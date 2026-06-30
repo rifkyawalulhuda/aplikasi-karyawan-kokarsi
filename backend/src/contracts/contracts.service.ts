@@ -19,29 +19,58 @@ export class UpdateContractDto extends CreateContractDto {}
 export class ContractsService {
   constructor(private prisma: PrismaService) {}
 
+  private static readonly DAY_MS = 24 * 60 * 60 * 1000
+
   private include = {
     employee: { select: { id: true, employeeNo: true, fullName: true } },
   }
 
+  private startOfDay(date: Date) {
+    const value = new Date(date)
+    value.setHours(0, 0, 0, 0)
+    return value
+  }
+
+  private resolveStatus(contract: { endDate: Date; status?: ContractStatus }, now = new Date()): ContractStatus {
+    if (contract.status === 'DIBATALKAN') return 'DIBATALKAN'
+
+    const today = this.startOfDay(now).getTime()
+    const end = this.startOfDay(contract.endDate).getTime()
+
+    if (end < today) return 'EXPIRED'
+
+    const daysLeft = Math.ceil((end - today) / ContractsService.DAY_MS)
+    return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+  }
+
+  private withComputedStatus<T extends { endDate: Date; status: ContractStatus }>(contract: T) {
+    return {
+      ...contract,
+      status: this.resolveStatus(contract),
+    }
+  }
+
+  private withComputedStatuses<T extends { endDate: Date; status: ContractStatus }>(contracts: T[]) {
+    return contracts.map(contract => this.withComputedStatus(contract))
+  }
+
   async findAll(params: { page?: number; limit?: number; status?: string; employeeId?: number }) {
     const { page = 1, limit = 10, status, employeeId } = params
-    const skip = (page - 1) * limit
     const where: any = {}
-    if (status) where.status = status
     if (employeeId) where.employeeId = employeeId
 
-    const [data, total] = await Promise.all([
-      this.prisma.contract.findMany({
-        where,
-        include: this.include,
-        skip,
-        take: limit,
-        orderBy: { startDate: 'desc' },
-      }),
-      this.prisma.contract.count({ where }),
-    ])
+    const data = this.withComputedStatuses(await this.prisma.contract.findMany({
+      where,
+      include: this.include,
+      orderBy: { startDate: 'desc' },
+    }))
 
-    return { data, total, page, limit, totalPages: Math.ceil(total / limit) }
+    const filtered = status ? data.filter(contract => contract.status === status) : data
+    const total = filtered.length
+    const skip = (page - 1) * limit
+    const paged = filtered.slice(skip, skip + limit)
+
+    return { data: paged, total, page, limit, totalPages: Math.ceil(total / limit) }
   }
 
   async findOne(id: number) {
@@ -50,11 +79,11 @@ export class ContractsService {
       include: { ...this.include, documents: true },
     })
     if (!contract) throw new NotFoundException('Kontrak tidak ditemukan')
-    return contract
+    return this.withComputedStatus(contract)
   }
 
   async create(dto: CreateContractDto) {
-    return this.prisma.contract.create({
+    const contract = await this.prisma.contract.create({
       data: {
         ...dto,
         startDate: new Date(dto.startDate),
@@ -62,11 +91,12 @@ export class ContractsService {
       },
       include: this.include,
     })
+    return this.withComputedStatus(contract)
   }
 
   async update(id: number, dto: UpdateContractDto) {
     await this.findOne(id)
-    return this.prisma.contract.update({
+    const contract = await this.prisma.contract.update({
       where: { id },
       data: {
         ...dto,
@@ -75,6 +105,7 @@ export class ContractsService {
       },
       include: this.include,
     })
+    return this.withComputedStatus(contract)
   }
 
   async remove(id: number) {
@@ -86,13 +117,13 @@ export class ContractsService {
     const now = new Date()
     const future = new Date()
     future.setDate(future.getDate() + days)
-    return this.prisma.contract.findMany({
+    const contracts = await this.prisma.contract.findMany({
       where: {
-        status: 'AKTIF',
         endDate: { gte: now, lte: future },
       },
       include: this.include,
       orderBy: { endDate: 'asc' },
     })
+    return this.withComputedStatuses(contracts).filter(contract => contract.status === 'AKAN_HABIS')
   }
 }

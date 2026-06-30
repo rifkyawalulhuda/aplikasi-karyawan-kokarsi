@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Employee } from '~/types'
+import type { Contract, Employee } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -33,9 +33,72 @@ const deleteLoading = ref(false)
 const editModal = ref(false)
 const editTarget = ref<Employee | null>(null)
 
+// History state
+const historyModal = ref(false)
+const historyLoading = ref(false)
+const historyTarget = ref<Employee | null>(null)
+const historyContracts = ref<Contract[]>([])
+
 function openEdit(employee: Employee) {
   editTarget.value = employee
   editModal.value = true
+}
+
+function formatDate(dateValue: string) {
+  return new Date(dateValue).toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function resolveContractStatus(contract: Contract) {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const end = new Date(contract.endDate)
+  end.setHours(0, 0, 0, 0)
+
+  if (contract.status === 'DIBATALKAN') return 'DIBATALKAN'
+  if (end < today) return 'EXPIRED'
+
+  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+  return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+}
+
+const contractStatusColorMap: Record<string, string> = {
+  AKTIF: 'success',
+  AKAN_HABIS: 'warning',
+  EXPIRED: 'error',
+  DIBATALKAN: 'neutral',
+}
+
+const contractStatusLabelMap: Record<string, string> = {
+  AKTIF: 'Aktif',
+  AKAN_HABIS: 'Akan Habis',
+  EXPIRED: 'Expired',
+  DIBATALKAN: 'Dibatalkan',
+}
+
+async function openHistory(employee: Employee) {
+  historyTarget.value = employee
+  historyModal.value = true
+  historyLoading.value = true
+  try {
+    const detail = await $fetch<Employee & { contracts?: Contract[] }>(`/api/employees/${employee.id}`)
+    historyContracts.value = [...(detail.contracts ?? [])].sort(
+      (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
+    )
+  } catch (e: any) {
+    toast.add({
+      title: 'Gagal memuat riwayat kontrak',
+      description: e?.data?.message ?? 'Terjadi kesalahan',
+      color: 'error',
+    })
+    historyContracts.value = []
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 function confirmDelete(employee: Employee) {
@@ -62,6 +125,13 @@ async function doDelete() {
 function getRowItems(row: Row<Employee>) {
   return [
     { type: 'label', label: 'Aksi' },
+    {
+      label: 'Riwayat Kontrak',
+      icon: 'i-lucide-history',
+      onSelect() {
+        openHistory(row.original)
+      }
+    },
     {
       label: 'Edit Data',
       icon: 'i-lucide-pencil',
@@ -301,4 +371,81 @@ watch([statusFilter, searchQuery], () => {
     :employee="editTarget"
     @updated="refresh"
   />
+
+  <UModal
+    v-model:open="historyModal"
+    title="Riwayat Kontrak Karyawan"
+    :ui="{ content: 'max-w-3xl' }"
+  >
+    <template #body>
+      <div v-if="historyTarget" class="space-y-4">
+        <div class="flex flex-wrap items-center gap-4 rounded-xl border border-default bg-elevated/40 p-4">
+          <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0">
+            <span class="text-sm font-semibold text-primary">
+              {{ historyTarget.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
+            </span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-highlighted">{{ historyTarget.fullName }}</p>
+            <p class="text-sm text-muted">{{ historyTarget.employeeNo }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UBadge variant="subtle" color="neutral">Total {{ historyContracts.length }} kontrak</UBadge>
+            <UBadge variant="subtle" color="success">
+              Aktif {{ historyContracts.filter(c => resolveContractStatus(c) === 'AKTIF').length }}
+            </UBadge>
+            <UBadge variant="subtle" color="warning">
+              Akan Habis {{ historyContracts.filter(c => resolveContractStatus(c) === 'AKAN_HABIS').length }}
+            </UBadge>
+            <UBadge variant="subtle" color="error">
+              Expired {{ historyContracts.filter(c => resolveContractStatus(c) === 'EXPIRED').length }}
+            </UBadge>
+          </div>
+        </div>
+
+        <div v-if="historyLoading" class="space-y-3">
+          <USkeleton class="h-24 w-full rounded-2xl" />
+          <USkeleton class="h-24 w-full rounded-2xl" />
+        </div>
+
+        <div v-else class="relative">
+          <div class="absolute left-5 top-2 bottom-2 w-px bg-border/70" />
+          <div class="space-y-3">
+            <div
+              v-for="(contract, index) in historyContracts"
+              :key="contract.id"
+              class="relative pl-14"
+            >
+              <div class="absolute left-0 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-default bg-background shadow-sm">
+                <div class="h-3 w-3 rounded-full" :class="index === 0 ? 'bg-primary' : 'bg-muted-foreground/40'" />
+              </div>
+
+              <div class="rounded-2xl border border-default bg-elevated/30 p-4">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                      <p class="font-medium text-highlighted">{{ contract.contractNo }}</p>
+                      <UBadge variant="subtle" color="neutral" size="sm">
+                        #{{ historyContracts.length - index }}
+                      </UBadge>
+                    </div>
+                    <p class="text-sm text-muted">
+                      {{ contract.contractType || '-' }}
+                      <span class="mx-1">&bull;</span>
+                      {{ formatDate(contract.startDate) }}
+                      -
+                      {{ formatDate(contract.endDate) }}
+                    </p>
+                  </div>
+                  <UBadge variant="subtle" :color="contractStatusColorMap[resolveContractStatus(contract)] as any">
+                    {{ contractStatusLabelMap[resolveContractStatus(contract)] }}
+                  </UBadge>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+  </UModal>
 </template>

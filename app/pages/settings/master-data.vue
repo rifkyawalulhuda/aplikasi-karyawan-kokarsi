@@ -1,11 +1,17 @@
 <script setup lang="ts">
 interface LookupItem { id: number; name: string }
 
-// Fetch semua master data sekaligus
-const { data: workLocations, refresh: refreshLocations } = await useFetch<LookupItem[]>('/api/lookups/work-locations', { lazy: true })
-const { data: jobRoles, refresh: refreshRoles } = await useFetch<LookupItem[]>('/api/lookups/job-roles', { lazy: true })
-const { data: jobLevels, refresh: refreshLevels } = await useFetch<LookupItem[]>('/api/lookups/job-levels', { lazy: true })
-const { data: taxStatuses, refresh: refreshTaxStatuses } = await useFetch<LookupItem[]>('/api/lookups/tax-status', { lazy: true })
+interface LookupsResponse {
+  workLocations: LookupItem[]
+  jobRoles: LookupItem[]
+  jobLevels: LookupItem[]
+  taxStatus: LookupItem[]
+}
+
+const workLocations = ref<LookupItem[]>([])
+const jobRoles = ref<LookupItem[]>([])
+const jobLevels = ref<LookupItem[]>([])
+const taxStatuses = ref<LookupItem[]>([])
 
 const toast = useToast()
 
@@ -35,6 +41,28 @@ const addState = reactive<Record<ResourceKey, AddState>>({
 const editResource = ref<ResourceKey>('work-locations')
 const deleteLoading = ref<number | null>(null)
 
+async function loadAllLookups() {
+  const data = await $fetch<LookupsResponse>('/api/lookups')
+  workLocations.value = data.workLocations ?? []
+  jobRoles.value = data.jobRoles ?? []
+  jobLevels.value = data.jobLevels ?? []
+  taxStatuses.value = data.taxStatus ?? []
+}
+
+async function loadResource(resource: ResourceKey) {
+  if (resource === 'work-locations') {
+    workLocations.value = await $fetch<LookupItem[]>('/api/lookups/work-locations')
+  } else if (resource === 'job-roles') {
+    jobRoles.value = await $fetch<LookupItem[]>('/api/lookups/job-roles')
+  } else if (resource === 'job-levels') {
+    jobLevels.value = await $fetch<LookupItem[]>('/api/lookups/job-levels')
+  } else if (resource === 'tax-status') {
+    taxStatuses.value = await $fetch<LookupItem[]>('/api/lookups/tax-status')
+  }
+}
+
+await loadAllLookups()
+
 function openEdit(resource: ResourceKey, item: LookupItem) {
   editResource.value = resource
   editState.id = item.id
@@ -52,7 +80,7 @@ async function saveEdit() {
     })
     toast.add({ title: 'Berhasil diperbarui', color: 'success' })
     editState.open = false
-    await refreshByResource(editResource.value)
+    await loadResource(editResource.value)
   } catch (e: any) {
     toast.add({ title: 'Gagal memperbarui', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
   } finally {
@@ -72,7 +100,7 @@ async function doAdd(resource: ResourceKey) {
     toast.add({ title: 'Berhasil ditambahkan', color: 'success' })
     s.name = ''
     s.open = false
-    await refreshByResource(resource)
+    await loadResource(resource)
   } catch (e: any) {
     toast.add({ title: 'Gagal menambahkan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
   } finally {
@@ -85,19 +113,12 @@ async function doDelete(resource: ResourceKey, id: number) {
   try {
     await $fetch(`/api/lookups/${resource}/${id}`, { method: 'DELETE' })
     toast.add({ title: 'Berhasil dihapus', color: 'success' })
-    await refreshByResource(resource)
+    await loadResource(resource)
   } catch (e: any) {
     toast.add({ title: 'Gagal menghapus', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
   } finally {
     deleteLoading.value = null
   }
-}
-
-async function refreshByResource(resource: ResourceKey) {
-  if (resource === 'work-locations') await refreshLocations()
-  else if (resource === 'job-roles') await refreshRoles()
-  else if (resource === 'job-levels') await refreshLevels()
-  else if (resource === 'tax-status') await refreshTaxStatuses()
 }
 
 // ── Cards config ─────────────────────────────────────────────────────

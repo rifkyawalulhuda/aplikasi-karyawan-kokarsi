@@ -10,6 +10,8 @@ export default eventHandler(async (event) => {
   if (query.page) params.set('page', String(query.page))
   if (query.limit) params.set('limit', String(query.limit))
   if (query.expiring) params.set('expiring', String(query.expiring))
+  if (query.status) params.set('status', String(query.status))
+  if (query.employeeId) params.set('employeeId', String(query.employeeId))
 
   const qs = params.toString() ? `?${params.toString()}` : ''
 

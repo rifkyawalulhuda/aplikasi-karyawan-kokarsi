@@ -1,8 +1,11 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { LookupsService } from './lookups.service'
+import { IsNotEmpty, IsString } from 'class-validator'
 
 class CreateLookupDto {
+  @IsString()
+  @IsNotEmpty()
   name: string
 }
 

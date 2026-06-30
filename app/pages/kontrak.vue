@@ -18,6 +18,32 @@ const { data: contractsRes, status, refresh } = await useFetch<{ data: Contract[
 
 const contracts = computed<Contract[]>(() => contractsRes.value?.data ?? [])
 
+const selectedEmployeeId = ref<number | null>(null)
+const historyModal = ref(false)
+const reopenHistoryAfterEdit = ref(false)
+
+const employeeContractCounts = computed<Record<number, number>>(() => {
+  return contracts.value.reduce((acc, contract) => {
+    acc[contract.employeeId] = (acc[contract.employeeId] ?? 0) + 1
+    return acc
+  }, {} as Record<number, number>)
+})
+
+const selectedEmployeeContracts = computed(() => {
+  if (!selectedEmployeeId.value) return []
+  return contracts.value
+    .filter(contract => contract.employeeId === selectedEmployeeId.value)
+    .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+})
+
+const selectedEmployee = computed(() => selectedEmployeeContracts.value[0]?.employee ?? null)
+const selectedEmployeeStats = computed(() => ({
+  total: selectedEmployeeContracts.value.length,
+  active: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKTIF').length,
+  expiring: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKAN_HABIS').length,
+  expired: selectedEmployeeContracts.value.filter(contract => contract.status === 'EXPIRED').length,
+}))
+
 const statusFilter = ref('all')
 const searchQuery = ref('')
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
@@ -31,8 +57,41 @@ const deleteTarget = ref<Contract | null>(null)
 const deleteLoading = ref(false)
 
 function openEdit(contract: Contract) {
+  reopenHistoryAfterEdit.value = false
   editTarget.value = contract
   editModal.value = true
+}
+
+function openHistory(contract: Contract) {
+  reopenHistoryAfterEdit.value = false
+  selectedEmployeeId.value = contract.employeeId
+  historyModal.value = true
+}
+
+function openEditFromHistory(contract: Contract) {
+  reopenHistoryAfterEdit.value = true
+  selectedEmployeeId.value = contract.employeeId
+  historyModal.value = false
+  editTarget.value = contract
+  nextTick(() => {
+    editModal.value = true
+  })
+}
+
+async function handleEditSaved() {
+  await refresh()
+
+  if (!reopenHistoryAfterEdit.value || !selectedEmployeeId.value) return
+
+  const employeeId = selectedEmployeeId.value
+  reopenHistoryAfterEdit.value = false
+  selectedEmployeeId.value = employeeId
+  await nextTick()
+  historyModal.value = true
+}
+
+function openDocument(url: string) {
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function confirmDelete(contract: Contract) {
@@ -73,6 +132,11 @@ function getRowItems(row: Row<Contract>) {
   return [
     { type: 'label', label: 'Aksi' },
     {
+      label: 'Riwayat Karyawan',
+      icon: 'i-lucide-history',
+      onSelect() { openHistory(row.original) }
+    },
+    {
       label: 'Edit Kontrak',
       icon: 'i-lucide-pencil',
       onSelect() { openEdit(row.original) }
@@ -105,9 +169,19 @@ const columns: TableColumn<Contract>[] = [
     accessorKey: 'employee',
     header: 'Karyawan',
     cell: ({ row }) =>
-      h('div', undefined, [
-        h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.employee?.fullName ?? '-'),
-        h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-')
+      h('div', { class: 'flex items-center justify-between gap-3' }, [
+        h('div', undefined, [
+          h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.employee?.fullName ?? '-'),
+          h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-')
+        ]),
+        h(UButton, {
+          size: 'xs',
+          color: 'neutral',
+          variant: 'subtle',
+          icon: 'i-lucide-history',
+          label: `${employeeContractCounts.value[row.original.employeeId] ?? 0} riwayat`,
+          onClick: () => openHistory(row.original),
+        })
       ])
   },
   {
@@ -184,11 +258,13 @@ const filteredData = computed(() => {
 
 const counts = computed(() => {
   const list = contracts.value
+  const uniqueEmployees = new Set(list.map(c => c.employeeId)).size
   return {
     total: list.length,
     aktif: list.filter(c => c.status === 'AKTIF').length,
     akanHabis: list.filter(c => c.status === 'AKAN_HABIS').length,
-    expired: list.filter(c => c.status === 'EXPIRED').length
+    expired: list.filter(c => c.status === 'EXPIRED').length,
+    employees: uniqueEmployees
   }
 })
 
@@ -215,6 +291,9 @@ watch([statusFilter, searchQuery], () => {
       <div class="flex flex-wrap gap-3 mb-4">
         <UBadge variant="subtle" color="neutral" size="lg">
           Total: {{ counts.total }}
+        </UBadge>
+        <UBadge variant="subtle" color="primary" size="lg">
+          Karyawan: {{ counts.employees }}
         </UBadge>
         <UBadge variant="subtle" color="success" size="lg">
           Aktif: {{ counts.aktif }}
@@ -293,7 +372,7 @@ watch([statusFilter, searchQuery], () => {
   <KontrakEditContractModal
     v-model:open="editModal"
     :contract="editTarget"
-    @saved="refresh()"
+    @saved="handleEditSaved"
   />
 
   <!-- Modal Konfirmasi Hapus -->
@@ -312,4 +391,99 @@ watch([statusFilter, searchQuery], () => {
       </div>
     </template>
   </UModal>
+
+  <!-- Modal Riwayat Kontrak per Karyawan -->
+  <UModal
+    v-model:open="historyModal"
+    title="Riwayat Kontrak Karyawan"
+    :ui="{ content: 'max-w-3xl' }"
+  >
+    <template #body>
+      <div v-if="selectedEmployee" class="space-y-4">
+        <div class="flex flex-wrap items-center gap-4 rounded-xl border border-default bg-elevated/40 p-4">
+          <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0">
+            <span class="text-sm font-semibold text-primary">
+              {{ selectedEmployee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
+            </span>
+          </div>
+          <div class="min-w-0 flex-1">
+            <p class="font-semibold text-highlighted">{{ selectedEmployee.fullName }}</p>
+            <p class="text-sm text-muted">{{ selectedEmployee.employeeNo }}</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <UBadge variant="subtle" color="neutral">Total {{ selectedEmployeeStats.total }} kontrak</UBadge>
+            <UBadge variant="subtle" color="success">Aktif {{ selectedEmployeeStats.active }}</UBadge>
+            <UBadge variant="subtle" color="warning">Akan Habis {{ selectedEmployeeStats.expiring }}</UBadge>
+            <UBadge variant="subtle" color="error">Expired {{ selectedEmployeeStats.expired }}</UBadge>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="absolute left-5 top-2 bottom-2 w-px bg-border/70" />
+          <div class="space-y-3">
+            <div
+              v-for="(contract, index) in selectedEmployeeContracts"
+              :key="contract.id"
+              class="relative pl-14"
+            >
+              <div class="absolute left-0 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-default bg-background shadow-sm">
+                <div class="h-3 w-3 rounded-full" :class="index === 0 ? 'bg-primary' : 'bg-muted-foreground/40'" />
+              </div>
+
+              <div class="rounded-2xl border border-default bg-elevated/30 p-4 transition-colors hover:bg-elevated/50">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="mb-2 flex flex-wrap items-center gap-2">
+                      <p class="font-medium text-highlighted">{{ contract.contractNo }}</p>
+                      <UBadge variant="subtle" color="neutral" size="sm">
+                        #{{ selectedEmployeeContracts.length - index }}
+                      </UBadge>
+                    </div>
+                    <p class="text-sm text-muted">
+                      {{ contract.contractType || '-' }}
+                      <span class="mx-1">&bull;</span>
+                      {{ new Date(contract.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+                      -
+                      {{ new Date(contract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+                    </p>
+                  </div>
+                  <UBadge variant="subtle" :color="statusColorMap[contract.status] as any">
+                    {{ statusLabelMap[contract.status] }}
+                  </UBadge>
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <UButton
+                    v-if="contract.documentUrl"
+                    label="Unduh Dokumen"
+                    icon="i-lucide-download"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    @click="openDocument(contract.documentUrl)"
+                  />
+                  <UButton
+                    label="Edit"
+                    icon="i-lucide-pencil"
+                    color="primary"
+                    variant="ghost"
+                    size="xs"
+                    @click="openEditFromHistory(contract)"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-muted">
+          Riwayat diurutkan dari kontrak terbaru. Ini menampilkan seluruh kontrak karyawan untuk memudahkan pelacakan masa kerja.
+        </p>
+      </div>
+      <div v-else class="text-sm text-muted">
+        Belum ada karyawan yang dipilih.
+      </div>
+    </template>
+  </UModal>
 </template>
+
+

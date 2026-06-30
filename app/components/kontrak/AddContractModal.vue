@@ -32,20 +32,12 @@ const contractTypeOptions = [
   { label: 'Magang', value: 'Magang' },
 ]
 
-const statusOptions = [
-  { label: 'Aktif', value: 'AKTIF' },
-  { label: 'Akan Habis', value: 'AKAN_HABIS' },
-  { label: 'Expired', value: 'EXPIRED' },
-  { label: 'Dibatalkan', value: 'DIBATALKAN' },
-]
-
 const schema = z.object({
   employeeId: z.number({ error: 'Karyawan wajib dipilih' }),
   contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   contractType: z.string().min(1, 'Tipe kontrak wajib diisi'),
-  status: z.string().min(1, 'Status wajib diisi'),
   documentUrl: z.string().optional(),
 })
 
@@ -57,7 +49,6 @@ const state = reactive<Partial<Schema>>({
   startDate: '',
   endDate: '',
   contractType: 'PKWT',
-  status: 'AKTIF',
   documentUrl: '',
 })
 
@@ -85,7 +76,6 @@ function resetForm() {
   state.startDate = ''
   state.endDate = ''
   state.contractType = 'PKWT'
-  state.status = 'AKTIF'
   state.documentUrl = ''
 }
 </script>
@@ -116,14 +106,9 @@ function resetForm() {
           </UFormField>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <UFormField label="Tipe Kontrak" name="contractType" required>
-            <USelect v-model="state.contractType" :items="contractTypeOptions" class="w-full" />
-          </UFormField>
-          <UFormField label="Status" name="status" required>
-            <USelect v-model="state.status" :items="statusOptions" class="w-full" />
-          </UFormField>
-        </div>
+        <UFormField label="Tipe Kontrak" name="contractType" required>
+          <USelect v-model="state.contractType" :items="contractTypeOptions" class="w-full" />
+        </UFormField>
 
         <UFormField label="URL Dokumen" name="documentUrl">
           <UInput v-model="state.documentUrl" placeholder="https://..." class="w-full" />

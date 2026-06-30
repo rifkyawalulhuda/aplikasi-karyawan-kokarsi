@@ -1,0 +1,6 @@
+cd E:\Github\aplikasi-karyawan-kokarsi\backend
+npx tsc -p tsconfig.json
+node dist/main.js
+
+cd E:\Github\aplikasi-karyawan-kokarsi
+pnpm dev
