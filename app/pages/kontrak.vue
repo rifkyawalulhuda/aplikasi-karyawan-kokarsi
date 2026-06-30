@@ -9,6 +9,7 @@ const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
 
 const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 
 const { data: contractsRes, status, refresh } = await useFetch<{ data: Contract[]; total: number }>('/api/contracts', {
@@ -52,8 +53,6 @@ const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const addModal = ref(false)
 const editModal = ref(false)
 const editTarget = ref<Contract | null>(null)
-const deleteModal = ref(false)
-const deleteTarget = ref<Contract | null>(null)
 const deleteLoading = ref(false)
 
 function openEdit(contract: Contract) {
@@ -95,17 +94,19 @@ function openDocument(url: string) {
 }
 
 function confirmDelete(contract: Contract) {
-  deleteTarget.value = contract
-  deleteModal.value = true
+  confirmDeleteToast({
+    title: 'Hapus data kontrak?',
+    description: `Kontrak ${contract.contractNo} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus Kontrak',
+    onConfirm: () => doDelete(contract),
+  })
 }
 
-async function doDelete() {
-  if (!deleteTarget.value) return
+async function doDelete(contract: Contract) {
   deleteLoading.value = true
   try {
-    await $fetch(`/api/contracts/${deleteTarget.value.id}`, { method: 'DELETE' })
+    await $fetch(`/api/contracts/${contract.id}`, { method: 'DELETE' })
     toast.add({ title: 'Kontrak berhasil dihapus', color: 'success' })
-    deleteModal.value = false
     refresh()
   } catch (e: any) {
     toast.add({ title: 'Gagal menghapus', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
@@ -374,23 +375,6 @@ watch([statusFilter, searchQuery], () => {
     :contract="editTarget"
     @saved="handleEditSaved"
   />
-
-  <!-- Modal Konfirmasi Hapus -->
-  <UModal v-model:open="deleteModal" title="Konfirmasi Hapus">
-    <template #body>
-      <p class="text-sm text-muted">
-        Yakin ingin menghapus kontrak
-        <span class="font-semibold text-highlighted">{{ deleteTarget?.contractNo }}</span>?
-        Tindakan ini tidak dapat dibatalkan.
-      </p>
-    </template>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <UButton label="Batal" color="neutral" variant="subtle" @click="deleteModal = false" />
-        <UButton label="Hapus" color="error" :loading="deleteLoading" @click="doDelete()" />
-      </div>
-    </template>
-  </UModal>
 
   <!-- Modal Riwayat Kontrak per Karyawan -->
   <UModal

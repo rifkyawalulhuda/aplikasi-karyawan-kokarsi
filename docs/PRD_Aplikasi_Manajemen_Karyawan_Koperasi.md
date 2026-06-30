@@ -59,8 +59,13 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 ### 4.2 Manajemen Kontrak Karyawan
 - Tambah kontrak baru untuk karyawan
 - Upload dokumen kontrak (PDF, max 10MB)
-- Field kontrak: `contractNo`, `startDate`, `endDate`, `contractType`, `status` (Aktif / Expired / Renewed / Dibatalkan)
-- Riwayat kontrak per karyawan (history)
+- Field kontrak: `contractNo`, `startDate`, `endDate`, `contractType`
+- Status kontrak dihitung otomatis dari `endDate`:
+  - `AKTIF` jika sisa > 30 hari
+  - `AKAN_HABIS` jika sisa <= 30 hari
+  - `EXPIRED` jika tanggal sudah lewat
+  - `DIBATALKAN` jika kontrak dibatalkan manual
+- Riwayat kontrak per karyawan (history) tersedia dalam mode read-only dari halaman Data Karyawan dan halaman Kontrak
 - Notifikasi otomatis kontrak akan habis (30 hari & 7 hari sebelumnya)
 
 ### 4.3 Status & Validitas
@@ -72,6 +77,7 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - Manajemen user Master Admin (`master_admin`)
 - Pengelolaan master data lookup (work location, job role, dll)
 - Audit log sederhana (siapa yang mengubah data kapan)
+- Konfirmasi hapus data menggunakan toast bawaan UI sebelum aksi delete dijalankan
 
 ### 4.5 Dashboard (Khusus Master Admin)
 - Total karyawan aktif
@@ -97,6 +103,9 @@ Sebagai Master Admin, saya ingin mengubah status karyawan dari KONTRAK menjadi M
 
 **US-05** (Master Admin)  
 Sebagai Master Admin, saya ingin melihat riwayat semua kontrak yang pernah dimiliki oleh satu karyawan.
+
+**US-06** (Master Admin)  
+Sebagai Master Admin, saya ingin mendapatkan toast konfirmasi sebelum menghapus data karyawan, kontrak, atau master data, agar tidak salah hapus.
 
 ---
 
@@ -187,10 +196,11 @@ CREATE TABLE employee_status_history (
 | FR-02 | Upload & simpan dokumen kontrak (PDF)                                      | P0        |
 | FR-03 | Sistem notifikasi kontrak akan habis (in-app + email)                      | P0        |
 | FR-04 | Filter & pencarian karyawan yang powerful                                  | P0        |
-| FR-05 | Riwayat kontrak per karyawan                                               | P1        |
+| FR-05 | Riwayat kontrak per karyawan (read-only)                                   | P1        |
 | FR-06 | Dashboard ringkasan khusus Master Admin                                    | P1        |
 | FR-07 | Export data karyawan ke Excel                                              | P2        |
 | FR-08 | Audit log perubahan data                                                   | P2        |
+| FR-09 | Toast konfirmasi sebelum hapus data karyawan, kontrak, dan master data     | P1        |
 
 ---
 

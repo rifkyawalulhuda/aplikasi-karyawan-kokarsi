@@ -49,9 +49,10 @@ npx tsc -p tsconfig.json
 | 4 | CRUD Karyawan (tambah, edit, hapus) | `app/pages/karyawan.vue`, `app/components/karyawan/` |
 | 5 | Fix Status Pajak (race condition + key mismatch) | `app/components/karyawan/EditModal.vue` |
 | 6 | Master Data CRUD (lokasi, jabatan, level, pajak) | `app/pages/master-data.vue`, `server/api/lookups/` |
-| 7 | CRUD Kontrak (tambah, edit, hapus) | `app/pages/kontrak.vue`, `app/components/kontrak/` |
+| 7 | CRUD Kontrak + status otomatis berdasarkan tanggal + riwayat per karyawan | `app/pages/kontrak.vue`, `app/pages/karyawan.vue`, `app/components/kontrak/` |
 | 8 | Upload foto karyawan | `app/components/karyawan/EditModal.vue`, `server/api/employees/[id]/photo.post.ts` |
 | 9 | Export Excel & PDF (semua data + semua kolom) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
+| 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts`, `app/pages/karyawan.vue`, `app/pages/kontrak.vue`, `app/pages/settings/master-data.vue` |
 
 ---
 
@@ -69,6 +70,15 @@ Semua Nitro handler baca `auth_token` cookie → forward `Authorization: Bearer 
 
 ### Response Wrapper
 Backend return `{ data: [...], total, page, limit, totalPages }` untuk list endpoints.
+
+### Kontrak Otomatis
+Status kontrak dihitung dari `endDate` terhadap tanggal hari ini, jadi UI tidak perlu input manual untuk status kontrak.
+
+Aturan yang dipakai:
+- `EXPIRED` jika `endDate` sudah lewat
+- `AKAN_HABIS` jika sisa kontrak 30 hari atau kurang
+- `AKTIF` jika sisa kontrak lebih dari 30 hari
+- `DIBATALKAN` tetap dipertahankan bila kontrak memang dibatalkan
 
 ### USelect Nuxt UI v4
 `value` di items harus exact match type dengan model value. Integer ID harus match integer.
@@ -93,6 +103,7 @@ app/
       AddContractModal.vue
       EditContractModal.vue
   composables/
+    useConfirmDeleteToast.ts  # Toast konfirmasi hapus reusable
     useExport.ts       # Export Excel & PDF (semua data dari DB)
   types/
     index.d.ts         # Employee, Contract, dll
@@ -156,7 +167,7 @@ backend/
 | `employeeId` | Int | FK → Employee |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
-| `status` | Enum | AKTIF / AKAN_HABIS / EXPIRED / DIBATALKAN |
+| `status` | Enum | Dihitung otomatis dari `endDate` (AKTIF / AKAN_HABIS / EXPIRED / DIBATALKAN) |
 
 ---
 
@@ -177,6 +188,10 @@ backend/
 | PUT | `/api/contracts/:id` | Edit kontrak |
 | DELETE | `/api/contracts/:id` | Hapus kontrak |
 | GET | `/api/lookups` | Semua lookup data |
+| GET | `/api/lookups/work-locations` | List lokasi kerja |
+| POST | `/api/lookups/work-locations` | Tambah lokasi kerja |
+| PUT | `/api/lookups/work-locations/:id` | Edit lokasi kerja |
+| DELETE | `/api/lookups/work-locations/:id` | Hapus lokasi kerja |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 
 ---
@@ -186,6 +201,8 @@ backend/
 - **Excel**: `xlsx` library — semua data + 21 kolom lengkap → `.xlsx`
 - **PDF**: `jspdf` + `jspdf-autotable` — landscape A4, semua kolom → `.pdf`
 - **Kolom export**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
+- **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
+- **Hapus data**: Karyawan, kontrak, dan master data memakai toast konfirmasi sebelum delete dijalankan
 
 ---
 
@@ -199,3 +216,5 @@ backend/
 | USelect tidak resolve label | Race condition — watch lookups + watch employee keduanya diperlukan |
 | Upload foto tidak jalan | Restart backend setelah compile (endpoint baru) |
 | Export tidak include kontrak | Backend `findAll` tidak include contracts — gunakan endpoint `/api/employees/export` (limit=9999) |
+| Data master tidak muncul setelah save | Pastikan backend validasi DTO lookup aktif dan frontend me-refresh resource master data setelah CRUD |
+

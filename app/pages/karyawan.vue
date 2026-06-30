@@ -10,6 +10,7 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UCheckbox = resolveComponent('UCheckbox')
 
 const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 const { exportExcel, exportPDF } = useExport()
 const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true })
@@ -25,8 +26,6 @@ const rowSelection = ref({})
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 
 // Delete state
-const deleteModal = ref(false)
-const deleteTarget = ref<Employee | null>(null)
 const deleteLoading = ref(false)
 
 // Edit state
@@ -102,18 +101,19 @@ async function openHistory(employee: Employee) {
 }
 
 function confirmDelete(employee: Employee) {
-  deleteTarget.value = employee
-  deleteModal.value = true
+  confirmDeleteToast({
+    title: 'Hapus data karyawan?',
+    description: `Data ${employee.fullName} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus Karyawan',
+    onConfirm: () => doDelete(employee),
+  })
 }
 
-async function doDelete() {
-  if (!deleteTarget.value) return
+async function doDelete(employee: Employee) {
   deleteLoading.value = true
   try {
-    await $fetch(`/api/employees/${deleteTarget.value.id}`, { method: 'DELETE' })
+    await $fetch(`/api/employees/${employee.id}`, { method: 'DELETE' })
     toast.add({ title: 'Karyawan dihapus', color: 'success' })
-    deleteModal.value = false
-    deleteTarget.value = null
     refresh()
   } catch (e: any) {
     toast.add({ title: 'Gagal menghapus', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
@@ -348,22 +348,6 @@ watch([statusFilter, searchQuery], () => {
       </div>
     </template>
   </UDashboardPanel>
-
-  <!-- Modal Konfirmasi Hapus -->
-  <UModal v-model:open="deleteModal" title="Konfirmasi Hapus">
-    <template #body>
-      <p class="text-sm text-muted">
-        Yakin ingin menghapus karyawan <span class="font-semibold text-highlighted">{{ deleteTarget?.fullName }}</span>?
-        Tindakan ini tidak dapat dibatalkan.
-      </p>
-    </template>
-    <template #footer>
-      <div class="flex justify-end gap-2">
-        <UButton label="Batal" color="neutral" variant="subtle" @click="deleteModal = false" />
-        <UButton label="Hapus" color="error" variant="solid" :loading="deleteLoading" @click="doDelete" />
-      </div>
-    </template>
-  </UModal>
 
   <!-- Modal Edit Karyawan -->
   <KaryawanEditModal

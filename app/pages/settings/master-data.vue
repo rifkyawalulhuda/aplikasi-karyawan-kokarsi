@@ -14,6 +14,7 @@ const jobLevels = ref<LookupItem[]>([])
 const taxStatuses = ref<LookupItem[]>([])
 
 const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 
 // ── Generic CRUD state ──────────────────────────────────────────────
 type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status'
@@ -109,6 +110,22 @@ async function doAdd(resource: ResourceKey) {
 }
 
 async function doDelete(resource: ResourceKey, id: number) {
+  confirmDeleteToast({
+    title: 'Hapus data master?',
+    description: `Data ${resourceLabelMap[resource]} ini akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus Data',
+    onConfirm: () => deleteLookup(resource, id),
+  })
+}
+
+const resourceLabelMap: Record<ResourceKey, string> = {
+  'work-locations': 'Lokasi Kerja',
+  'job-roles': 'Jabatan',
+  'job-levels': 'Level Jabatan',
+  'tax-status': 'Status Pajak',
+}
+
+async function deleteLookup(resource: ResourceKey, id: number) {
   deleteLoading.value = id
   try {
     await $fetch(`/api/lookups/${resource}/${id}`, { method: 'DELETE' })
