@@ -1,69 +1,57 @@
 <script setup lang="ts">
-import * as z from 'zod'
-import type { FormError } from '@nuxt/ui'
+const toast = useToast()
 
-const passwordSchema = z.object({
-  current: z.string().min(8, 'Must be at least 8 characters'),
-  new: z.string().min(8, 'Must be at least 8 characters')
-})
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
 
-type PasswordSchema = z.output<typeof passwordSchema>
-
-const password = reactive<Partial<PasswordSchema>>({
-  current: '',
-  new: ''
-})
-
-const validate = (state: Partial<PasswordSchema>): FormError[] => {
-  const errors: FormError[] = []
-  if (state.current && state.new && state.current === state.new) {
-    errors.push({ name: 'new', message: 'Passwords must be different' })
+function onSave() {
+  if (newPassword.value !== confirmPassword.value) {
+    toast.add({ title: 'Password tidak cocok', color: 'error' })
+    return
   }
-  return errors
+  toast.add({ title: 'Password berhasil diubah', color: 'success' })
+  currentPassword.value = ''
+  newPassword.value = ''
+  confirmPassword.value = ''
 }
 </script>
 
 <template>
-  <UPageCard
-    title="Password"
-    description="Confirm your current password before setting a new one."
-    variant="subtle"
-  >
-    <UForm
-      :schema="passwordSchema"
-      :state="password"
-      :validate="validate"
-      class="flex flex-col gap-4 max-w-xs"
-    >
-      <UFormField name="current">
-        <UInput
-          v-model="password.current"
-          type="password"
-          placeholder="Current password"
-          class="w-full"
-        />
-      </UFormField>
-
-      <UFormField name="new">
-        <UInput
-          v-model="password.new"
-          type="password"
-          placeholder="New password"
-          class="w-full"
-        />
-      </UFormField>
-
-      <UButton label="Update" class="w-fit" type="submit" />
-    </UForm>
-  </UPageCard>
-
-  <UPageCard
-    title="Account"
-    description="No longer want to use our service? You can delete your account here. This action is not reversible. All information related to this account will be deleted permanently."
-    class="bg-linear-to-tl from-error/10 from-5% to-default"
-  >
-    <template #footer>
-      <UButton label="Delete account" color="error" />
+  <UDashboardPanel id="settings-security">
+    <template #header>
+      <UDashboardNavbar title="Keamanan">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
+      </UDashboardNavbar>
     </template>
-  </UPageCard>
+
+    <template #body>
+      <div class="max-w-md space-y-6">
+        <UCard>
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-key-round" class="size-4 text-muted" />
+              <span class="font-semibold text-sm">Ubah Password</span>
+            </div>
+          </template>
+          <div class="space-y-4">
+            <UFormField label="Password Saat Ini">
+              <UInput v-model="currentPassword" type="password" class="w-full" placeholder="••••••••" />
+            </UFormField>
+            <UFormField label="Password Baru">
+              <UInput v-model="newPassword" type="password" class="w-full" placeholder="••••••••" />
+            </UFormField>
+            <UFormField label="Konfirmasi Password Baru">
+              <UInput v-model="confirmPassword" type="password" class="w-full" placeholder="••••••••" />
+            </UFormField>
+            <div class="flex justify-end">
+              <UButton label="Simpan Password" color="primary" @click="onSave" />
+            </div>
+          </div>
+        </UCard>
+      </div>
+    </template>
+  </UDashboardPanel>
 </template>

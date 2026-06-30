@@ -1,57 +1,85 @@
-import type { AvatarProps } from '@nuxt/ui'
-
-export type UserStatus = 'subscribed' | 'unsubscribed' | 'bounced'
-export type SaleStatus = 'paid' | 'failed' | 'refunded'
-
-export interface User {
+// ─── Lookup Types ───────────────────────────────────────────────────
+export interface WorkLocation {
   id: number
   name: string
+}
+
+export interface TaxStatus {
+  id: number
+  name: string
+}
+
+export interface JobRole {
+  id: number
+  name: string
+}
+
+export interface JobLevel {
+  id: number
+  name: string
+}
+
+// ─── Employee ────────────────────────────────────────────────────────
+export type EmploymentStatus = 'MITRA' | 'KONTRAK'
+export type Gender = 'MALE' | 'FEMALE'
+export type EducationLevel = 'SMA' | 'D3' | 'S1' | 'S2'
+
+export interface Employee {
+  id: number
+  employeeNo: string
+  fullName: string
+  employmentStatus: EmploymentStatus
+  taxStatusId: number
+  taxStatus?: TaxStatus
+  birthDate: string
+  gender: Gender
+  workLocationId: number
+  workLocation?: WorkLocation
+  jobRoleId: number
+  jobRole?: JobRole
+  jobLevelId: number
+  jobLevel?: JobLevel
+  educationLevel: EducationLevel
+  joinDate: string
+  phoneNumber: string
   email: string
-  avatar?: AvatarProps
-  status: UserStatus
-  location: string
+  fotoKaryawan?: string
 }
 
-export interface Mail {
+// ─── Contract ────────────────────────────────────────────────────────
+export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'DIBATALKAN'
+
+export interface Contract {
   id: number
-  unread?: boolean
-  from: User
-  subject: string
-  body: string
-  date: string
+  employeeId: number
+  employee?: Pick<Employee, 'id' | 'employeeNo' | 'fullName'>
+  contractNo: string
+  startDate: string
+  endDate: string
+  contractType: string
+  status: ContractStatus
+  documentUrl?: string
+  createdAt: string
+  updatedAt?: string
 }
 
-export interface Member {
-  name: string
-  username: string
-  role: 'member' | 'owner'
-  avatar: AvatarProps
-}
-
-export interface Stat {
+// ─── Dashboard ───────────────────────────────────────────────────────
+export interface DashboardStat {
   title: string
   icon: string
   value: number | string
-  variation: number
-  formatter?: (value: number) => string
+  description?: string
+  color?: string
 }
 
-export interface Sale {
-  id: string
-  date: string
-  status: SaleStatus
-  email: string
-  amount: number
-}
-
-export interface Notification {
+// ─── Auth ────────────────────────────────────────────────────────────
+export interface MasterAdmin {
   id: number
-  unread?: boolean
-  sender: User
-  body: string
-  date: string
+  employeeNo: string
+  fullName: string
 }
 
+// ─── Misc ────────────────────────────────────────────────────────────
 export type Period = 'daily' | 'weekly' | 'monthly'
 
 export interface Range {

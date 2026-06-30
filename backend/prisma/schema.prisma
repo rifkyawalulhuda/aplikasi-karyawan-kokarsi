@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model WorkLocation {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  employees Employee[]
+
+  @@map("work_locations")
+}
+
+model TaxStatus {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  employees Employee[]
+
+  @@map("tax_status")
+}
+
+model JobRole {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  employees Employee[]
+
+  @@map("job_roles")
+}
+
+model JobLevel {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  employees Employee[]
+
+  @@map("job_levels")
+}
+
+model Employee {
+  id               Int              @id @default(autoincrement())
+  employeeNo       String           @unique @db.VarChar(100)
+  fullName         String           @db.VarChar(255)
+  employmentStatus EmploymentStatus
+  taxStatusId      Int
+  birthDate        DateTime         @db.Date
+  gender           Gender
+  workLocationId   Int
+  jobRoleId        Int
+  jobLevelId       Int
+  educationLevel   EducationLevel
+  joinDate         DateTime         @db.Date
+  phoneNumber      String?          @db.VarChar(50)
+  email            String           @unique @db.VarChar(255)
+  fotoKaryawan     String?
+
+  taxStatus    TaxStatus    @relation(fields: [taxStatusId], references: [id])
+  workLocation WorkLocation @relation(fields: [workLocationId], references: [id])
+  jobRole      JobRole      @relation(fields: [jobRoleId], references: [id])
+  jobLevel     JobLevel     @relation(fields: [jobLevelId], references: [id])
+
+  contracts             Contract[]
+  statusHistory         EmployeeStatusHistory[]
+  masterAdmin           MasterAdmin?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("employees")
+}
+
+model MasterAdmin {
+  id         Int      @id @default(autoincrement())
+  employeeNo String   @unique @db.VarChar(100)
+  fullName   String   @db.VarChar(255)
+  password   String   @db.VarChar(255)
+  employee   Employee @relation(fields: [employeeNo], references: [employeeNo])
+
+  statusChanges EmployeeStatusHistory[]
+
+  @@map("master_admin")
+}
+
+model Contract {
+  id           Int            @id @default(autoincrement())
+  employeeId   Int
+  contractNo   String         @unique @db.VarChar(100)
+  startDate    DateTime       @db.Date
+  endDate      DateTime       @db.Date
+  contractType String?        @db.VarChar(50)
+  status       ContractStatus @default(AKTIF)
+  documentUrl  String?
+
+  employee  Employee           @relation(fields: [employeeId], references: [id])
+  documents ContractDocument[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contracts")
+}
+
+model ContractDocument {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  fileName   String   @db.VarChar(255)
+  fileUrl    String
+  uploadedAt DateTime @default(now())
+
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@map("contract_documents")
+}
+
+model EmployeeStatusHistory {
+  id         Int      @id @default(autoincrement())
+  employeeId Int
+  oldStatus  String   @db.VarChar(20)
+  newStatus  String   @db.VarChar(20)
+  changedBy  Int
+  changedAt  DateTime @default(now())
+  notes      String?
+
+  employee Employee    @relation(fields: [employeeId], references: [id])
+  admin    MasterAdmin @relation(fields: [changedBy], references: [id])
+
+  @@map("employee_status_history")
+}
+
+enum EmploymentStatus {
+  MITRA
+  KONTRAK
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum EducationLevel {
+  SMA
+  D3
+  S1
+  S2
+}
+
+enum ContractStatus {
+  AKTIF
+  AKAN_HABIS
+  EXPIRED
+  DIBATALKAN
+}
