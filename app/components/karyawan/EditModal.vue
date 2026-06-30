@@ -19,7 +19,38 @@ const emit = defineEmits<{ updated: []; 'update:modelValue': [val: boolean] }>()
 
 const open = defineModel<boolean>({ default: false })
 const loading = ref(false)
+const uploadLoading = ref(false)
+const photoFile = ref<File | null>(null)
+const photoPreview = ref<string | null>(null)
 const toast = useToast()
+
+function onPhotoChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  photoFile.value = file
+  photoPreview.value = URL.createObjectURL(file)
+}
+
+async function uploadPhoto() {
+  if (!props.employee || !photoFile.value) return
+  uploadLoading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('photo', photoFile.value)
+    await $fetch(`/api/employees/${props.employee.id}/photo`, {
+      method: 'POST',
+      body: formData,
+    })
+    toast.add({ title: 'Foto berhasil diupload', color: 'success' })
+    photoFile.value = null
+    emit('updated')
+  } catch (e: any) {
+    toast.add({ title: 'Gagal upload foto', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadLoading.value = false
+  }
+}
 
 const { data: lookups } = await useFetch<LookupsResponse>('/api/lookups')
 
@@ -131,6 +162,38 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     :ui="{ content: 'max-w-2xl' }"
   >
     <template #body>
+      <!-- Section Upload Foto -->
+      <div class="flex items-center gap-4 mb-4 pb-4 border-b border-default">
+        <div class="w-16 h-16 rounded-full overflow-hidden bg-elevated flex items-center justify-center shrink-0">
+          <img
+            v-if="photoPreview || props.employee?.fotoKaryawan"
+            :src="photoPreview || `http://localhost:3001${props.employee?.fotoKaryawan}`"
+            class="w-full h-full object-cover"
+            alt="Foto karyawan"
+          />
+          <UIcon v-else name="i-lucide-user" class="w-8 h-8 text-muted" />
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-medium text-highlighted mb-1">Foto Karyawan</p>
+          <p class="text-xs text-muted mb-2">JPG, PNG, WebP. Maks 2MB.</p>
+          <div class="flex items-center gap-2">
+            <label class="cursor-pointer">
+              <input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" class="hidden" @change="onPhotoChange" />
+              <UButton as="span" label="Pilih Foto" color="neutral" variant="subtle" size="sm" icon="i-lucide-upload" />
+            </label>
+            <UButton
+              v-if="photoFile"
+              label="Upload"
+              color="primary"
+              size="sm"
+              :loading="uploadLoading"
+              @click="uploadPhoto()"
+            />
+          </div>
+          <p v-if="photoFile" class="text-xs text-muted mt-1">{{ photoFile.name }}</p>
+        </div>
+      </div>
+
       <UForm
         :schema="schema"
         :state="state"

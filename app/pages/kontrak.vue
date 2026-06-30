@@ -11,13 +11,49 @@ const UDropdownMenu = resolveComponent('UDropdownMenu')
 const toast = useToast()
 const table = useTemplateRef('table')
 
-const { data: contractsRes, status } = await useFetch<{ data: Contract[]; total: number }>('/api/contracts', { lazy: true })
+const { data: contractsRes, status, refresh } = await useFetch<{ data: Contract[]; total: number }>('/api/contracts', {
+  query: { limit: 999 },
+  lazy: true
+})
 
 const contracts = computed<Contract[]>(() => contractsRes.value?.data ?? [])
 
 const statusFilter = ref('all')
 const searchQuery = ref('')
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
+
+// Modal state
+const addModal = ref(false)
+const editModal = ref(false)
+const editTarget = ref<Contract | null>(null)
+const deleteModal = ref(false)
+const deleteTarget = ref<Contract | null>(null)
+const deleteLoading = ref(false)
+
+function openEdit(contract: Contract) {
+  editTarget.value = contract
+  editModal.value = true
+}
+
+function confirmDelete(contract: Contract) {
+  deleteTarget.value = contract
+  deleteModal.value = true
+}
+
+async function doDelete() {
+  if (!deleteTarget.value) return
+  deleteLoading.value = true
+  try {
+    await $fetch(`/api/contracts/${deleteTarget.value.id}`, { method: 'DELETE' })
+    toast.add({ title: 'Kontrak berhasil dihapus', color: 'success' })
+    deleteModal.value = false
+    refresh()
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menghapus', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    deleteLoading.value = false
+  }
+}
 
 const statusColorMap: Record<ContractStatus, string> = {
   AKTIF: 'success',
@@ -37,24 +73,24 @@ function getRowItems(row: Row<Contract>) {
   return [
     { type: 'label', label: 'Aksi' },
     {
-      label: 'Lihat Detail',
-      icon: 'i-lucide-eye'
+      label: 'Edit Kontrak',
+      icon: 'i-lucide-pencil',
+      onSelect() { openEdit(row.original) }
     },
     {
       label: 'Unduh Dokumen',
       icon: 'i-lucide-download',
-      disabled: !row.original.documentUrl
+      disabled: !row.original.documentUrl,
+      onSelect() {
+        if (row.original.documentUrl) window.open(row.original.documentUrl, '_blank')
+      }
     },
     { type: 'separator' },
     {
-      label: 'Perbarui Kontrak',
-      icon: 'i-lucide-refresh-cw',
-      onSelect() {
-        toast.add({
-          title: 'Perbarui Kontrak',
-          description: `Kontrak ${row.original.contractNo} akan diperbarui.`
-        })
-      }
+      label: 'Hapus Kontrak',
+      icon: 'i-lucide-trash',
+      color: 'error' as const,
+      onSelect() { confirmDelete(row.original) }
     }
   ]
 }
@@ -146,7 +182,6 @@ const filteredData = computed(() => {
   return list
 })
 
-// Summary counts
 const counts = computed(() => {
   const list = contracts.value
   return {
@@ -170,7 +205,7 @@ watch([statusFilter, searchQuery], () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton label="Tambah Kontrak" icon="i-lucide-plus" color="primary" />
+          <UButton label="Tambah Kontrak" icon="i-lucide-plus" color="primary" @click="addModal = true" />
         </template>
       </UDashboardNavbar>
     </template>
@@ -200,7 +235,6 @@ watch([statusFilter, searchQuery], () => {
           icon="i-lucide-search"
           placeholder="Cari no. kontrak atau karyawan..."
         />
-
         <USelect
           v-model="statusFilter"
           :items="[
@@ -248,4 +282,34 @@ watch([statusFilter, searchQuery], () => {
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Modal Tambah -->
+  <KontrakAddContractModal
+    v-model:open="addModal"
+    @saved="refresh()"
+  />
+
+  <!-- Modal Edit -->
+  <KontrakEditContractModal
+    v-model:open="editModal"
+    :contract="editTarget"
+    @saved="refresh()"
+  />
+
+  <!-- Modal Konfirmasi Hapus -->
+  <UModal v-model:open="deleteModal" title="Konfirmasi Hapus">
+    <template #body>
+      <p class="text-sm text-muted">
+        Yakin ingin menghapus kontrak
+        <span class="font-semibold text-highlighted">{{ deleteTarget?.contractNo }}</span>?
+        Tindakan ini tidak dapat dibatalkan.
+      </p>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <UButton label="Batal" color="neutral" variant="subtle" @click="deleteModal = false" />
+        <UButton label="Hapus" color="error" :loading="deleteLoading" @click="doDelete()" />
+      </div>
+    </template>
+  </UModal>
 </template>

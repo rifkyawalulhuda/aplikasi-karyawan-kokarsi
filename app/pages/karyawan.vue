@@ -11,6 +11,7 @@ const UCheckbox = resolveComponent('UCheckbox')
 
 const toast = useToast()
 const table = useTemplateRef('table')
+const { exportExcel, exportPDF } = useExport()
 const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true })
 
 const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
@@ -202,6 +203,16 @@ watch([statusFilter, searchQuery], () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UDropdownMenu
+            :items="[
+              [
+                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => exportExcel('data-karyawan') },
+                { label: 'Export PDF', icon: 'i-lucide-file-text', onSelect: () => exportPDF('data-karyawan') }
+              ]
+            ]"
+          >
+            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" />
+          </UDropdownMenu>
           <KaryawanAddModal @added="refresh()" />
         </template>
       </UDashboardNavbar>

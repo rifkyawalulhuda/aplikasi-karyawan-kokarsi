@@ -1,5 +1,8 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
+import { FileInterceptor } from '@nestjs/platform-express'
+import { diskStorage } from 'multer'
+import { extname } from 'path'
 import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto } from './employees.service'
 
 @UseGuards(AuthGuard('jwt'))
@@ -45,5 +48,31 @@ export class EmployeesController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id)
+  }
+
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: diskStorage({
+      destination: './uploads/photos',
+      filename: (_req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9)
+        cb(null, `photo-${unique}${extname(file.originalname)}`)
+      },
+    }),
+    fileFilter: (_req, file, cb) => {
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+        return cb(new BadRequestException('Hanya file gambar (jpg, png, webp) yang diizinkan'), false)
+      }
+      cb(null, true)
+    },
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+  }))
+  uploadPhoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('File tidak ditemukan')
+    const fotoKaryawan = `/uploads/photos/${file.filename}`
+    return this.service.update(id, { fotoKaryawan } as any)
   }
 }
