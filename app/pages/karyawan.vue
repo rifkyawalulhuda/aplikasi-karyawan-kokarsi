@@ -28,6 +28,15 @@ const deleteModal = ref(false)
 const deleteTarget = ref<Employee | null>(null)
 const deleteLoading = ref(false)
 
+// Edit state
+const editModal = ref(false)
+const editTarget = ref<Employee | null>(null)
+
+function openEdit(employee: Employee) {
+  editTarget.value = employee
+  editModal.value = true
+}
+
 function confirmDelete(employee: Employee) {
   deleteTarget.value = employee
   deleteModal.value = true
@@ -56,7 +65,7 @@ function getRowItems(row: Row<Employee>) {
       label: 'Edit Data',
       icon: 'i-lucide-pencil',
       onSelect() {
-        navigateTo(`/karyawan/${row.original.id}/edit`)
+        openEdit(row.original)
       }
     },
     { type: 'separator' },
@@ -274,4 +283,11 @@ watch([statusFilter, searchQuery], () => {
       </div>
     </template>
   </UModal>
+
+  <!-- Modal Edit Karyawan -->
+  <KaryawanEditModal
+    v-model="editModal"
+    :employee="editTarget"
+    @updated="refresh"
+  />
 </template>

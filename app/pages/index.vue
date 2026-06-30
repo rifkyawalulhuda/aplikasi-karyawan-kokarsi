@@ -1,76 +1,81 @@
 <script setup lang="ts">
-import type { DashboardStat, Employee } from '~/types'
-
-const { data: employeesRes } = await useFetch<{ data: Employee[] }>('/api/employees', { lazy: true })
-
-const employees = computed<Employee[]>(() => employeesRes.value?.data ?? [])
-
-const stats = computed<DashboardStat[]>(() => {
-  const list = employees.value ?? []
-  const total = list.length
-  const mitra = list.filter(e => e.employmentStatus === 'MITRA').length
-  const kontrak = list.filter(e => e.employmentStatus === 'KONTRAK').length
-
-  return [
-    {
-      title: 'Total Karyawan',
-      icon: 'i-lucide-users',
-      value: total,
-      description: 'Seluruh karyawan terdaftar',
-      color: 'primary'
-    },
-    {
-      title: 'Status MITRA',
-      icon: 'i-lucide-user-check',
-      value: mitra,
-      description: 'Karyawan berstatus Mitra',
-      color: 'success'
-    },
-    {
-      title: 'Status KONTRAK',
-      icon: 'i-lucide-file-text',
-      value: kontrak,
-      description: 'Karyawan berstatus Kontrak',
-      color: 'warning'
-    },
-    {
-      title: 'Kontrak Akan Habis',
-      icon: 'i-lucide-alarm-clock',
-      value: 0,
-      description: 'Dalam 30 hari ke depan',
-      color: 'error'
-    }
-  ]
-})
-
-// Distribusi per lokasi kerja
-const locationDist = computed(() => {
-  const list = employees.value ?? []
-  const map: Record<string, number> = {}
-  for (const e of list) {
-    const loc = e.workLocation?.name ?? 'Tidak Diketahui'
-    map[loc] = (map[loc] ?? 0) + 1
-  }
-  return Object.entries(map).map(([name, count]) => ({ name, count }))
-})
-
-// Distribusi per job level
-const levelDist = computed(() => {
-  const list = employees.value
-  const map: Record<string, number> = {}
-  for (const e of list) {
-    const level = e.jobLevel?.name ?? 'Tidak Diketahui'
-    map[level] = (map[level] ?? 0) + 1
-  }
-  return Object.entries(map).map(([name, count]) => ({ name, count }))
-})
-
-const colorMap: Record<string, string> = {
-  primary: 'bg-primary/10 ring-primary/25 text-primary',
-  success: 'bg-green-500/10 ring-green-500/25 text-green-500',
-  warning: 'bg-amber-500/10 ring-amber-500/25 text-amber-500',
-  error: 'bg-red-500/10 ring-red-500/25 text-red-500'
+interface DashboardStats {
+  total: number
+  mitra: number
+  kontrak: number
+  expiringContracts: number
+  byLocation: { name: string; count: number }[]
+  byLevel: { name: string; count: number }[]
 }
+
+const { data: stats } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
+
+const statCards = computed(() => [
+  {
+    title: 'Total Karyawan',
+    icon: 'i-lucide-users',
+    value: stats.value?.total ?? 0,
+    description: 'Seluruh karyawan terdaftar',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+    ring: 'ring-primary/20'
+  },
+  {
+    title: 'Status MITRA',
+    icon: 'i-lucide-user-check',
+    value: stats.value?.mitra ?? 0,
+    description: 'Karyawan berstatus Mitra',
+    color: 'text-green-500',
+    bg: 'bg-green-500/10',
+    ring: 'ring-green-500/20'
+  },
+  {
+    title: 'Status KONTRAK',
+    icon: 'i-lucide-file-text',
+    value: stats.value?.kontrak ?? 0,
+    description: 'Karyawan berstatus Kontrak',
+    color: 'text-amber-500',
+    bg: 'bg-amber-500/10',
+    ring: 'ring-amber-500/20'
+  },
+  {
+    title: 'Kontrak Akan Habis',
+    icon: 'i-lucide-alarm-clock',
+    value: stats.value?.expiringContracts ?? 0,
+    description: 'Dalam 30 hari ke depan',
+    color: 'text-red-500',
+    bg: 'bg-red-500/10',
+    ring: 'ring-red-500/20'
+  }
+])
+
+// Donut chart untuk status karyawan
+const donutData = computed(() => {
+  const total = stats.value?.total ?? 0
+  const mitra = stats.value?.mitra ?? 0
+  const kontrak = stats.value?.kontrak ?? 0
+  const r = 40
+  const cx = 60
+  const cy = 60
+  const circ = 2 * Math.PI * r
+  if (total === 0) return { r, cx, cy, circ, mitraLen: 0, kontrakLen: 0, mitraOffset: 0, kontrakOffset: 0, mitraPct: 0, kontrakPct: 0, total: 0 }
+
+  const mitraPct = Math.round((mitra / total) * 100)
+  const kontrakPct = Math.round((kontrak / total) * 100)
+
+  // SVG arc untuk donut
+
+  const mitraLen = (mitra / total) * circ
+  const kontrakLen = (kontrak / total) * circ
+  const mitraOffset = 0
+  const kontrakOffset = circ - mitraLen
+
+  return { r, cx, cy, circ, mitraLen, kontrakLen, mitraOffset, kontrakOffset, mitraPct, kontrakPct, total }
+})
+
+// Progress bar colors
+const locationColors = ['bg-primary', 'bg-blue-400', 'bg-cyan-500', 'bg-indigo-500']
+const levelColors = ['bg-violet-500', 'bg-purple-400', 'bg-fuchsia-500', 'bg-pink-500']
 </script>
 
 <template>
@@ -80,88 +85,237 @@ const colorMap: Record<string, string> = {
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #right>
+          <span class="text-xs text-muted hidden sm:block">
+            {{ new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+          </span>
+        </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <!-- Stats -->
-      <UPageGrid class="lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-px mb-6">
-        <UPageCard
-          v-for="(stat, index) in stats"
-          :key="index"
-          :icon="stat.icon"
-          :title="stat.title"
-          variant="subtle"
-          :ui="{
-            container: 'gap-y-1.5',
-            wrapper: 'items-start',
-            leading: `p-2.5 rounded-full ring ring-inset flex-col ${colorMap[stat.color ?? 'primary']}`,
-            title: 'font-normal text-muted text-xs uppercase'
-          }"
-          class="lg:rounded-none first:rounded-l-lg last:rounded-r-lg hover:z-1"
-        >
-          <div class="flex items-center gap-2">
-            <span class="text-2xl font-semibold text-highlighted">
-              {{ stat.value }}
-            </span>
-          </div>
-          <p class="text-xs text-muted mt-1">{{ stat.description }}</p>
-        </UPageCard>
-      </UPageGrid>
+      <div class="p-4 sm:p-6 space-y-6">
 
-      <!-- Distribusi -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Lokasi Kerja -->
-        <UCard>
+        <!-- Stat Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <UCard
+            v-for="(card, i) in statCards"
+            :key="i"
+            class="cursor-default hover:ring-1 hover:ring-default transition-all duration-200"
+            :ui="{ body: 'p-4 sm:p-5' }"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">{{ card.title }}</p>
+                <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ card.value }}</p>
+                <p class="text-xs text-muted mt-1 truncate">{{ card.description }}</p>
+              </div>
+              <div :class="['p-2.5 rounded-xl ring ring-inset shrink-0', card.bg, card.ring]">
+                <UIcon :name="card.icon" :class="['size-5', card.color]" />
+              </div>
+            </div>
+          </UCard>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+
+          <!-- Donut Chart: Status Karyawan -->
+          <UCard :ui="{ body: 'p-4 sm:p-5' }">
+            <template #header>
+              <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
+                <UIcon name="i-lucide-pie-chart" class="size-4 text-muted" />
+                <span class="text-sm font-semibold text-highlighted">Status Karyawan</span>
+              </div>
+            </template>
+
+            <div class="flex flex-col items-center gap-4">
+              <!-- SVG Donut -->
+              <div class="relative">
+                <svg width="120" height="120" viewBox="0 0 120 120">
+                  <!-- Background circle -->
+                  <circle
+                    :cx="donutData.cx"
+                    :cy="donutData.cy"
+                    :r="donutData.r"
+                    fill="none"
+                    class="stroke-accented"
+                    stroke-width="16"
+                  />
+                  <!-- MITRA arc -->
+                  <circle
+                    v-if="(stats?.total ?? 0) > 0"
+                    :cx="donutData.cx"
+                    :cy="donutData.cy"
+                    :r="donutData.r"
+                    fill="none"
+                    class="stroke-green-500"
+                    stroke-width="16"
+                    stroke-linecap="round"
+                    :stroke-dasharray="`${donutData.mitraLen} ${donutData.circ}`"
+                    :stroke-dashoffset="donutData.circ * 0.25"
+                    style="transition: stroke-dasharray 0.6s ease"
+                  />
+                  <!-- KONTRAK arc -->
+                  <circle
+                    v-if="(stats?.total ?? 0) > 0"
+                    :cx="donutData.cx"
+                    :cy="donutData.cy"
+                    :r="donutData.r"
+                    fill="none"
+                    class="stroke-amber-500"
+                    stroke-width="16"
+                    stroke-linecap="round"
+                    :stroke-dasharray="`${donutData.kontrakLen} ${donutData.circ}`"
+                    :stroke-dashoffset="donutData.circ * 0.25 - (donutData.mitraLen ?? 0)"
+                    style="transition: stroke-dasharray 0.6s ease"
+                  />
+                  <!-- Center text -->
+                  <text x="60" y="56" text-anchor="middle" class="fill-highlighted" font-size="18" font-weight="700">
+                    {{ donutData.total }}
+                  </text>
+                  <text x="60" y="71" text-anchor="middle" class="fill-muted" font-size="9">
+                    Total
+                  </text>
+                </svg>
+              </div>
+
+              <!-- Legend -->
+              <div class="w-full space-y-2">
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-2">
+                    <span class="size-2.5 rounded-full bg-green-500 shrink-0" />
+                    <span class="text-muted">MITRA</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-highlighted tabular-nums">{{ stats?.mitra ?? 0 }}</span>
+                    <span class="text-xs text-muted tabular-nums">({{ donutData.mitraPct }}%)</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-sm">
+                  <div class="flex items-center gap-2">
+                    <span class="size-2.5 rounded-full bg-amber-500 shrink-0" />
+                    <span class="text-muted">KONTRAK</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold text-highlighted tabular-nums">{{ stats?.kontrak ?? 0 }}</span>
+                    <span class="text-xs text-muted tabular-nums">({{ donutData.kontrakPct }}%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </UCard>
+
+          <!-- Bar: Distribusi Lokasi Kerja -->
+          <UCard :ui="{ body: 'p-4 sm:p-5' }">
+            <template #header>
+              <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
+                <UIcon name="i-lucide-map-pin" class="size-4 text-muted" />
+                <span class="text-sm font-semibold text-highlighted">Lokasi Kerja</span>
+              </div>
+            </template>
+
+            <div class="space-y-3.5">
+              <template v-if="(stats?.byLocation?.length ?? 0) > 0">
+                <div
+                  v-for="(item, i) in stats?.byLocation"
+                  :key="item.name"
+                  class="space-y-1.5"
+                >
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted truncate max-w-[70%]">{{ item.name }}</span>
+                    <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                  </div>
+                  <div class="h-2 bg-accented rounded-full overflow-hidden">
+                    <div
+                      :class="['h-full rounded-full transition-all duration-700', locationColors[i % locationColors.length]]"
+                      :style="{ width: `${(item.count / (stats?.total || 1)) * 100}%` }"
+                    />
+                  </div>
+                </div>
+              </template>
+              <p v-else class="text-sm text-muted text-center py-4">Belum ada data</p>
+            </div>
+          </UCard>
+
+          <!-- Bar: Distribusi Level Jabatan -->
+          <UCard :ui="{ body: 'p-4 sm:p-5' }">
+            <template #header>
+              <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
+                <UIcon name="i-lucide-bar-chart-2" class="size-4 text-muted" />
+                <span class="text-sm font-semibold text-highlighted">Level Jabatan</span>
+              </div>
+            </template>
+
+            <div class="space-y-3.5">
+              <template v-if="(stats?.byLevel?.length ?? 0) > 0">
+                <div
+                  v-for="(item, i) in stats?.byLevel"
+                  :key="item.name"
+                  class="space-y-1.5"
+                >
+                  <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted truncate max-w-[70%]">{{ item.name }}</span>
+                    <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                  </div>
+                  <div class="h-2 bg-accented rounded-full overflow-hidden">
+                    <div
+                      :class="['h-full rounded-full transition-all duration-700', levelColors[i % levelColors.length]]"
+                      :style="{ width: `${(item.count / (stats?.total || 1)) * 100}%` }"
+                    />
+                  </div>
+                </div>
+              </template>
+              <p v-else class="text-sm text-muted text-center py-4">Belum ada data</p>
+            </div>
+          </UCard>
+
+        </div>
+
+        <!-- Quick Actions -->
+        <UCard :ui="{ body: 'p-4 sm:p-5' }">
           <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-map-pin" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Distribusi Lokasi Kerja</span>
+            <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
+              <UIcon name="i-lucide-zap" class="size-4 text-muted" />
+              <span class="text-sm font-semibold text-highlighted">Akses Cepat</span>
             </div>
           </template>
-          <div class="space-y-3">
-            <div
-              v-for="item in locationDist"
-              :key="item.name"
-              class="flex items-center gap-3"
-            >
-              <span class="text-sm text-highlighted w-24 shrink-0">{{ item.name }}</span>
-              <div class="flex-1 bg-accented rounded-full h-2">
-                <div
-                  class="bg-primary h-2 rounded-full transition-all"
-                  :style="{ width: `${(item.count / (employees?.length || 1)) * 100}%` }"
-                />
-              </div>
-              <span class="text-sm font-medium text-highlighted w-6 text-right">{{ item.count }}</span>
-            </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <UButton
+              to="/karyawan"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-users"
+              label="Data Karyawan"
+              class="justify-start cursor-pointer"
+            />
+            <UButton
+              to="/kontrak"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-file-text"
+              label="Kontrak"
+              class="justify-start cursor-pointer"
+            />
+            <UButton
+              to="/settings/master-data"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-database"
+              label="Master Data"
+              class="justify-start cursor-pointer"
+            />
+            <UButton
+              to="/settings"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-settings"
+              label="Pengaturan"
+              class="justify-start cursor-pointer"
+            />
           </div>
         </UCard>
 
-        <!-- Job Level -->
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-bar-chart-2" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Distribusi Level Jabatan</span>
-            </div>
-          </template>
-          <div class="space-y-3">
-            <div
-              v-for="item in levelDist"
-              :key="item.name"
-              class="flex items-center gap-3"
-            >
-              <span class="text-sm text-highlighted w-24 shrink-0">{{ item.name }}</span>
-              <div class="flex-1 bg-accented rounded-full h-2">
-                <div
-                  class="bg-primary h-2 rounded-full transition-all"
-                  :style="{ width: `${(item.count / (employees?.length || 1)) * 100}%` }"
-                />
-              </div>
-              <span class="text-sm font-medium text-highlighted w-6 text-right">{{ item.count }}</span>
-            </div>
-          </div>
-        </UCard>
       </div>
     </template>
   </UDashboardPanel>

@@ -105,13 +105,38 @@ export class EmployeesService {
   }
 
   async getDashboardStats() {
-    const [total, mitra, kontrak, byLocation, byLevel] = await Promise.all([
+    const now = new Date()
+    const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+
+    const [total, mitra, kontrak, expiringContracts, locations, levels] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { employmentStatus: 'MITRA' } }),
       this.prisma.employee.count({ where: { employmentStatus: 'KONTRAK' } }),
-      this.prisma.employee.groupBy({ by: ['workLocationId'], _count: true }),
-      this.prisma.employee.groupBy({ by: ['jobLevelId'], _count: true }),
+      this.prisma.contract.count({
+        where: { endDate: { gte: now, lte: in30Days } }
+      }),
+      this.prisma.workLocation.findMany({
+        select: {
+          name: true,
+          _count: { select: { employees: true } }
+        }
+      }),
+      this.prisma.jobLevel.findMany({
+        select: {
+          name: true,
+          _count: { select: { employees: true } }
+        }
+      }),
     ])
-    return { total, mitra, kontrak, byLocation, byLevel }
+
+    const byLocation = locations
+      .map(l => ({ name: l.name, count: l._count.employees }))
+      .filter(l => l.count > 0)
+
+    const byLevel = levels
+      .map(l => ({ name: l.name, count: l._count.employees }))
+      .filter(l => l.count > 0)
+
+    return { total, mitra, kontrak, expiringContracts, byLocation, byLevel }
   }
 }
