@@ -1,4 +1,4 @@
-// ─── Lookup Types ───────────────────────────────────────────────────
+// --- Lookup Types ---
 export interface WorkLocation {
   id: number
   name: string
@@ -24,7 +24,7 @@ export interface JobLevel {
   name: string
 }
 
-// ─── Employee ────────────────────────────────────────────────────────
+// --- Employee ---
 export type EmploymentStatus = 'MITRA' | 'KONTRAK'
 export type Gender = 'MALE' | 'FEMALE'
 export type EducationLevel = 'SMA' | 'D3' | 'S1' | 'S2'
@@ -51,7 +51,7 @@ export interface Employee {
   fotoKaryawan?: string
 }
 
-// ─── Contract ────────────────────────────────────────────────────────
+// --- Contract ---
 export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'DIBATALKAN'
 
 export interface Contract {
@@ -69,7 +69,7 @@ export interface Contract {
   updatedAt?: string
 }
 
-// ─── Dashboard ───────────────────────────────────────────────────────
+// --- Dashboard ---
 export interface DashboardStat {
   title: string
   icon: string
@@ -78,14 +78,28 @@ export interface DashboardStat {
   color?: string
 }
 
-// ─── Auth ────────────────────────────────────────────────────────────
+// --- Auth ---
+export type AdminRole = 'ADMIN' | 'PENGELOLA_KOPERASI'
+
 export interface MasterAdmin {
   id: number
   employeeNo: string
   fullName: string
+  role: AdminRole
 }
 
-// ─── Misc ────────────────────────────────────────────────────────────
+export interface UserAccount {
+  id: number
+  name: string
+  nik: string
+  email: string
+  role: AdminRole
+  username: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+// --- Misc ---
 export type Period = 'daily' | 'weekly' | 'monthly'
 
 export interface Range {

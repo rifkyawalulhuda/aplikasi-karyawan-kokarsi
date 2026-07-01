@@ -11,6 +11,7 @@ const appConfig = useAppConfig()
 
 const user = computed(() => ({
   name: auth.admin?.fullName ?? 'Master Admin',
+  description: (auth.admin?.role ?? 'ADMIN') === 'PENGELOLA_KOPERASI' ? 'Pengelola Koperasi' : 'Admin',
   avatar: { alt: auth.admin?.fullName ?? 'Master Admin' }
 }))
 
@@ -20,6 +21,7 @@ const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
 const items = computed<DropdownMenuItem[][]>(() => ([[{
   type: 'label',
   label: user.value.name,
+  description: user.value.description,
   avatar: user.value.avatar
 }], [{
   label: 'Profil',

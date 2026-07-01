@@ -87,6 +87,35 @@ async function main() {
       employeeNo: employee.employeeNo,
       fullName: 'Admin Kokarsi',
       password: hashedPassword,
+      role: 'ADMIN',
+    },
+  })
+
+  const adminUserPassword = await bcrypt.hash('admin123', 10)
+  await prisma.userAccount.upsert({
+    where: { username: 'admin.kokarsi' },
+    update: {},
+    create: {
+      name: 'Admin Kokarsi',
+      nik: 'SKY-ADM-001',
+      email: 'admin@kokarsi-sankyu.co.id',
+      role: 'ADMIN',
+      username: 'admin.kokarsi',
+      password: adminUserPassword,
+    },
+  })
+
+  const pengelolaPassword = await bcrypt.hash('pengelola123', 10)
+  await prisma.userAccount.upsert({
+    where: { username: 'pengelola1' },
+    update: {},
+    create: {
+      name: 'Rina Permata',
+      nik: 'SKY-PEL-001',
+      email: 'rina.permata@sankyu.co.id',
+      role: 'PENGELOLA_KOPERASI',
+      username: 'pengelola1',
+      password: pengelolaPassword,
     },
   })
 
@@ -104,7 +133,9 @@ async function main() {
   })
 
   console.log('Seed selesai!')
-  console.log('Login: employeeNo=EMP001, password=admin123')
+  console.log('Login admin: employeeNo=EMP001, password=admin123')
+  console.log('Login admin user: username=admin.kokarsi, password=admin123')
+  console.log('Login pengelola: username=pengelola1, password=pengelola123')
 }
 
 main()

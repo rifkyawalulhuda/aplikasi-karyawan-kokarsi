@@ -3,48 +3,67 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 
 const route = useRoute()
 const open = ref(false)
+const auth = useAuthStore()
 
-const links = [[{
-  label: 'Dashboard',
-  icon: 'i-lucide-layout-dashboard',
-  to: '/',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Data Karyawan',
-  icon: 'i-lucide-users',
-  to: '/karyawan',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Kontrak',
-  icon: 'i-lucide-file-text',
-  to: '/kontrak',
-  onSelect: () => { open.value = false }
-}, {
-  label: 'Pengaturan',
-  to: '/settings',
-  icon: 'i-lucide-settings',
-  defaultOpen: true,
-  type: 'trigger',
-  children: [{
-    label: 'Umum',
+const links = computed<NavigationMenuItem[]>(() => [
+  {
+    label: 'Dashboard',
+    icon: 'i-lucide-layout-dashboard',
+    to: '/',
+    onSelect: () => { open.value = false },
+  },
+  {
+    label: 'Data Karyawan',
+    icon: 'i-lucide-users',
+    to: '/karyawan',
+    onSelect: () => { open.value = false },
+  },
+  {
+    label: 'Kontrak',
+    icon: 'i-lucide-file-text',
+    to: '/kontrak',
+    onSelect: () => { open.value = false },
+  },
+  {
+    label: 'Pengaturan',
     to: '/settings',
-    exact: true,
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Master Data',
-    to: '/settings/master-data',
-    onSelect: () => { open.value = false }
-  }, {
-    label: 'Keamanan',
-    to: '/settings/security',
-    onSelect: () => { open.value = false }
-  }]
-}]] satisfies NavigationMenuItem[][]
+    icon: 'i-lucide-settings',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [
+      {
+        label: 'Umum',
+        to: '/settings',
+        exact: true,
+        onSelect: () => { open.value = false },
+      },
+      auth.canManageMasterData
+        ? {
+            label: 'Master Data',
+            to: '/settings/master-data',
+            onSelect: () => { open.value = false },
+          }
+        : null,
+      auth.canManageMasterData
+        ? {
+            label: 'User',
+            to: '/settings/users',
+            onSelect: () => { open.value = false },
+          }
+        : null,
+      {
+        label: 'Keamanan',
+        to: '/settings/security',
+        onSelect: () => { open.value = false },
+      },
+    ].filter(Boolean) as NavigationMenuItem[],
+  },
+])
 
-const groups = computed(() => [{
+const groups = computed<any[]>(() => [{
   id: 'links',
   label: 'Navigasi',
-  items: links.flat()
+  items: links.value as any
 }])
 </script>
 
@@ -67,7 +86,7 @@ const groups = computed(() => [{
 
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="links[0]"
+          :items="links"
           orientation="vertical"
           tooltip
           popover

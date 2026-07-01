@@ -17,7 +17,7 @@ Sistem ini akan mengelola seluruh data master karyawan secara terpusat, termasuk
 **Tujuan Utama**:
 - Menggantikan proses manual (Excel) menjadi sistem digital yang terintegrasi
 - Meningkatkan akurasi data dan kepatuhan ketenagakerjaan
-- Memberikan visibilitas real-time kepada **Master Admin** terhadap status dan masa berlaku kontrak seluruh karyawan
+- Memberikan visibilitas real-time kepada **Admin** dan **Pengelola Koperasi** terhadap status dan masa berlaku kontrak seluruh karyawan
 
 **Target MVP**: 3–4 bulan pertama
 
@@ -32,7 +32,7 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - **GOAL-01**: 100% data karyawan PT. Sankyu tercatat secara digital dalam 1 sistem
 - **GOAL-02**: Mengurangi waktu pencarian & pengelolaan data karyawan dari jam menjadi < 30 detik
 - **GOAL-03**: Memberikan notifikasi otomatis 30 hari & 7 hari sebelum kontrak habis
-- **GOAL-04**: Dashboard ringkasan lengkap yang hanya dapat diakses oleh **Master Admin**
+- **GOAL-04**: Dashboard ringkasan lengkap yang dapat diakses oleh **Admin** dan **Pengelola Koperasi**
 
 ---
 
@@ -40,10 +40,11 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 
 | Peran           | Deskripsi                                      | Kebutuhan Utama                                      |
 |-----------------|------------------------------------------------|------------------------------------------------------|
-| **Master Admin**| Satu-satunya peran yang mengelola seluruh sistem | CRUD karyawan, upload dokumen kontrak & foto, update status, monitoring kontrak, dashboard |
+| **Master Admin**| Peran penuh yang mengelola seluruh sistem | CRUD karyawan, upload dokumen kontrak & foto, update status, monitoring kontrak, dashboard, master data, user internal |
+| **Pengelola Koperasi**| Peran operasional untuk data karyawan dan kontrak | CRUD karyawan, monitoring kontrak, dashboard, tanpa akses master data dan user internal |
 
 > **Catatan Penting**:  
-> Saat ini **hanya Master Admin** yang akan menggunakan aplikasi ini.  
+> Saat ini ada dua peran internal: **Master Admin** dan **Pengelola Koperasi**.  
 > Tidak ada portal karyawan (self-service) dan tidak ada akses untuk Owner / Manajemen di fase MVP.
 
 ---
@@ -74,12 +75,13 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - Bulk update status karyawan
 
 ### 4.4 Admin & Setting
-- Manajemen user Master Admin (`master_admin`)
-- Pengelolaan master data lookup (work location, job role, dll)
+- Manajemen user internal (`master_admin`)
+- Master User untuk pembuatan akun internal Admin / Pengelola Koperasi
+- Pengelolaan master data lookup (work location, job role, dll) hanya untuk **Master Admin**
 - Audit log sederhana (siapa yang mengubah data kapan)
 - Konfirmasi hapus data menggunakan toast bawaan UI sebelum aksi delete dijalankan
 
-### 4.5 Dashboard (Khusus Master Admin)
+### 4.5 Dashboard (Internal)
 - Total karyawan aktif
 - Jumlah karyawan MITRA vs KONTRAK
 - Kontrak yang akan habis dalam 30 hari
@@ -106,6 +108,12 @@ Sebagai Master Admin, saya ingin melihat riwayat semua kontrak yang pernah dimil
 
 **US-06** (Master Admin)  
 Sebagai Master Admin, saya ingin mendapatkan toast konfirmasi sebelum menghapus data karyawan, kontrak, atau master data, agar tidak salah hapus.
+
+**US-07** (Pengelola Koperasi)  
+Sebagai Pengelola Koperasi, saya ingin mengelola data karyawan dan status kontrak, tetapi tidak bisa membuat atau mengedit Master Data, agar pembagian kewenangan tetap jelas.
+
+**US-08** (Master Admin)  
+Sebagai Master Admin, saya ingin membuat dan mengelola akun internal dengan role Admin atau Pengelola Koperasi, agar akses sistem bisa diatur lebih rapi.
 
 ---
 
@@ -197,7 +205,7 @@ CREATE TABLE employee_status_history (
 | FR-03 | Sistem notifikasi kontrak akan habis (in-app + email)                      | P0        |
 | FR-04 | Filter & pencarian karyawan yang powerful                                  | P0        |
 | FR-05 | Riwayat kontrak per karyawan (read-only)                                   | P1        |
-| FR-06 | Dashboard ringkasan khusus Master Admin                                    | P1        |
+| FR-06 | Dashboard ringkasan untuk peran internal                                   | P1        |
 | FR-07 | Export data karyawan ke Excel                                              | P2        |
 | FR-08 | Audit log perubahan data                                                   | P2        |
 | FR-09 | Toast konfirmasi sebelum hapus data karyawan, kontrak, dan master data     | P1        |
@@ -206,7 +214,7 @@ CREATE TABLE employee_status_history (
 
 ## 9. Non-Functional Requirements
 
-- **Keamanan**: Password hash (argon2), JWT, **hanya akses Master Admin**
+- **Keamanan**: Password hash (argon2), JWT, akses berbasis peran internal
 - **Performa**: Halaman list karyawan < 2 detik (server-side pagination + Tanstack Table)
 - **Reliability**: Backup database otomatis harian
 - **Scalability**: Siap untuk 5.000+ karyawan
@@ -233,7 +241,7 @@ CREATE TABLE employee_status_history (
 | **M1: Foundation**        | Minggu 1-2  | Prisma schema + NestJS backend dasar                  |
 | **M2: Master Data**       | Minggu 3-5  | CRUD Karyawan + Upload Foto + Lookup tables + Nuxt UI |
 | **M3: Kontrak**           | Minggu 6-8  | Modul kontrak + upload dokumen + history + notifikasi |
-| **M4: Dashboard**         | Minggu 9-10 | Dashboard khusus Master Admin                         |
+| **M4: Dashboard**         | Minggu 9-10 | Dashboard khusus peran internal                       |
 | **M5: Polish & Testing**  | Minggu 11-12| Bug fix, UI/UX improvement, UAT                       |
 | **Go-Live**               | Minggu 13   | Deployment ke production                              |
 
@@ -244,7 +252,7 @@ CREATE TABLE employee_status_history (
 - 100% data karyawan PT. Sankyu sudah masuk ke sistem dalam 1 bulan pertama
 - Rata-rata waktu input data karyawan baru < 3 menit
 - 0 kasus kontrak terlewat dalam 6 bulan pertama
-- Master Admin puas dengan sistem (NPS ≥ 9/10)
+- Pengguna internal puas dengan sistem (NPS ≥ 9/10)
 
 ---
 
@@ -252,7 +260,7 @@ CREATE TABLE employee_status_history (
 
 **Asumsi**:
 - Data karyawan PT. Sankyu sudah tersedia dalam format Excel/CSV
-- Hanya ada 1–2 orang Master Admin yang akan menggunakan sistem
+- Hanya ada 1–2 orang pengguna internal yang akan menggunakan sistem
 - Server (Xubuntu + Docker) sudah tersedia
 
 **Risiko**:
@@ -270,7 +278,7 @@ CREATE TABLE employee_status_history (
 
 **Catatan Akhir**:
 Dokumen ini adalah **versi 1.1** (revisi sesuai permintaan).  
-Fokus utama: **Hanya untuk Master Admin** di **Koperasi Karyawan PT. Sankyu**.
+Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
 
 ---
 

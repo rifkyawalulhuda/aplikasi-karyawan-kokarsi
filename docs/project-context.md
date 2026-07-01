@@ -6,13 +6,15 @@
 
 ## Ringkasan Proyek
 
-Aplikasi manajemen karyawan internal untuk **Kokarsi PT. Sankyu**. Single role: Master Admin. UI Bahasa Indonesia.
+Aplikasi manajemen karyawan internal untuk **Kokarsi PT. Sankyu**. Role internal: Master Admin dan Pengelola Koperasi. UI Bahasa Indonesia.
 
 - **Repo**: `E:\Github\aplikasi-karyawan-kokarsi`
 - **Frontend**: Nuxt 3 + Nuxt UI v4 + TypeScript + Tailwind -> `http://localhost:3000`
 - **Backend**: NestJS + Prisma + PostgreSQL -> `http://localhost:3001/api`
 - **Database**: PostgreSQL lokal project ini via `backend/.env` (`DATABASE_URL`), Docker `kokarsi-postgres`, port `5435`, DB `kokarsi_karyawan`
-- **Login**: `employeeNo=EMP001` / `password=admin123`
+- **Login Admin**: `employeeNo=EMP001` / `password=admin123`
+- **Login Admin User**: `username=admin.kokarsi` / `password=admin123`
+- **Login Pengelola**: `username=pengelola1` / `password=pengelola123`
 
 ---
 
@@ -57,6 +59,9 @@ npx tsc -p tsconfig.json
 | 8 | Upload foto karyawan | `app/components/karyawan/EditModal.vue`, `server/api/employees/[id]/photo.post.ts` |
 | 9 | Export Excel & PDF (semua data + semua kolom) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
 | 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts`, `app/pages/karyawan.vue`, `app/pages/kontrak.vue`, `app/pages/settings/master-data.vue` |
+| 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts`, `app/layouts/default.vue`, `app/middleware/auth.global.ts` |
+| 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/prisma/schema.prisma`, `backend/src/users/`, `app/pages/settings/users.vue`, `server/api/users/` |
+| 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
 
 ---
 
@@ -98,6 +103,7 @@ app/
     karyawan.vue           # Manajemen karyawan
     kontrak.vue            # Manajemen kontrak
     settings/master-data.vue  # Master data
+    settings/users.vue        # Master user
     login.vue              # Login
   components/
     karyawan/
@@ -126,6 +132,8 @@ server/
     lookups/
       [resource].ts         # GET list + POST
       [resource]/[id].ts    # PUT + DELETE
+    users.ts                # CRUD master user list/create
+    users/[id].ts           # CRUD master user detail
   middleware/
     auth.ts                 # JWT guard
 
@@ -134,11 +142,12 @@ backend/
     employees/              # CRUD + upload foto endpoint
     contracts/              # CRUD kontrak
     lookups/                # Work locations, job roles, levels, tax status, contract types
+    users/                  # CRUD master user internal
     auth/                   # JWT strategy
     main.ts                 # Static assets /uploads + dotenv/config
     prisma/                 # Prisma service adapter
   prisma/
-    schema.prisma           # Employee, Contract, ContractType, MasterAdmin, dll
+    schema.prisma           # Employee, Contract, ContractType, MasterAdmin, UserAccount, dll
   uploads/
     photos/                 # Foto karyawan tersimpan di sini
 ```
@@ -180,6 +189,16 @@ backend/
 |-------|------|-----------|
 | `name` | String | Nama tipe kontrak, mis. PKWT / PKWTT / Magang |
 
+### UserAccount
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `name` | String | Nama lengkap akun internal |
+| `nik` | String | Unique, dipakai sebagai identitas login alternatif |
+| `email` | String | Unique |
+| `role` | Enum | ADMIN / PENGELOLA_KOPERASI |
+| `username` | String | Unique, dipakai login utama |
+| `password` | String | Hash password di backend |
+
 ---
 
 ## API Endpoints
@@ -207,6 +226,10 @@ backend/
 | POST | `/api/lookups/contract-types` | Tambah tipe kontrak |
 | PUT | `/api/lookups/contract-types/:id` | Edit tipe kontrak |
 | DELETE | `/api/lookups/contract-types/:id` | Hapus tipe kontrak |
+| GET | `/api/users` | List master user |
+| POST | `/api/users` | Tambah user internal |
+| PUT | `/api/users/:id` | Edit user internal |
+| DELETE | `/api/users/:id` | Hapus user internal |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 
 ---
@@ -217,7 +240,8 @@ backend/
 - **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom -> `.pdf`
 - **Kolom export**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Status Pajak, No. Kontrak Aktif, Tipe Kontrak, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 - **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
-- **Hapus data**: Karyawan, kontrak, dan master data memakai toast konfirmasi sebelum delete dijalankan
+- **Hapus data**: Karyawan, kontrak, master data, dan user memakai toast konfirmasi sebelum delete dijalankan
+- **Master User**: Admin dapat membuat akun internal dengan role `ADMIN` atau `PENGELOLA_KOPERASI`; password disimpan hash, seed sudah menambahkan akun Admin dan Pengelola, login mendukung `username` atau `NIK`, dan duplikat `NIK/Email/Username` menampilkan pesan validasi yang ramah
 
 ---
 

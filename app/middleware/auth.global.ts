@@ -6,4 +6,10 @@ export default defineNuxtRouteMiddleware((to) => {
   if (to.path === '/login' && auth.isLoggedIn) {
     return navigateTo('/')
   }
+  if (to.path === '/settings/master-data' && (auth.admin?.role ?? 'ADMIN') !== 'ADMIN') {
+    return navigateTo('/settings')
+  }
+  if (to.path === '/settings/users' && (auth.admin?.role ?? 'ADMIN') !== 'ADMIN') {
+    return navigateTo('/settings')
+  }
 })

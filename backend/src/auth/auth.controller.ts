@@ -26,6 +26,9 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Put('change-password')
   async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    if (req.user.kind === 'user_account') {
+      return this.auth.changeUserPassword(req.user.sub, dto.oldPassword, dto.newPassword)
+    }
     return this.auth.changePassword(req.user.sub, dto.oldPassword, dto.newPassword)
   }
 }

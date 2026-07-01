@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { LookupsService } from './lookups.service'
 import { IsNotEmpty, IsString } from 'class-validator'
@@ -14,6 +14,12 @@ class CreateLookupDto {
 export class LookupsController {
   constructor(private service: LookupsService) {}
 
+  private ensureMasterDataWriteAccess(role?: string) {
+    if (role !== 'ADMIN') {
+      throw new ForbiddenException('Role Pengelola Koperasi tidak dapat mengubah Master Data')
+    }
+  }
+
   @Get()
   getAll() {
     return this.service.getAll()
@@ -23,69 +29,104 @@ export class LookupsController {
   getWorkLocations() { return this.service.getWorkLocations() }
 
   @Post('work-locations')
-  createWorkLocation(@Body() dto: CreateLookupDto) { return this.service.createWorkLocation(dto.name) }
+  createWorkLocation(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createWorkLocation(dto.name)
+  }
 
   @Put('work-locations/:id')
-  updateWorkLocation(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+  updateWorkLocation(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.updateWorkLocation(id, dto.name)
   }
 
   @Delete('work-locations/:id')
-  deleteWorkLocation(@Param('id', ParseIntPipe) id: number) { return this.service.deleteWorkLocation(id) }
+  deleteWorkLocation(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteWorkLocation(id)
+  }
 
   @Get('job-roles')
   getJobRoles() { return this.service.getJobRoles() }
 
   @Post('job-roles')
-  createJobRole(@Body() dto: CreateLookupDto) { return this.service.createJobRole(dto.name) }
+  createJobRole(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createJobRole(dto.name)
+  }
 
   @Put('job-roles/:id')
-  updateJobRole(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+  updateJobRole(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.updateJobRole(id, dto.name)
   }
 
   @Delete('job-roles/:id')
-  deleteJobRole(@Param('id', ParseIntPipe) id: number) { return this.service.deleteJobRole(id) }
+  deleteJobRole(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteJobRole(id)
+  }
 
   @Get('job-levels')
   getJobLevels() { return this.service.getJobLevels() }
 
   @Post('job-levels')
-  createJobLevel(@Body() dto: CreateLookupDto) { return this.service.createJobLevel(dto.name) }
+  createJobLevel(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createJobLevel(dto.name)
+  }
 
   @Put('job-levels/:id')
-  updateJobLevel(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+  updateJobLevel(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.updateJobLevel(id, dto.name)
   }
 
   @Delete('job-levels/:id')
-  deleteJobLevel(@Param('id', ParseIntPipe) id: number) { return this.service.deleteJobLevel(id) }
+  deleteJobLevel(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteJobLevel(id)
+  }
 
   @Get('tax-status')
   getTaxStatus() { return this.service.getTaxStatus() }
 
   @Post('tax-status')
-  createTaxStatus(@Body() dto: CreateLookupDto) { return this.service.createTaxStatus(dto.name) }
+  createTaxStatus(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createTaxStatus(dto.name)
+  }
 
   @Put('tax-status/:id')
-  updateTaxStatus(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+  updateTaxStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.updateTaxStatus(id, dto.name)
   }
 
   @Delete('tax-status/:id')
-  deleteTaxStatus(@Param('id', ParseIntPipe) id: number) { return this.service.deleteTaxStatus(id) }
+  deleteTaxStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteTaxStatus(id)
+  }
 
   @Get('contract-types')
   getContractTypes() { return this.service.getContractTypes() }
 
   @Post('contract-types')
-  createContractType(@Body() dto: CreateLookupDto) { return this.service.createContractType(dto.name) }
+  createContractType(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createContractType(dto.name)
+  }
 
   @Put('contract-types/:id')
-  updateContractType(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+  updateContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.updateContractType(id, dto.name)
   }
 
   @Delete('contract-types/:id')
-  deleteContractType(@Param('id', ParseIntPipe) id: number) { return this.service.deleteContractType(id) }
+  deleteContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteContractType(id)
+  }
 }

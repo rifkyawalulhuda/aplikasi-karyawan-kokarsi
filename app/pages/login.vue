@@ -124,7 +124,7 @@ async function handleLogin() {
               <form class="space-y-5" @submit.prevent="handleLogin">
                 <div class="space-y-2">
                   <label for="employeeNo" class="text-sm font-medium text-highlighted">
-                    No. Induk Karyawan
+                    No. Induk / NIK / Username
                   </label>
                   <div class="group flex items-center rounded-xl border border-default bg-elevated/40 px-4 py-3 transition focus-within:ring-2 focus-within:ring-primary/20">
                     <UIcon name="i-lucide-id-card" class="size-4 text-muted" />
@@ -133,7 +133,7 @@ async function handleLogin() {
                       v-model="form.employeeNo"
                       type="text"
                       autocomplete="username"
-                      placeholder="Contoh: EMP001"
+                      placeholder="Contoh: EMP001 atau pengelola1"
                       class="ml-3 w-full border-0 bg-transparent p-0 text-sm text-highlighted placeholder:text-dimmed focus:outline-none focus:ring-0"
                     >
                   </div>

@@ -33,6 +33,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   // Proxy semua property ke client
   get employee() { return this.client.employee }
   get masterAdmin() { return this.client.masterAdmin }
+  get userAccount() { return this.client.userAccount }
   get contract() { return this.client.contract }
   get contractDocument() { return this.client.contractDocument }
   get contractType() { return this.client.contractType }

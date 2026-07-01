@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const auth = useAuthStore()
 </script>
 
 <template>
@@ -58,6 +59,27 @@
               <UInput model-value="SKY-ADM-001" class="w-full" disabled />
             </UFormField>
             <p class="text-xs text-muted">Hubungi administrator sistem untuk mengubah data profil.</p>
+          </div>
+        </UCard>
+
+        <UCard v-if="auth.canManageMasterData">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-users" class="size-4 text-muted" />
+              <span class="font-semibold text-sm">Master User</span>
+            </div>
+          </template>
+          <div class="space-y-4">
+            <p class="text-sm text-muted">
+              Kelola akun internal untuk Admin dan Pengelola Koperasi dari satu tempat.
+            </p>
+            <UButton
+              to="/settings/users"
+              label="Buka Master User"
+              icon="i-lucide-arrow-right"
+              color="primary"
+              variant="soft"
+            />
           </div>
         </UCard>
       </div>
