@@ -24,10 +24,22 @@ const photoFile = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const toast = useToast()
 
+function resetPhotoState() {
+  if (photoPreview.value) {
+    URL.revokeObjectURL(photoPreview.value)
+  }
+  photoPreview.value = null
+  photoFile.value = null
+}
+
 function onPhotoChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  // Revoke blob URL lama sebelum buat yang baru
+  if (photoPreview.value) {
+    URL.revokeObjectURL(photoPreview.value)
+  }
   photoFile.value = file
   photoPreview.value = URL.createObjectURL(file)
 }
@@ -43,7 +55,8 @@ async function uploadPhoto() {
       body: formData,
     })
     toast.add({ title: 'Foto berhasil diupload', color: 'success' })
-    photoFile.value = null
+    // Reset preview agar fallback ke URL server yang baru
+    resetPhotoState()
     emit('updated')
   } catch (e: any) {
     toast.add({ title: 'Gagal upload foto', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
@@ -106,8 +119,18 @@ function fillState(emp: typeof props.employee) {
   state.taxStatusId = emp.taxStatusId
 }
 
-// Watch employee prop
-watch(() => props.employee, (emp) => fillState(emp), { immediate: true })
+// Watch employee prop — reset photo state saat ganti employee
+watch(() => props.employee, (emp) => {
+  resetPhotoState()
+  fillState(emp)
+}, { immediate: true })
+
+// Reset photo state saat modal ditutup
+watch(() => open.value, (val) => {
+  if (!val) {
+    resetPhotoState()
+  }
+})
 
 // Watch lookups — re-fill setelah lookups loaded agar USelect resolve label dengan benar
 watch(() => lookups.value, (val) => {

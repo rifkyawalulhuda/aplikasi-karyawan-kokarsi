@@ -177,13 +177,19 @@ const columns: TableColumn<Employee>[] = [
     header: 'Nama Lengkap',
     cell: ({ row }) =>
       h('div', { class: 'flex items-center gap-3' }, [
-        h('div', {
-          class: 'size-8 rounded-full bg-primary/10 ring ring-primary/25 flex items-center justify-center shrink-0'
-        }, [
-          h('span', { class: 'text-xs font-semibold text-primary' },
-            row.original.fullName.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
-          )
-        ]),
+        row.original.fotoKaryawan
+          ? h('img', {
+              src: `http://localhost:3001${row.original.fotoKaryawan}`,
+              alt: row.original.fullName,
+              class: 'size-8 rounded-full object-cover ring ring-primary/25 shrink-0'
+            })
+          : h('div', {
+              class: 'size-8 rounded-full bg-primary/10 ring ring-primary/25 flex items-center justify-center shrink-0'
+            }, [
+              h('span', { class: 'text-xs font-semibold text-primary' },
+                row.original.fullName.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
+              )
+            ]),
         h('div', undefined, [
           h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.fullName),
           h('p', { class: 'text-xs text-muted' }, row.original.email)

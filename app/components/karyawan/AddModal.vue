@@ -5,7 +5,7 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 interface LookupItem { id: number; name: string }
 interface LookupsResponse {
   workLocations: LookupItem[]
-  taxStatuses: LookupItem[]
+  taxStatus: LookupItem[]
   jobRoles: LookupItem[]
   jobLevels: LookupItem[]
   educationLevels: string[]
@@ -17,7 +17,55 @@ const emit = defineEmits<{ added: [] }>()
 
 const open = ref(false)
 const loading = ref(false)
+const uploadLoading = ref(false)
+const photoFile = ref<File | null>(null)
+const photoPreview = ref<string | null>(null)
 const toast = useToast()
+
+function resetPhotoState() {
+  if (photoPreview.value) {
+    URL.revokeObjectURL(photoPreview.value)
+  }
+  photoPreview.value = null
+  photoFile.value = null
+}
+
+function onPhotoChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (photoPreview.value) {
+    URL.revokeObjectURL(photoPreview.value)
+  }
+  photoFile.value = file
+  photoPreview.value = URL.createObjectURL(file)
+}
+
+async function uploadPhoto(employeeId: number) {
+  if (!photoFile.value) return
+  uploadLoading.value = true
+  try {
+    const formData = new FormData()
+    formData.append('photo', photoFile.value)
+    await $fetch(`/api/employees/${employeeId}/photo`, {
+      method: 'POST',
+      body: formData,
+    })
+    toast.add({ title: 'Foto berhasil diupload', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Gagal upload foto', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadLoading.value = false
+    resetPhotoState()
+  }
+}
+
+// Reset photo state saat modal ditutup
+watch(() => open.value, (val) => {
+  if (!val) {
+    resetPhotoState()
+  }
+})
 
 const { data: lookups } = await useFetch<LookupsResponse>('/api/lookups')
 
@@ -65,16 +113,20 @@ const jobLevelItems = computed(() =>
   (lookups.value?.jobLevels ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
 )
 const taxStatusItems = computed(() =>
-  (lookups.value?.taxStatuses ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
+  (lookups.value?.taxStatus ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
 )
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
-    await $fetch('/api/employees', {
+    const created = await $fetch<{ id: number }>('/api/employees', {
       method: 'POST',
       body: event.data,
     })
+    // Upload foto jika ada file yang dipilih
+    if (photoFile.value) {
+      await uploadPhoto(created.id)
+    }
     toast.add({
       title: 'Karyawan ditambahkan',
       description: `${event.data.fullName} (${event.data.employeeNo}) berhasil ditambahkan.`,
@@ -108,6 +160,30 @@ function onClose() {
     <UButton label="Tambah Karyawan" icon="i-lucide-user-plus" />
 
     <template #body>
+      <!-- Section Upload Foto -->
+      <div class="flex items-center gap-4 mb-4 pb-4 border-b border-default">
+        <div class="w-16 h-16 rounded-full overflow-hidden bg-elevated flex items-center justify-center shrink-0">
+          <img
+            v-if="photoPreview"
+            :src="photoPreview"
+            class="w-full h-full object-cover"
+            alt="Foto karyawan"
+          />
+          <UIcon v-else name="i-lucide-user" class="w-8 h-8 text-muted" />
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-medium text-highlighted mb-1">Foto Karyawan</p>
+          <p class="text-xs text-muted mb-2">JPG, PNG, WebP. Maks 2MB.</p>
+          <div class="flex items-center gap-2">
+            <label class="cursor-pointer">
+              <input type="file" accept="image/jpg,image/jpeg,image/png,image/webp" class="hidden" @change="onPhotoChange" />
+              <UButton as="span" label="Pilih Foto" color="neutral" variant="subtle" size="sm" icon="i-lucide-upload" />
+            </label>
+          </div>
+          <p v-if="photoFile" class="text-xs text-muted mt-1">{{ photoFile.name }}</p>
+        </div>
+      </div>
+
       <UForm
         :schema="schema"
         :state="state"

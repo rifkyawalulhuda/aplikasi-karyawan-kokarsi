@@ -2,7 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, Pars
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
-import { extname } from 'path'
+import { extname, join } from 'path'
 import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto } from './employees.service'
 
 @UseGuards(AuthGuard('jwt'))
@@ -53,7 +53,7 @@ export class EmployeesController {
   @Post(':id/photo')
   @UseInterceptors(FileInterceptor('photo', {
     storage: diskStorage({
-      destination: './uploads/photos',
+      destination: join(process.cwd(), 'uploads', 'photos'),
       filename: (_req, file, cb) => {
         const unique = Date.now() + '-' + Math.round(Math.random() * 1e9)
         cb(null, `photo-${unique}${extname(file.originalname)}`)
@@ -73,6 +73,6 @@ export class EmployeesController {
   ) {
     if (!file) throw new BadRequestException('File tidak ditemukan')
     const fotoKaryawan = `/uploads/photos/${file.filename}`
-    return this.service.update(id, { fotoKaryawan } as any)
+    return this.service.updatePhoto(id, fotoKaryawan)
   }
 }

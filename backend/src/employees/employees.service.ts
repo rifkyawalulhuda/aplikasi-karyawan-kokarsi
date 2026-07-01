@@ -107,6 +107,15 @@ export class EmployeesService {
     })
   }
 
+  async updatePhoto(id: number, fotoKaryawan: string) {
+    await this.findOne(id)
+    return this.prisma.employee.update({
+      where: { id },
+      data: { fotoKaryawan },
+      include: this.include,
+    })
+  }
+
   async remove(id: number) {
     await this.findOne(id)
     return this.prisma.employee.delete({ where: { id } })
