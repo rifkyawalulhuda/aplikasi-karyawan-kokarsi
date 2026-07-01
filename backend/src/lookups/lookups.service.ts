@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -11,6 +11,14 @@ export class LookupsService {
 
   private contractTypesMigrationError() {
     return new BadRequestException('Tabel contract_types belum tersedia. Jalankan migrasi database terlebih dahulu.')
+  }
+
+  private isForeignKeyViolation(error: any) {
+    return error?.code === 'P2003' || error?.meta?.cause?.originalCode === '23503'
+  }
+
+  private foreignKeyError(label: string) {
+    return new ConflictException(`Data ${label} sedang dipakai oleh karyawan dan tidak bisa dihapus. Ubah referensi karyawan terlebih dahulu.`)
   }
 
   async getAll() {
@@ -30,22 +38,42 @@ export class LookupsService {
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
   createWorkLocation(name: string) { return this.prisma.workLocation.create({ data: { name } }) }
   updateWorkLocation(id: number, name: string) { return this.prisma.workLocation.update({ where: { id }, data: { name } }) }
-  deleteWorkLocation(id: number) { return this.prisma.workLocation.delete({ where: { id } }) }
+  deleteWorkLocation(id: number) {
+    return this.prisma.workLocation.delete({ where: { id } }).catch((e) => {
+      if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('lokasi kerja')
+      throw e
+    })
+  }
 
   getJobRoles() { return this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }) }
   createJobRole(name: string) { return this.prisma.jobRole.create({ data: { name } }) }
   updateJobRole(id: number, name: string) { return this.prisma.jobRole.update({ where: { id }, data: { name } }) }
-  deleteJobRole(id: number) { return this.prisma.jobRole.delete({ where: { id } }) }
+  deleteJobRole(id: number) {
+    return this.prisma.jobRole.delete({ where: { id } }).catch((e) => {
+      if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('jabatan')
+      throw e
+    })
+  }
 
   getJobLevels() { return this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }) }
   createJobLevel(name: string) { return this.prisma.jobLevel.create({ data: { name } }) }
   updateJobLevel(id: number, name: string) { return this.prisma.jobLevel.update({ where: { id }, data: { name } }) }
-  deleteJobLevel(id: number) { return this.prisma.jobLevel.delete({ where: { id } }) }
+  deleteJobLevel(id: number) {
+    return this.prisma.jobLevel.delete({ where: { id } }).catch((e) => {
+      if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('level jabatan')
+      throw e
+    })
+  }
 
   getTaxStatus() { return this.prisma.taxStatus.findMany({ orderBy: { name: 'asc' } }) }
   createTaxStatus(name: string) { return this.prisma.taxStatus.create({ data: { name } }) }
   updateTaxStatus(id: number, name: string) { return this.prisma.taxStatus.update({ where: { id }, data: { name } }) }
-  deleteTaxStatus(id: number) { return this.prisma.taxStatus.delete({ where: { id } }) }
+  deleteTaxStatus(id: number) {
+    return this.prisma.taxStatus.delete({ where: { id } }).catch((e) => {
+      if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('status pajak')
+      throw e
+    })
+  }
 
   getContractTypes() {
     return this.prisma.contractType.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
@@ -71,6 +99,7 @@ export class LookupsService {
   deleteContractType(id: number) {
     return this.prisma.contractType.delete({ where: { id } }).catch((error) => {
       if (this.isMissingContractTypesTable(error)) throw this.contractTypesMigrationError()
+      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('tipe kontrak')
       throw error
     })
   }
