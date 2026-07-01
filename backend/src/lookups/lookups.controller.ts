@@ -74,4 +74,18 @@ export class LookupsController {
 
   @Delete('tax-status/:id')
   deleteTaxStatus(@Param('id', ParseIntPipe) id: number) { return this.service.deleteTaxStatus(id) }
+
+  @Get('contract-types')
+  getContractTypes() { return this.service.getContractTypes() }
+
+  @Post('contract-types')
+  createContractType(@Body() dto: CreateLookupDto) { return this.service.createContractType(dto.name) }
+
+  @Put('contract-types/:id')
+  updateContractType(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    return this.service.updateContractType(id, dto.name)
+  }
+
+  @Delete('contract-types/:id')
+  deleteContractType(@Param('id', ParseIntPipe) id: number) { return this.service.deleteContractType(id) }
 }

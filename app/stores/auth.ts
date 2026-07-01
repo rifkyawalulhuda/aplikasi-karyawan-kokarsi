@@ -11,6 +11,11 @@ export const useAuthStore = defineStore('auth', () => {
       method: 'POST',
       body: { employeeNo, password },
     })
+
+    if (!res?.access_token) {
+      throw new Error('Login gagal, respons backend tidak valid')
+    }
+
     token.value = res.access_token
     admin.value = res.admin
     return res

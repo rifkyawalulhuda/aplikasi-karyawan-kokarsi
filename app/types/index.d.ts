@@ -9,6 +9,11 @@ export interface TaxStatus {
   name: string
 }
 
+export interface ContractType {
+  id: number
+  name: string
+}
+
 export interface JobRole {
   id: number
   name: string
@@ -56,7 +61,8 @@ export interface Contract {
   contractNo: string
   startDate: string
   endDate: string
-  contractType: string
+  contractTypeId?: number | null
+  contractType?: ContractType | null
   status: ContractStatus
   documentUrl?: string
   createdAt: string

@@ -8,7 +8,7 @@ export class CreateContractDto {
   @IsString() contractNo: string
   @IsDateString() startDate: string
   @IsDateString() endDate: string
-  @IsOptional() @IsString() contractType?: string
+  @IsOptional() @IsInt() contractTypeId?: number
   @IsOptional() @IsEnum(ContractStatus) status?: ContractStatus
   @IsOptional() @IsString() documentUrl?: string
 }
@@ -23,6 +23,7 @@ export class ContractsService {
 
   private include = {
     employee: { select: { id: true, employeeNo: true, fullName: true } },
+    contractType: { select: { id: true, name: true } },
   }
 
   private startOfDay(date: Date) {

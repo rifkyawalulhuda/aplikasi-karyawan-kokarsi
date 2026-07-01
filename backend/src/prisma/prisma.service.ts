@@ -7,12 +7,13 @@ let pool: Pool | null = null
 
 function getPool(): Pool {
   if (!pool) {
+    const connectionString = process.env.DATABASE_URL
+    if (!connectionString) {
+      throw new Error('DATABASE_URL belum diset. Periksa backend/.env atau environment saat menjalankan backend.')
+    }
+
     pool = new Pool({
-      host: 'localhost',
-      port: 5434,
-      user: 'postgres',
-      password: 'kokarsi2026',
-      database: 'kokarsi_karyawan',
+      connectionString,
     })
   }
   return pool
@@ -34,6 +35,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get masterAdmin() { return this.client.masterAdmin }
   get contract() { return this.client.contract }
   get contractDocument() { return this.client.contractDocument }
+  get contractType() { return this.client.contractType }
   get workLocation() { return this.client.workLocation }
   get jobRole() { return this.client.jobRole }
   get jobLevel() { return this.client.jobLevel }

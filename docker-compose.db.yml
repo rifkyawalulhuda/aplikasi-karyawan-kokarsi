@@ -1,0 +1,21 @@
+services:
+  kokarsi-postgres:
+    image: postgres:16-alpine
+    container_name: kokarsi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kokarsi
+      POSTGRES_PASSWORD: kokarsi2026
+      POSTGRES_DB: kokarsi_karyawan
+    ports:
+      - "5435:5432"
+    volumes:
+      - kokarsi-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kokarsi -d kokarsi_karyawan"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  kokarsi-postgres-data:

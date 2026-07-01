@@ -3,6 +3,8 @@ import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Contract } from '~/types'
 
+interface LookupOption { label: string; value: number }
+
 const props = defineProps<{ open: boolean; contract: Contract | null }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
@@ -12,17 +14,20 @@ const emit = defineEmits<{
 const toast = useToast()
 const loading = ref(false)
 
-const contractTypeOptions = [
-  { label: 'PKWT', value: 'PKWT' },
-  { label: 'PKWTT', value: 'PKWTT' },
-  { label: 'Magang', value: 'Magang' },
-]
+const { data: contractTypesRes } = await useFetch<{ id: number; name: string }[]>('/api/lookups/contract-types')
+
+const contractTypeOptions = computed<LookupOption[]>(() =>
+  (contractTypesRes.value ?? []).map(type => ({
+    label: type.name,
+    value: type.id,
+  })),
+)
 
 const schema = z.object({
   contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
-  contractType: z.string().min(1, 'Tipe kontrak wajib diisi'),
+  contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
   documentUrl: z.string().optional(),
 })
 
@@ -32,7 +37,7 @@ const state = reactive<Partial<Schema>>({
   contractNo: '',
   startDate: '',
   endDate: '',
-  contractType: 'PKWT',
+  contractTypeId: undefined,
   documentUrl: '',
 })
 
@@ -41,7 +46,7 @@ function fillState(c: Contract | null) {
   state.contractNo = c.contractNo
   state.startDate = c.startDate ? c.startDate.slice(0, 10) : ''
   state.endDate = c.endDate ? c.endDate.slice(0, 10) : ''
-  state.contractType = c.contractType
+  state.contractTypeId = c.contractTypeId ?? undefined
   state.documentUrl = c.documentUrl ?? ''
 }
 
@@ -88,8 +93,13 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
         </div>
 
-        <UFormField label="Tipe Kontrak" name="contractType" required>
-          <USelect v-model="state.contractType" :items="contractTypeOptions" class="w-full" />
+        <UFormField label="Tipe Kontrak" name="contractTypeId" required>
+          <USelect
+            v-model="state.contractTypeId"
+            :items="contractTypeOptions"
+            placeholder="Pilih tipe kontrak..."
+            class="w-full"
+          />
         </UFormField>
 
         <UFormField label="URL Dokumen" name="documentUrl">

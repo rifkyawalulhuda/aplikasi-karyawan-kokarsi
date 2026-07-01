@@ -414,7 +414,7 @@ watch([statusFilter, searchQuery], () => {
                       </UBadge>
                     </div>
                     <p class="text-sm text-muted">
-                      {{ contract.contractType || '-' }}
+                      {{ contract.contractType?.name || '-' }}
                       <span class="mx-1">&bull;</span>
                       {{ formatDate(contract.startDate) }}
                       -

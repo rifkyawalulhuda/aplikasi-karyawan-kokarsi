@@ -188,7 +188,7 @@ const columns: TableColumn<Contract>[] = [
   {
     accessorKey: 'contractType',
     header: 'Tipe',
-    cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.contractType)
+    cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.contractType?.name ?? '-')
   },
   {
     accessorKey: 'startDate',
@@ -424,7 +424,7 @@ watch([statusFilter, searchQuery], () => {
                       </UBadge>
                     </div>
                     <p class="text-sm text-muted">
-                      {{ contract.contractType || '-' }}
+                      {{ contract.contractType?.name || '-' }}
                       <span class="mx-1">&bull;</span>
                       {{ new Date(contract.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
                       -

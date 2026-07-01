@@ -22,6 +22,14 @@ model TaxStatus {
   @@map("tax_status")
 }
 
+model ContractType {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(255)
+  contracts Contract[]
+
+  @@map("contract_types")
+}
+
 model JobRole {
   id        Int        @id @default(autoincrement())
   name      String     @db.VarChar(255)
@@ -88,11 +96,12 @@ model Contract {
   contractNo   String         @unique @db.VarChar(100)
   startDate    DateTime       @db.Date
   endDate      DateTime       @db.Date
-  contractType String?        @db.VarChar(50)
+  contractTypeId Int?
   status       ContractStatus @default(AKTIF)
   documentUrl  String?
 
   employee  Employee           @relation(fields: [employeeId], references: [id])
+  contractType ContractType?   @relation(fields: [contractTypeId], references: [id])
   documents ContractDocument[]
 
   createdAt DateTime @default(now())

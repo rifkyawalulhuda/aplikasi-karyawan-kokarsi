@@ -5,6 +5,6 @@ export default defineConfig({
   earlyAccess: true,
   schema: path.join(__dirname, 'prisma/schema.prisma'),
   datasource: {
-    url: 'postgresql://postgres:***@localhost:5434/kokarsi_karyawan',
+    url: process.env.DATABASE_URL ?? 'postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan',
   },
 })

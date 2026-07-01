@@ -69,7 +69,15 @@ export class EmployeesService {
   async findOne(id: number) {
     const emp = await this.prisma.employee.findUnique({
       where: { id },
-      include: { ...this.include, contracts: { orderBy: { startDate: 'desc' } } },
+      include: {
+        ...this.include,
+        contracts: {
+          orderBy: { startDate: 'desc' },
+          include: {
+            contractType: true,
+          },
+        },
+      },
     })
     if (!emp) throw new NotFoundException('Karyawan tidak ditemukan')
     return emp

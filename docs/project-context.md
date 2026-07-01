@@ -1,6 +1,6 @@
-# Project Context — Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
+# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-06-30 | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-01 | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -9,9 +9,9 @@
 Aplikasi manajemen karyawan internal untuk **Kokarsi PT. Sankyu**. Single role: Master Admin. UI Bahasa Indonesia.
 
 - **Repo**: `E:\Github\aplikasi-karyawan-kokarsi`
-- **Frontend**: Nuxt 3 + Nuxt UI v4 + TypeScript + Tailwind → `http://localhost:3000`
-- **Backend**: NestJS + Prisma + PostgreSQL → `http://localhost:3001/api`
-- **Database**: Docker `app-karyawan-postgres`, port `5434`, DB `kokarsi_karyawan`
+- **Frontend**: Nuxt 3 + Nuxt UI v4 + TypeScript + Tailwind -> `http://localhost:3000`
+- **Backend**: NestJS + Prisma + PostgreSQL -> `http://localhost:3001/api`
+- **Database**: PostgreSQL lokal project ini via `backend/.env` (`DATABASE_URL`), Docker `kokarsi-postgres`, port `5435`, DB `kokarsi_karyawan`
 - **Login**: `employeeNo=EMP001` / `password=admin123`
 
 ---
@@ -19,8 +19,12 @@ Aplikasi manajemen karyawan internal untuk **Kokarsi PT. Sankyu**. Single role: 
 ## Cara Menjalankan
 
 ```bash
-# 1. Start PostgreSQL
-docker start app-karyawan-postgres
+# 1. Start PostgreSQL project ini
+docker compose -f docker-compose.db.yml up -d
+
+# 1a. Kredensial project ini:
+#    user: kokarsi
+#    password: kokarsi2026
 
 # 2. Start Backend
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
@@ -48,7 +52,7 @@ npx tsc -p tsconfig.json
 | 3 | Dashboard stats + donut chart + progress bars | `app/pages/index.vue` |
 | 4 | CRUD Karyawan (tambah, edit, hapus) | `app/pages/karyawan.vue`, `app/components/karyawan/` |
 | 5 | Fix Status Pajak (race condition + key mismatch) | `app/components/karyawan/EditModal.vue` |
-| 6 | Master Data CRUD (lokasi, jabatan, level, pajak) | `app/pages/master-data.vue`, `server/api/lookups/` |
+| 6 | Master Data CRUD (lokasi, jabatan, level, pajak, tipe kontrak) | `app/pages/settings/master-data.vue`, `server/api/lookups/` |
 | 7 | CRUD Kontrak + status otomatis berdasarkan tanggal + riwayat per karyawan | `app/pages/kontrak.vue`, `app/pages/karyawan.vue`, `app/components/kontrak/` |
 | 8 | Upload foto karyawan | `app/components/karyawan/EditModal.vue`, `server/api/employees/[id]/photo.post.ts` |
 | 9 | Export Excel & PDF (semua data + semua kolom) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
@@ -60,13 +64,13 @@ npx tsc -p tsconfig.json
 
 ```
 Frontend (Nuxt 3)          Nitro Server           Backend (NestJS)
-app/pages/            →    server/api/        →   src/
-app/components/            server/middleware/      Prisma → PostgreSQL
+app/pages/            ->    server/api/        ->   src/
+app/components/            server/middleware/      Prisma -> PostgreSQL
 app/composables/
 ```
 
 ### Nitro Auth Pattern
-Semua Nitro handler baca `auth_token` cookie → forward `Authorization: Bearer <token>` ke NestJS.
+Semua Nitro handler baca `auth_token` cookie -> forward `Authorization: Bearer <token>` ke NestJS.
 
 ### Response Wrapper
 Backend return `{ data: [...], total, page, limit, totalPages }` untuk list endpoints.
@@ -90,52 +94,53 @@ Aturan yang dipakai:
 ```
 app/
   pages/
-    index.vue          # Dashboard
-    karyawan.vue       # Manajemen karyawan
-    kontrak.vue        # Manajemen kontrak
-    master-data.vue    # Master data
-    login.vue          # Login
+    index.vue              # Dashboard
+    karyawan.vue           # Manajemen karyawan
+    kontrak.vue            # Manajemen kontrak
+    settings/master-data.vue  # Master data
+    login.vue              # Login
   components/
     karyawan/
-      AddModal.vue     # Tambah karyawan
-      EditModal.vue    # Edit karyawan + upload foto
+      AddModal.vue         # Tambah karyawan
+      EditModal.vue        # Edit karyawan + upload foto
     kontrak/
       AddContractModal.vue
       EditContractModal.vue
   composables/
     useConfirmDeleteToast.ts  # Toast konfirmasi hapus reusable
-    useExport.ts       # Export Excel & PDF (semua data dari DB)
+    useExport.ts             # Export Excel & PDF (semua data dari DB)
   types/
-    index.d.ts         # Employee, Contract, dll
+    index.d.ts              # Employee, Contract, dll
 
 server/
   api/
-    auth/              # Login, logout, me
+    auth/                   # Login, logout, me
     employees/
-      index.ts         # GET list + POST
-      [id].ts          # GET detail + PUT + DELETE
-      [id]/photo.post.ts  # Upload foto
-      export.get.ts    # Fetch semua data untuk export
+      index.ts              # GET list + POST
+      [id].ts               # GET detail + PUT + DELETE
+      [id]/photo.post.ts    # Upload foto
+      export.get.ts         # Fetch semua data untuk export
     contracts/
-      index.ts         # GET list + POST
-      [id].ts          # GET + PUT + DELETE
+      index.ts              # GET list + POST
+      [id].ts               # GET + PUT + DELETE
     lookups/
-      [resource].ts    # GET list + POST
-      [resource]/[id].ts  # PUT + DELETE
+      [resource].ts         # GET list + POST
+      [resource]/[id].ts    # PUT + DELETE
   middleware/
-    auth.ts            # JWT guard
+    auth.ts                 # JWT guard
 
 backend/
   src/
-    employees/         # CRUD + upload foto endpoint
-    contracts/         # CRUD kontrak
-    lookups/           # Work locations, job roles, levels, tax status
-    auth/              # JWT strategy
-    main.ts            # Static assets /uploads
+    employees/              # CRUD + upload foto endpoint
+    contracts/              # CRUD kontrak
+    lookups/                # Work locations, job roles, levels, tax status, contract types
+    auth/                   # JWT strategy
+    main.ts                 # Static assets /uploads + dotenv/config
+    prisma/                 # Prisma service adapter
   prisma/
-    schema.prisma      # Employee, Contract, MasterAdmin, dll
+    schema.prisma           # Employee, Contract, ContractType, MasterAdmin, dll
   uploads/
-    photos/            # Foto karyawan tersimpan di sini
+    photos/                 # Foto karyawan tersimpan di sini
 ```
 
 ---
@@ -154,20 +159,26 @@ backend/
 | `email` | String | Unique |
 | `phoneNumber` | String? | Opsional |
 | `educationLevel` | Enum | SMA / D3 / S1 / S2 |
-| `workLocationId` | Int | FK → WorkLocation |
-| `jobRoleId` | Int | FK → JobRole |
-| `jobLevelId` | Int | FK → JobLevel |
-| `taxStatusId` | Int | FK → TaxStatus |
-| `fotoKaryawan` | String? | Path foto, e.g. `/uploads/photos/photo-xxx.jpg` |
+| `workLocationId` | Int | FK ke WorkLocation |
+| `jobRoleId` | Int | FK ke JobRole |
+| `jobLevelId` | Int | FK ke JobLevel |
+| `taxStatusId` | Int | FK ke TaxStatus |
+| `fotoKaryawan` | String? | Path foto, mis. `/uploads/photos/photo-xxx.jpg` |
 
 ### Contract
 | Field | Type | Keterangan |
 |-------|------|-----------|
 | `contractNo` | String | Nomor kontrak |
-| `employeeId` | Int | FK → Employee |
+| `employeeId` | Int | FK ke Employee |
+| `contractTypeId` | Int? | FK ke ContractType |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
 | `status` | Enum | Dihitung otomatis dari `endDate` (AKTIF / AKAN_HABIS / EXPIRED / DIBATALKAN) |
+
+### ContractType
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `name` | String | Nama tipe kontrak, mis. PKWT / PKWTT / Magang |
 
 ---
 
@@ -192,15 +203,19 @@ backend/
 | POST | `/api/lookups/work-locations` | Tambah lokasi kerja |
 | PUT | `/api/lookups/work-locations/:id` | Edit lokasi kerja |
 | DELETE | `/api/lookups/work-locations/:id` | Hapus lokasi kerja |
+| GET | `/api/lookups/contract-types` | List tipe kontrak |
+| POST | `/api/lookups/contract-types` | Tambah tipe kontrak |
+| PUT | `/api/lookups/contract-types/:id` | Edit tipe kontrak |
+| DELETE | `/api/lookups/contract-types/:id` | Hapus tipe kontrak |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 
 ---
 
 ## Export Data
 
-- **Excel**: `xlsx` library — semua data + 21 kolom lengkap → `.xlsx`
-- **PDF**: `jspdf` + `jspdf-autotable` — landscape A4, semua kolom → `.pdf`
-- **Kolom export**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
+- **Excel**: `xlsx` library - semua data + 21 kolom lengkap -> `.xlsx`
+- **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom -> `.pdf`
+- **Kolom export**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Status Pajak, No. Kontrak Aktif, Tipe Kontrak, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 - **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
 - **Hapus data**: Karyawan, kontrak, dan master data memakai toast konfirmasi sebelum delete dijalankan
 
@@ -212,9 +227,10 @@ backend/
 |---------|--------|
 | Bearer token ter-mask Hermes | Gunakan Python `base64.b64decode('QmVhcmVyIA==')` untuk generate string |
 | Backend tidak start | Compile dulu: `npx tsc -p tsconfig.json` |
+| Backend `node dist/main.js` gagal baca env | `backend/src/main.ts` sudah load `dotenv/config`, pastikan dijalankan dari folder `backend` |
+| Prisma migrate gagal auth | Pastikan `DATABASE_URL` mengarah ke `kokarsi-postgres` di port `5435` |
 | Status Pajak tampil angka | Key backend `taxStatus` bukan `taxStatuses` |
-| USelect tidak resolve label | Race condition — watch lookups + watch employee keduanya diperlukan |
+| USelect tidak resolve label | Race condition - watch lookups + watch employee keduanya diperlukan |
 | Upload foto tidak jalan | Restart backend setelah compile (endpoint baru) |
-| Export tidak include kontrak | Backend `findAll` tidak include contracts — gunakan endpoint `/api/employees/export` (limit=9999) |
+| Export tidak include kontrak | Backend `findAll` tidak include contracts - gunakan endpoint `/api/employees/export` (limit=9999) |
 | Data master tidak muncul setelah save | Pastikan backend validasi DTO lookup aktif dan frontend me-refresh resource master data setelah CRUD |
-

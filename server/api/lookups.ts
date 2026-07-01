@@ -4,10 +4,17 @@ export default eventHandler(async (event) => {
   const token = getCookie(event, 'auth_token') ?? getHeader(event, 'authorization') ?? ''
   const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const res = await $fetch(`${BACKEND}/lookups`, {
-    headers: authHeader,
-    ignoreResponseError: true,
-  })
-
-  return res
+  try {
+    return await $fetch(`${BACKEND}/lookups`, {
+      headers: authHeader,
+    })
+  } catch (error: any) {
+    throw createError({
+      statusCode: error?.statusCode ?? error?.response?.status ?? 500,
+      statusMessage: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memuat master data',
+      data: {
+        message: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memuat master data',
+      },
+    })
+  }
 })

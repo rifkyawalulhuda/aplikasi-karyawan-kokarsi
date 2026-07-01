@@ -2,7 +2,7 @@ import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } fr
 
 const BACKEND = 'http://localhost:3001/api'
 
-const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status']
+const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types']
 
 export default defineEventHandler(async (event) => {
   const resource = getRouterParam(event, 'resource')
@@ -20,10 +20,19 @@ export default defineEventHandler(async (event) => {
 
   const body = method !== 'GET' && method !== 'DELETE' ? await readBody(event) : undefined
 
-  return $fetch(`${BACKEND}/lookups/${resource}/${id}`, {
-    method: method as any,
-    headers: authHeader,
-    body,
-    ignoreResponseError: true,
-  })
+  try {
+    return await $fetch(`${BACKEND}/lookups/${resource}/${id}`, {
+      method: method as any,
+      headers: authHeader,
+      body,
+    })
+  } catch (error: any) {
+    throw createError({
+      statusCode: error?.statusCode ?? error?.response?.status ?? 500,
+      statusMessage: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memproses data master',
+      data: {
+        message: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memproses data master',
+      },
+    })
+  }
 })

@@ -6,18 +6,20 @@ interface LookupsResponse {
   jobRoles: LookupItem[]
   jobLevels: LookupItem[]
   taxStatus: LookupItem[]
+  contractTypes: LookupItem[]
 }
 
 const workLocations = ref<LookupItem[]>([])
 const jobRoles = ref<LookupItem[]>([])
 const jobLevels = ref<LookupItem[]>([])
 const taxStatuses = ref<LookupItem[]>([])
+const contractTypes = ref<LookupItem[]>([])
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 
 // ── Generic CRUD state ──────────────────────────────────────────────
-type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status'
+type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types'
 
 interface EditState {
   open: boolean
@@ -38,6 +40,7 @@ const addState = reactive<Record<ResourceKey, AddState>>({
   'job-roles': { open: false, name: '', loading: false },
   'job-levels': { open: false, name: '', loading: false },
   'tax-status': { open: false, name: '', loading: false },
+  'contract-types': { open: false, name: '', loading: false },
 })
 const editResource = ref<ResourceKey>('work-locations')
 const deleteLoading = ref<number | null>(null)
@@ -48,6 +51,7 @@ async function loadAllLookups() {
   jobRoles.value = data.jobRoles ?? []
   jobLevels.value = data.jobLevels ?? []
   taxStatuses.value = data.taxStatus ?? []
+  contractTypes.value = data.contractTypes ?? []
 }
 
 async function loadResource(resource: ResourceKey) {
@@ -59,10 +63,18 @@ async function loadResource(resource: ResourceKey) {
     jobLevels.value = await $fetch<LookupItem[]>('/api/lookups/job-levels')
   } else if (resource === 'tax-status') {
     taxStatuses.value = await $fetch<LookupItem[]>('/api/lookups/tax-status')
+  } else if (resource === 'contract-types') {
+    contractTypes.value = await $fetch<LookupItem[]>('/api/lookups/contract-types')
   }
 }
 
-await loadAllLookups()
+onMounted(async () => {
+  try {
+    await loadAllLookups()
+  } catch (error) {
+    console.error('Gagal memuat master data', error)
+  }
+})
 
 function openEdit(resource: ResourceKey, item: LookupItem) {
   editResource.value = resource
@@ -123,6 +135,7 @@ const resourceLabelMap: Record<ResourceKey, string> = {
   'job-roles': 'Jabatan',
   'job-levels': 'Level Jabatan',
   'tax-status': 'Status Pajak',
+  'contract-types': 'Tipe Kontrak',
 }
 
 async function deleteLookup(resource: ResourceKey, id: number) {
@@ -163,6 +176,12 @@ const cards = computed(() => [
     label: 'Status Pajak',
     icon: 'i-lucide-receipt',
     items: taxStatuses.value ?? [],
+  },
+  {
+    key: 'contract-types' as ResourceKey,
+    label: 'Tipe Kontrak',
+    icon: 'i-lucide-badge-info',
+    items: contractTypes.value ?? [],
   },
 ])
 </script>

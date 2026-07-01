@@ -45,11 +45,18 @@ async function main() {
     prisma.taxStatus.upsert({ where: { id: 5 }, update: {}, create: { name: 'K/2' } }),
   ])
 
+  const contractTypes = await Promise.all([
+    prisma.contractType.upsert({ where: { name: 'PKWT' }, update: {}, create: { name: 'PKWT' } }),
+    prisma.contractType.upsert({ where: { name: 'PKWTT' }, update: {}, create: { name: 'PKWTT' } }),
+    prisma.contractType.upsert({ where: { name: 'Magang' }, update: {}, create: { name: 'Magang' } }),
+  ])
+
   console.log('Lookup data seeded:', {
     workLocations: workLocations.length,
     jobRoles: jobRoles.length,
     jobLevels: jobLevels.length,
     taxStatuses: taxStatuses.length,
+    contractTypes: contractTypes.length,
   })
 
   const employee = await prisma.employee.upsert({
@@ -91,7 +98,7 @@ async function main() {
       contractNo: 'KTR/2024/001',
       startDate: new Date('2024-01-01'),
       endDate: new Date('2026-12-31'),
-      contractType: 'PKWT',
+      contractTypeId: contractTypes[0].id,
       status: 'AKTIF',
     },
   })
