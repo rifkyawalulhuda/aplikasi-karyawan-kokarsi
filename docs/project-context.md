@@ -62,6 +62,8 @@ npx tsc -p tsconfig.json
 | 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts`, `app/layouts/default.vue`, `app/middleware/auth.global.ts` |
 | 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/prisma/schema.prisma`, `backend/src/users/`, `app/pages/settings/users.vue`, `server/api/users/` |
 | 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
+| 14 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
+| 15 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
 
 ---
 
@@ -113,7 +115,8 @@ app/
       AddContractModal.vue
       EditContractModal.vue
   composables/
-    useConfirmDeleteToast.ts  # Toast konfirmasi hapus reusable
+    useConfirmDeleteToast.ts   # Toast konfirmasi hapus reusable
+    useConfirmActionToast.ts   # Toast konfirmasi aksi generic (logout, dll)
     useExport.ts             # Export Excel & PDF (semua data dari DB)
   types/
     index.d.ts              # Employee, Contract, dll

@@ -8,6 +8,7 @@ defineProps<{
 const auth = useAuthStore()
 const colorMode = useColorMode()
 const appConfig = useAppConfig()
+const { confirmActionToast } = useConfirmActionToast()
 
 const user = computed(() => ({
   name: auth.admin?.fullName ?? 'Master Admin',
@@ -89,7 +90,15 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   label: 'Keluar',
   icon: 'i-lucide-log-out',
   onSelect() {
-    auth.logout()
+    confirmActionToast({
+      title: 'Konfirmasi Keluar',
+      description: 'Anda akan keluar dari sistem. Sesi login akan berakhir.',
+      icon: 'i-lucide-log-out',
+      color: 'warning',
+      confirmLabel: 'Keluar',
+      confirmColor: 'error',
+      onConfirm: () => auth.logout(),
+    })
   }
 }]]))
 </script>
