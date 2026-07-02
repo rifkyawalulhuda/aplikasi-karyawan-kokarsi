@@ -143,6 +143,9 @@ export class EmployeesService {
             contractType: true,
           },
         },
+        statusHistory: {
+          orderBy: { changedAt: 'desc' },
+        },
       },
     })
     if (!emp) throw new NotFoundException('Karyawan tidak ditemukan')

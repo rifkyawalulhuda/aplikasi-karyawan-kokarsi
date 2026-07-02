@@ -175,7 +175,10 @@ const columns: TableColumn<Contract>[] = [
     cell: ({ row }) =>
       h('div', { class: 'flex items-center justify-between gap-3' }, [
         h('div', undefined, [
-          h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.employee?.fullName ?? '-'),
+          h(resolveComponent('NuxtLink'), {
+            to: `/karyawan/${row.original.employeeId}`,
+            class: 'font-medium text-highlighted text-sm hover:text-primary hover:underline'
+          }, () => row.original.employee?.fullName ?? '-'),
           h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-')
         ]),
         h(UButton, {

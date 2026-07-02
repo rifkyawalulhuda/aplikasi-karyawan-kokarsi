@@ -4,10 +4,21 @@ export default eventHandler(async (event) => {
   const body = await readBody(event)
 
   try {
-    return await $fetch(`${BACKEND}/auth/login`, {
+    const res: any = await $fetch(`${BACKEND}/auth/login`, {
       method: 'POST',
       body,
     })
+
+    if (res?.access_token) {
+      setCookie(event, 'auth_token', res.access_token, {
+        httpOnly: false,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 8,
+        path: '/',
+      })
+    }
+
+    return res
   } catch (error: any) {
     throw createError({
       statusCode: error?.statusCode ?? error?.response?.status ?? 500,

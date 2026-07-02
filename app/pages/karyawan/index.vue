@@ -14,7 +14,7 @@ const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 const { exportExcel, exportPDF } = useExport()
-const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true })
+const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true, credentials: 'include' })
 
 const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
 
@@ -243,6 +243,13 @@ function getRowItems(row: Row<Employee>) {
   return [
     { type: 'label', label: 'Aksi' },
     {
+      label: 'Lihat Detail',
+      icon: 'i-lucide-eye',
+      onSelect() {
+        navigateTo(`/karyawan/${row.original.id}`)
+      }
+    },
+    {
       label: 'Riwayat Kontrak',
       icon: 'i-lucide-history',
       onSelect() {
@@ -316,7 +323,10 @@ const columns: TableColumn<Employee>[] = [
               )
             ]),
         h('div', undefined, [
-          h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.fullName),
+          h(resolveComponent('NuxtLink'), {
+            to: `/karyawan/${row.original.id}`,
+            class: 'font-medium text-highlighted text-sm hover:text-primary hover:underline'
+          }, () => row.original.fullName),
           h('p', { class: 'text-xs text-muted' }, row.original.email)
         ])
       ])

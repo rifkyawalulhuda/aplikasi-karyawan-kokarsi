@@ -49,6 +49,18 @@ export interface EmployeeOffboarding {
   updatedAt: string
 }
 
+export interface EmployeeStatusHistory {
+  id: number
+  employeeId: number
+  oldStatus: string
+  newStatus: string
+  changedById?: number | null
+  changedByName: string
+  changedByRole: string
+  changedAt: string
+  notes?: string | null
+}
+
 export interface Employee {
   id: number
   employeeNo: string
@@ -73,6 +85,7 @@ export interface Employee {
   fotoKaryawan?: string
   contracts?: Contract[]
   offboarding?: EmployeeOffboarding | null
+  statusHistory?: EmployeeStatusHistory[]
   createdAt?: string
   updatedAt?: string
 }
