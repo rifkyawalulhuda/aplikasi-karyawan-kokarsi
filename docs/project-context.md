@@ -1,6 +1,6 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-01 | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-02 | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -203,6 +203,18 @@ backend/
 |-------|------|-----------|
 | `name` | String | Nama tipe kontrak, mis. PKWT / PKWTT / Magang |
 
+### EmployeeOffboarding
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `employeeId` | Int | Satu record offboarding aktif per karyawan |
+| `terminationType` | Enum | RESIGN / PHK |
+| `terminationDate` | Date | Tanggal efektif offboarding |
+| `reason` | String? | Catatan atau alasan offboarding |
+| `processedById` | Int | ID user pemroses |
+| `processedByName` | String | Nama user pemroses |
+| `processedByRole` | String | Role user pemroses |
+| `processedByKind` | String | Jenis akun (`master_admin` / `user_account`) |
+
 ### UserAccount
 | Field | Type | Keterangan |
 |-------|------|-----------|
@@ -225,6 +237,7 @@ backend/
 | POST | `/api/employees` | Tambah karyawan |
 | GET | `/api/employees/:id` | Detail karyawan + kontrak |
 | PUT | `/api/employees/:id` | Edit karyawan |
+| POST | `/api/employees/:id/offboarding` | Proses offboarding karyawan (RESIGN / PHK) |
 | DELETE | `/api/employees/:id` | Hapus karyawan |
 | POST | `/api/employees/:id/photo` | Upload foto |
 | GET | `/api/contracts` | List kontrak |

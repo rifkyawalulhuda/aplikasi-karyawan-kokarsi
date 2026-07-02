@@ -12,7 +12,7 @@
 
 Aplikasi web **Manajemen Data Karyawan Koperasi Karyawan PT. Sankyu** adalah sistem HR internal yang dibuat **khusus untuk Koperasi Karyawan PT. Sankyu**.
 
-Sistem ini akan mengelola seluruh data master karyawan secara terpusat, termasuk manajemen dokumen kontrak, status kepegawaian (MITRA / KONTRAK), pelacakan masa berlaku kontrak, dan upload foto karyawan.
+Sistem ini akan mengelola seluruh data master karyawan secara terpusat, termasuk manajemen dokumen kontrak, status kepegawaian otomatis, proses offboarding, pelacakan masa berlaku kontrak, dan upload foto karyawan.
 
 **Tujuan Utama**:
 - Menggantikan proses manual (Excel) menjadi sistem digital yang terintegrasi
@@ -53,26 +53,29 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 
 ### 4.1 Master Data Karyawan
 - CRUD lengkap data karyawan sesuai skema database revisi
-- Field wajib: `employeeNo`, `fullName`, `employmentStatus`, `birthDate`, `gender`, `joinDate`, `email`, `phoneNumber`, `fotoKaryawan`
+- Field wajib: `employeeNo`, `fullName`, `birthDate`, `gender`, `joinDate`, `email`, `phoneNumber`, `fotoKaryawan`
 - Dropdown lookup untuk: `workLocation`, `jobRole`, `jobLevel`, `taxStatus`, `educationLevel`
 - Upload foto karyawan (Picture Upload)
+- `employmentStatus` tidak diinput manual; dihitung otomatis menjadi `AKTIF`, `KONTRAK_EXPIRED`, `RESIGN`, atau `PHK`
 
 ### 4.2 Manajemen Kontrak Karyawan
 - Tambah kontrak baru untuk karyawan
 - Upload dokumen kontrak (PDF, max 10MB)
 - Field kontrak: `contractNo`, `startDate`, `endDate`, `contractType`
-- Status kontrak dihitung otomatis dari `endDate`:
+- Status kontrak dihitung otomatis dari status karyawan + `endDate`:
   - `AKTIF` jika sisa > 30 hari
   - `AKAN_HABIS` jika sisa <= 30 hari
   - `EXPIRED` jika tanggal sudah lewat
+  - `SELESAI` jika karyawan sudah offboarding (`RESIGN` / `PHK`)
   - `DIBATALKAN` jika kontrak dibatalkan manual
 - Riwayat kontrak per karyawan (history) tersedia dalam mode read-only dari halaman Data Karyawan dan halaman Kontrak
 - Notifikasi otomatis kontrak akan habis (30 hari & 7 hari sebelumnya)
 
 ### 4.3 Status & Validitas
-- Filter & search karyawan berdasarkan status (MITRA / KONTRAK)
+- Filter & search karyawan berdasarkan status (`AKTIF` / `KONTRAK_EXPIRED` / `RESIGN` / `PHK`)
 - Indikator visual masa berlaku kontrak (hijau = aktif, kuning = <30 hari, merah = expired)
-- Bulk update status karyawan
+- Offboarding karyawan (`RESIGN` / `PHK`) dengan tanggal efektif dan catatan
+- Detail offboarding dapat dilihat oleh Admin dan Pengelola dari halaman detail karyawan global
 
 ### 4.4 Admin & Setting
 - Manajemen user internal (`master_admin`)
@@ -83,7 +86,7 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 
 ### 4.5 Dashboard (Internal)
 - Total karyawan aktif
-- Jumlah karyawan MITRA vs KONTRAK
+- Jumlah karyawan `AKTIF`, `KONTRAK_EXPIRED`, `RESIGN`, dan `PHK`
 - Kontrak yang akan habis dalam 30 hari
 - Grafik distribusi job level & lokasi kerja
 
@@ -95,13 +98,13 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 Sebagai Master Admin, saya ingin menambahkan data karyawan baru beserta kontrak pertamanya dan foto karyawan, agar data langsung lengkap.
 
 **US-02** (Master Admin)  
-Sebagai Master Admin, saya ingin melihat daftar semua karyawan dengan filter status (MITRA/KONTRAK) dan status kontrak (aktif/akan habis/expired) beserta foto karyawan.
+Sebagai Master Admin, saya ingin melihat daftar semua karyawan dengan filter status (`AKTIF`/`KONTRAK_EXPIRED`/`RESIGN`/`PHK`) dan status kontrak (aktif/akan habis/expired/selesai) beserta foto karyawan.
 
 **US-03** (Master Admin)  
 Sebagai Master Admin, saya ingin mendapatkan notifikasi otomatis ketika ada kontrak yang akan habis dalam 30 hari.
 
 **US-04** (Master Admin)  
-Sebagai Master Admin, saya ingin mengubah status karyawan dari KONTRAK menjadi MITRA dan mencatat riwayat perubahannya.
+Sebagai Master Admin, saya ingin memproses offboarding karyawan sebagai `RESIGN` atau `PHK` dan mencatat riwayat perubahannya.
 
 **US-05** (Master Admin)  
 Sebagai Master Admin, saya ingin melihat riwayat semua kontrak yang pernah dimiliki oleh satu karyawan.
@@ -111,6 +114,9 @@ Sebagai Master Admin, saya ingin mendapatkan toast konfirmasi sebelum menghapus 
 
 **US-07** (Pengelola Koperasi)  
 Sebagai Pengelola Koperasi, saya ingin mengelola data karyawan dan status kontrak, tetapi tidak bisa membuat atau mengedit Master Data, agar pembagian kewenangan tetap jelas.
+
+**US-10** (Admin & Pengelola)  
+Sebagai Admin atau Pengelola Koperasi, saya ingin membuka halaman detail karyawan global agar bisa melihat biodata, status kepegawaian, detail offboarding, dan riwayat kontrak dalam satu tempat.
 
 **US-08** (Master Admin)  
 Sebagai Master Admin, saya ingin membuat dan mengelola akun internal dengan role Admin atau Pengelola Koperasi, agar akses sistem bisa diatur lebih rapi.
@@ -164,9 +170,26 @@ CREATE TABLE employee_status_history (
   employee_id INTEGER REFERENCES employees(id),
   old_status VARCHAR(20),
   new_status VARCHAR(20),
-  changed_by INTEGER REFERENCES master_admin(id),
+  changed_by_id INTEGER,
+  changed_by_name VARCHAR(255) NOT NULL,
+  changed_by_role VARCHAR(50) NOT NULL,
   changed_at TIMESTAMP DEFAULT NOW(),
   notes TEXT
+);
+
+-- employee_offboarding
+CREATE TABLE employee_offboarding (
+  id SERIAL PRIMARY KEY,
+  employee_id INTEGER UNIQUE REFERENCES employees(id),
+  termination_type VARCHAR(20) NOT NULL,
+  termination_date DATE NOT NULL,
+  reason TEXT,
+  processed_by_id INTEGER NOT NULL,
+  processed_by_name VARCHAR(255) NOT NULL,
+  processed_by_role VARCHAR(50) NOT NULL,
+  processed_by_kind VARCHAR(50) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP
 );
 ```
 
@@ -212,6 +235,9 @@ CREATE TABLE employee_status_history (
 | FR-07 | Export data karyawan ke Excel                                              | P2        |
 | FR-08 | Audit log perubahan data                                                   | P2        |
 | FR-09 | Toast konfirmasi sebelum hapus data karyawan, kontrak, dan master data     | P1        |
+| FR-10 | Status kepegawaian dihitung otomatis dari kontrak dan offboarding          | P0        |
+| FR-11 | Offboarding karyawan (`RESIGN` / `PHK`) dengan catatan dan audit trail     | P0        |
+| FR-12 | Halaman detail karyawan global dengan biodata, offboarding, dan kontrak    | P1        |
 
 ---
 
