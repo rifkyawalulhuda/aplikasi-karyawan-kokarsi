@@ -17,6 +17,50 @@ export function useExport() {
     return s === 'AKTIF' ? 'Aktif' : s === 'AKAN_HABIS' ? 'Akan Habis' : s === 'EXPIRED' ? 'Expired' : s === 'DIBATALKAN' ? 'Dibatalkan' : s
   }
 
+  function normalizeDate(val?: string | Date | null) {
+    if (!val) return null
+    const d = new Date(val)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+
+  function resolveContractStatus(contract: any) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const end = normalizeDate(contract?.endDate)
+    if (!end) return contract?.status ?? ''
+
+    end.setHours(0, 0, 0, 0)
+    if (contract?.status === 'DIBATALKAN') return 'DIBATALKAN'
+    if (end < today) return 'EXPIRED'
+
+    const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+    return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+  }
+
+  function resolveActiveContract(employee: any) {
+    const contracts = Array.isArray(employee?.contracts) ? [...employee.contracts] : []
+    if (!contracts.length) return null
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const activeByDate = contracts.find((contract: any) => {
+      const start = normalizeDate(contract?.startDate)
+      const end = normalizeDate(contract?.endDate)
+      if (!start || !end) return false
+      start.setHours(0, 0, 0, 0)
+      end.setHours(0, 0, 0, 0)
+      return start <= today && end >= today && contract?.status !== 'DIBATALKAN'
+    })
+
+    if (activeByDate) return activeByDate
+
+    return contracts.find((contract: any) => contract?.status === 'AKTIF')
+      ?? contracts.find((contract: any) => contract?.status !== 'DIBATALKAN')
+      ?? contracts[0]
+  }
+
   function toRows(employees: Employee[], includeDepartment = false) {
     return employees.map((e: any, i: number) => ({
       'No': i + 1,
@@ -34,10 +78,10 @@ export function useExport() {
       'Level Jabatan': e.jobLevel?.name ?? '-',
       ...(includeDepartment ? { 'Departement': e.department?.name ?? '-' } : {}),
       'Status Pajak': e.taxStatus?.name ?? '-',
-      'No. Kontrak Aktif': e.contracts?.find((c: any) => c.status === 'AKTIF')?.contractNo ?? '-',
-      'Tgl. Mulai Kontrak': fmt(e.contracts?.find((c: any) => c.status === 'AKTIF')?.startDate),
-      'Tgl. Selesai Kontrak': fmt(e.contracts?.find((c: any) => c.status === 'AKTIF')?.endDate),
-      'Status Kontrak': statusLabel(e.contracts?.find((c: any) => c.status === 'AKTIF')?.status ?? ''),
+      'No. Kontrak Aktif': resolveActiveContract(e)?.contractNo ?? '-',
+      'Tgl. Mulai Kontrak': fmt(resolveActiveContract(e)?.startDate),
+      'Tgl. Selesai Kontrak': fmt(resolveActiveContract(e)?.endDate),
+      'Status Kontrak': statusLabel(resolveContractStatus(resolveActiveContract(e)) ?? ''),
       'Foto': e.fotoKaryawan ? `http://localhost:3001${e.fotoKaryawan}` : '-',
       'Dibuat': fmt(e.createdAt),
       'Diperbarui': fmt(e.updatedAt),

@@ -16,12 +16,14 @@ export class EmployeesController {
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('employmentStatus') employmentStatus?: string,
+    @Query('includeContracts') includeContracts?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : 1,
       limit: limit ? +limit : 10,
       search,
       employmentStatus,
+      includeContracts: includeContracts === 'true',
     })
   }
 

@@ -40,8 +40,9 @@ export class EmployeesService {
     limit?: number
     search?: string
     employmentStatus?: string
+    includeContracts?: boolean
   }) {
-    const { page = 1, limit = 10, search, employmentStatus } = params
+    const { page = 1, limit = 10, search, employmentStatus, includeContracts = false } = params
     const skip = (page - 1) * limit
 
     const where: any = {}
@@ -57,7 +58,15 @@ export class EmployeesService {
     const [data, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
-        include: this.include,
+        include: includeContracts
+          ? {
+              ...this.include,
+              contracts: {
+                orderBy: { startDate: 'desc' },
+                include: { contractType: true },
+              },
+            }
+          : this.include,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },

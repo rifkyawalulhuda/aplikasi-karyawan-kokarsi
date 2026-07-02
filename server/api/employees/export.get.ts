@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   const params = new URLSearchParams({
     limit: '9999',
     page: '1',
+    includeContracts: 'true',
     ...(query.search ? { search: String(query.search) } : {}),
     ...(query.employmentStatus ? { employmentStatus: String(query.employmentStatus) } : {}),
   })

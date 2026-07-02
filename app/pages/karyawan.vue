@@ -8,6 +8,7 @@ const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UCheckbox = resolveComponent('UCheckbox')
+const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
@@ -24,6 +25,7 @@ const statusFilter = ref('all')
 const columnVisibility = ref({})
 const rowSelection = ref({})
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
 // Delete state
 const deleteLoading = ref(false)
@@ -41,6 +43,107 @@ const historyContracts = ref<Contract[]>([])
 function openEdit(employee: Employee) {
   editTarget.value = employee
   editModal.value = true
+}
+
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+
+  sorting.value = null
+}
+
+function getSortValue(employee: Employee, key: string) {
+  switch (key) {
+    case 'employeeNo':
+      return employee.employeeNo ?? ''
+    case 'fullName':
+      return employee.fullName ?? ''
+    case 'employmentStatus':
+      return employee.employmentStatus ?? ''
+    case 'workLocation':
+      return employee.workLocation?.name ?? ''
+    case 'jobRole':
+      return employee.jobRole?.name ?? ''
+    case 'department':
+      return employee.department?.name ?? ''
+    case 'joinDate':
+      return employee.joinDate ?? ''
+    default:
+      return ''
+  }
+}
+
+function formatFilterDate(dateValue?: string | null) {
+  if (!dateValue) return ''
+  const date = new Date(dateValue)
+  if (Number.isNaN(date.getTime())) return ''
+
+  return date.toLocaleDateString('id-ID', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  })
+}
+
+function getSearchTokens(employee: Employee) {
+  const employeeWithContracts = employee as Employee & { contracts?: Contract[] }
+  const activeContract = employeeWithContracts.contracts?.find((contract: Contract) => contract.status === 'AKTIF')
+    ?? employeeWithContracts.contracts?.[0]
+
+  return [
+    employee.employeeNo,
+    employee.fullName,
+    employee.employmentStatus,
+    employee.gender,
+    employee.birthDate,
+    employee.joinDate,
+    employee.email,
+    employee.phoneNumber,
+    employee.educationLevel,
+    employee.workLocation?.name,
+    employee.jobRole?.name,
+    employee.department?.name,
+    employee.jobLevel?.name,
+    employee.taxStatus?.name,
+    employee.fotoKaryawan,
+    activeContract?.contractNo,
+    activeContract?.contractType?.name,
+    activeContract?.startDate,
+    activeContract?.endDate,
+    activeContract ? resolveContractStatus(activeContract) : null,
+    formatFilterDate(employee.birthDate),
+    formatFilterDate(employee.joinDate),
+    formatFilterDate(activeContract?.startDate),
+    formatFilterDate(activeContract?.endDate),
+  ]
+    .flatMap(value => String(value ?? '').toLowerCase().split(/\s+/))
+    .filter(Boolean)
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
 }
 
 function formatDate(dateValue: string) {
@@ -169,12 +272,12 @@ const columns: TableColumn<Employee>[] = [
   },
   {
     accessorKey: 'employeeNo',
-    header: 'No. Induk',
+    header: () => sortableHeader('No. Induk', 'employeeNo'),
     cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.employeeNo)
   },
   {
     accessorKey: 'fullName',
-    header: 'Nama Lengkap',
+    header: () => sortableHeader('Nama Lengkap', 'fullName'),
     cell: ({ row }) =>
       h('div', { class: 'flex items-center gap-3' }, [
         row.original.fotoKaryawan
@@ -198,7 +301,7 @@ const columns: TableColumn<Employee>[] = [
   },
   {
     accessorKey: 'employmentStatus',
-    header: 'Status',
+    header: () => sortableHeader('Status', 'employmentStatus'),
     filterFn: 'equals',
     cell: ({ row }) => {
       const color = row.original.employmentStatus === 'MITRA' ? 'success' : 'warning'
@@ -207,22 +310,22 @@ const columns: TableColumn<Employee>[] = [
   },
   {
     accessorKey: 'workLocation',
-    header: 'Lokasi',
+    header: () => sortableHeader('Lokasi', 'workLocation'),
     cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.workLocation?.name ?? '-')
   },
   {
     accessorKey: 'jobRole',
-    header: 'Jabatan',
+    header: () => sortableHeader('Jabatan', 'jobRole'),
     cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.jobRole?.name ?? '-')
   },
   {
     accessorKey: 'department',
-    header: 'Departement',
+    header: () => sortableHeader('Departement', 'department'),
     cell: ({ row }) => h('span', { class: 'text-sm text-muted' }, row.original.department?.name ?? '-')
   },
   {
     accessorKey: 'joinDate',
-    header: 'Tgl. Bergabung',
+    header: () => sortableHeader('Tgl. Bergabung', 'joinDate'),
     cell: ({ row }) => {
       const d = new Date(row.original.joinDate)
       return h('span', { class: 'text-sm text-muted' },
@@ -257,13 +360,25 @@ const filteredData = computed(() => {
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
-    list = list.filter(e =>
-      e.fullName.toLowerCase().includes(q) ||
-      e.employeeNo.toLowerCase().includes(q) ||
-      e.email.toLowerCase().includes(q)
-    )
+    list = list.filter(e => getSearchTokens(e).some(token => token.includes(q)))
   }
-  return list
+
+  const sort = sorting.value
+  if (!sort) return list
+
+  return [...list].sort((a, b) => {
+    const aValue = getSortValue(a, sort.key)
+    const bValue = getSortValue(b, sort.key)
+    let result = 0
+
+    if (sort.key === 'joinDate') {
+      result = new Date(aValue).getTime() - new Date(bValue).getTime()
+    } else {
+      result = String(aValue).localeCompare(String(bValue), 'id', { sensitivity: 'base' })
+    }
+
+    return sort.direction === 'asc' ? result : -result
+  })
 })
 
 watch([statusFilter, searchQuery], () => {

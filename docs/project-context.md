@@ -62,10 +62,10 @@ npx tsc -p tsconfig.json
 | 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts`, `app/layouts/default.vue`, `app/middleware/auth.global.ts` |
 | 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/prisma/schema.prisma`, `backend/src/users/`, `app/pages/settings/users.vue`, `server/api/users/` |
 | 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
-| 14 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
-| 15 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
-| 15 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
-
+| 14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan.vue` |
+| 15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
+| 16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
+| 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
 ---
 
 ## Arsitektur
@@ -244,9 +244,9 @@ backend/
 
 ## Export Data
 
-- **Excel**: `xlsx` library - semua data + 22 kolom lengkap termasuk `Departement` -> `.xlsx`
+- **Excel**: `xlsx` library - semua data + 22 kolom lengkap termasuk `Departement` dan kontrak aktif otomatis dari data tanggal -> `.xlsx`
 - **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom lama -> `.pdf`
-- **Kolom export Excel**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tipe Kontrak, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
+- **Kolom export Excel**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 - **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
 - **Hapus data**: Karyawan, kontrak, master data, dan user memakai toast konfirmasi sebelum delete dijalankan
 - **Master User**: Admin dapat membuat akun internal dengan role `ADMIN` atau `PENGELOLA_KOPERASI`; password disimpan hash, seed sudah menambahkan akun Admin dan Pengelola, login mendukung `username` atau `NIK`, dan duplikat `NIK/Email/Username` menampilkan pesan validasi yang ramah
