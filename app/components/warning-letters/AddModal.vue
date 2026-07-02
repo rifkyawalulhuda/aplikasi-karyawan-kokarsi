@@ -77,6 +77,17 @@ watch(() => props.open, (open) => {
   }
 })
 
+// Auto-calculate Berlaku Sampai = Tanggal Surat + 6 bulan
+watch(() => state.letterDate, (date) => {
+  if (date) {
+    const d = new Date(date)
+    d.setMonth(d.getMonth() + 6)
+    state.validUntil = d.toISOString().split('T')[0]
+  } else {
+    state.validUntil = ''
+  }
+})
+
 function onEmployeeChange(id: number | undefined) {
   selectedEmployee.value = employees.value.find(e => e.id === id) ?? null
 }
@@ -201,8 +212,13 @@ function resetForm() {
           <UFormField label="Tanggal Surat" name="letterDate" required>
             <UInput v-model="state.letterDate" type="date" class="w-full" />
           </UFormField>
-          <UFormField label="Berlaku Sampai" name="validUntil" required>
-            <UInput v-model="state.validUntil" type="date" class="w-full" />
+          <UFormField label="Berlaku Sampai (6 bulan)" name="validUntil">
+            <UInput
+              :model-value="state.validUntil"
+              type="date"
+              readonly
+              class="w-full opacity-60"
+            />
           </UFormField>
         </div>
 

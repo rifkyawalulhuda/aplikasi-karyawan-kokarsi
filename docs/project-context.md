@@ -1,6 +1,6 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-02 | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-02 (v3) | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -68,7 +68,10 @@ npx tsc -p tsconfig.json
 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
 18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/`, `app/pages/karyawan/index.vue`, `app/pages/kontrak.vue`, `app/pages/index.vue` |
 19 | Halaman detail data karyawan (`/karyawan/:id`) — fix SSR auth + route conflict | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/ProfileHeader.vue` |
-20 | Tabel Manajemen Kontrak mendukung sorting dari header kolom (6 kolom) | `app/pages/kontrak.vue` |
+| 20 | Tabel Manajemen Kontrak mendukung sorting dari header kolom (6 kolom) | `app/pages/kontrak.vue` |
+| 21 | Manajemen Surat Peringatan + generate PDF (pdfkit, template kop surat + logo) | `app/pages/dokumen/surat-peringatan/index.vue`, `app/components/warning-letters/AddModal.vue`, `backend/src/warning-letters/`, `server/api/warning-letters/` |
+| 22 | Auto-calculate "Berlaku Sampai" (6 bulan dari Tanggal Surat) + field read-only | `app/components/warning-letters/AddModal.vue` |
+| 23 | Endpoint pengurus koperasi (tanpa admin-only guard) untuk dropdown | `backend/src/users/users.controller.ts`, `server/api/users/pengurus.get.ts` |
 ---
 
 ## Arsitektur
@@ -119,6 +122,9 @@ app/
       index.vue            # Manajemen karyawan (list)
       [id].vue             # Detail karyawan
     kontrak.vue            # Manajemen kontrak
+    dokumen/
+      surat-peringatan/
+        index.vue          # Manajemen Surat Peringatan (list + generate PDF)
     settings/master-data.vue  # Master data
     settings/users.vue        # Master user
     login.vue              # Login
@@ -133,6 +139,8 @@ app/
     kontrak/
       AddContractModal.vue
       EditContractModal.vue
+    warning-letters/
+      AddModal.vue           # Form SP dengan dynamic violations + auto-validUntil
   composables/
     useConfirmDeleteToast.ts   # Toast konfirmasi hapus reusable
     useConfirmActionToast.ts   # Toast konfirmasi aksi generic (logout, dll)
@@ -151,6 +159,12 @@ server/
     contracts/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
+    warning-letters/
+      index.ts              # GET list + POST
+      [id].ts               # GET + PUT + DELETE
+      [id]/generate.get.ts  # GET generate PDF (proxy stream)
+    users/
+      pengurus.get.ts       # GET list pengurus (no admin guard)
     lookups/
       [resource].ts         # GET list + POST
       [resource]/[id].ts    # PUT + DELETE
@@ -163,13 +177,16 @@ backend/
   src/
     employees/              # CRUD + upload foto endpoint
     contracts/              # CRUD kontrak
+    warning-letters/        # CRUD surat peringatan + PDF generator (pdfkit)
     lookups/                # Work locations, job roles, levels, tax status, contract types
-    users/                  # CRUD master user internal
+    users/                  # CRUD master user internal + pengurus endpoint
     auth/                   # JWT strategy
     main.ts                 # Static assets /uploads + dotenv/config
     prisma/                 # Prisma service adapter
   prisma/
-    schema.prisma           # Employee, Contract, ContractType, MasterAdmin, UserAccount, dll
+    schema.prisma           # Employee, Contract, WarningLetter, MasterAdmin, UserAccount, dll
+  assets/
+    logo-sp.png             # Logo PT Sankyu untuk PDF surat peringatan
   uploads/
     photos/                 # Foto karyawan tersimpan di sini
 ```
@@ -233,6 +250,19 @@ backend/
 | `username` | String | Unique, dipakai login utama |
 | `password` | String | Hash password di backend |
 
+### WarningLetter
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `letterNumber` | String | Unique, format: 195 /KUKP-SII/VIII/2025 |
+| `employeeId` | Int | FK ke Employee |
+| `violationType` | String[] | Array deskripsi pelanggaran |
+| `warningLevel` | Int | 1, 2, atau 3 (SP 1/2/3) |
+| `letterDate` | Date | Tanggal surat diterbitkan |
+| `validUntil` | Date | Tanggal berakhir (auto: letterDate + 6 bulan) |
+| `processedById` | Int | ID user pemroses |
+| `processedByName` | String | Nama pengurus koperasi |
+| `documentUrl` | String? | Opsional, URL dokumen |
+
 ---
 
 ## API Endpoints
@@ -265,10 +295,17 @@ backend/
 | POST | `/api/lookups/departments` | Tambah departement |
 | PUT | `/api/lookups/departments/:id` | Edit departement |
 | DELETE | `/api/lookups/departments/:id` | Hapus departement |
-| GET | `/api/users` | List master user |
+| GET | `/api/users` | List master user (admin only) |
+| GET | `/api/users/pengurus` | List pengurus (semua role) |
 | POST | `/api/users` | Tambah user internal |
 | PUT | `/api/users/:id` | Edit user internal |
 | DELETE | `/api/users/:id` | Hapus user internal |
+| GET | `/api/warning-letters` | List surat peringatan (pagination, search) |
+| POST | `/api/warning-letters` | Tambah surat peringatan |
+| GET | `/api/warning-letters/:id` | Detail surat peringatan |
+| PUT | `/api/warning-letters/:id` | Edit surat peringatan |
+| DELETE | `/api/warning-letters/:id` | Hapus surat peringatan |
+| GET | `/api/warning-letters/:id/generate` | Generate PDF surat peringatan |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 
 ---
@@ -283,6 +320,8 @@ backend/
 - **Hapus data**: Karyawan, kontrak, master data, dan user memakai toast konfirmasi sebelum delete dijalankan
 - **Master User**: Admin dapat membuat akun internal dengan role `ADMIN` atau `PENGELOLA_KOPERASI`; password disimpan hash, seed sudah menambahkan akun Admin dan Pengelola, login mendukung `username` atau `NIK`, dan duplikat `NIK/Email/Username` menampilkan pesan validasi yang ramah
 - **Master Data Departement**: Lookup baru tersedia dengan rule CRUD yang sama seperti master data lain, dan masuk ke seed awal
+- **Surat Peringatan**: CRUD lengkap dengan generate PDF (pdfkit) sesuai template asli (logo, kop surat, font TimesNewRoman + Calibri). Form AddModal menggunakan UForm + zod validation, dynamic violation list (add/remove), auto-fill pengurus dari user login, auto-calculate "Berlaku Sampai" = Tanggal Surat + 6 bulan (read-only field). Endpoint `/api/users/pengurus` dibuat terpisah dari `/api/users` karena `GET /api/users` memerlukan role ADMIN, sedangkan pengurus perlu diakses semua role untuk dropdown form SP
+- **Sidebar Dokumen Karyawan**: Group baru di sidebar dengan icon `i-lucide-file-badge`, berisi submenu "Surat Peringatan"
 
 ---
 
@@ -303,3 +342,8 @@ backend/
 | SSR auth gagal di detail karyawan | `$fetch` tidak forward cookie saat SSR. Ganti ke `useFetch + useRequestHeaders(['cookie'])` |
 | SSR crash `Cannot read properties of undefined` | Nested data (ex: `employee.fullName`) undefined saat SSR. Tambah optional chaining: `employee?.fullName` |
 | Sorting tidak konsisten antar halaman | Pola sorting: `toggleSort()` + `getSortValue()` + `sortableHeader()` + `UIcon` (lucide icons) |
+| Dropdown pengurus koperasi kosong | `GET /api/users` butuh role ADMIN. Gunakan `/api/users/pengurus` (tanpa admin guard) |
+| Modal tidak muncul saat klik tombol | Pastikan komponen modal di **luar** `<UDashboardPanel>`, bukan di dalamnya (slot `#body` atau `#default` saja yang valid) |
+| USelect value `null` vs `undefined` | Nuxt UI v4 `USelect` expect `undefined` bukan `null` untuk empty state. Gunakan `as number | undefined` |
+| `PrismaService` property tidak ditemukan | PrismaService pakai explicit getter proxy. Tambah getter baru untuk model baru: `get warningLetter() { return this.client.warningLetter }` |
+| Prisma `mode: 'insensitive'` type error | Gunakan `as const` atau cast `where: any` untuk avoid QueryMode type mismatch |
