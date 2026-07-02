@@ -1,9 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException, Request } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { extname, join } from 'path'
-import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto } from './employees.service'
+import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto, OffboardingDto } from './employees.service'
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('employees')
@@ -45,6 +45,11 @@ export class EmployeesController {
   @Put(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDto) {
     return this.service.update(id, dto)
+  }
+
+  @Post(':id/offboarding')
+  offboard(@Param('id', ParseIntPipe) id: number, @Body() dto: OffboardingDto, @Request() req: any) {
+    return this.service.offboard(id, dto, req.user)
   }
 
   @Delete(':id')

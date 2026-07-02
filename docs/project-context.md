@@ -66,6 +66,7 @@ npx tsc -p tsconfig.json
 | 15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
 | 16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
 | 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
+| 18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/`, `app/pages/karyawan.vue`, `app/pages/kontrak.vue`, `app/pages/index.vue` |
 ---
 
 ## Arsitektur
@@ -87,10 +88,19 @@ Backend return `{ data: [...], total, page, limit, totalPages }` untuk list endp
 Status kontrak dihitung dari `endDate` terhadap tanggal hari ini, jadi UI tidak perlu input manual untuk status kontrak.
 
 Aturan yang dipakai:
+- `SELESAI` jika karyawan sudah offboarding (`RESIGN` / `PHK`) dan kontrak bukan `DIBATALKAN`
 - `EXPIRED` jika `endDate` sudah lewat
 - `AKAN_HABIS` jika sisa kontrak 30 hari atau kurang
 - `AKTIF` jika sisa kontrak lebih dari 30 hari
 - `DIBATALKAN` tetap dipertahankan bila kontrak memang dibatalkan
+
+### Status Kepegawaian Otomatis
+Status kepegawaian tidak lagi diinput manual di form karyawan.
+
+Aturan yang dipakai:
+- `RESIGN` atau `PHK` jika sudah diproses lewat offboarding
+- `AKTIF` jika kontrak terbaru masih aktif secara tanggal
+- `KONTRAK_EXPIRED` jika tidak ada kontrak aktif terbaru lagi
 
 ### USelect Nuxt UI v4
 `value` di items harus exact match type dengan model value. Integer ID harus match integer.
@@ -165,7 +175,7 @@ backend/
 |-------|------|-----------|
 | `employeeNo` | String | Unique, e.g. SKY-001 |
 | `fullName` | String | Nama lengkap |
-| `employmentStatus` | Enum | MITRA / KONTRAK |
+| `employmentStatus` | Enum | AKTIF / KONTRAK_EXPIRED / RESIGN / PHK |
 | `gender` | Enum | MALE / FEMALE |
 | `birthDate` | Date | Tanggal lahir |
 | `joinDate` | Date | Tanggal bergabung |
@@ -186,7 +196,7 @@ backend/
 | `contractTypeId` | Int? | FK ke ContractType |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
-| `status` | Enum | Dihitung otomatis dari `endDate` (AKTIF / AKAN_HABIS / EXPIRED / DIBATALKAN) |
+| `status` | Enum | Dihitung otomatis dari status karyawan + tanggal (AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
 
 ### ContractType
 | Field | Type | Keterangan |
@@ -244,7 +254,7 @@ backend/
 
 ## Export Data
 
-- **Excel**: `xlsx` library - semua data + 22 kolom lengkap termasuk `Departement` dan kontrak aktif otomatis dari data tanggal -> `.xlsx`
+- **Excel**: `xlsx` library - semua data + 22 kolom lengkap termasuk `Departement`, status kepegawaian otomatis, dan kontrak relevan terbaru -> `.xlsx`
 - **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom lama -> `.pdf`
 - **Kolom export Excel**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 - **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama

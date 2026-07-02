@@ -11,7 +11,6 @@ interface LookupsResponse {
   jobRoles: LookupItem[]
   jobLevels: LookupItem[]
   educationLevels: string[]
-  employmentStatuses: string[]
   genders: { value: string; label: string }[]
 }
 
@@ -71,7 +70,6 @@ const { data: lookups } = await useFetch<LookupsResponse>('/api/lookups')
 const schema = z.object({
   employeeNo: z.string().min(3, 'Min. 3 karakter'),
   fullName: z.string().min(3, 'Min. 3 karakter'),
-  employmentStatus: z.enum(['MITRA', 'KONTRAK']),
   gender: z.enum(['MALE', 'FEMALE']),
   birthDate: z.string().min(1, 'Wajib diisi'),
   joinDate: z.string().min(1, 'Wajib diisi'),
@@ -90,7 +88,6 @@ type Schema = z.output<typeof schema>
 const state = reactive<Partial<Schema>>({
   employeeNo: '',
   fullName: '',
-  employmentStatus: 'KONTRAK',
   gender: 'MALE',
   birthDate: '',
   joinDate: '',
@@ -109,7 +106,6 @@ function fillState(emp: typeof props.employee) {
   if (!emp) return
   state.employeeNo = emp.employeeNo
   state.fullName = emp.fullName
-  state.employmentStatus = emp.employmentStatus as 'MITRA' | 'KONTRAK'
   state.gender = emp.gender as 'MALE' | 'FEMALE'
   state.birthDate = emp.birthDate ? emp.birthDate.slice(0, 10) : ''
   state.joinDate = emp.joinDate ? emp.joinDate.slice(0, 10) : ''
@@ -240,15 +236,11 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
         </div>
 
-        <!-- Baris 2: Status + Gender -->
+        <!-- Baris 2: Gender -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Status Kepegawaian" name="employmentStatus" required>
-            <USelect
-              v-model="state.employmentStatus"
-              :items="[{ label: 'MITRA', value: 'MITRA' }, { label: 'KONTRAK', value: 'KONTRAK' }]"
-              class="w-full"
-            />
-          </UFormField>
+          <div class="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 text-xs text-muted">
+            Status kepegawaian dihitung otomatis dari kontrak terbaru atau proses offboarding.
+          </div>
           <UFormField label="Jenis Kelamin" name="gender" required>
             <USelect
               v-model="state.gender"

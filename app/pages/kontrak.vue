@@ -43,6 +43,7 @@ const selectedEmployeeStats = computed(() => ({
   active: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKTIF').length,
   expiring: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKAN_HABIS').length,
   expired: selectedEmployeeContracts.value.filter(contract => contract.status === 'EXPIRED').length,
+  finished: selectedEmployeeContracts.value.filter(contract => contract.status === 'SELESAI').length,
 }))
 
 const statusFilter = ref('all')
@@ -119,6 +120,7 @@ const statusColorMap: Record<ContractStatus, string> = {
   AKTIF: 'success',
   AKAN_HABIS: 'warning',
   EXPIRED: 'error',
+  SELESAI: 'info',
   DIBATALKAN: 'neutral'
 }
 
@@ -126,6 +128,7 @@ const statusLabelMap: Record<ContractStatus, string> = {
   AKTIF: 'Aktif',
   AKAN_HABIS: 'Akan Habis',
   EXPIRED: 'Expired',
+  SELESAI: 'Selesai',
   DIBATALKAN: 'Dibatalkan'
 }
 
@@ -265,6 +268,7 @@ const counts = computed(() => {
     aktif: list.filter(c => c.status === 'AKTIF').length,
     akanHabis: list.filter(c => c.status === 'AKAN_HABIS').length,
     expired: list.filter(c => c.status === 'EXPIRED').length,
+    selesai: list.filter(c => c.status === 'SELESAI').length,
     employees: uniqueEmployees
   }
 })
@@ -305,6 +309,9 @@ watch([statusFilter, searchQuery], () => {
         <UBadge variant="subtle" color="error" size="lg">
           Expired: {{ counts.expired }}
         </UBadge>
+        <UBadge variant="subtle" color="info" size="lg">
+          Selesai: {{ counts.selesai }}
+        </UBadge>
       </div>
 
       <!-- Toolbar -->
@@ -322,6 +329,7 @@ watch([statusFilter, searchQuery], () => {
             { label: 'Aktif', value: 'AKTIF' },
             { label: 'Akan Habis', value: 'AKAN_HABIS' },
             { label: 'Expired', value: 'EXPIRED' },
+            { label: 'Selesai', value: 'SELESAI' },
             { label: 'Dibatalkan', value: 'DIBATALKAN' }
           ]"
           placeholder="Filter status"
@@ -399,6 +407,7 @@ watch([statusFilter, searchQuery], () => {
             <UBadge variant="subtle" color="success">Aktif {{ selectedEmployeeStats.active }}</UBadge>
             <UBadge variant="subtle" color="warning">Akan Habis {{ selectedEmployeeStats.expiring }}</UBadge>
             <UBadge variant="subtle" color="error">Expired {{ selectedEmployeeStats.expired }}</UBadge>
+            <UBadge variant="subtle" color="info">Selesai {{ selectedEmployeeStats.finished }}</UBadge>
           </div>
         </div>
 

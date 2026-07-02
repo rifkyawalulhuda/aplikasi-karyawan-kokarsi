@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsEnum } from 'class-validator'
 import { ContractStatus } from '@prisma/client'
+import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 
 export class CreateContractDto {
   @IsInt() employeeId: number
@@ -19,40 +20,41 @@ export class UpdateContractDto extends CreateContractDto {}
 export class ContractsService {
   constructor(private prisma: PrismaService) {}
 
-  private static readonly DAY_MS = 24 * 60 * 60 * 1000
-
   private include = {
-    employee: { select: { id: true, employeeNo: true, fullName: true } },
+    employee: { select: { id: true, employeeNo: true, fullName: true, employmentStatus: true } },
     contractType: { select: { id: true, name: true } },
   }
 
-  private startOfDay(date: Date) {
-    const value = new Date(date)
-    value.setHours(0, 0, 0, 0)
-    return value
-  }
-
-  private resolveStatus(contract: { endDate: Date; status?: ContractStatus }, now = new Date()): ContractStatus {
-    if (contract.status === 'DIBATALKAN') return 'DIBATALKAN'
-
-    const today = this.startOfDay(now).getTime()
-    const end = this.startOfDay(contract.endDate).getTime()
-
-    if (end < today) return 'EXPIRED'
-
-    const daysLeft = Math.ceil((end - today) / ContractsService.DAY_MS)
-    return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
-  }
-
-  private withComputedStatus<T extends { endDate: Date; status: ContractStatus }>(contract: T) {
+  private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
+    const employeeStatus = (contract as any).employee?.employmentStatus
     return {
       ...contract,
-      status: this.resolveStatus(contract),
+      status: resolveContractStatus(contract, employeeStatus),
     }
   }
 
-  private withComputedStatuses<T extends { endDate: Date; status: ContractStatus }>(contracts: T[]) {
+  private withComputedStatuses<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contracts: T[]) {
     return contracts.map(contract => this.withComputedStatus(contract))
+  }
+
+  private async syncEmployeeStatus(employeeId: number) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        contracts: true,
+        offboarding: true,
+      },
+    })
+
+    if (!employee) return
+
+    const employmentStatus = resolveEmploymentStatus(employee.contracts, employee.offboarding)
+    if (employmentStatus !== employee.employmentStatus) {
+      await this.prisma.employee.update({
+        where: { id: employeeId },
+        data: { employmentStatus },
+      })
+    }
   }
 
   async findAll(params: { page?: number; limit?: number; status?: string; employeeId?: number }) {
@@ -92,11 +94,12 @@ export class ContractsService {
       },
       include: this.include,
     })
+    await this.syncEmployeeStatus(dto.employeeId)
     return this.withComputedStatus(contract)
   }
 
   async update(id: number, dto: UpdateContractDto) {
-    await this.findOne(id)
+    const existing = await this.findOne(id)
     const contract = await this.prisma.contract.update({
       where: { id },
       data: {
@@ -106,12 +109,18 @@ export class ContractsService {
       },
       include: this.include,
     })
+    await this.syncEmployeeStatus(existing.employeeId)
+    if (dto.employeeId !== existing.employeeId) {
+      await this.syncEmployeeStatus(dto.employeeId)
+    }
     return this.withComputedStatus(contract)
   }
 
   async remove(id: number) {
-    await this.findOne(id)
-    return this.prisma.contract.delete({ where: { id } })
+    const contract = await this.findOne(id)
+    const removed = await this.prisma.contract.delete({ where: { id } })
+    await this.syncEmployeeStatus(contract.employeeId)
+    return removed
   }
 
   async getExpiring(days: number) {

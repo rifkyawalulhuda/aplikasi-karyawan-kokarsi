@@ -38,6 +38,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get contractDocument() { return this.client.contractDocument }
   get contractType() { return this.client.contractType }
   get department() { return this.client.department }
+  get employeeOffboarding() { return this.client.employeeOffboarding }
+  get employeeStatusHistory() { return this.client.employeeStatusHistory }
   get workLocation() { return this.client.workLocation }
   get jobRole() { return this.client.jobRole }
   get jobLevel() { return this.client.jobLevel }
@@ -45,6 +47,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }
+  $transaction(...args: Parameters<PrismaClient['$transaction']>) {
+    return (this.client.$transaction as any)(...args)
+  }
 
   async onModuleInit() {
     await this.client.$connect()

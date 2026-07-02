@@ -30,9 +30,24 @@ export interface JobLevel {
 }
 
 // --- Employee ---
-export type EmploymentStatus = 'MITRA' | 'KONTRAK'
+export type EmploymentStatus = 'AKTIF' | 'KONTRAK_EXPIRED' | 'RESIGN' | 'PHK'
 export type Gender = 'MALE' | 'FEMALE'
 export type EducationLevel = 'SMA' | 'D3' | 'S1' | 'S2'
+export type TerminationType = 'RESIGN' | 'PHK'
+
+export interface EmployeeOffboarding {
+  id: number
+  employeeId: number
+  terminationType: TerminationType
+  terminationDate: string
+  reason?: string | null
+  processedById: number
+  processedByName: string
+  processedByRole: string
+  processedByKind: string
+  createdAt: string
+  updatedAt: string
+}
 
 export interface Employee {
   id: number
@@ -53,13 +68,17 @@ export interface Employee {
   jobLevel?: JobLevel
   educationLevel: EducationLevel
   joinDate: string
-  phoneNumber: string
+  phoneNumber?: string
   email: string
   fotoKaryawan?: string
+  contracts?: Contract[]
+  offboarding?: EmployeeOffboarding | null
+  createdAt?: string
+  updatedAt?: string
 }
 
 // --- Contract ---
-export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'DIBATALKAN'
+export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'SELESAI' | 'DIBATALKAN'
 
 export interface Contract {
   id: number

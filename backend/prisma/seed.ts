@@ -72,7 +72,7 @@ async function main() {
     create: {
       employeeNo: 'EMP001',
       fullName: 'Budi Santoso',
-      employmentStatus: 'KONTRAK',
+      employmentStatus: 'AKTIF',
       gender: 'MALE',
       birthDate: new Date('1990-05-15'),
       joinDate: new Date('2022-01-01'),

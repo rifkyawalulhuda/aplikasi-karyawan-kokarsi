@@ -4,6 +4,18 @@ import autoTable from 'jspdf-autotable'
 import type { Employee } from '~/types'
 
 export function useExport() {
+  function employmentStatusLabel(status: string) {
+    return status === 'AKTIF'
+      ? 'Aktif'
+      : status === 'KONTRAK_EXPIRED'
+        ? 'Kontrak Expired'
+        : status === 'RESIGN'
+          ? 'Resign'
+          : status === 'PHK'
+            ? 'PHK'
+            : status
+  }
+
   function fmt(val: string | undefined) {
     if (!val) return '-'
     return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -14,7 +26,7 @@ export function useExport() {
   }
 
   function statusLabel(s: string) {
-    return s === 'AKTIF' ? 'Aktif' : s === 'AKAN_HABIS' ? 'Akan Habis' : s === 'EXPIRED' ? 'Expired' : s === 'DIBATALKAN' ? 'Dibatalkan' : s
+    return s === 'AKTIF' ? 'Aktif' : s === 'AKAN_HABIS' ? 'Akan Habis' : s === 'EXPIRED' ? 'Expired' : s === 'SELESAI' ? 'Selesai' : s === 'DIBATALKAN' ? 'Dibatalkan' : s
   }
 
   function normalizeDate(val?: string | Date | null) {
@@ -24,18 +36,7 @@ export function useExport() {
   }
 
   function resolveContractStatus(contract: any) {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const end = normalizeDate(contract?.endDate)
-    if (!end) return contract?.status ?? ''
-
-    end.setHours(0, 0, 0, 0)
-    if (contract?.status === 'DIBATALKAN') return 'DIBATALKAN'
-    if (end < today) return 'EXPIRED'
-
-    const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
-    return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+    return contract?.status ?? ''
   }
 
   function resolveActiveContract(employee: any) {
@@ -66,7 +67,7 @@ export function useExport() {
       'No': i + 1,
       'No. Induk Karyawan': e.employeeNo ?? '-',
       'Nama Lengkap': e.fullName ?? '-',
-      'Status Kepegawaian': e.employmentStatus ?? '-',
+      'Status Kepegawaian': employmentStatusLabel(e.employmentStatus ?? '-'),
       'Jenis Kelamin': genderLabel(e.gender ?? ''),
       'Tanggal Lahir': fmt(e.birthDate),
       'Tanggal Bergabung': fmt(e.joinDate),

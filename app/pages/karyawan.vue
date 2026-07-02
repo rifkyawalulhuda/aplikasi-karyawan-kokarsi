@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Contract, Employee } from '~/types'
+import type { Contract, Employee, EmploymentStatus } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -33,6 +33,8 @@ const deleteLoading = ref(false)
 // Edit state
 const editModal = ref(false)
 const editTarget = ref<Employee | null>(null)
+const offboardingModal = ref(false)
+const offboardingTarget = ref<Employee | null>(null)
 
 // History state
 const historyModal = ref(false)
@@ -43,6 +45,11 @@ const historyContracts = ref<Contract[]>([])
 function openEdit(employee: Employee) {
   editTarget.value = employee
   editModal.value = true
+}
+
+function openOffboarding(employee: Employee) {
+  offboardingTarget.value = employee
+  offboardingModal.value = true
 }
 
 function toggleSort(key: string) {
@@ -94,13 +101,14 @@ function formatFilterDate(dateValue?: string | null) {
 
 function getSearchTokens(employee: Employee) {
   const employeeWithContracts = employee as Employee & { contracts?: Contract[] }
-  const activeContract = employeeWithContracts.contracts?.find((contract: Contract) => contract.status === 'AKTIF')
+  const activeContract = employeeWithContracts.contracts?.find((contract: Contract) => ['AKTIF', 'AKAN_HABIS'].includes(contract.status))
     ?? employeeWithContracts.contracts?.[0]
 
   return [
     employee.employeeNo,
     employee.fullName,
     employee.employmentStatus,
+    employmentStatusLabelMap[employee.employmentStatus],
     employee.gender,
     employee.birthDate,
     employee.joinDate,
@@ -117,7 +125,7 @@ function getSearchTokens(employee: Employee) {
     activeContract?.contractType?.name,
     activeContract?.startDate,
     activeContract?.endDate,
-    activeContract ? resolveContractStatus(activeContract) : null,
+    activeContract ? contractStatusLabelMap[resolveContractStatus(activeContract)] : null,
     formatFilterDate(employee.birthDate),
     formatFilterDate(employee.joinDate),
     formatFilterDate(activeContract?.startDate),
@@ -155,23 +163,14 @@ function formatDate(dateValue: string) {
 }
 
 function resolveContractStatus(contract: Contract) {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const end = new Date(contract.endDate)
-  end.setHours(0, 0, 0, 0)
-
-  if (contract.status === 'DIBATALKAN') return 'DIBATALKAN'
-  if (end < today) return 'EXPIRED'
-
-  const daysLeft = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
-  return daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+  return contract.status
 }
 
 const contractStatusColorMap: Record<string, string> = {
   AKTIF: 'success',
   AKAN_HABIS: 'warning',
   EXPIRED: 'error',
+  SELESAI: 'info',
   DIBATALKAN: 'neutral',
 }
 
@@ -179,7 +178,22 @@ const contractStatusLabelMap: Record<string, string> = {
   AKTIF: 'Aktif',
   AKAN_HABIS: 'Akan Habis',
   EXPIRED: 'Expired',
+  SELESAI: 'Selesai',
   DIBATALKAN: 'Dibatalkan',
+}
+
+const employmentStatusColorMap: Record<EmploymentStatus, string> = {
+  AKTIF: 'success',
+  KONTRAK_EXPIRED: 'warning',
+  RESIGN: 'neutral',
+  PHK: 'error',
+}
+
+const employmentStatusLabelMap: Record<EmploymentStatus, string> = {
+  AKTIF: 'Aktif',
+  KONTRAK_EXPIRED: 'Kontrak Expired',
+  RESIGN: 'Resign',
+  PHK: 'PHK',
 }
 
 async function openHistory(employee: Employee) {
@@ -240,6 +254,14 @@ function getRowItems(row: Row<Employee>) {
       icon: 'i-lucide-pencil',
       onSelect() {
         openEdit(row.original)
+      }
+    },
+    {
+      label: 'Offboarding',
+      icon: 'i-lucide-user-x',
+      disabled: row.original.employmentStatus === 'RESIGN' || row.original.employmentStatus === 'PHK',
+      onSelect() {
+        openOffboarding(row.original)
       }
     },
     { type: 'separator' },
@@ -304,8 +326,8 @@ const columns: TableColumn<Employee>[] = [
     header: () => sortableHeader('Status', 'employmentStatus'),
     filterFn: 'equals',
     cell: ({ row }) => {
-      const color = row.original.employmentStatus === 'MITRA' ? 'success' : 'warning'
-      return h(UBadge, { variant: 'subtle', color }, () => row.original.employmentStatus)
+      const status = row.original.employmentStatus
+      return h(UBadge, { variant: 'subtle', color: employmentStatusColorMap[status] as any }, () => employmentStatusLabelMap[status])
     }
   },
   {
@@ -424,8 +446,10 @@ watch([statusFilter, searchQuery], () => {
             v-model="statusFilter"
             :items="[
               { label: 'Semua Status', value: 'all' },
-              { label: 'MITRA', value: 'MITRA' },
-              { label: 'KONTRAK', value: 'KONTRAK' }
+              { label: 'Aktif', value: 'AKTIF' },
+              { label: 'Kontrak Expired', value: 'KONTRAK_EXPIRED' },
+              { label: 'Resign', value: 'RESIGN' },
+              { label: 'PHK', value: 'PHK' }
             ]"
             placeholder="Filter status"
             class="min-w-36"
@@ -477,6 +501,12 @@ watch([statusFilter, searchQuery], () => {
     @updated="refresh()"
   />
 
+  <KaryawanOffboardingModal
+    v-model="offboardingModal"
+    :employee="offboardingTarget"
+    @saved="refresh()"
+  />
+
   <UModal
     v-model:open="historyModal"
     title="Riwayat Kontrak Karyawan"
@@ -504,6 +534,9 @@ watch([statusFilter, searchQuery], () => {
             </UBadge>
             <UBadge variant="subtle" color="error">
               Expired {{ historyContracts.filter(c => resolveContractStatus(c) === 'EXPIRED').length }}
+            </UBadge>
+            <UBadge variant="subtle" color="info">
+              Selesai {{ historyContracts.filter(c => resolveContractStatus(c) === 'SELESAI').length }}
             </UBadge>
           </div>
         </div>

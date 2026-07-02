@@ -1,12 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
-import { EmploymentStatus, Gender, EducationLevel } from '@prisma/client'
+import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
+import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
 
 export class CreateEmployeeDto {
   @IsString() employeeNo: string
   @IsString() fullName: string
-  @IsEnum(EmploymentStatus) employmentStatus: EmploymentStatus
   @IsEnum(Gender) gender: Gender
   @IsDateString() birthDate: string
   @IsDateString() joinDate: string
@@ -23,6 +23,12 @@ export class CreateEmployeeDto {
 
 export class UpdateEmployeeDto extends CreateEmployeeDto {}
 
+export class OffboardingDto {
+  @IsEnum(TerminationType) terminationType: TerminationType
+  @IsDateString() terminationDate: string
+  @IsOptional() @IsString() reason?: string
+}
+
 @Injectable()
 export class EmployeesService {
   constructor(private prisma: PrismaService) {}
@@ -33,6 +39,53 @@ export class EmployeesService {
     jobLevel: true,
     taxStatus: true,
     department: true,
+    offboarding: true,
+  }
+
+  private mapContractsWithComputedStatus<T extends { status: any; startDate: Date; endDate: Date }>(
+    employeeStatus: EmploymentStatus,
+    contracts: T[],
+  ) {
+    return contracts.map(contract => ({
+      ...contract,
+      status: resolveContractStatus(contract, employeeStatus),
+    }))
+  }
+
+  private mapEmployee<T extends { contracts?: any[]; offboarding?: any | null; employmentStatus: EmploymentStatus }>(employee: T) {
+    const contracts = Array.isArray(employee.contracts) ? employee.contracts : []
+    const employmentStatus = Array.isArray(employee.contracts)
+      ? resolveEmploymentStatus(contracts, employee.offboarding)
+      : employee.employmentStatus
+
+    return {
+      ...employee,
+      employmentStatus,
+      contracts: contracts.length ? this.mapContractsWithComputedStatus(employmentStatus, contracts) : undefined,
+    }
+  }
+
+  private async recomputeEmployeeStatus(employeeId: number) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: {
+        contracts: true,
+        offboarding: true,
+      },
+    })
+
+    if (!employee) throw new NotFoundException('Karyawan tidak ditemukan')
+
+    const nextStatus = resolveEmploymentStatus(employee.contracts, employee.offboarding)
+
+    if (employee.employmentStatus !== nextStatus) {
+      await this.prisma.employee.update({
+        where: { id: employeeId },
+        data: { employmentStatus: nextStatus },
+      })
+    }
+
+    return nextStatus
   }
 
   async findAll(params: {
@@ -55,7 +108,7 @@ export class EmployeesService {
     }
     if (employmentStatus) where.employmentStatus = employmentStatus
 
-    const [data, total] = await Promise.all([
+    const [rawData, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
         include: includeContracts
@@ -74,6 +127,8 @@ export class EmployeesService {
       this.prisma.employee.count({ where }),
     ])
 
+    const data = rawData.map(employee => this.mapEmployee(employee))
+
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) }
   }
 
@@ -91,23 +146,25 @@ export class EmployeesService {
       },
     })
     if (!emp) throw new NotFoundException('Karyawan tidak ditemukan')
-    return emp
+    return this.mapEmployee(emp)
   }
 
   async create(dto: CreateEmployeeDto) {
-    return this.prisma.employee.create({
+    const employee = await this.prisma.employee.create({
       data: {
         ...dto,
+        employmentStatus: 'KONTRAK_EXPIRED',
         birthDate: new Date(dto.birthDate),
         joinDate: new Date(dto.joinDate),
       },
       include: this.include,
     })
+    return this.findOne(employee.id)
   }
 
   async update(id: number, dto: UpdateEmployeeDto) {
     await this.findOne(id)
-    return this.prisma.employee.update({
+    const employee = await this.prisma.employee.update({
       where: { id },
       data: {
         ...dto,
@@ -116,15 +173,18 @@ export class EmployeesService {
       },
       include: this.include,
     })
+    await this.recomputeEmployeeStatus(id)
+    return this.findOne(employee.id)
   }
 
   async updatePhoto(id: number, fotoKaryawan: string) {
     await this.findOne(id)
-    return this.prisma.employee.update({
+    const employee = await this.prisma.employee.update({
       where: { id },
       data: { fotoKaryawan },
       include: this.include,
     })
+    return this.mapEmployee(employee)
   }
 
   async remove(id: number) {
@@ -132,16 +192,88 @@ export class EmployeesService {
     return this.prisma.employee.delete({ where: { id } })
   }
 
+  async offboard(id: number, dto: OffboardingDto, actor: { sub: number; fullName?: string; role?: string; kind?: string }) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id },
+      include: {
+        contracts: true,
+        offboarding: true,
+      },
+    })
+
+    if (!employee) throw new NotFoundException('Karyawan tidak ditemukan')
+
+    const oldStatus = resolveEmploymentStatus(employee.contracts, employee.offboarding)
+    const nextStatus: EmploymentStatus = dto.terminationType
+
+    await this.prisma.client.$transaction(async (tx) => {
+      await tx.employeeOffboarding.upsert({
+        where: { employeeId: id },
+        update: {
+          terminationType: dto.terminationType,
+          terminationDate: new Date(dto.terminationDate),
+          reason: dto.reason,
+          processedById: actor.sub,
+          processedByName: actor.fullName ?? 'System',
+          processedByRole: actor.role ?? 'UNKNOWN',
+          processedByKind: actor.kind ?? 'unknown',
+        },
+        create: {
+          employeeId: id,
+          terminationType: dto.terminationType,
+          terminationDate: new Date(dto.terminationDate),
+          reason: dto.reason,
+          processedById: actor.sub,
+          processedByName: actor.fullName ?? 'System',
+          processedByRole: actor.role ?? 'UNKNOWN',
+          processedByKind: actor.kind ?? 'unknown',
+        },
+      })
+
+      await tx.employee.update({
+        where: { id },
+        data: { employmentStatus: nextStatus },
+      })
+
+      await tx.contract.updateMany({
+        where: {
+          employeeId: id,
+          status: { not: 'DIBATALKAN' },
+        },
+        data: { status: 'SELESAI' },
+      })
+
+      await tx.employeeStatusHistory.create({
+        data: {
+          employeeId: id,
+          oldStatus,
+          newStatus: nextStatus,
+          changedById: actor.sub,
+          changedByName: actor.fullName ?? 'System',
+          changedByRole: actor.role ?? 'UNKNOWN',
+          notes: dto.reason,
+        },
+      })
+    })
+
+    return this.findOne(id)
+  }
+
   async getDashboardStats() {
     const now = new Date()
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-    const [total, mitra, kontrak, expiringContracts, locations, levels] = await Promise.all([
+    const [total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels] = await Promise.all([
       this.prisma.employee.count(),
-      this.prisma.employee.count({ where: { employmentStatus: 'MITRA' } }),
-      this.prisma.employee.count({ where: { employmentStatus: 'KONTRAK' } }),
+      this.prisma.employee.count({ where: { employmentStatus: 'AKTIF' } }),
+      this.prisma.employee.count({ where: { employmentStatus: 'KONTRAK_EXPIRED' } }),
+      this.prisma.employee.count({ where: { employmentStatus: 'RESIGN' } }),
+      this.prisma.employee.count({ where: { employmentStatus: 'PHK' } }),
       this.prisma.contract.count({
-        where: { endDate: { gte: now, lte: in30Days } }
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: { notIn: ['DIBATALKAN', 'SELESAI'] },
+        }
       }),
       this.prisma.workLocation.findMany({
         select: {
@@ -165,6 +297,6 @@ export class EmployeesService {
       .map(l => ({ name: l.name, count: l._count.employees }))
       .filter(l => l.count > 0)
 
-    return { total, mitra, kontrak, expiringContracts, byLocation, byLevel }
+    return { total, aktif, kontrakExpired, resign, phk, expiringContracts, byLocation, byLevel }
   }
 }

@@ -95,6 +95,7 @@ model Employee {
 
   contracts             Contract[]
   statusHistory         EmployeeStatusHistory[]
+  offboarding           EmployeeOffboarding?
   masterAdmin           MasterAdmin?
 
   createdAt DateTime @default(now())
@@ -104,14 +105,12 @@ model Employee {
 }
 
 model MasterAdmin {
-  id         Int      @id @default(autoincrement())
-  employeeNo String   @unique @db.VarChar(100)
-  fullName   String   @db.VarChar(255)
-  password   String   @db.VarChar(255)
+  id         Int       @id @default(autoincrement())
+  employeeNo String    @unique @db.VarChar(100)
+  fullName   String    @db.VarChar(255)
+  password   String    @db.VarChar(255)
   role       AdminRole @default(ADMIN)
-  employee   Employee @relation(fields: [employeeNo], references: [employeeNo])
-
-  statusChanges EmployeeStatusHistory[]
+  employee   Employee  @relation(fields: [employeeNo], references: [employeeNo])
 
   @@map("master_admin")
 }
@@ -149,23 +148,44 @@ model ContractDocument {
 }
 
 model EmployeeStatusHistory {
-  id         Int      @id @default(autoincrement())
-  employeeId Int
-  oldStatus  String   @db.VarChar(20)
-  newStatus  String   @db.VarChar(20)
-  changedBy  Int
-  changedAt  DateTime @default(now())
-  notes      String?
+  id            Int      @id @default(autoincrement())
+  employeeId    Int
+  oldStatus     String   @db.VarChar(30)
+  newStatus     String   @db.VarChar(30)
+  changedById   Int?
+  changedByName String   @db.VarChar(255)
+  changedByRole String   @db.VarChar(50)
+  changedAt     DateTime @default(now())
+  notes         String?
 
-  employee Employee    @relation(fields: [employeeId], references: [id])
-  admin    MasterAdmin @relation(fields: [changedBy], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
 
   @@map("employee_status_history")
 }
 
+model EmployeeOffboarding {
+  id              Int             @id @default(autoincrement())
+  employeeId      Int             @unique
+  terminationType TerminationType
+  terminationDate DateTime        @db.Date
+  reason          String?
+  processedById   Int
+  processedByName String          @db.VarChar(255)
+  processedByRole String          @db.VarChar(50)
+  processedByKind String          @db.VarChar(50)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_offboarding")
+}
+
 enum EmploymentStatus {
-  MITRA
-  KONTRAK
+  AKTIF
+  KONTRAK_EXPIRED
+  RESIGN
+  PHK
 }
 
 enum Gender {
@@ -184,7 +204,13 @@ enum ContractStatus {
   AKTIF
   AKAN_HABIS
   EXPIRED
+  SELESAI
   DIBATALKAN
+}
+
+enum TerminationType {
+  RESIGN
+  PHK
 }
 
 enum AdminRole {

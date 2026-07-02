@@ -1,8 +1,10 @@
 <script setup lang="ts">
 interface DashboardStats {
   total: number
-  mitra: number
-  kontrak: number
+  aktif: number
+  kontrakExpired: number
+  resign: number
+  phk: number
   expiringContracts: number
   byLocation: { name: string; count: number }[]
   byLevel: { name: string; count: number }[]
@@ -21,22 +23,40 @@ const statCards = computed(() => [
     ring: 'ring-primary/20'
   },
   {
-    title: 'Status MITRA',
+    title: 'Status Aktif',
     icon: 'i-lucide-user-check',
-    value: stats.value?.mitra ?? 0,
-    description: 'Karyawan berstatus Mitra',
+    value: stats.value?.aktif ?? 0,
+    description: 'Karyawan dengan kontrak aktif',
     color: 'text-green-500',
     bg: 'bg-green-500/10',
     ring: 'ring-green-500/20'
   },
   {
-    title: 'Status KONTRAK',
-    icon: 'i-lucide-file-text',
-    value: stats.value?.kontrak ?? 0,
-    description: 'Karyawan berstatus Kontrak',
+    title: 'Kontrak Expired',
+    icon: 'i-lucide-file-warning',
+    value: stats.value?.kontrakExpired ?? 0,
+    description: 'Karyawan tanpa kontrak aktif',
     color: 'text-amber-500',
     bg: 'bg-amber-500/10',
     ring: 'ring-amber-500/20'
+  },
+  {
+    title: 'Status Resign',
+    icon: 'i-lucide-log-out',
+    value: stats.value?.resign ?? 0,
+    description: 'Keluar secara resign',
+    color: 'text-slate-500',
+    bg: 'bg-slate-500/10',
+    ring: 'ring-slate-500/20'
+  },
+  {
+    title: 'Status PHK',
+    icon: 'i-lucide-user-round-x',
+    value: stats.value?.phk ?? 0,
+    description: 'Keluar karena PHK',
+    color: 'text-rose-500',
+    bg: 'bg-rose-500/10',
+    ring: 'ring-rose-500/20'
   },
   {
     title: 'Kontrak Akan Habis',
@@ -52,25 +72,27 @@ const statCards = computed(() => [
 // Donut chart untuk status karyawan
 const donutData = computed(() => {
   const total = stats.value?.total ?? 0
-  const mitra = stats.value?.mitra ?? 0
-  const kontrak = stats.value?.kontrak ?? 0
   const r = 40
   const cx = 60
   const cy = 60
   const circ = 2 * Math.PI * r
-  if (total === 0) return { r, cx, cy, circ, mitraLen: 0, kontrakLen: 0, mitraOffset: 0, kontrakOffset: 0, mitraPct: 0, kontrakPct: 0, total: 0 }
+  const segments = [
+    { key: 'aktif', label: 'Aktif', count: stats.value?.aktif ?? 0, color: 'stroke-green-500', bg: 'bg-green-500' },
+    { key: 'kontrakExpired', label: 'Kontrak Expired', count: stats.value?.kontrakExpired ?? 0, color: 'stroke-amber-500', bg: 'bg-amber-500' },
+    { key: 'resign', label: 'Resign', count: stats.value?.resign ?? 0, color: 'stroke-slate-500', bg: 'bg-slate-500' },
+    { key: 'phk', label: 'PHK', count: stats.value?.phk ?? 0, color: 'stroke-rose-500', bg: 'bg-rose-500' },
+  ]
 
-  const mitraPct = Math.round((mitra / total) * 100)
-  const kontrakPct = Math.round((kontrak / total) * 100)
+  let used = 0
+  const mappedSegments = segments.map((segment) => {
+    const length = total > 0 ? (segment.count / total) * circ : 0
+    const offset = circ * 0.25 - used
+    used += length
+    const pct = total > 0 ? Math.round((segment.count / total) * 100) : 0
+    return { ...segment, length, offset, pct }
+  })
 
-  // SVG arc untuk donut
-
-  const mitraLen = (mitra / total) * circ
-  const kontrakLen = (kontrak / total) * circ
-  const mitraOffset = 0
-  const kontrakOffset = circ - mitraLen
-
-  return { r, cx, cy, circ, mitraLen, kontrakLen, mitraOffset, kontrakOffset, mitraPct, kontrakPct, total }
+  return { r, cx, cy, circ, total, segments: mappedSegments }
 })
 
 // Progress bar colors
@@ -97,7 +119,7 @@ const levelColors = ['bg-violet-500', 'bg-purple-400', 'bg-fuchsia-500', 'bg-pin
       <div class="p-4 sm:p-6 space-y-6">
 
         <!-- Stat Cards -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4">
           <UCard
             v-for="(card, i) in statCards"
             :key="i"
@@ -142,32 +164,19 @@ const levelColors = ['bg-violet-500', 'bg-purple-400', 'bg-fuchsia-500', 'bg-pin
                     class="stroke-accented"
                     stroke-width="16"
                   />
-                  <!-- MITRA arc -->
                   <circle
-                    v-if="(stats?.total ?? 0) > 0"
+                    v-for="segment in donutData.segments"
+                    v-show="segment.count > 0"
+                    :key="segment.key"
                     :cx="donutData.cx"
                     :cy="donutData.cy"
                     :r="donutData.r"
                     fill="none"
-                    class="stroke-green-500"
+                    :class="segment.color"
                     stroke-width="16"
                     stroke-linecap="round"
-                    :stroke-dasharray="`${donutData.mitraLen} ${donutData.circ}`"
-                    :stroke-dashoffset="donutData.circ * 0.25"
-                    style="transition: stroke-dasharray 0.6s ease"
-                  />
-                  <!-- KONTRAK arc -->
-                  <circle
-                    v-if="(stats?.total ?? 0) > 0"
-                    :cx="donutData.cx"
-                    :cy="donutData.cy"
-                    :r="donutData.r"
-                    fill="none"
-                    class="stroke-amber-500"
-                    stroke-width="16"
-                    stroke-linecap="round"
-                    :stroke-dasharray="`${donutData.kontrakLen} ${donutData.circ}`"
-                    :stroke-dashoffset="donutData.circ * 0.25 - (donutData.mitraLen ?? 0)"
+                    :stroke-dasharray="`${segment.length} ${donutData.circ}`"
+                    :stroke-dashoffset="segment.offset"
                     style="transition: stroke-dasharray 0.6s ease"
                   />
                   <!-- Center text -->
@@ -182,24 +191,18 @@ const levelColors = ['bg-violet-500', 'bg-purple-400', 'bg-fuchsia-500', 'bg-pin
 
               <!-- Legend -->
               <div class="w-full space-y-2">
-                <div class="flex items-center justify-between text-sm">
+                <div
+                  v-for="segment in donutData.segments"
+                  :key="segment.key"
+                  class="flex items-center justify-between text-sm"
+                >
                   <div class="flex items-center gap-2">
-                    <span class="size-2.5 rounded-full bg-green-500 shrink-0" />
-                    <span class="text-muted">MITRA</span>
+                    <span :class="['size-2.5 rounded-full shrink-0', segment.bg]" />
+                    <span class="text-muted">{{ segment.label }}</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="font-semibold text-highlighted tabular-nums">{{ stats?.mitra ?? 0 }}</span>
-                    <span class="text-xs text-muted tabular-nums">({{ donutData.mitraPct }}%)</span>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between text-sm">
-                  <div class="flex items-center gap-2">
-                    <span class="size-2.5 rounded-full bg-amber-500 shrink-0" />
-                    <span class="text-muted">KONTRAK</span>
-                  </div>
-                  <div class="flex items-center gap-2">
-                    <span class="font-semibold text-highlighted tabular-nums">{{ stats?.kontrak ?? 0 }}</span>
-                    <span class="text-xs text-muted tabular-nums">({{ donutData.kontrakPct }}%)</span>
+                    <span class="font-semibold text-highlighted tabular-nums">{{ segment.count }}</span>
+                    <span class="text-xs text-muted tabular-nums">({{ segment.pct }}%)</span>
                   </div>
                 </div>
               </div>
