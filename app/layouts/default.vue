@@ -25,6 +25,19 @@ const links = computed<NavigationMenuItem[]>(() => [
     onSelect: () => { open.value = false },
   },
   {
+    label: 'Dokumen Karyawan',
+    icon: 'i-lucide-file-badge',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [
+      {
+        label: 'Surat Peringatan',
+        to: '/dokumen/surat-peringatan',
+        onSelect: () => { open.value = false },
+      },
+    ],
+  },
+  {
     label: 'Pengaturan',
     to: '/settings',
     icon: 'i-lucide-settings',

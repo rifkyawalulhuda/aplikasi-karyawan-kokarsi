@@ -44,6 +44,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get jobRole() { return this.client.jobRole }
   get jobLevel() { return this.client.jobLevel }
   get taxStatus() { return this.client.taxStatus }
+  get warningLetter() { return this.client.warningLetter }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

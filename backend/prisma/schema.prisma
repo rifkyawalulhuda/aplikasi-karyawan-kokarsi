@@ -97,11 +97,32 @@ model Employee {
   statusHistory         EmployeeStatusHistory[]
   offboarding           EmployeeOffboarding?
   masterAdmin           MasterAdmin?
+  warningLetters        WarningLetter[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("employees")
+}
+
+model WarningLetter {
+  id              Int      @id @default(autoincrement())
+  letterNumber    String   @unique @db.VarChar(100)
+  employeeId      Int
+  violationType   String[] @db.Text
+  warningLevel    Int
+  letterDate      DateTime @db.Date
+  validUntil      DateTime @db.Date
+  processedById   Int
+  processedByName String   @db.VarChar(255)
+  documentUrl     String?
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("warning_letters")
 }
 
 model MasterAdmin {

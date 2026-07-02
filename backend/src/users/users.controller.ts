@@ -68,6 +68,11 @@ export class UsersController {
     }
   }
 
+  @Get('pengurus')
+  getPengurus() {
+    return this.service.getAll()
+  }
+
   @Get()
   getAll(@Request() req: any) {
     this.ensureAdmin(req.user?.role)

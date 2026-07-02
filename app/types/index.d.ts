@@ -108,6 +108,23 @@ export interface Contract {
   updatedAt?: string
 }
 
+// --- Warning Letter ---
+export interface WarningLetter {
+  id: number
+  letterNumber: string
+  employeeId: number
+  employee?: Pick<Employee, 'id' | 'employeeNo' | 'fullName'> & { jobRole?: JobRole }
+  violationType: string[]
+  warningLevel: number
+  letterDate: string
+  validUntil: string
+  processedById: number
+  processedByName: string
+  documentUrl?: string | null
+  createdAt: string
+  updatedAt?: string
+}
+
 // --- Dashboard ---
 export interface DashboardStat {
   title: string
