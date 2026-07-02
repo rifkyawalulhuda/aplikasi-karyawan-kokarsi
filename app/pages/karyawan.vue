@@ -216,9 +216,9 @@ const columns: TableColumn<Employee>[] = [
     cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.jobRole?.name ?? '-')
   },
   {
-    accessorKey: 'jobLevel',
-    header: 'Level',
-    cell: ({ row }) => h('span', { class: 'text-sm text-muted' }, row.original.jobLevel?.name ?? '-')
+    accessorKey: 'department',
+    header: 'Departement',
+    cell: ({ row }) => h('span', { class: 'text-sm text-muted' }, row.original.department?.name ?? '-')
   },
   {
     accessorKey: 'joinDate',
@@ -359,7 +359,7 @@ watch([statusFilter, searchQuery], () => {
   <KaryawanEditModal
     v-model="editModal"
     :employee="editTarget"
-    @updated="refresh"
+    @updated="refresh()"
   />
 
   <UModal
