@@ -52,21 +52,23 @@ npx tsc -p tsconfig.json
 | 1 | JWT auth via cookie (Nitro proxy) | `server/middleware/auth.ts`, `server/api/auth/` |
 | 2 | Login / Logout + nama admin di sidebar | `app/pages/login.vue`, `app/layouts/` |
 | 3 | Dashboard stats + donut chart + progress bars | `app/pages/index.vue` |
-| 4 | CRUD Karyawan (tambah, edit, hapus) | `app/pages/karyawan.vue`, `app/components/karyawan/` |
+| 4 | CRUD Karyawan (tambah, edit, hapus) | `app/pages/karyawan/index.vue`, `app/components/karyawan/` |
 | 5 | Fix Status Pajak (race condition + key mismatch) | `app/components/karyawan/EditModal.vue` |
 | 6 | Master Data CRUD (lokasi, jabatan, level, pajak, tipe kontrak) | `app/pages/settings/master-data.vue`, `server/api/lookups/` |
-| 7 | CRUD Kontrak + status otomatis berdasarkan tanggal + riwayat per karyawan | `app/pages/kontrak.vue`, `app/pages/karyawan.vue`, `app/components/kontrak/` |
+| 7 | CRUD Kontrak + status otomatis berdasarkan tanggal + riwayat per karyawan | `app/pages/kontrak.vue`, `app/pages/karyawan/index.vue`, `app/components/kontrak/` |
 | 8 | Upload foto karyawan | `app/components/karyawan/EditModal.vue`, `server/api/employees/[id]/photo.post.ts` |
 | 9 | Export Excel & PDF (semua data + semua kolom, Excel termasuk Departement) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
-| 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts`, `app/pages/karyawan.vue`, `app/pages/kontrak.vue`, `app/pages/settings/master-data.vue` |
+| 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts`, `app/pages/karyawan/index.vue`, `app/pages/kontrak.vue`, `app/pages/settings/master-data.vue` |
 | 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts`, `app/layouts/default.vue`, `app/middleware/auth.global.ts` |
 | 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/prisma/schema.prisma`, `backend/src/users/`, `app/pages/settings/users.vue`, `server/api/users/` |
 | 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
-| 14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan.vue` |
-| 15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
-| 16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
-| 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
-| 18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/`, `app/pages/karyawan.vue`, `app/pages/kontrak.vue`, `app/pages/index.vue` |
+14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan/index.vue` |
+15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
+16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
+17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
+18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/`, `app/pages/karyawan/index.vue`, `app/pages/kontrak.vue`, `app/pages/index.vue` |
+19 | Halaman detail data karyawan (`/karyawan/:id`) — fix SSR auth + route conflict | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/ProfileHeader.vue` |
+20 | Tabel Manajemen Kontrak mendukung sorting dari header kolom (6 kolom) | `app/pages/kontrak.vue` |
 ---
 
 ## Arsitektur
@@ -113,7 +115,9 @@ Aturan yang dipakai:
 app/
   pages/
     index.vue              # Dashboard
-    karyawan.vue           # Manajemen karyawan
+    karyawan/
+      index.vue            # Manajemen karyawan (list)
+      [id].vue             # Detail karyawan
     kontrak.vue            # Manajemen kontrak
     settings/master-data.vue  # Master data
     settings/users.vue        # Master user
@@ -122,6 +126,10 @@ app/
     karyawan/
       AddModal.vue         # Tambah karyawan
       EditModal.vue        # Edit karyawan + upload foto
+      ContractTable.vue    # Tabel kontrak (sorting support)
+      detail/
+        ProfileHeader.vue  # Header profil karyawan
+        DataKaryawan.vue   # Tab data karyawan
     kontrak/
       AddContractModal.vue
       EditContractModal.vue
@@ -271,6 +279,7 @@ backend/
 - **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom lama -> `.pdf`
 - **Kolom export Excel**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 - **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
+- **Sorting tabel**: Kedua halaman (Data Karyawan & Manajemen Kontrak) mendukung sorting header kolom dengan 3-state cycle (asc → desc → null) menggunakan icon lucide (arrow-up-down/arrow-up/arrow-down)
 - **Hapus data**: Karyawan, kontrak, master data, dan user memakai toast konfirmasi sebelum delete dijalankan
 - **Master User**: Admin dapat membuat akun internal dengan role `ADMIN` atau `PENGELOLA_KOPERASI`; password disimpan hash, seed sudah menambahkan akun Admin dan Pengelola, login mendukung `username` atau `NIK`, dan duplikat `NIK/Email/Username` menampilkan pesan validasi yang ramah
 - **Master Data Departement**: Lookup baru tersedia dengan rule CRUD yang sama seperti master data lain, dan masuk ke seed awal
@@ -290,3 +299,7 @@ backend/
 | Upload foto tidak jalan | Restart backend setelah compile (endpoint baru) |
 | Export tidak include kontrak | Backend `findAll` tidak include contracts - gunakan endpoint `/api/employees/export` (limit=9999) |
 | Data master tidak muncul setelah save | Pastikan backend validasi DTO lookup aktif dan frontend me-refresh resource master data setelah CRUD |
+| Detail karyawan `/karyawan/:id` tidak render | Route conflict: `karyawan.vue` vs `karyawan/[id].vue`. Pindah list ke `karyawan/index.vue`, hapus `karyawan.vue` |
+| SSR auth gagal di detail karyawan | `$fetch` tidak forward cookie saat SSR. Ganti ke `useFetch + useRequestHeaders(['cookie'])` |
+| SSR crash `Cannot read properties of undefined` | Nested data (ex: `employee.fullName`) undefined saat SSR. Tambah optional chaining: `employee?.fullName` |
+| Sorting tidak konsisten antar halaman | Pola sorting: `toggleSort()` + `getSortValue()` + `sortableHeader()` + `UIcon` (lucide icons) |
