@@ -7,6 +7,7 @@ interface LookupsResponse {
   jobLevels: LookupItem[]
   taxStatus: LookupItem[]
   contractTypes: LookupItem[]
+  departments: LookupItem[]
 }
 
 const workLocations = ref<LookupItem[]>([])
@@ -14,12 +15,13 @@ const jobRoles = ref<LookupItem[]>([])
 const jobLevels = ref<LookupItem[]>([])
 const taxStatuses = ref<LookupItem[]>([])
 const contractTypes = ref<LookupItem[]>([])
+const departments = ref<LookupItem[]>([])
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 
 // ── Generic CRUD state ──────────────────────────────────────────────
-type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types'
+type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments'
 
 interface EditState {
   open: boolean
@@ -42,6 +44,7 @@ const resourceLabelMap: Record<ResourceKey, string> = {
   'job-levels': 'Level Jabatan',
   'tax-status': 'Status Pajak',
   'contract-types': 'Tipe Kontrak',
+  departments: 'Departement',
 }
 
 const resourceIconMap: Record<ResourceKey, string> = {
@@ -50,6 +53,7 @@ const resourceIconMap: Record<ResourceKey, string> = {
   'job-levels': 'i-lucide-layers',
   'tax-status': 'i-lucide-receipt',
   'contract-types': 'i-lucide-file-text',
+  departments: 'i-lucide-building-2',
 }
 
 const resourceDescMap: Record<ResourceKey, string> = {
@@ -58,6 +62,7 @@ const resourceDescMap: Record<ResourceKey, string> = {
   'job-levels': 'Daftar level jabatan karyawan',
   'tax-status': 'Daftar status pajak karyawan',
   'contract-types': 'Daftar tipe kontrak kerja',
+  departments: 'Daftar departement kerja',
 }
 
 const tabs = computed(() => [
@@ -66,6 +71,7 @@ const tabs = computed(() => [
   { key: 'job-levels' as ResourceKey, label: 'Level Jabatan', icon: 'i-lucide-layers', count: jobLevels.value.length },
   { key: 'tax-status' as ResourceKey, label: 'Status Pajak', icon: 'i-lucide-receipt', count: taxStatuses.value.length },
   { key: 'contract-types' as ResourceKey, label: 'Tipe Kontrak', icon: 'i-lucide-file-text', count: contractTypes.value.length },
+  { key: 'departments' as ResourceKey, label: 'Departement', icon: 'i-lucide-building-2', count: departments.value.length },
 ])
 
 const currentItems = computed<LookupItem[]>(() => {
@@ -75,13 +81,14 @@ const currentItems = computed<LookupItem[]>(() => {
   else if (activeTab.value === 'job-levels') items = jobLevels.value
   else if (activeTab.value === 'tax-status') items = taxStatuses.value
   else if (activeTab.value === 'contract-types') items = contractTypes.value
+  else if (activeTab.value === 'departments') items = departments.value
 
   if (!searchQuery.value) return items
   return items.filter(i => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
 })
 
 const totalCount = computed(() =>
-  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length
+  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length
 )
 
 async function loadAllLookups() {
@@ -91,6 +98,7 @@ async function loadAllLookups() {
   jobLevels.value = data.jobLevels ?? []
   taxStatuses.value = data.taxStatus ?? []
   contractTypes.value = data.contractTypes ?? []
+  departments.value = data.departments ?? []
 }
 
 async function loadResource(resource: ResourceKey) {
@@ -99,6 +107,7 @@ async function loadResource(resource: ResourceKey) {
   else if (resource === 'job-levels') jobLevels.value = await $fetch<LookupItem[]>('/api/lookups/job-levels')
   else if (resource === 'tax-status') taxStatuses.value = await $fetch<LookupItem[]>('/api/lookups/tax-status')
   else if (resource === 'contract-types') contractTypes.value = await $fetch<LookupItem[]>('/api/lookups/contract-types')
+  else if (resource === 'departments') departments.value = await $fetch<LookupItem[]>('/api/lookups/departments')
 }
 
 onMounted(async () => {
@@ -206,8 +215,8 @@ function onTabChange(key: ResourceKey) {
         <!-- Page description -->
         <div class="mb-6 max-w-3xl">
           <p class="text-sm text-muted leading-6">
-            Kelola data referensi untuk lokasi kerja, jabatan, level jabatan, status pajak, dan tipe kontrak.
-            Data ini dipakai di form karyawan dan kontrak.
+            Kelola data referensi untuk lokasi kerja, jabatan, level jabatan, status pajak, tipe kontrak, dan departement.
+            Data ini dipakai sebagai referensi sistem agar input tetap konsisten.
           </p>
           <div class="mt-3 flex flex-wrap gap-2">
             <UBadge variant="subtle" color="neutral" size="sm">

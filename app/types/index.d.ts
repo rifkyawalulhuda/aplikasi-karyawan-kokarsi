@@ -14,6 +14,11 @@ export interface ContractType {
   name: string
 }
 
+export interface Department {
+  id: number
+  name: string
+}
+
 export interface JobRole {
   id: number
   name: string
@@ -36,6 +41,8 @@ export interface Employee {
   employmentStatus: EmploymentStatus
   taxStatusId: number
   taxStatus?: TaxStatus
+  departmentId?: number | null
+  department?: Department | null
   birthDate: string
   gender: Gender
   workLocationId: number

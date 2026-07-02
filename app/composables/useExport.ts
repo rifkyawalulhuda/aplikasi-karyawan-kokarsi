@@ -17,7 +17,7 @@ export function useExport() {
     return s === 'AKTIF' ? 'Aktif' : s === 'AKAN_HABIS' ? 'Akan Habis' : s === 'EXPIRED' ? 'Expired' : s === 'DIBATALKAN' ? 'Dibatalkan' : s
   }
 
-  function toRows(employees: Employee[]) {
+  function toRows(employees: Employee[], includeDepartment = false) {
     return employees.map((e: any, i: number) => ({
       'No': i + 1,
       'No. Induk Karyawan': e.employeeNo ?? '-',
@@ -32,6 +32,7 @@ export function useExport() {
       'Lokasi Kerja': e.workLocation?.name ?? '-',
       'Jabatan': e.jobRole?.name ?? '-',
       'Level Jabatan': e.jobLevel?.name ?? '-',
+      ...(includeDepartment ? { 'Departement': e.department?.name ?? '-' } : {}),
       'Status Pajak': e.taxStatus?.name ?? '-',
       'No. Kontrak Aktif': e.contracts?.find((c: any) => c.status === 'AKTIF')?.contractNo ?? '-',
       'Tgl. Mulai Kontrak': fmt(e.contracts?.find((c: any) => c.status === 'AKTIF')?.startDate),
@@ -50,7 +51,7 @@ export function useExport() {
 
   async function exportExcel(filename = 'data-karyawan') {
     const employees = await fetchAllEmployees()
-    const rows = toRows(employees)
+    const rows = toRows(employees, true)
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Karyawan')

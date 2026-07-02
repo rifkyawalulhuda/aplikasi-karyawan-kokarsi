@@ -109,6 +109,27 @@ export class LookupsController {
     return this.service.deleteTaxStatus(id)
   }
 
+  @Get('departments')
+  getDepartments() { return this.service.getDepartments() }
+
+  @Post('departments')
+  createDepartment(@Request() req: any, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createDepartment(dto.name)
+  }
+
+  @Put('departments/:id')
+  updateDepartment(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.updateDepartment(id, dto.name)
+  }
+
+  @Delete('departments/:id')
+  deleteDepartment(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteDepartment(id)
+  }
+
   @Get('contract-types')
   getContractTypes() { return this.service.getContractTypes() }
 

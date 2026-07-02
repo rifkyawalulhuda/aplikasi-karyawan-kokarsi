@@ -30,6 +30,14 @@ model ContractType {
   @@map("contract_types")
 }
 
+model Department {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(255)
+  employees Employee[]
+
+  @@map("departments")
+}
+
 model UserAccount {
   id        Int       @id @default(autoincrement())
   name      String    @db.VarChar(255)
@@ -67,6 +75,7 @@ model Employee {
   fullName         String           @db.VarChar(255)
   employmentStatus EmploymentStatus
   taxStatusId      Int
+  departmentId     Int?
   birthDate        DateTime         @db.Date
   gender           Gender
   workLocationId   Int
@@ -79,6 +88,7 @@ model Employee {
   fotoKaryawan     String?
 
   taxStatus    TaxStatus    @relation(fields: [taxStatusId], references: [id])
+  department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   workLocation WorkLocation @relation(fields: [workLocationId], references: [id])
   jobRole      JobRole      @relation(fields: [jobRoleId], references: [id])
   jobLevel     JobLevel     @relation(fields: [jobLevelId], references: [id])

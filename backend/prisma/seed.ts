@@ -51,12 +51,19 @@ async function main() {
     prisma.contractType.upsert({ where: { name: 'Magang' }, update: {}, create: { name: 'Magang' } }),
   ])
 
+  const departments = await Promise.all([
+    prisma.department.upsert({ where: { name: 'Operasional' }, update: {}, create: { name: 'Operasional' } }),
+    prisma.department.upsert({ where: { name: 'Administrasi' }, update: {}, create: { name: 'Administrasi' } }),
+    prisma.department.upsert({ where: { name: 'Human Capital' }, update: {}, create: { name: 'Human Capital' } }),
+  ])
+
   console.log('Lookup data seeded:', {
     workLocations: workLocations.length,
     jobRoles: jobRoles.length,
     jobLevels: jobLevels.length,
     taxStatuses: taxStatuses.length,
     contractTypes: contractTypes.length,
+    departments: departments.length,
   })
 
   const employee = await prisma.employee.upsert({
@@ -76,6 +83,7 @@ async function main() {
       jobRoleId: jobRoles[0].id,
       jobLevelId: jobLevels[0].id,
       taxStatusId: taxStatuses[2].id,
+      departmentId: departments[0].id,
     },
   })
 
@@ -91,11 +99,22 @@ async function main() {
     },
   })
 
+  await prisma.userAccount.deleteMany({
+    where: {
+      OR: [
+        { username: 'admin.kokarsi' },
+        { nik: 'SKY-ADM-001' },
+        { email: 'admin@kokarsi-sankyu.co.id' },
+        { username: 'pengelola1' },
+        { nik: 'SKY-PEL-001' },
+        { email: 'rina.permata@sankyu.co.id' },
+      ],
+    },
+  })
+
   const adminUserPassword = await bcrypt.hash('admin123', 10)
-  await prisma.userAccount.upsert({
-    where: { username: 'admin.kokarsi' },
-    update: {},
-    create: {
+  await prisma.userAccount.create({
+    data: {
       name: 'Admin Kokarsi',
       nik: 'SKY-ADM-001',
       email: 'admin@kokarsi-sankyu.co.id',
@@ -106,10 +125,8 @@ async function main() {
   })
 
   const pengelolaPassword = await bcrypt.hash('pengelola123', 10)
-  await prisma.userAccount.upsert({
-    where: { username: 'pengelola1' },
-    update: {},
-    create: {
+  await prisma.userAccount.create({
+    data: {
       name: 'Rina Permata',
       nik: 'SKY-PEL-001',
       email: 'rina.permata@sankyu.co.id',

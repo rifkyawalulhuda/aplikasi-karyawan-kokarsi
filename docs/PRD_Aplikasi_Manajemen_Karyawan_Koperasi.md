@@ -77,7 +77,7 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 ### 4.4 Admin & Setting
 - Manajemen user internal (`master_admin`)
 - Master User untuk pembuatan akun internal Admin / Pengelola Koperasi
-- Pengelolaan master data lookup (work location, job role, dll) hanya untuk **Master Admin**
+- Pengelolaan master data lookup (work location, job role, departement, dll) hanya untuk **Master Admin**
 - Audit log sederhana (siapa yang mengubah data kapan)
 - Konfirmasi hapus data menggunakan toast bawaan UI sebelum aksi delete dijalankan
 
@@ -114,6 +114,9 @@ Sebagai Pengelola Koperasi, saya ingin mengelola data karyawan dan status kontra
 
 **US-08** (Master Admin)  
 Sebagai Master Admin, saya ingin membuat dan mengelola akun internal dengan role Admin atau Pengelola Koperasi, agar akses sistem bisa diatur lebih rapi.
+
+**US-09** (Master Admin)  
+Sebagai Master Admin, saya ingin mengelola master data Departement, agar struktur organisasi dan referensi data karyawan lebih rapi.
 
 ---
 

@@ -7,6 +7,7 @@ interface LookupItem { id: number; name: string }
 interface LookupsResponse {
   workLocations: LookupItem[]
   taxStatus: LookupItem[]
+  departments: LookupItem[]
   jobRoles: LookupItem[]
   jobLevels: LookupItem[]
   educationLevels: string[]
@@ -80,7 +81,8 @@ const schema = z.object({
   workLocationId: z.number({ error: 'Wajib dipilih' }),
   jobRoleId: z.number({ error: 'Wajib dipilih' }),
   jobLevelId: z.number({ error: 'Wajib dipilih' }),
-  taxStatusId: z.number({ error: 'Wajib dipilih' })
+  taxStatusId: z.number({ error: 'Wajib dipilih' }),
+  departmentId: z.number({ error: 'Wajib dipilih' })
 })
 
 type Schema = z.output<typeof schema>
@@ -98,7 +100,8 @@ const state = reactive<Partial<Schema>>({
   workLocationId: undefined,
   jobRoleId: undefined,
   jobLevelId: undefined,
-  taxStatusId: undefined
+  taxStatusId: undefined,
+  departmentId: undefined
 })
 
 // Isi state saat employee atau lookups berubah (tunggu keduanya ready)
@@ -117,6 +120,7 @@ function fillState(emp: typeof props.employee) {
   state.jobRoleId = emp.jobRoleId
   state.jobLevelId = emp.jobLevelId
   state.taxStatusId = emp.taxStatusId
+  state.departmentId = emp.departmentId ?? undefined
 }
 
 // Watch employee prop — reset photo state saat ganti employee
@@ -142,6 +146,9 @@ const workLocationItems = computed(() =>
 )
 const jobRoleItems = computed(() =>
   (lookups.value?.jobRoles ?? []).map(l => ({ label: l.name, value: l.id }))
+)
+const departmentItems = computed(() =>
+  (lookups.value?.departments ?? []).map(l => ({ label: l.name, value: l.id }))
 )
 const jobLevelItems = computed(() =>
   (lookups.value?.jobLevels ?? []).map(l => ({ label: l.name, value: l.id }))
@@ -291,8 +298,16 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
         </div>
 
-        <!-- Baris 6: Level + Status Pajak -->
+        <!-- Baris 6: Departement + Level -->
         <div class="grid grid-cols-2 gap-4">
+          <UFormField label="Departement" name="departmentId" required>
+            <USelect
+              v-model="state.departmentId"
+              :items="departmentItems"
+              placeholder="Pilih departement"
+              class="w-full"
+            />
+          </UFormField>
           <UFormField label="Level Jabatan" name="jobLevelId" required>
             <USelect
               v-model="state.jobLevelId"
@@ -301,6 +316,10 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
               class="w-full"
             />
           </UFormField>
+        </div>
+
+        <!-- Baris 7: Status Pajak -->
+        <div class="grid grid-cols-2 gap-4">
           <UFormField label="Status Pajak" name="taxStatusId" required>
             <USelect
               v-model="state.taxStatusId"

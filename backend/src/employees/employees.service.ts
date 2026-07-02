@@ -17,6 +17,7 @@ export class CreateEmployeeDto {
   @IsInt() jobRoleId: number
   @IsInt() jobLevelId: number
   @IsInt() taxStatusId: number
+  @IsInt() departmentId: number
   @IsOptional() @IsString() fotoKaryawan?: string
 }
 
@@ -31,6 +32,7 @@ export class EmployeesService {
     jobRole: true,
     jobLevel: true,
     taxStatus: true,
+    department: true,
   }
 
   async findAll(params: {

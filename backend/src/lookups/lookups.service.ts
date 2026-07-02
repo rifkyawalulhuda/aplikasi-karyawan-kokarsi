@@ -13,6 +13,14 @@ export class LookupsService {
     return new BadRequestException('Tabel contract_types belum tersedia. Jalankan migrasi database terlebih dahulu.')
   }
 
+  private isMissingDepartmentsTable(error: any) {
+    return error?.code === 'P2021' || error?.meta?.modelName === 'Department'
+  }
+
+  private departmentsMigrationError() {
+    return new BadRequestException('Tabel departments belum tersedia. Jalankan migrasi database terlebih dahulu.')
+  }
+
   private isForeignKeyViolation(error: any) {
     return error?.code === 'P2003' || error?.meta?.cause?.originalCode === '23503'
   }
@@ -22,7 +30,7 @@ export class LookupsService {
   }
 
   async getAll() {
-    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes] = await Promise.all([
+    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments] = await Promise.all([
       this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }),
@@ -31,8 +39,12 @@ export class LookupsService {
         if (this.isMissingContractTypesTable(error)) return []
         throw error
       }),
+      this.prisma.department.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+        if (this.isMissingDepartmentsTable(error)) return []
+        throw error
+      }),
     ])
-    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes }
+    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments }
   }
 
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
@@ -100,6 +112,35 @@ export class LookupsService {
     return this.prisma.contractType.delete({ where: { id } }).catch((error) => {
       if (this.isMissingContractTypesTable(error)) throw this.contractTypesMigrationError()
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('tipe kontrak')
+      throw error
+    })
+  }
+
+  getDepartments() {
+    return this.prisma.department.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+      if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
+      throw error
+    })
+  }
+
+  createDepartment(name: string) {
+    return this.prisma.department.create({ data: { name } }).catch((error) => {
+      if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
+      throw error
+    })
+  }
+
+  updateDepartment(id: number, name: string) {
+    return this.prisma.department.update({ where: { id }, data: { name } }).catch((error) => {
+      if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
+      throw error
+    })
+  }
+
+  deleteDepartment(id: number) {
+    return this.prisma.department.delete({ where: { id } }).catch((error) => {
+      if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
+      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departement')
       throw error
     })
   }

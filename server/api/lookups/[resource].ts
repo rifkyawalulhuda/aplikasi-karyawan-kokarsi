@@ -2,7 +2,7 @@ import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } fr
 
 const BACKEND = 'http://localhost:3001/api'
 
-const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types']
+const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types', 'departments']
 
 export default defineEventHandler(async (event) => {
   const resource = getRouterParam(event, 'resource')
