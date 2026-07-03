@@ -778,8 +778,7 @@ export class ContractDocumentService {
     // Check if there's enough space for closing + signature, if not add new page
     if (y + 250 > pageBottom) {
       doc.addPage()
-      this.drawCorporateHeader(doc, 'PKWT')
-      y = 180
+      y = 40
     }
     
     // === BILINGUAL CLOSING PARAGRAPHS (two columns, no borders) ===
