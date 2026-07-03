@@ -7,6 +7,7 @@ import type { Contract, ContractStatus } from '~/types'
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
+const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
@@ -49,6 +50,7 @@ const selectedEmployeeStats = computed(() => ({
 const statusFilter = ref('all')
 const searchQuery = ref('')
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
 // Modal state
 const addModal = ref(false)
@@ -116,6 +118,58 @@ async function doDelete(contract: Contract) {
   }
 }
 
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+
+  sorting.value = null
+}
+
+function getSortValue(contract: Contract, key: string) {
+  switch (key) {
+    case 'contractNo':
+      return contract.contractNo ?? ''
+    case 'employee':
+      return contract.employee?.fullName ?? ''
+    case 'contractType':
+      return contract.contractType?.name ?? ''
+    case 'startDate':
+      return contract.startDate ?? ''
+    case 'endDate':
+      return contract.endDate ?? ''
+    case 'status':
+      return contract.status ?? ''
+    default:
+      return ''
+  }
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
+}
+
 const statusColorMap: Record<ContractStatus, string> = {
   AKTIF: 'success',
   AKAN_HABIS: 'warning',
@@ -166,16 +220,19 @@ function getRowItems(row: Row<Contract>) {
 const columns: TableColumn<Contract>[] = [
   {
     accessorKey: 'contractNo',
-    header: 'No. Kontrak',
+    header: () => sortableHeader('No. Kontrak', 'contractNo'),
     cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.contractNo)
   },
   {
     accessorKey: 'employee',
-    header: 'Karyawan',
+    header: () => sortableHeader('Karyawan', 'employee'),
     cell: ({ row }) =>
       h('div', { class: 'flex items-center justify-between gap-3' }, [
         h('div', undefined, [
-          h('p', { class: 'font-medium text-highlighted text-sm' }, row.original.employee?.fullName ?? '-'),
+          h(resolveComponent('NuxtLink'), {
+            to: `/karyawan/${row.original.employeeId}`,
+            class: 'font-medium text-highlighted text-sm hover:text-primary hover:underline'
+          }, () => row.original.employee?.fullName ?? '-'),
           h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-')
         ]),
         h(UButton, {
@@ -190,12 +247,12 @@ const columns: TableColumn<Contract>[] = [
   },
   {
     accessorKey: 'contractType',
-    header: 'Tipe',
+    header: () => sortableHeader('Tipe', 'contractType'),
     cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.contractType?.name ?? '-')
   },
   {
     accessorKey: 'startDate',
-    header: 'Tgl. Mulai',
+    header: () => sortableHeader('Tgl. Mulai', 'startDate'),
     cell: ({ row }) => {
       const d = new Date(row.original.startDate)
       return h('span', { class: 'text-sm text-muted' },
@@ -205,7 +262,7 @@ const columns: TableColumn<Contract>[] = [
   },
   {
     accessorKey: 'endDate',
-    header: 'Tgl. Selesai',
+    header: () => sortableHeader('Tgl. Selesai', 'endDate'),
     cell: ({ row }) => {
       const d = new Date(row.original.endDate)
       return h('span', { class: 'text-sm text-muted' },
@@ -215,7 +272,7 @@ const columns: TableColumn<Contract>[] = [
   },
   {
     accessorKey: 'status',
-    header: 'Status',
+    header: () => sortableHeader('Status', 'status'),
     filterFn: 'equals',
     cell: ({ row }) => {
       const s = row.original.status as ContractStatus
@@ -257,7 +314,23 @@ const filteredData = computed(() => {
       c.employee?.employeeNo?.toLowerCase().includes(q)
     )
   }
-  return list
+
+  const sort = sorting.value
+  if (!sort) return list
+
+  return [...list].sort((a, b) => {
+    const aValue = getSortValue(a, sort.key)
+    const bValue = getSortValue(b, sort.key)
+    let result = 0
+
+    if (sort.key === 'startDate' || sort.key === 'endDate') {
+      result = new Date(aValue).getTime() - new Date(bValue).getTime()
+    } else {
+      result = String(aValue).localeCompare(String(bValue), 'id', { sensitivity: 'base' })
+    }
+
+    return sort.direction === 'asc' ? result : -result
+  })
 })
 
 const counts = computed(() => {
