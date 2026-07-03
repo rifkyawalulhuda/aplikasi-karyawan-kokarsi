@@ -40,6 +40,16 @@ export class WarningLettersController {
     res.send(buffer)
   }
 
+  @Get(':id/preview')
+  async preview(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+    const letter = await this.service.findOne(id)
+    const buffer = await this.pdfGenerator.generateWarningLetter(letter)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="SP-${letter.letterNumber}.pdf"`)
+    res.send(buffer)
+  }
+
   @Post()
   create(@Body() dto: CreateWarningLetterDto) {
     return this.service.create(dto)
