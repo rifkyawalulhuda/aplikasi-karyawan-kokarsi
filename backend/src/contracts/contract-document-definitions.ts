@@ -121,57 +121,226 @@ const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sect
   },
 ]
 
-const mitraCommonSections = (roleLabel: string): ContractDocumentDefinition['sections'] => [
-  {
-    heading: 'Pasal 1 - Ruang Lingkup',
-    paragraphs: [
-      `PIHAK PERTAMA menunjuk PIHAK KEDUA untuk melaksanakan kerja sama kemitraan pada pekerjaan ${roleLabel} sesuai kebutuhan operasional koperasi dan unit layanan terkait.`,
-      'PIHAK KEDUA wajib menjalankan pekerjaan secara profesional, menjaga etika kerja, dan mematuhi seluruh prosedur operasional yang diberlakukan selama masa kemitraan.',
-    ],
-  },
-  {
-    heading: 'Pasal 2 - Jangka Waktu',
-    paragraphs: [
-      'Perjanjian kemitraan berlaku untuk jangka waktu sesuai tanggal mulai dan tanggal berakhir yang tercantum dalam dokumen ini.',
-      'Perpanjangan, perubahan, atau pembaruan kemitraan hanya sah apabila disetujui secara tertulis oleh Para Pihak.',
-    ],
-  },
-  {
-    heading: 'Pasal 3 - Hak dan Kewajiban PIHAK PERTAMA',
-    paragraphs: [
-      'PIHAK PERTAMA berkewajiban memberikan penugasan, arahan kerja, dan pembayaran imbalan jasa sesuai ketentuan perjanjian ini.',
-      'PIHAK PERTAMA berhak melakukan evaluasi kinerja, pembinaan, penyesuaian penempatan, dan pengakhiran kerja sama apabila terdapat kondisi operasional atau pelanggaran kewajiban.',
-    ],
-  },
-  {
-    heading: 'Pasal 4 - Hak dan Kewajiban PIHAK KEDUA',
-    paragraphs: [
-      'PIHAK KEDUA berkewajiban melaksanakan pekerjaan dengan jujur, tertib, menjaga kerahasiaan, dan mematuhi kebijakan operasional koperasi maupun lokasi penugasan.',
-      'PIHAK KEDUA bertanggung jawab atas perilaku kerja, hasil kerja, penggunaan fasilitas, serta kerugian yang timbul akibat kelalaian atau pelanggaran yang dilakukannya.',
-    ],
-  },
-  {
-    heading: 'Pasal 5 - Imbalan Jasa dan Administrasi Pembayaran',
-    paragraphs: [
-      'PIHAK KEDUA menerima imbalan jasa bulanan sesuai nilai kompensasi yang disepakati dalam perjanjian ini dan komponen administrasi lain yang berlaku.',
-      'Pembayaran dilakukan melalui mekanisme administrasi yang ditetapkan PIHAK PERTAMA serta tunduk pada pemotongan, pajak, dan persyaratan administrasi yang berlaku.',
-    ],
-  },
-  {
-    heading: 'Pasal 6 - Evaluasi, Kepatuhan, dan Kerahasiaan',
-    paragraphs: [
-      'PIHAK PERTAMA dapat melakukan evaluasi berkala atas kinerja, kepatuhan, kehadiran, dan perilaku kerja PIHAK KEDUA selama masa kemitraan.',
-      'PIHAK KEDUA wajib menjaga kerahasiaan seluruh data, informasi usaha, dokumen, dan prosedur kerja yang diperoleh selama pelaksanaan pekerjaan.',
-    ],
-  },
-  {
-    heading: 'Pasal 7 - Pengakhiran dan Wanprestasi',
-    paragraphs: [
-      'Apabila salah satu pihak tidak memenuhi kewajiban yang telah disepakati, maka pihak lainnya berhak melakukan peninjauan, pemberian peringatan, atau pengakhiran kerja sama sesuai kondisi yang terjadi.',
-      'Perjanjian ini dapat berakhir karena jangka waktu selesai, evaluasi operasional, pengakhiran penugasan, atau sebab lain yang sah menurut kebijakan internal dan ketentuan hukum yang berlaku.',
-    ],
-  },
-]
+// Daftar tugas (Pasal 1 ayat 2) spesifik per jenis mitra, mengikuti sample PDF asli
+const MITRA_SCOPE_WORK: Record<string, string> = {
+  MITRA_DRIVER: 'Driver antar jemput karyawan, pengantaran/pengiriman barang, dan antar dokumen',
+  MITRA_KOMART: 'Cashier Kopmart Koperasi PT. Sankyu Indonesia International',
+  MITRA_STAFF: 'Staff Administrasi Koperasi PT. Sankyu Indonesia International',
+  MITRA_WAREHOUSE: 'Handling Warehouse Koperasi PT. Sankyu Indonesia International',
+}
+
+const MITRA_DUTIES: Record<string, string[]> = {
+  MITRA_DRIVER: [
+    'a. Memiliki SIM kendaraan yang aktif.',
+    'b. Melakukan pengisian absent harian dan mengisi absent bulanan.',
+    'c. Memastikan kendaraan dalam kondisi baik dan terawat dan mengisi ceklist harian kendaraan.',
+    'd. Melakukan pemeriksaan rutin terhadap kondisi kendaraan seperti cek oli, bensin, dan ban. Supaya dapat terkontrol kondisi kendaraan dan melakukan service rutin kendaraan.',
+    'e. Mengemudikan kendaraan dengan aman dan bertanggung jawab.',
+    'f. Mengantarkan penumpang atau barang, dokumen sesuai dengan rute yang ditentukan.',
+    'g. Menjaga keselamatan penumpang atau barang yang diangkut.',
+    'h. Melaporkan kejadian atau masalah yang terjadi selama perjalanan.',
+    'i. Mengetahui dan mematuhi peraturan lalu lintas.',
+  ],
+  MITRA_KOMART: [
+    'a. Pelayanan dan Pemrosesan Transaksi: melayani transaksi pembayaran pelanggan atau anggota koperasi baik secara tunai (cash) maupun non-tunai (kartu debit/kredit, QRIS, dll) menggunakan mesin kasir atau sistem Point of Sale (POS).',
+    'b. Layanan Pelanggan: menyapa konsumen dengan ramah, memberikan informasi produk atau ketersediaan stok, dan membantu membungkus barang belanjaan.',
+    'c. Promosi (Upselling): menawarkan produk tambahan atau promo/diskon yang sedang berlangsung di Kopmart kepada pelanggan.',
+    'd. Administrasi dan Keuangan: rekonsiliasi kas untuk memastikan tidak ada selisih uang tunai dan transaksi non-tunai di mesin kasir pada setiap akhir giliran kerja (shift).',
+    'e. Keamanan Finansial: memeriksa keaslian uang tunai yang diterima untuk mencegah peredaran uang palsu dan mengamankan dana Cashier.',
+    'f. Pelaporan: membuat laporan penerimaan dan pengeluaran harian serta melakukan rekapitulasi data penjualan.',
+    'g. Pemeliharaan Toko dan Operasional: membantu melakukan opname (penghitungan stok) barang di toko, khususnya di area kasir dan display.',
+    'h. Kebersihan Area Toko: menjaga kebersihan dan kerapian area kerja agar pelanggan tetap merasa nyaman.',
+    'i. Penanganan Masalah: menyelesaikan keluhan pelanggan dengan cepat, sopan, dan profesional.',
+  ],
+  MITRA_STAFF: [
+    'a. Pengelolaan dan Pengarsipan Dokumen: menyimpan, menyortir, dan merapikan dokumen fisik maupun digital (e-filing) agar mudah diakses kembali saat dibutuhkan serta memastikan keamanan dan kerahasiaan data penting perusahaan.',
+    'b. Pengolahan Data (Data Entry): memasukkan data baru ke dalam sistem, database, atau spreadsheet dengan tingkat akurasi tinggi serta membuat rekapitulasi data (seperti data penjualan, inventaris, atau absensi) secara berkala.',
+    'c. Surat-Menyurat dan Pembuatan Laporan: menyiapkan dokumen korespondensi seperti surat resmi/legalitas, proposal, atau invoice serta menyusun laporan harian, mingguan, atau bulanan sesuai instruksi atasan.',
+    'd. Komunikasi dan Penerimaan Tamu: menerima panggilan telepon masuk, membalas email, menyampaikan pesan kepada pihak yang dituju, serta menyambut tamu yang datang ke kantor dan memberikan informasi dasar yang dibutuhkan.',
+    'e. Penjadwalan dan Logistik: mengatur jadwal pertemuan, rapat internal, atau janji temu dengan klien serta mengelola inventaris dan pengadaan alat tulis kantor (ATK) serta fasilitas operasional lainnya.',
+  ],
+  MITRA_WAREHOUSE: [
+    'a. Operator forklift: mengoperasikan forklift untuk loading dan unloading serta menyimpan barang di area gudang penyimpanan berupa barang umum maupun Bahan Berbahaya dan Beracun (B3) sesuai instruksi dan SOP serta mematuhi ketentuan keselamatan kerja.',
+    'b. Tally: melakukan penghitungan, pengecekan, dan memberikan label pada barang yang akan dimuat sebelum dilakukan pengiriman, serta memastikan proses pemuatan, penataan, pengamanan, dan pembongkaran muatan dilakukan sesuai standar operasional (SOP), termasuk memastikan barang B3 dikemas, diberi label, dan ditangani sesuai ketentuan keselamatan dan peraturan perundang-undangan yang berlaku.',
+    'c. Melakukan pemeriksaan kelayakan forklift sebelum, selama, dan setelah pengoperasian, termasuk pengecekan kondisi forklift, ban, lampu, sistem kelistrikan, dan lainnya.',
+    'd. Menjaga keamanan, keutuhan, dan keakuratan secara aktual barang yang akan dimuat atau dibongkar selama proses loading maupun unloading, serta mengoperasikan forklift dengan cara yang aman.',
+    'e. Mengisi dan melaporkan dokumen serta menyerahkan dokumen setelah selesai loading maupun unloading.',
+    'f. Customer Service: memberikan bantuan, solusi, informasi, dan pelayanan terhadap klien serta memastikan kepuasan klien sebelum, selama, dan setelah menjadi klien.',
+    'g. Segera melaporkan kepada leader atau foreman dari klien PIHAK PERTAMA setiap kejadian darurat, kecelakaan, tumpahan (spill), kebocoran muatan B3, kerusakan barang, atau kondisi lain yang dapat mengancam keselamatan di area kerja.',
+    'h. Menggunakan perlengkapan keselamatan diri (APD) yang diwajibkan di area kerja, serta melaksanakan instruksi tambahan yang relevan sepanjang tidak bertentangan dengan ketentuan perjanjian ini.',
+  ],
+}
+
+// Struktur lengkap 15 Pasal Perjanjian Kemitraan (mengikuti sample PDF 1:1)
+const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sections'] => {
+  const scopeWork = MITRA_SCOPE_WORK[templateKey] ?? 'penyediaan jasa sesuai kebutuhan PIHAK PERTAMA'
+  const duties = MITRA_DUTIES[templateKey] ?? []
+  return [
+    {
+      heading: 'PASAL 1\nRUANG LINGKUP',
+      paragraphs: [
+        `1. PIHAK PERTAMA dengan ini menunjuk PIHAK KEDUA dan PIHAK KEDUA dengan ini menyatakan kesediaannya menerima penunjukan PIHAK PERTAMA untuk bekerja sama sebagai Mitra guna melakukan pekerjaan ${scopeWork} untuk klien PIHAK PERTAMA yang telah menyetujui penunjukkan PIHAK KEDUA untuk pelaksanaan Jasa bagi kepentingannya ("Klien") dengan rincian sebagaimana ditentukan dalam Lampiran Perjanjian serta syarat dan ketentuan yang diatur dalam Perjanjian ini.`,
+        '2. Pekerjaan atau jasa yang diberikan dan dikerjakan oleh PIHAK KEDUA untuk kepentingan PIHAK PERTAMA meliputi antara lain sebagai berikut:',
+        ...duties,
+        '3. Atas Pekerjaan yang dilakukan PIHAK KEDUA di atas, maka PIHAK KEDUA akan mendapatkan imbalan berupa Imbalan Jasa dari PIHAK PERTAMA, sebagaimana tersebut pada Pasal 4 Perjanjian ini.',
+        '4. Penunjukan untuk hal sebagaimana dimaksud dalam ketentuan ayat (1) di atas bersifat eksklusif terhadap PIHAK PERTAMA, dengan pengertian bahwa PIHAK KEDUA tidak dapat mengadakan kerja sama atau menyediakan jasa yang sejenis sebagaimana diatur dalam Perjanjian ini dengan pihak selain PIHAK PERTAMA.',
+        '5. Perjanjian ini tidak bersifat eksklusif terhadap PIHAK KEDUA, dengan pengertian bahwa PIHAK PERTAMA berhak mengadakan kerja sama yang sejenis atau menunjuk pihak lain untuk menyediakan jasa yang sejenis, selama tidak melanggar hak-hak PIHAK KEDUA sebagaimana diatur dalam Perjanjian ini.',
+        '6. Selain memperhatikan ketentuan dalam Perjanjian ini, PIHAK KEDUA berkomitmen untuk mematuhi seluruh ketentuan yang ditetapkan oleh Klien selama pelaksanaan Pekerjaan, tanpa mengurangi hak-hak PIHAK KEDUA sebagaimana diatur dalam Perjanjian ini. PIHAK KEDUA memahami bahwa pelanggaran terhadap kebijakan yang ditetapkan oleh PIHAK PERTAMA dapat mengakibatkan pemutusan Perjanjian ini.',
+      ],
+    },
+    {
+      heading: 'PASAL 2\nJANGKA WAKTU PERJANJIAN',
+      paragraphs: [
+        '__MITRA_TERM__',
+        '2. Jangka Waktu Perjanjian ini dapat diperpanjang berdasarkan persetujuan tertulis Para Pihak, kecuali salah satu Pihak bermaksud untuk mengakhiri Perjanjian ini dengan memberikan surat pemberitahuan kepada Pihak lainnya dalam waktu paling lambat 30 (tiga puluh) hari kerja sebelum berakhirnya Jangka Waktu Perjanjian.',
+      ],
+    },
+    {
+      heading: 'PASAL 3\nHAK DAN KEWAJIBAN PARA PIHAK',
+      paragraphs: [
+        '1. PIHAK PERTAMA memiliki hak dan kewajiban sebagai berikut:',
+        'a. PIHAK PERTAMA berhak menunjuk PIHAK KEDUA untuk melaksanakan Pekerjaan, dengan tata cara lebih lanjut sebagaimana diinformasikan oleh PIHAK PERTAMA kepada PIHAK KEDUA secara langsung.',
+        'b. PIHAK PERTAMA berhak melakukan evaluasi terhadap kinerja PIHAK KEDUA selambat-lambatnya 1 minggu sebelum perjanjian mitra ini berakhir.',
+        'c. PIHAK PERTAMA berhak melakukan peneguran kepada PIHAK KEDUA dan memindahkannya jika pekerjaan di bagian pekerjaan tersebut tidak dapat atau belum bisa dilakukan dengan baik, dengan melakukan penyesuaian atas ketentuan-ketentuan dalam Perjanjian ini. Namun, apabila penempatan PIHAK KEDUA pada yang baru tersebut mengakibatkan pengurangan hak-hak PIHAK KEDUA sebagaimana diatur dalam Perjanjian ini,',
+        'd. PIHAK PERTAMA berhak mengakhiri Perjanjian ini secara keseluruhan dan secara sepihak berdasarkan hasil evaluasi sesuai dengan ketentuan pada Pasal 5 dalam Perjanjian ini; dan',
+        'e. PIHAK PERTAMA berkewajiban melakukan pembayaran kepada PIHAK KEDUA atas Pekerjaan yang telah dilakukan oleh PIHAK KEDUA sesuai dengan jumlah dan tata cara pembayaran yang diatur dalam Perjanjian ini.',
+        'f. PIHAK PERTAMA berkewajiban membayarkan imbalan kepada PIHAK KEDUA, serta menambahkan sejumlah dana sebagai Simpanan Mitra selama jangka waktu kemitraan, sesuai dengan ketentuan yang diatur dalam perjanjian ini.',
+        '2. PIHAK KEDUA memiliki hak dan kewajiban sebagai berikut:',
+        'a. PIHAK KEDUA berhak menerima pembayaran dari PIHAK PERTAMA atas Pekerjaan yang telah dilakukan oleh PIHAK KEDUA sesuai dengan jumlah dan tata cara pembayaran yang diatur dalam Perjanjian ini;',
+        'b. PIHAK KEDUA berkewajiban melaksanakan Pekerjaan sesuai dengan kebutuhan PIHAK PERTAMA dan ruang lingkup yang diatur dalam Perjanjian ini;',
+        'c. PIHAK KEDUA berkewajiban memenuhi dan melaksanakan seluruh tugas dan ketentuan yang telah diuraikan dalam Pasal ini dan keseluruhan Perjanjian ini, Pedoman Peraturan dan Tata Tertib yang diberlakukan oleh PIHAK PERTAMA maupun ketentuan lain yang menjadi keputusan dan/atau kebijakan dari PIHAK PERTAMA.',
+        'd. PIHAK KEDUA berkewajiban merahasiakan semua informasi mengenai PIHAK PERTAMA dan Pekerjaan yang diterima atau diketahui PIHAK KEDUA dan tidak memberikan dokumen atau informasi yang diketahui baik secara lisan maupun tertulis, gambaran, rekaman, laporan, video, dan segala macam bentuk yang mengandung informasi tentang PIHAK PERTAMA dan Pekerjaan ke pihak lainnya ataupun yang bukan haknya.',
+        'e. Dalam hal PIHAK KEDUA tidak lagi bekerja di PIHAK PERTAMA maka PIHAK KEDUA wajib menyerahkan dan mengembalikan semua informasi mengenai Klien dan Pekerjaan yang diterima atau diketahui olehnya, baik karena jabatannya, atau karena sebab lain termasuk semua informasi maupun data dalam bentuk hard copy, email, disket, CD, USB, maupun dalam bentuk media lainnya kepada PIHAK PERTAMA;',
+        'f. PIHAK KEDUA berkewajiban memenuhi dan menjalankan kode etik, aturan yang diberlakukan di PIHAK PERTAMA;',
+        'g. PIHAK KEDUA berkewajiban untuk melakukan Pekerjaan dengan jujur, cermat, tertib dan bersemangat untuk kepentingan PIHAK PERTAMA sesuai Pekerjaannya;',
+        'h. PIHAK KEDUA berkewajiban memakai seragam yang diberikan PIHAK PERTAMA, serta bertingkah laku sopan dan menghormati seluruh pekerja dan pihak-pihak lainnya di PIHAK PERTAMA (anggota koperasi);',
+        'i. PIHAK KEDUA berkewajiban memahami, mengikuti dan menerapkan prosedur dalam melakukan Pekerjaan di PIHAK PERTAMA.',
+        'j. PIHAK KEDUA berkewajiban memberikan laporan atas Pekerjaan yang dilaksanakan, baik secara lisan maupun tertulis dan bentuk laporan lainnya kepada PIHAK PERTAMA.',
+      ],
+    },
+    {
+      heading: 'PASAL 4\nIMBALAN JASA',
+      paragraphs: [
+        '1. Para Pihak sepakat bahwa imbalan jasa atas Pekerjaan yang dilaksanakan oleh PIHAK KEDUA berdasarkan Perjanjian ini adalah sebesar:',
+        '__MITRA_IMBALAN__',
+        'b. Uang Ketupat sebesar satu kali Upah Minimum Kota/Kabupaten (UMK) yang berlaku pada area administratif terkait, dibayarkan satu kali dalam satu tahun pada periode Hari Raya Idul Fitri.',
+        'c. Imbalan Tahunan sebesar 0,5 (nol koma lima) kali UMK yang berlaku pada area administratif terkait, yang dibayarkan satu kali dalam satu tahun.',
+        'd. Simpanan Mitra sebesar satu kali UMK yang berlaku pada area administratif terkait, yang akan ditambahkan dan disimpan selama masa kemitraan dan akan didistribusikan pada saat adanya pemutusan hubungan kemitraan.',
+        'e. BPJS Kesehatan (segmen Pekerja Bukan Penerima Upah/Kelas 3) untuk mitra beserta anggota keluarga dalam 1 kartu keluarga maksimal 5 (lima) orang yang ditanggung oleh PIHAK PERTAMA selama masa kemitraan.',
+        'f. BPJS Ketenagakerjaan (BPU) Program Jaminan Kecelakaan Kerja (JKK) dan Jaminan Kematian (JKM) dengan dasar tarif penghasilan sebesar Rp 5.000.000,- (lima juta rupiah).',
+        'g. BPJS Jaminan Hari Tua (JHT) BPU dengan dasar tarif penghasilan sebesar Rp 5.000.000,- (lima juta rupiah) yang dibayarkan sesuai ketentuan yang berlaku.',
+        '2. PIHAK PERTAMA wajib melakukan pembayaran imbalan yang telah terakumulasi sebagaimana dimaksud pada ayat (1) di atas kepada PIHAK KEDUA pada tanggal 7 (tujuh) setiap bulannya, kecuali untuk imbalan-imbalan tertentu yang dibayarkan hanya pada saat-saat tertentu sesuai dengan ketentuan pada ayat (1) di atas.',
+        '3. Pembayaran akan dilakukan oleh PIHAK PERTAMA kepada PIHAK KEDUA melalui transfer elektronik ke rekening Bank milik PIHAK KEDUA.',
+        '4. Para Pihak sepakat untuk mematuhi seluruh ketentuan perpajakan yang berlaku dan terkait dengan pembayaran Imbalan Jasa. Semua pajak yang berhubungan dengan Perjanjian ini akan ditanggung dan/atau dibayar oleh Para Pihak sesuai dengan ketentuan Perundang-undangan Perpajakan yang berlaku di Negara Republik Indonesia.',
+      ],
+    },
+    {
+      heading: 'PASAL 5\nEVALUASI',
+      paragraphs: [
+        '1. Para Pihak sepakat untuk melakukan evaluasi bersama terhadap ketentuan-ketentuan yang telah ditetapkan dalam Perjanjian ini maupun pelaksanaan Perjanjian ini dalam suatu proses evaluasi kerjasama.',
+        '2. Proses evaluasi kerjasama sebagaimana dimaksud ayat (1) Pasal ini dilakukan selambat-lambatnya 1 (satu) tahun sekali.',
+        '3. Hal-hal yang akan dibahas dalam proses evaluasi kerja sama sebagaimana dimaksud ayat (1) Pasal ini antara lain meliputi:',
+        'a. pembahasan perkembangan dan kendala pelaksanaan Pekerjaan atau Perjanjian;',
+        'b. hal-hal lain di luar butir (a) ayat ini, yang dipandang perlu untuk dievaluasi oleh Para Pihak.',
+        '4. Apabila berdasarkan hasil evaluasi terhadap pelaksanaan Perjanjian ini kinerja PIHAK KEDUA dianggap tidak memuaskan atau tidak mencapai standar yang ditetapkan oleh PIHAK PERTAMA, maka PIHAK PERTAMA dapat mengakhiri Perjanjian ini secara sepihak dengan memberikan pemberitahuan tertulis kepada PIHAK KEDUA selambat-lambatnya 30 (tiga puluh) hari sebelum tanggal pengakhiran Perjanjian.',
+        '5. PIHAK KEDUA dilarang memutuskan Perjanjian ini secara sepihak di tengah pelaksanaan Pekerjaan dari PIHAK PERTAMA. Pemutusan sepihak oleh PIHAK KEDUA tersebut dapat menimbulkan kewajiban pembayaran denda oleh PIHAK KEDUA sebesar denda yang dikenakan oleh PIHAK PERTAMA akibat pemutusan sepihak tersebut.',
+      ],
+    },
+    {
+      heading: 'PASAL 6\nKERAHASIAAN',
+      paragraphs: [
+        '1. PIHAK KEDUA setuju bahwa PIHAK KEDUA wajib untuk menjaga kerahasiaan semua data tetapi tidak terbatas pada informasi, keterangan, dokumen-dokumen, baik secara langsung maupun tidak langsung, yang berkaitan dengan pelaksanaan Pekerjaan dan pelaksanaan Perjanjian ini.',
+        '2. PIHAK KEDUA tidak akan menggandakan atau menyebarluaskan informasi rahasia kepada pihak manapun juga, melakukan wawancara publik atau membuat pengumuman publik atau pernyataan terkait syarat-syarat dan ketentuan-ketentuan dari Perjanjian ini atau fakta-fakta, situasi, peristiwa atau kejadian sekitar yang terkait dengan cara apapun juga kecuali:',
+        'a. dengan persetujuan tertulis terlebih dahulu;',
+        'b. informasi telah secara umum tersedia bagi publik; dan',
+        'c. perintah instansi atau pihak yang berwenang berdasarkan hukum, peraturan perundang-undangan atau putusan pengadilan yang berlaku.',
+        '3. Selain ketentuan kewajiban menjaga kerahasiaan sebagaimana ditetapkan dalam Perjanjian ini, PIHAK KEDUA juga wajib mematuhi ketentuan kerahasiaan sebagaimana ditetapkan oleh PIHAK PERTAMA sehubungan dengan informasi yang diperoleh PIHAK KEDUA selama pelaksanaan Pekerjaan di PIHAK PERTAMA.',
+        '4. Kelalaian dalam menjaga kerahasiaan sebagaimana diatur dalam Perjanjian ini yang menyebabkan kerugian kepada PIHAK PERTAMA dalam Perjanjian ini, maka PIHAK PERTAMA berhak menuntut ganti rugi kepada PIHAK KEDUA.',
+        '5. Ketentuan Pasal ini tidak akan berakhir dan akan tetap mengikat Para Pihak setelah Perjanjian ini diputuskan atau berakhir.',
+      ],
+    },
+    {
+      heading: 'PASAL 7\nKEADAAN MEMAKSA',
+      paragraphs: [
+        '1. Tidak ada Pihak yang bertanggung jawab kepada pihak lainnya atas segala keterlambatan atau kegagalan dalam melaksanakan baik sebagian maupun keseluruhan Perjanjian ini, yang diakibatkan oleh sebab-sebab di luar kuasa mereka, yang tidak dapat dihindari meskipun dengan perencanaan yang baik dan tidak dapat diatasi dengan upaya yang wajar, yaitu termasuk namun tidak terbatas pada bencana alam, gempa bumi, kondisi cuaca yang luar biasa buruk, kecelakaan, unjuk rasa, huru-hara, wabah penyakit, perang (yang dideklarasikan maupun yang tidak), gangguan sipil, pemogokan, pemberontakan, kebakaran, banjir, badai, kekeringan, tindakan pemerintah atau otoritas militer, sabotase, dan lain-lain yang sejenis yang secara langsung mengganggu terlaksananya kewajiban menurut Perjanjian ini dan dibuktikan tidak ada unsur kesengajaan dan/atau kelalaian yang dilakukan Pihak ("Keadaan Memaksa").',
+        '2. Sebab-sebab Keadaan Memaksa tersebut tidak akan dianggap sebagai wanprestasi terhadap Perjanjian ini, namun pemberitahuan secara tertulis oleh Pihak yang terkena Keadaan Memaksa kepada Pihak lainnya harus dilakukan dengan segera selambat-lambatnya dalam waktu 3 (tiga) hari kerja terjadinya Keadaan Memaksa, berisi antara lain alasan dan perkiraan lamanya penangguhan Pekerjaan dan/atau kewajiban lainnya berdasarkan Perjanjian ini.',
+        '3. Setelah Para Pihak menerima pemberitahuan tertulis sebagaimana diatur dalam ayat (2) Pasal ini di atas, Para Pihak akan segera merundingkan perubahan-perubahan yang diperlukan agar Perjanjian dapat tetap dilaksanakan dan kepentingan Para Pihak dapat sebesar-besarnya terlindungi. Perjanjian Para Pihak terhadap perubahan akan dituangkan secara tertulis.',
+        '4. Semua kerugian dan biaya yang diderita oleh salah satu Pihak sebagai akibat terjadinya Keadaan Memaksa bukan merupakan beban atau tanggung jawab Pihak lainnya.',
+      ],
+    },
+    {
+      heading: 'PASAL 8\nWANPRESTASI',
+      paragraphs: [
+        '1. Peristiwa Wanprestasi. Para Pihak dapat mengakhiri Perjanjian ini jika salah satu dari peristiwa berikut terjadi:',
+        'a. Salah satu pihak baik secara sengaja maupun tidak sengaja, tidak dapat memenuhi atau gagal untuk melakukan kewajiban yang merupakan hak bagi pihak lainnya sebagaimana diatur di dalam Perjanjian termasuk namun tidak terbatas pada tidak melaksanakan pekerjaan, tidak melaksanakan pembayaran, dan/atau melaksanakan pekerjaan atau pembayaran tetapi tidak tepat waktu, dan/atau melakukan pekerjaan atau pembayaran tetapi tidak sesuai dengan ketentuan yang telah disepakati.',
+        'b. Salah satu pihak melakukan tindakan dan/atau memberikan informasi yang tidak benar atau melanggar Perjanjian ini.',
+        '2. Pengecualian Wanprestasi. Hal-hal menyangkut kesalahan, kelalaian, dan kegagalan yang diakibatkan oleh salah satu pihak dianggap bukan merupakan Wanprestasi apabila hal tersebut timbul dari peristiwa Keadaan Memaksa (Force Majeure).',
+      ],
+    },
+    {
+      heading: 'PASAL 9\nGANTI RUGI',
+      paragraphs: [
+        '1. Salah satu Pihak wajib bertanggung jawab terhadap segala bentuk kerugian, ancaman, maupun tuntutan yang dialami oleh Pihak lainnya dalam hal salah satu Pihak telah lalai dan/atau wanprestasi dengan cara tidak melaksanakan hak dan kewajibannya termasuk namun tidak terbatas pada tidak melaksanakan Pekerjaan, kerusakan barang dikarenakan kelalaian, gagal mencapai target dalam pelaksanaan pekerjaan, tidak melaksanakan pembayaran, dan/atau melaksanakan Pekerjaan atau pembayaran tetapi tidak tepat waktu, dan/atau melakukan pekerjaan atau pembayaran tetapi tidak sesuai dengan ketentuan yang telah dimintakan oleh masing-masing Pihak sebagaimana tertulis di dalam Perjanjian ini.',
+        '2. Dalam hal PIHAK KEDUA lalai dan/atau wanprestasi dalam melaksanakan kewajiban atau melakukan hal-hal yang disebutkan dalam ayat (1) di atas, maka PIHAK PERTAMA berhak untuk mengakhiri Perjanjian ini lebih awal sebagaimana diatur dalam Pasal 11 Perjanjian ini.',
+      ],
+    },
+    {
+      heading: 'PASAL 10\nPENGALIHAN DAN/ATAU SUB-KONTRAK',
+      paragraphs: [
+        '1. PIHAK KEDUA dilarang untuk mengalihkan sebagian atau seluruh ketentuan dalam Perjanjian ini.',
+        '2. PIHAK PERTAMA dapat mengalihkan sebagian atau seluruh ketentuan dalam Perjanjian ini kepada pihak lain dengan persetujuan PIHAK KEDUA.',
+        '3. PIHAK KEDUA dilarang untuk mensubkontrakkan sebagian/seluruh pekerjaan dan kewajibannya dalam Perjanjian ini kepada pihak ketiga manapun tanpa persetujuan tertulis dari PIHAK PERTAMA.',
+      ],
+    },
+    {
+      heading: 'PASAL 11\nPENGAKHIRAN PERJANJIAN',
+      paragraphs: [
+        '1. Bahwa Perjanjian ini akan berakhir apabila terjadi salah satu dari hal-hal sebagai berikut:',
+        'a. Jangka waktu Perjanjian sebagaimana diatur dalam Pasal 2 tersebut di atas berakhir dan tidak diperjanjikan lain oleh Para Pihak.',
+        'b. Para Pihak sepakat untuk mengakhiri Perjanjian ini dan dituangkan secara tertulis dalam sebuah kesepakatan pengakhiran yang ditandatangani oleh Para Pihak.',
+        'c. Salah satu Pihak melanggar, baik sebagian maupun seluruh ketentuan dalam Perjanjian ini, dan tidak segera melakukan perbaikan dalam jangka waktu 7 (tujuh) hari kerja setelah disampaikannya pemberitahuan tertulis telah terjadinya pelanggaran oleh Pihak yang dirugikan.',
+        'd. Diputuskan pengakhiran berdasarkan hasil dari evaluasi yang dimaksud dalam Pasal 5 Perjanjian ini.',
+        'e. Tidak tercapai kesepakatan mengenai penempatan PIHAK KEDUA sebagaimana diatur pada Pasal 5 Perjanjian ini.',
+        'f. Dalam hal terdapat ketentuan perundang-undangan dan/atau kebijakan Pemerintah yang tidak memungkinkan berlangsungnya Perjanjian ini.',
+        '2. Dengan berakhirnya Perjanjian ini, baik dikarenakan Force Majeure ataupun karena hal-hal sebagaimana dimaksud dalam Pasal ini, maka masing-masing Pihak tetap harus memenuhi kewajibannya yang telah timbul sebelum tanggal pengakhiran Perjanjian hingga tanggal dimana Perjanjian ini berakhir.',
+        '3. Para Pihak sepakat mengesampingkan ketentuan Pasal 1266 Kitab Undang-Undang Hukum Perdata khususnya ketentuan yang mengharuskan adanya putusan pengadilan untuk pengakhiran suatu perjanjian, sehingga untuk pengakhiran Perjanjian ini tidak diperlukan adanya putusan pengadilan.',
+      ],
+    },
+    {
+      heading: 'PASAL 12\nPEMBERITAHUAN',
+      paragraphs: [
+        '1. Setiap pemberitahuan, permintaan, dan lain-lain berkaitan dengan Perjanjian ini harus dibuat secara tertulis dan harus dikirim dengan surat tercatat, jasa kurir, dikirim secara langsung dengan mendapat tanda terima, atau melalui e-mail, yang ditujukan ke alamat:',
+        'Jika dikirim kepada PIHAK PERTAMA dialamatkan kepada: Alamat: Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20 GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330; Telepon: 021 - 50555340; E-mail: Kokarsi_unitjkt@sankyu.co.id',
+        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: __MITRA_ADDRESS__; Telepon: ....................; E-mail: ....................',
+        '2. Pemberitahuan dianggap telah diterima oleh Pihak yang dituju: pada saat ditandatanganinya tanda terima oleh Pihak yang dituju (dalam hal dikirim langsung atau menggunakan jasa kurir); dalam 3 (tiga) hari kerja setelah tanggal pengiriman jika pemberitahuan disampaikan melalui surat tercatat; dan pada saat konfirmasi laporan pengiriman telah diterima oleh pengirim, pada tanggal diterimanya e-mail, jika pemberitahuan disampaikan melalui e-mail.',
+      ],
+    },
+    {
+      heading: 'PASAL 13\nPENYELESAIAN PERSELISIHAN',
+      paragraphs: [
+        '1. Perjanjian ini diatur menurut hukum negara Republik Indonesia. Segala perselisihan yang timbul akan diselesaikan oleh Para Pihak dengan cara musyawarah untuk mufakat.',
+        '2. Apabila penyelesaian perselisihan secara musyawarah sebagaimana dimaksud pada ayat (1) tidak tercapai dalam jangka waktu 30 (tiga puluh) hari sejak timbulnya perselisihan, yaitu sejak pertama kali perselisihan dinyatakan oleh salah satu Pihak kepada Pihak lainnya, maka Para Pihak sepakat untuk menyelesaikan perselisihan melalui Pengadilan Negeri yang berwenang.',
+      ],
+    },
+    {
+      heading: 'PASAL 14\nPERUBAHAN PERJANJIAN',
+      paragraphs: [
+        '1. Para Pihak sepakat bahwa setiap perubahan pasal atau ayat-ayat dalam Perjanjian ini hanya dapat dilakukan atas kesepakatan tertulis Para Pihak.',
+        '2. Setiap perubahan pasal atau ayat-ayat sebagaimana dimaksud dalam ketentuan ayat (1) pasal ini, setelah disepakati dibuat dalam suatu amandemen yang merupakan satu kesatuan dan bagian yang tidak terpisahkan dari Perjanjian ini.',
+        '3. Perjanjian ini berikut seluruh lampiran, amandemen, dan/atau addendum (yang ada atau akan ada di kemudian hari) merupakan satu kesatuan yang mewakili keseluruhan Perjanjian dan oleh karenanya setiap dan seluruh komunikasi, korespondensi, keterangan dan kesepakatan lain, baik lisan maupun tertulis yang telah ada atau dibuat sebelumnya dianggap tidak berlaku.',
+        '4. Tidak ada amandemen, addendum atau variasi dari Perjanjian ini yang berlaku efektif kecuali dibuat secara tertulis dan ditandatangani oleh Para Pihak atau perwakilannya yang sah.',
+      ],
+    },
+    {
+      heading: 'PASAL 15\nLAIN-LAIN',
+      paragraphs: [
+        '1. Dalam hal salah satu atau lebih ketentuan-ketentuan dalam Perjanjian ini bertentangan dengan peraturan perundang-undangan yang berlaku atau tidak dapat dilaksanakan karena ketentuan hukum ("Undang-Undang"), maka ketentuan-ketentuan lain dalam Perjanjian yang tidak melanggar hukum akan tetap berlaku secara mengikat bagi Para Pihak.',
+        '2. Perjanjian ini dapat ditandatangani secara bersamaan dalam dua atau lebih halaman terpisah oleh Para Pihak, dimana masing-masing bagian yang ditandatangani tersebut dianggap asli dan merupakan Perjanjian yang sama.',
+        '3. Kegagalan, keterlambatan, atau penundaan salah satu Pihak untuk menjalankan haknya berdasarkan Perjanjian ini atau kegagalan, keterlambatan, atau penundaan untuk meminta Pihak lainnya agar memenuhi ketentuan-ketentuan dalam Perjanjian ini, tidak akan dianggap sebagai pengesampingan atau pelepasan hak, wewenang, atau tuntutan oleh Pihak lainnya untuk di kemudian hari menuntut dipenuhinya ketentuan-ketentuan dalam Perjanjian ini.',
+      ],
+    },
+  ]
+}
 
 const DOCX_REMOVED_NOTE = 'Dokumen kontrak dirender langsung ke PDF native dari kode dengan layout legal internal yang mengacu ke sample PDF referensi.'
 
@@ -298,7 +467,7 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     ],
     firstPartyLabel: 'PIHAK PERTAMA',
     secondPartyLabel: 'PIHAK KEDUA',
-    sections: mitraCommonSections('Driver antar jemput karyawan, pengiriman barang, dan antar dokumen'),
+    sections: mitraFullSections('MITRA_DRIVER'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
   },
   MITRA_KOMART: {
@@ -323,7 +492,7 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     ],
     firstPartyLabel: 'PIHAK PERTAMA',
     secondPartyLabel: 'PIHAK KEDUA',
-    sections: mitraCommonSections('Cashier Kopmart Koperasi'),
+    sections: mitraFullSections('MITRA_KOMART'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
   },
   MITRA_STAFF: {
@@ -348,7 +517,7 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     ],
     firstPartyLabel: 'PIHAK PERTAMA',
     secondPartyLabel: 'PIHAK KEDUA',
-    sections: mitraCommonSections('Staff Admin Koperasi'),
+    sections: mitraFullSections('MITRA_STAFF'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
   },
   MITRA_WAREHOUSE: {
@@ -373,7 +542,7 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     ],
     firstPartyLabel: 'PIHAK PERTAMA',
     secondPartyLabel: 'PIHAK KEDUA',
-    sections: mitraCommonSections('Handling Warehouse'),
+    sections: mitraFullSections('MITRA_WAREHOUSE'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
   },
 }
@@ -381,3 +550,4 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
 export function getContractDocumentDefinition(templateKey: string) {
   return CONTRACT_DOCUMENT_DEFINITIONS[templateKey]
 }
+

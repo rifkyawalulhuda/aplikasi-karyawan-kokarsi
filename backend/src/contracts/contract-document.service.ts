@@ -422,64 +422,70 @@ export class ContractDocumentService {
     return blocks
   }
 
+  private isMitraListItem(text: string): boolean {
+    // Deteksi item daftar (a. b. c. ... atau 1. 2. ...) agar rata kiri, bukan justify
+    return /^[a-z]\.\s/.test(text) || /^\d+\.\s/.test(text)
+  }
+
   private buildMitraBlocks(payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>): TextBlock[] {
-    const firstParty = [
-      '1. Koperasi Karyawan PT. Sankyu Indonesia International – Unit Kantor Pusat, suatu badan hukum yang berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor AHU-2123.AH.01.04/Koperasi/2015 tertanggal 16 Oktober 2015, dibuat dihadapan Notaris dan disahkan oleh Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia, berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat, Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. Hari Suhono dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan',
-      `2. ${payload.employee.fullName}, Warga Negara Indonesia, lahir di ${payload.employee.birthPlace ?? '-'} pada ${this.formatDate(payload.employee.birthDate)}, pemegang Kartu Tanda Penduduk (KTP) Nomor ${payload.employee.nik ?? '-'}, beralamat di ${payload.employee.address ?? '-'}, dalam hal ini bertindak untuk dan atas nama pribadi (untuk selanjutnya disebut sebagai "PIHAK KEDUA").`,
-      'PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").',
-      '',
-      'Dengan ini masing-masing bertindak dalam kedudukannya tersebut di atas terlebih dahulu menerangkan hal-hal sebagai berikut:',
-      '1. Bahwa PIHAK PERTAMA adalah suatu koperasi yang salah satu ruang lingkup kegiatannya bergerak di bidang Penyediaan Tenaga Kerja.',
-      '2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA dalam penyediaan jasa kepada perusahaan-perusahaan yang membutuhkan jasa dari PIHAK PERTAMA.',
-      '3. Bahwa Para Pihak sepakat untuk mengikatkan diri dalam suatu Perjanjian dan dalam rangka melaksanakan maksud dan tujuan tersebut, Para Pihak sepakat untuk melakukan kerjasama kemitraan sebagaimana diatur menurut Perjanjian ini.',
-      '',
-      'Sehubungan dengan hal-hal tersebut diatas, Para Pihak sepakat untuk membuat dan menandatangani Perjanjian ini dengan syarat-syarat dan ketentuan sebagai berikut:',
-      '',
-      payload.definition.openingLine,
-      ...payload.definition.recitals,
-      `Mitra ditempatkan sebagai ${payload.meta.positionLabel} pada lokasi kerja ${payload.meta.locationLabel}.`,
-      `Jangka waktu perjanjian dimulai sejak ${payload.meta.startDate} sampai dengan ${payload.meta.endDate}.`,
-      `Imbalan jasa yang disepakati adalah sebesar ${payload.meta.compensation}.`,
-    ]
+    const emp = payload.employee
+    const meta = payload.meta
+    const bodyFont = 10
+    const bodySize = 10
 
-    const blocks: TextBlock[] = firstParty.map(text => ({
-      text,
-      font: 'Times-Roman',
-      fontSize: 11,
-      align: 'justify' as TextAlign,
-      gapAfter: 8,
-    }))
+    const blocks: TextBlock[] = []
 
+    const addPara = (text: string, opts: Partial<TextBlock> = {}) => {
+      blocks.push({
+        text,
+        font: 'Times-Roman',
+        fontSize: bodySize,
+        align: (this.isMitraListItem(text) ? 'left' : 'justify') as TextAlign,
+        gapAfter: 6,
+        ...opts,
+      })
+    }
+
+    // === Pembukaan ===
+    addPara('Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada hari ................ tanggal ................ oleh dan antara:')
+
+    // Para Pihak
+    addPara('1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. Hari Suhono dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan')
+    addPara(`2. Bpk./Ibu ${emp.fullName}, Warga Negara Indonesia, lahir di ${emp.birthPlace ?? '.................'} pada tanggal ${this.formatDate(emp.birthDate)}, pemegang Kartu Tanda Penduduk (KTP) Nomor ${emp.nik ?? '.................'}, beralamat di ${emp.address ?? '.................'}, dalam hal ini bertindak untuk dan atas nama pribadi (untuk selanjutnya disebut sebagai "PIHAK KEDUA").`)
+
+    addPara('Kemudian PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").')
+    addPara('Dengan ini masing-masing bertindak dalam kedudukannya tersebut di atas terlebih dahulu menerangkan hal-hal sebagai berikut:')
+    addPara('1. Bahwa PIHAK PERTAMA adalah suatu koperasi yang salah satu ruang lingkup kegiatannya bergerak di bidang Penyediaan Tenaga Kerja.')
+    addPara('2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA dalam penyediaan jasa kepada perusahaan-perusahaan yang membutuhkan jasa dari PIHAK PERTAMA.')
+    addPara('3. Bahwa Para Pihak sepakat untuk mengikatkan diri dalam suatu Perjanjian dan dalam rangka melaksanakan maksud dan tujuan tersebut, Para Pihak sepakat untuk melakukan kerjasama kemitraan sebagaimana diatur menurut Perjanjian ini.')
+    addPara('Sehubungan dengan hal-hal tersebut diatas, Para Pihak sepakat untuk membuat dan menandatangani Perjanjian ini dengan syarat-syarat dan ketentuan sebagai berikut:')
+
+    // === Pasal 1 - 15 ===
     for (const section of payload.definition.sections) {
       blocks.push({
-        text: section.heading.toUpperCase(),
+        text: section.heading,
         font: 'Times-Bold',
-        fontSize: 12,
+        fontSize: 11,
         align: 'center',
-        gapBefore: 10,
-        gapAfter: 8,
+        gapBefore: 8,
+        gapAfter: 5,
       })
 
-      for (const paragraph of section.paragraphs) {
-        blocks.push({
-          text: paragraph,
-          font: 'Times-Roman',
-          fontSize: 11,
-          align: 'justify',
-          gapAfter: 8,
-        })
+      for (const raw of section.paragraphs) {
+        let text = raw
+        if (text === '__MITRA_TERM__') {
+          text = `1. Para Pihak sepakat bahwa Pekerjaan yang dilaksanakan oleh PIHAK KEDUA adalah terhitung sejak penandatanganan Perjanjian ini dari ${meta.startDate} sampai dengan ${meta.endDate} dan apabila Para Pihak telah menyelesaikan seluruh kewajibannya berdasarkan Perjanjian ini.`
+        } else if (text === '__MITRA_IMBALAN__') {
+          text = `a. Imbalan Jasa Bulanan sebesar ${meta.compensation} yang dibayarkan setiap bulan sesuai ketentuan perjanjian ini.`
+        } else if (text === '__MITRA_ADDRESS__') {
+          text = emp.address ?? '.................'
+        }
+        addPara(text)
       }
     }
 
-    for (const paragraph of payload.definition.closingParagraphs) {
-      blocks.push({
-        text: paragraph,
-        font: 'Times-Roman',
-        fontSize: 11,
-        align: 'justify',
-        gapAfter: 8,
-      })
-    }
+    // === Penutup ===
+    addPara('Demikian Perjanjian ini dibuat dalam 2 (dua) rangkap serta bermeterai cukup dan masing-masing mempunyai kekuatan hukum yang sama. Perjanjian ini ditandatangani oleh Para Pihak untuk dipedomani sebagaimana mestinya.', { gapBefore: 8 })
 
     return blocks
   }
@@ -910,10 +916,103 @@ export class ContractDocumentService {
     this.renderParallelColumns(doc, payload)
   }
 
+  private measureBlockHeight(doc: any, block: TextBlock, width: number): number {
+    doc.font(block.font).fontSize(block.fontSize)
+    return doc.heightOfString(block.text, {
+      width,
+      align: block.align ?? 'left',
+      lineGap: 1.5,
+    })
+  }
+
+  private renderMitraBlock(doc: any, block: TextBlock, x: number, y: number, width: number): number {
+    const effectiveY = y + (block.gapBefore ?? 0)
+    doc.font(block.font).fontSize(block.fontSize)
+    const height = doc.heightOfString(block.text, {
+      width,
+      align: block.align ?? 'left',
+      lineGap: 1.5,
+    })
+    doc.text(block.text, x, effectiveY, {
+      width,
+      align: block.align ?? 'left',
+      lineGap: 1.5,
+    })
+    return effectiveY + height + (block.gapAfter ?? 0)
+  }
+
   private renderMitraPdf(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
     const blocks = this.buildMitraBlocks(payload)
-    this.renderSequentialColumns(doc, payload, blocks)
-    this.renderSignaturePage(doc, payload)
+
+    const leftX = 40
+    const rightX = 306
+    const colWidth = 249
+    let index = 0
+    let firstPage = true
+
+    while (index < blocks.length) {
+      if (!firstPage) doc.addPage()
+
+      let headerBottomY = 0
+      let topY: number
+      if (firstPage) {
+        headerBottomY = this.drawCorporateHeader(doc, 'MITRA')
+        this.drawTitleBlock(doc, payload, headerBottomY)
+        topY = headerBottomY + 100
+      } else {
+        topY = 45
+      }
+      const bottomY = doc.page.height - 55
+
+      // Fill left column, then right column
+      for (const columnX of [leftX, rightX]) {
+        let y = topY
+        while (index < blocks.length) {
+          const block = blocks[index]
+          const testY = y + (block.gapBefore ?? 0)
+          const h = this.measureBlockHeight(doc, block, colWidth)
+          if (testY + h > bottomY) break
+          y = this.renderMitraBlock(doc, block, columnX, y, colWidth)
+          index += 1
+        }
+      }
+
+      firstPage = false
+    }
+
+    this.renderMitraSignature(doc, payload)
+  }
+
+  private renderMitraSignature(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
+    const leftX = 40
+    const rightX = 306
+    const colWidth = 249
+    const needed = 150
+
+    let y = doc.y + 20
+    if (y + needed > doc.page.height - 55) {
+      doc.addPage()
+      y = 60
+    }
+
+    doc.font('Times-Bold').fontSize(11)
+    doc.text('PIHAK PERTAMA', leftX, y, { width: colWidth, align: 'center' })
+    doc.text('PIHAK KEDUA', rightX, y, { width: colWidth, align: 'center' })
+
+    doc.font('Times-Bold').fontSize(10)
+    doc.text('KOPERASI PT. SANKYU INT\'L', leftX, y + 16, { width: colWidth, align: 'center' })
+
+    // Ruang tanda tangan
+    const nameY = y + 90
+    doc.font('Times-Bold').fontSize(11)
+    const firstName = 'Hari Suhono'
+    const secondName = payload.employee.fullName || '.................'
+    doc.text(firstName, leftX, nameY, { width: colWidth, align: 'center' })
+    doc.text(secondName, rightX, nameY, { width: colWidth, align: 'center' })
+
+    doc.font('Times-Roman').fontSize(10)
+    doc.text('(Ketua Koperasi)', leftX, nameY + 16, { width: colWidth, align: 'center' })
+    doc.text('(Mitra)', rightX, nameY + 16, { width: colWidth, align: 'center' })
   }
 
   async generate(id: number) {
