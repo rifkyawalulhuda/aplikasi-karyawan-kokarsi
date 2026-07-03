@@ -69,6 +69,8 @@ export class PdfGeneratorService {
       // === BODY (Calibri 12pt, x=72) ===
       let y = 203
       doc.font('Calibri').fontSize(12)
+      const violationLineGap = 2
+
       doc.text('Surat peringatan ini di tujukan kepada  :', 72, y)
 
       y = 230
@@ -87,15 +89,35 @@ export class PdfGeneratorService {
       doc.text('Jenis Pelanggaran', 72, y)
       doc.text(':', 180, y)
 
-      // Violations (numbered list)
+      // Violations (numbered list) - dynamic height per item
       y = 328
-      for (let i = 0; i < violationType.length; i++) {
-        doc.text(`${i + 1}.  ${violationType[i]}`, 72, y, { width: 451 })
-        y += 25
+      const violationWidth = 328
+      const violationList = Array.isArray(violationType) ? violationType.filter(Boolean) : []
+
+      if (violationList.length === 0) {
+        doc.text('-', 195, y, { width: violationWidth })
+        y = doc.y + 8
+      } else {
+        for (let i = 0; i < violationList.length; i++) {
+          const itemText = `${i + 1}.  ${violationList[i]}`
+          const itemBounds = doc.boundsOfString(itemText, 195, y, {
+            width: violationWidth,
+            align: 'left',
+            lineGap: violationLineGap,
+          })
+
+          doc.text(itemText, 195, y, {
+            width: violationWidth,
+            align: 'left',
+            lineGap: violationLineGap,
+          })
+
+          y += itemBounds.height + 8
+        }
       }
 
       // Paragraf alasan
-      y += 15
+      y += 10
       const paragraf1 = `Surat peringatan ini diterbitkan berdasarkan kesalahan yang telah saudara ${employee.fullName} lakukan. Oleh karena itu perusahaan memberikan Surat Peringatan Ke ${warningLevel}, hal ini bertujuan untuk dapat memberikan arahan serta peringatan terhadap saudara agar mematuhi tata tertib perusahaan dan tidak melakukan kesalahan lagi yang dapat merugikan perusahaan.`
       doc.text(paragraf1, 72, y, { width: 451, align: 'justify' })
 

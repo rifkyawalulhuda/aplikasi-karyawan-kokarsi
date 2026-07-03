@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { Employee, UserAccount } from '~/types'
+import type { Employee, UserAccount, WarningLetter } from '~/types'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{
+  open: boolean
+  warningLetter: WarningLetter | null
+}>()
+
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'saved': []
@@ -60,22 +64,32 @@ const state = reactive<Partial<Schema>>({
   processedByName: '',
 })
 
-const auth = useAuthStore()
-
-// Auto-fill pengurus dari user yang login saat modal dibuka
+// Pre-populate form saat modal dibuka / data berubah
 watch(() => props.open, (open) => {
-  if (open && auth.admin) {
-    // Find matching user from pengurus list
-    const matchedUser = users.value.find(u => u.name === auth.admin?.fullName || u.id === auth.admin?.id)
-    if (matchedUser) {
-      state.processedById = matchedUser.id
-      state.processedByName = matchedUser.name
-    } else {
-      // Use admin data directly even if not in pengurus list
-      state.processedByName = auth.admin?.fullName ?? ''
-    }
+  if (open && props.warningLetter) {
+    populateForm(props.warningLetter)
   }
 })
+
+watch(() => props.warningLetter, (letter) => {
+  if (props.open && letter) {
+    populateForm(letter)
+  }
+})
+
+function populateForm(letter: WarningLetter) {
+  state.letterNumber = letter.letterNumber
+  state.employeeId = letter.employeeId
+  state.violationType = letter.violationType?.length ? [...letter.violationType] : ['']
+  state.warningLevel = letter.warningLevel
+  state.letterDate = letter.letterDate ? letter.letterDate.split('T')[0] : ''
+  state.validUntil = letter.validUntil ? letter.validUntil.split('T')[0] : ''
+  state.processedById = letter.processedById ?? undefined
+  state.processedByName = letter.processedByName ?? ''
+
+  // Set selectedEmployee untuk info card
+  selectedEmployee.value = employees.value.find(e => e.id === letter.employeeId) ?? null
+}
 
 // Auto-calculate Berlaku Sampai = Tanggal Surat + 6 bulan
 watch(() => state.letterDate, (date) => {
@@ -109,42 +123,30 @@ function onUserChange(id: number | undefined) {
 }
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
+  if (!props.warningLetter?.id) return
   loading.value = true
   try {
-    await $fetch('/api/warning-letters', {
-      method: 'POST',
+    await $fetch(`/api/warning-letters/${props.warningLetter.id}`, {
+      method: 'PUT',
       body: {
         ...event.data,
         violationType: event.data.violationType.filter(v => v.trim()),
       },
       credentials: 'include',
     })
-    toast.add({ title: 'Surat peringatan berhasil dibuat', color: 'success' })
+    toast.add({ title: 'Surat peringatan berhasil diperbarui', color: 'success' })
     emit('saved')
     emit('update:open', false)
-    resetForm()
   } catch (e: any) {
-    toast.add({ title: 'Gagal membuat surat peringatan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+    toast.add({ title: 'Gagal memperbarui surat peringatan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
   } finally {
     loading.value = false
   }
 }
-
-function resetForm() {
-  state.letterNumber = ''
-  state.employeeId = undefined
-  state.violationType = ['']
-  state.warningLevel = undefined
-  state.letterDate = ''
-  state.validUntil = ''
-  state.processedById = undefined
-  state.processedByName = ''
-  selectedEmployee.value = null
-}
 </script>
 
 <template>
-  <UModal :open="props.open" title="Tambah Surat Peringatan" @update:open="emit('update:open', $event)">
+  <UModal :open="props.open" title="Edit Surat Peringatan" @update:open="emit('update:open', $event)">
     <template #body>
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
         <UFormField label="Nomor Surat" name="letterNumber" required>
@@ -239,7 +241,7 @@ function resetForm() {
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />
-          <UButton type="submit" label="Simpan" color="primary" :loading="loading" />
+          <UButton type="submit" label="Simpan Perubahan" color="primary" :loading="loading" />
         </div>
       </UForm>
     </template>

@@ -15,6 +15,8 @@ const table = useTemplateRef('table')
 const searchQuery = ref('')
 const levelFilter = ref('all')
 const addModal = ref(false)
+const editModal = ref(false)
+const editTarget = ref<WarningLetter | null>(null)
 
 const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLetter[]; total: number }>('/api/warning-letters', {
   query: { limit: 999 },
@@ -60,6 +62,11 @@ function spBadgeColor(level: number) {
   if (level === 1) return 'info'
   if (level === 2) return 'warning'
   return 'error'
+}
+
+function openEdit(letter: WarningLetter) {
+  editTarget.value = letter
+  editModal.value = true
 }
 
 async function handleDelete(id: number) {
@@ -148,6 +155,7 @@ const columns: TableColumn<WarningLetter>[] = [
       h(UDropdownMenu, {
         items: [
           [{ label: 'Unduh PDF', icon: 'i-lucide-download', onClick: () => handleGeneratePDF(row.original) }],
+          [{ label: 'Edit', icon: 'i-lucide-pencil', onClick: () => openEdit(row.original) }],
           [{ label: 'Hapus', icon: 'i-lucide-trash', onClick: () => handleDelete(row.original.id) }],
         ],
       }, () => h(UButton, { icon: 'i-lucide-ellipsis', variant: 'ghost', color: 'neutral' })),
@@ -244,6 +252,13 @@ const columns: TableColumn<WarningLetter>[] = [
   <!-- Modal Tambah -->
   <WarningLettersAddModal
     v-model:open="addModal"
+    @saved="refresh()"
+  />
+
+  <!-- Modal Edit -->
+  <WarningLettersEditModal
+    v-model:open="editModal"
+    :warning-letter="editTarget"
     @saved="refresh()"
   />
 </template>
