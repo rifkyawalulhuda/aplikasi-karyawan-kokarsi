@@ -90,23 +90,24 @@ export class PdfGeneratorService {
       doc.text(':', 180, y)
 
       // Violations (numbered list) - dynamic height per item
-      y = 328
-      const violationWidth = 328
+      y = 321
+      const violationX = 72
+      const violationWidth = 451
       const violationList = Array.isArray(violationType) ? violationType.filter(Boolean) : []
 
       if (violationList.length === 0) {
-        doc.text('-', 195, y, { width: violationWidth })
+        doc.text('-', violationX, y, { width: violationWidth })
         y = doc.y + 8
       } else {
         for (let i = 0; i < violationList.length; i++) {
           const itemText = `${i + 1}.  ${violationList[i]}`
-          const itemBounds = doc.boundsOfString(itemText, 195, y, {
+          const itemBounds = doc.boundsOfString(itemText, violationX, y, {
             width: violationWidth,
             align: 'left',
             lineGap: violationLineGap,
           })
 
-          doc.text(itemText, 195, y, {
+          doc.text(itemText, violationX, y, {
             width: violationWidth,
             align: 'left',
             lineGap: violationLineGap,
