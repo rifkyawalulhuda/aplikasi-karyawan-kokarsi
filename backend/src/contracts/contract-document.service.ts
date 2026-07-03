@@ -134,6 +134,11 @@ export class ContractDocumentService {
     })
   }
 
+  private formatDayName(date: Date | string | null | undefined) {
+    if (!date) return '................'
+    return new Date(date).toLocaleDateString('id-ID', { weekday: 'long' })
+  }
+
   private formatEnglishDate(date: Date | string | null | undefined) {
     if (!date) return '-'
     return new Date(date).toLocaleDateString('en-US', {
@@ -455,7 +460,9 @@ export class ContractDocumentService {
     }
 
     // === Pembukaan ===
-    addPara('Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada hari ................ tanggal ................ oleh dan antara:')
+    const signedRaw = payload.contract.signedDate ?? payload.contract.startDate
+    const signedDay = this.formatDayName(signedRaw)
+    addPara(`Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada hari ${signedDay} tanggal ${meta.signedDate} oleh dan antara:`)
 
     // Para Pihak
     addPara('1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. Hari Suhono dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan')
@@ -1038,18 +1045,9 @@ export class ContractDocumentService {
     const body = this.buildMitraBlocks(payload)
     const colWidth = 249
 
-    // Pilar tanda tangan (single column)
-    const sigFirst: TextBlock = {
-      text: '', font: 'Times-Bold', fontSize: 10, align: 'center', gapBefore: 16,
-      sigPillar: { header: 'PIHAK PERTAMA', org: "KOPERASI PT. SANKYU INT'L", name: 'Hari Suhono', role: '(Ketua Koperasi)' },
-    }
-    const sigSecond: TextBlock = {
-      text: '', font: 'Times-Bold', fontSize: 10, align: 'center', gapBefore: 16,
-      sigPillar: { header: 'PIHAK KEDUA', name: payload.employee.fullName || '.................', role: '(Mitra)' },
-    }
-
     // Bagi konten 50/50 berdasar tinggi kumulatif. Paruh pertama -> kolom kiri
     // (semua halaman), paruh kedua -> kolom kanan (semua halaman) = layout booklet asli.
+    // Tanda tangan TIDAK dimasukkan ke kolom; dirender full-width di paling bawah.
     const heights = body.map(b =>
       (b.gapBefore ?? 0) + this.measureBlockHeight(doc, b, colWidth) + (b.gapAfter ?? 0),
     )
@@ -1065,8 +1063,8 @@ export class ContractDocumentService {
       splitIdx -= 1
     }
 
-    const firstHalf = [...body.slice(0, splitIdx), sigFirst]
-    const secondHalf = [...body.slice(splitIdx), sigSecond]
+    const firstHalf = body.slice(0, splitIdx)
+    const secondHalf = body.slice(splitIdx)
 
     const leftX = 40
     const rightX = 306
@@ -1075,6 +1073,7 @@ export class ContractDocumentService {
     let li = 0
     let ri = 0
     let firstPage = true
+    let lastContentBottom = 0
 
     while (li < firstHalf.length || ri < secondHalf.length) {
       if (!firstPage) doc.addPage()
@@ -1100,8 +1099,41 @@ export class ContractDocumentService {
       const dividerBottom = isLastPage ? contentBottom : bottomY
       doc.moveTo(dividerX, topY).lineTo(dividerX, dividerBottom).lineWidth(0.75).stroke()
 
+      if (isLastPage) lastContentBottom = contentBottom
       firstPage = false
     }
+
+    // Tanda tangan full-width di paling bawah, DI LUAR garis pembatas kolom
+    this.renderMitraSignatureFooter(doc, payload, lastContentBottom + 30)
+  }
+
+  private renderMitraSignatureFooter(
+    doc: any,
+    payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>,
+    startY: number,
+  ) {
+    const leftX = 40
+    const rightX = 306
+    const colWidth = 249
+    const sigHeight = this.MITRA_SIG_HEIGHT
+
+    let y = startY
+    // Blok tanda tangan bersifat atomik: jika tidak muat, pindah ke halaman baru
+    if (y + sigHeight > doc.page.height - 40) {
+      doc.addPage()
+      y = 60
+    }
+
+    this.renderMitraSignaturePillar(
+      doc,
+      { header: 'PIHAK PERTAMA', org: "KOPERASI PT. SANKYU INT'L", name: 'Hari Suhono', role: '(Ketua Koperasi)' },
+      leftX, y, colWidth,
+    )
+    this.renderMitraSignaturePillar(
+      doc,
+      { header: 'PIHAK KEDUA', name: payload.employee.fullName || '.................', role: '(Mitra)' },
+      rightX, y, colWidth,
+    )
   }
 
   async generate(id: number) {
