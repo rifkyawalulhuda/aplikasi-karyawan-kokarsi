@@ -1,6 +1,6 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-03 (v5) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v6) | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -40,7 +40,7 @@ pnpm dev
 ### Compile Backend (setelah ada perubahan kode)
 ```bash
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
-npx tsc -p tsconfig.json
+NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 ```
 
 ---
@@ -57,29 +57,33 @@ npx tsc -p tsconfig.json
 | 6 | Master Data CRUD (lokasi, jabatan, level, pajak, tipe kontrak) | `app/pages/settings/master-data.vue`, `server/api/lookups/` |
 | 7 | CRUD Kontrak + status otomatis berdasarkan tanggal + riwayat per karyawan | `app/pages/kontrak.vue`, `app/pages/karyawan/index.vue`, `app/components/kontrak/` |
 | 8 | Upload foto karyawan | `app/components/karyawan/EditModal.vue`, `server/api/employees/[id]/photo.post.ts` |
-| 9 | Export Excel & PDF (semua data + semua kolom, Excel termasuk Departement) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
-| 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts`, `app/pages/karyawan/index.vue`, `app/pages/kontrak.vue`, `app/pages/settings/master-data.vue` |
-| 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts`, `app/layouts/default.vue`, `app/middleware/auth.global.ts` |
-| 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/prisma/schema.prisma`, `backend/src/users/`, `app/pages/settings/users.vue`, `server/api/users/` |
+| 9 | Export Excel & PDF (semua data + semua kolom termasuk NIK, Tempat Lahir, Alamat) | `app/composables/useExport.ts`, `server/api/employees/export.get.ts` |
+| 10 | Toast konfirmasi hapus untuk karyawan, kontrak, dan master data | `app/composables/useConfirmDeleteToast.ts` |
+| 11 | Role internal Master Admin vs Pengelola Koperasi dengan pembatasan Master Data | `backend/prisma/schema.prisma`, `backend/src/lookups/lookups.controller.ts` |
+| 12 | Master User untuk admin membuat akun Admin/Pengelola | `backend/src/users/`, `app/pages/settings/users.vue` |
 | 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
-14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan/index.vue` |
-15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/`, `app/pages/settings/master-data.vue`, `server/api/lookups/` |
-16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
-17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts`, `app/components/UserMenu.vue` |
-18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/`, `app/pages/karyawan/index.vue`, `app/pages/kontrak.vue`, `app/pages/index.vue` |
-19 | Halaman detail data karyawan (`/karyawan/:id`) — fix SSR auth + route conflict | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/ProfileHeader.vue` |
+| 14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan/index.vue` |
+| 15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/` |
+| 16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
+| 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts` |
+| 18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/` |
+| 19 | Halaman detail data karyawan (`/karyawan/:id`) — NIK, Tempat Lahir, Alamat + layout Data Pekerjaan / Data Pribadi | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/SummaryCards.vue` |
 | 20 | Tabel Manajemen Kontrak mendukung sorting dari header kolom (6 kolom) | `app/pages/kontrak.vue` |
-| 21 | Manajemen Surat Peringatan + generate PDF (pdfkit, template kop surat + logo) | `app/pages/dokumen/surat-peringatan/index.vue`, `app/components/warning-letters/AddModal.vue`, `backend/src/warning-letters/`, `server/api/warning-letters/` |
+| 21 | Manajemen Surat Peringatan + generate PDF (pdfkit, template kop surat + logo) | `app/pages/dokumen/surat-peringatan/index.vue`, `backend/src/warning-letters/` |
 | 22 | Auto-calculate "Berlaku Sampai" (6 bulan dari Tanggal Surat) + field read-only | `app/components/warning-letters/AddModal.vue` |
 | 23 | Endpoint pengurus koperasi (tanpa admin-only guard) untuk dropdown | `backend/src/users/users.controller.ts`, `server/api/users/pengurus.get.ts` |
-| 24 | Fondasi template dokumen kontrak otomatis: master template, preview, generate DOCX/PDF, dan field legal kontrak | `backend/src/contracts/`, `backend/src/contract-templates/`, `app/pages/kontrak.vue`, `app/pages/settings/contract-templates.vue` |
-|| 25 | Generator dokumen kontrak langsung ke PDF native (pdfkit), tanpa template DOCX atau LibreOffice | `backend/src/contracts/contract-document.service.ts` |
-|| 26 | Layout PDF kontrak: 2 kolom paralel (ID/EN) untuk PKWT, single column untuk MITRA | `backend/src/contracts/contract-document.service.ts` |
-|| 27 | PDF PKWT 1:1 dengan sample: 11 pasal bilingual, terminologi Perusahaan/Karyawan, font Times New Roman, data dinamis (tanggal mulai/akhir, upah) | `backend/src/contracts/contract-document.service.ts`, `backend/src/contracts/contract-document-definitions.ts` |
-|| 28 | PDF MITRA: preambule detail (akta pendirian, keputusan kementerian, identitas mitra), single column full-width | `backend/src/contracts/contract-document.service.ts` |
-|| 29 | Signature block: table box 2-kolom dengan border, nama uppercase+bold+underline, role label (KARYAWAN/KETUA KOPERASI) | `backend/src/contracts/contract-document.service.ts` |
-|| 30 | Multi-page layout fix: title block hanya di halaman 1, border kolom menyesuaikan tinggi konten, no blank gap di halaman 2+ | `backend/src/contracts/contract-document.service.ts` |
-|---
+| 24 | Fondasi template dokumen kontrak otomatis: master template, preview, generate PDF | `backend/src/contracts/`, `backend/src/contract-templates/` |
+| 25 | Generator dokumen kontrak langsung ke PDF native (pdfkit), tanpa LibreOffice | `backend/src/contracts/contract-document.service.ts` |
+| 26 | PDF PKWT: 2 kolom bilingual (ID/EN), header hanya halaman 1, border kolom, signature box | `backend/src/contracts/contract-document.service.ts` |
+| 27 | PDF PKWT 1:1: 11 pasal, font Times New Roman, data dinamis, closing bilingual | `backend/src/contracts/contract-document-definitions.ts` |
+| 28 | PDF MITRA: layout booklet 2-kolom split 50/50, 15 pasal legal lengkap, border luar + divider tengah | `backend/src/contracts/contract-document.service.ts`, `backend/src/contracts/contract-document-definitions.ts` |
+| 29 | PDF MITRA 1:1 dengan sample: header halaman 1, title full-width, hari/tanggal tanda tangan dinamis | `backend/src/contracts/contract-document.service.ts` |
+| 30 | PDF MITRA signature footer: 2 pilar (PIHAK PERTAMA/KEDUA) di luar garis, full-width, tidak terpisah | `backend/src/contracts/contract-document.service.ts` |
+| 31 | Preview PDF dokumen kontrak dan surat peringatan via PDF.js canvas render (bukan iframe) | `app/components/PdfViewer.client.vue`, `app/pages/kontrak.vue`, `app/pages/dokumen/surat-peringatan/index.vue` |
+| 32 | Eskalasi Surat Peringatan: rule SP1→SP2→SP3, blokir jika SP3 aktif, validasi backend + UI | `backend/src/warning-letters/warning-letters.service.ts`, `app/components/warning-letters/AddModal.vue` |
+| 33 | Upload dokumen kontrak PDF (scan tanda tangan) menggantikan field URL Dokumen | `backend/src/contracts/contracts.controller.ts`, `app/components/kontrak/EditContractModal.vue`, `server/api/contracts/[id]/document.post.ts` |
+
+---
 
 ## Arsitektur
 
@@ -97,42 +101,61 @@ Semua Nitro handler baca `auth_token` cookie -> forward `Authorization: Bearer <
 Backend return `{ data: [...], total, page, limit, totalPages }` untuk list endpoints.
 
 ### Kontrak Otomatis
-Status kontrak dihitung dari `endDate` terhadap tanggal hari ini, jadi UI tidak perlu input manual untuk status kontrak.
-
-Aturan yang dipakai:
-- `SELESAI` jika karyawan sudah offboarding (`RESIGN` / `PHK`) dan kontrak bukan `DIBATALKAN`
+Status kontrak dihitung dari `endDate` terhadap tanggal hari ini:
+- `SELESAI` jika karyawan sudah offboarding dan kontrak bukan `DIBATALKAN`
 - `EXPIRED` jika `endDate` sudah lewat
 - `AKAN_HABIS` jika sisa kontrak 30 hari atau kurang
 - `AKTIF` jika sisa kontrak lebih dari 30 hari
-- `DIBATALKAN` tetap dipertahankan bila kontrak memang dibatalkan
+- `DIBATALKAN` tetap dipertahankan
 
 ### Dokumen Kontrak Otomatis
-Modul kontrak menggunakan **generator PDF native** (pdfkit) — tidak ada dependency DOCX/LibreOffice:
+Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Master data template kontrak (`ContractTemplate`) terhubung ke kontrak karyawan
-- Preview kontrak menampilkan metadata template legal, status missing field, dan susunan generator
-- Generate dokumen menghasilkan PDF langsung dari kode (tanpa template DOCX atau LibreOffice)
+- Preview kontrak menampilkan PDF langsung via PDF.js (render ke canvas, bukan iframe)
+- Generate dokumen menghasilkan PDF dari kode
+- Endpoint `download-pdf` selalu regenerate (tidak serve cache basi)
 
 **Layout PDF PKWT (Kesepakatan Kerja Waktu Tertentu):**
-- 2 kolom paralel bilingual (Indonesia kiri, English kanan) dengan border vertikal
-- Font Times New Roman, terminologi "Perusahaan/Karyawan" (bukan PIHAK PERTAMA/PIHAK KEDUA)
-- 11 pasal lengkap dengan data dinamis: tanggal mulai/akhir, nominal upah
-- Title block hanya di halaman 1, halaman berikutnya langsung header + konten
-- Border kolom menyesuaikan tinggi konten (tidak full-page height)
-- Closing paragraph bilingual di luar border kolom
-- Signature block: table box 2-kolom dengan border, nama uppercase+bold+underline, role label (KARYAWAN/KETUA KOPERASI)
+- 2 kolom paralel bilingual (Indonesia kiri, English kanan) dengan border
+- Header corporate (kop surat + logo) **hanya di halaman 1**, halaman 2+ tanpa header
+- Font Times New Roman, 11 pasal lengkap, data dinamis (tanggal, upah)
+- Blok identitas karyawan (II. Nama / Tgl Lahir / Gender / Alamat) menggunakan tabular layout (posisi colon tetap) agar sejajar
+- Closing paragraph bilingual + signature box 2-kolom border di luar border kolom
 
 **Layout PDF MITRA (Perjanjian Kemitraan):**
-- Single column full-width (tanpa border)
-- Preambule detail: akta pendirian, keputusan kementerian, identitas mitra lengkap
-- Closing paragraph dan signature di halaman terpisah
+- Layout booklet 2-kolom: konten dibagi 50/50 tinggi, paruh pertama mengisi kolom kiri semua halaman, paruh kedua kolom kanan
+- Header corporate + title ("PERJANJIAN KEMITRAAN" + Nomor + Tanggal) full-width **hanya halaman 1**
+- Hari + tanggal tanda tangan diisi otomatis di paragraf pembuka
+- 15 pasal legal lengkap per role (Driver/Komart/Staff/Warehouse) + daftar tugas spesifik
+- Border luar (kotak) mengelilingi kedua kolom + garis pembatas vertikal tengah
+- Heading PASAL tidak pernah terpisah dari paragraf pertamanya (break-inside: avoid)
+- Signature 2 pilar (PIHAK PERTAMA / PIHAK KEDUA) di **paling bawah di luar garis border**
+
+### Eskalasi Surat Peringatan
+Rule eskalasi aktif:
+- Tidak ada SP aktif → admin bebas pilih SP1, SP2, atau SP3
+- SP1 aktif → default SP2, SP1 dinonaktifkan, SP3 tetap boleh
+- SP2 aktif → hanya SP3 diizinkan
+- SP3 aktif → pembuatan SP baru **diblokir** sampai masa SP selesai (`validUntil` < hari ini)
+
+Endpoint: `GET /api/warning-letters/escalation/:employeeId`
+
+### Upload Dokumen Kontrak (Scan)
+- Upload file PDF kontrak yang sudah ditandatangani & scan
+- Endpoint: `POST /api/contracts/:id/document` (multipart, field `document`, max 10MB, PDF only)
+- File disimpan di `uploads/contracts/scanned/`, path disimpan di field `documentUrl`
+- Di form Edit Kontrak, field "URL Dokumen" diganti file upload; Tambah Kontrak tidak ada upload (harus via Edit setelah kontrak dibuat)
 
 ### Status Kepegawaian Otomatis
-Status kepegawaian tidak lagi diinput manual di form karyawan.
-
-Aturan yang dipakai:
 - `RESIGN` atau `PHK` jika sudah diproses lewat offboarding
-- `AKTIF` jika kontrak terbaru masih aktif secara tanggal
-- `KONTRAK_EXPIRED` jika tidak ada kontrak aktif terbaru lagi
+- `AKTIF` jika kontrak terbaru masih aktif
+- `KONTRAK_EXPIRED` jika tidak ada kontrak aktif
+
+### Preview PDF (PDF.js)
+- Komponen `PdfViewer.client.vue` — render PDF ke `<canvas>` via `pdfjs-dist` (v6.1.200)
+- Fetch PDF sebagai bytes (dengan credentials cookie), render per-halaman
+- Dipakai di preview dokumen kontrak & surat peringatan
+- Tidak bergantung plugin PDF bawaan browser
 
 ### USelect Nuxt UI v4
 `value` di items harus exact match type dengan model value. Integer ID harus match integer.
@@ -151,27 +174,27 @@ app/
     kontrak.vue            # Manajemen kontrak
     dokumen/
       surat-peringatan/
-        index.vue          # Manajemen Surat Peringatan (list + generate PDF)
+        index.vue          # Manajemen Surat Peringatan (preview PDF)
     settings/master-data.vue  # Master data
     settings/users.vue        # Master user
     login.vue              # Login
   components/
+    PdfViewer.client.vue   # Preview PDF via PDF.js canvas render
     karyawan/
       AddModal.vue         # Tambah karyawan
       EditModal.vue        # Edit karyawan + upload foto
-      ContractTable.vue    # Tabel kontrak (sorting support)
       detail/
+        SummaryCards.vue   # Ringkasan data (Data Pekerjaan + Data Pribadi)
         ProfileHeader.vue  # Header profil karyawan
-        DataKaryawan.vue   # Tab data karyawan
     kontrak/
-      AddContractModal.vue
-      EditContractModal.vue
+      AddContractModal.vue   # Tambah kontrak
+      EditContractModal.vue  # Edit kontrak + upload dokumen scan PDF
     warning-letters/
-      AddModal.vue           # Form SP dengan dynamic violations + auto-validUntil
+      AddModal.vue           # Form SP + eskalasi rule
   composables/
     useConfirmDeleteToast.ts   # Toast konfirmasi hapus reusable
-    useConfirmActionToast.ts   # Toast konfirmasi aksi generic (logout, dll)
-    useExport.ts             # Export Excel & PDF (semua data dari DB)
+    useConfirmActionToast.ts   # Toast konfirmasi aksi generic
+    useExport.ts             # Export Excel & PDF (semua data + NIK/Alamat/TmptLahir)
   types/
     index.d.ts              # Employee, Contract, dll
 
@@ -186,10 +209,16 @@ server/
     contracts/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
+      [id]/download-pdf.get.ts    # Stream PDF kontrak (selalu regenerate)
+      [id]/document-preview.get.ts # Preview metadata kontrak
+      [id]/document.post.ts       # Upload dokumen scan PDF
+      [id]/generate-document.post.ts # Generate dokumen kontrak
     warning-letters/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
-      [id]/generate.get.ts  # GET generate PDF (proxy stream)
+      [id]/generate.get.ts  # GET generate PDF (download)
+      [id]/preview.get.ts   # GET preview PDF (inline)
+      escalation/[employeeId].get.ts # GET status eskalasi SP per karyawan
     users/
       pengurus.get.ts       # GET list pengurus (no admin guard)
     lookups/
@@ -202,10 +231,12 @@ server/
 
 backend/
   src/
-    employees/              # CRUD + upload foto endpoint
-    contracts/              # CRUD kontrak
+    employees/              # CRUD + upload foto + offboarding
+    contracts/              # CRUD kontrak + upload scan + generate PDF
+      contract-document.service.ts    # Generator PDF native (PKWT + MITRA)
+      contract-document-definitions.ts # Definisi pasal legal per template (15 pasal MITRA, 11 pasal PKWT)
     contract-templates/     # CRUD master template kontrak
-    warning-letters/        # CRUD surat peringatan + PDF generator (pdfkit)
+    warning-letters/        # CRUD SP + PDF generator + eskalasi rule
     lookups/                # Work locations, job roles, levels, tax status, contract types
     users/                  # CRUD master user internal + pengurus endpoint
     auth/                   # JWT strategy
@@ -215,10 +246,12 @@ backend/
     schema.prisma           # Employee, Contract, WarningLetter, MasterAdmin, UserAccount, dll
   assets/
     logo-sp.png             # Logo PT Sankyu untuk PDF surat peringatan
-    contract-templates/     # (kosong — arsip non-runtime)
+    contract-logo-pkwt.jpg  # Logo kop surat PKWT
+    contract-logo-mitra.jpg # Logo kop surat MITRA
   uploads/
-    photos/                 # Foto karyawan tersimpan di sini
+    photos/                 # Foto karyawan
     contracts/              # Hasil generate dokumen kontrak PDF
+    contracts/scanned/      # Dokumen kontrak scan (upload manual)
 ```
 
 ---
@@ -230,6 +263,9 @@ backend/
 |-------|------|-----------|
 | `employeeNo` | String | Unique, e.g. SKY-001 |
 | `fullName` | String | Nama lengkap |
+| `nik` | String? | NIK (KTP) |
+| `birthPlace` | String? | Tempat lahir |
+| `address` | String? | Alamat lengkap |
 | `employmentStatus` | Enum | AKTIF / KONTRAK_EXPIRED / RESIGN / PHK |
 | `gender` | Enum | MALE / FEMALE |
 | `birthDate` | Date | Tanggal lahir |
@@ -241,67 +277,31 @@ backend/
 | `jobRoleId` | Int | FK ke JobRole |
 | `jobLevelId` | Int | FK ke JobLevel |
 | `taxStatusId` | Int | FK ke TaxStatus |
-| `fotoKaryawan` | String? | Path foto, mis. `/uploads/photos/photo-xxx.jpg` |
+| `departmentId` | Int? | FK ke Department |
+| `fotoKaryawan` | String? | Path foto |
 
 ### Contract
 | Field | Type | Keterangan |
 |-------|------|-----------|
-| `contractNo` | String | Nomor kontrak |
+| `contractNo` | String | Nomor kontrak (unique) |
 | `employeeId` | Int | FK ke Employee |
 | `contractTypeId` | Int? | FK ke ContractType |
 | `templateId` | Int? | FK ke ContractTemplate |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
-| `status` | Enum | Dihitung otomatis dari status karyawan + tanggal (AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
-| `signedDate` | Date? | Tanggal penandatanganan dokumen |
-| `positionLabel` | String? | Label posisi untuk dokumen kontrak |
-| `workLocationLabel` | String? | Label lokasi kerja untuk dokumen kontrak |
-| `baseCompensation` | Decimal/Number? | Nilai kompensasi/upah di dokumen |
+| `status` | Enum | Computed (AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
+| `signedDate` | Date? | Tanggal penandatanganan |
+| `positionLabel` | String? | Label posisi di dokumen PDF |
+| `workLocationLabel` | String? | Label lokasi kerja di dokumen PDF |
+| `baseCompensation` | Int? | Nominal kompensasi/upah |
+| `documentUrl` | String? | Path file PDF scan kontrak yang sudah ditandatangani |
 | `generatedPdfUrl` | String? | Path hasil generate PDF |
 | `generatedAt` | DateTime? | Tanggal generate PDF |
-
-### ContractTemplate
-| Field | Type | Keterangan |
-|-------|------|-----------|
-| `code` | String | Kode template internal |
-| `name` | String | Nama template |
-| `family` | Enum | MITRA / PKWT |
-| `templateKey` | String | Kunci generator / mapping sample legal |
-| `contractTypeId` | Int? | FK opsional ke tipe kontrak |
-| `jobRoleId` | Int? | FK opsional ke jabatan |
-| `isActive` | Boolean | Status template aktif |
-
-### ContractType
-| Field | Type | Keterangan |
-|-------|------|-----------|
-| `name` | String | Nama tipe kontrak, mis. PKWT / PKWTT / Magang |
-
-### EmployeeOffboarding
-| Field | Type | Keterangan |
-|-------|------|-----------|
-| `employeeId` | Int | Satu record offboarding aktif per karyawan |
-| `terminationType` | Enum | RESIGN / PHK |
-| `terminationDate` | Date | Tanggal efektif offboarding |
-| `reason` | String? | Catatan atau alasan offboarding |
-| `processedById` | Int | ID user pemroses |
-| `processedByName` | String | Nama user pemroses |
-| `processedByRole` | String | Role user pemroses |
-| `processedByKind` | String | Jenis akun (`master_admin` / `user_account`) |
-
-### UserAccount
-| Field | Type | Keterangan |
-|-------|------|-----------|
-| `name` | String | Nama lengkap akun internal |
-| `nik` | String | Unique, dipakai sebagai identitas login alternatif |
-| `email` | String | Unique |
-| `role` | Enum | ADMIN / PENGELOLA_KOPERASI |
-| `username` | String | Unique, dipakai login utama |
-| `password` | String | Hash password di backend |
 
 ### WarningLetter
 | Field | Type | Keterangan |
 |-------|------|-----------|
-| `letterNumber` | String | Unique, format: 195 /KUKP-SII/VIII/2025 |
+| `letterNumber` | String | Unique |
 | `employeeId` | Int | FK ke Employee |
 | `violationType` | String[] | Array deskripsi pelanggaran |
 | `warningLevel` | Int | 1, 2, atau 3 (SP 1/2/3) |
@@ -309,7 +309,15 @@ backend/
 | `validUntil` | Date | Tanggal berakhir (auto: letterDate + 6 bulan) |
 | `processedById` | Int | ID user pemroses |
 | `processedByName` | String | Nama pengurus koperasi |
-| `documentUrl` | String? | Opsional, URL dokumen |
+
+### ContractTemplate
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `code` | String | Kode template internal |
+| `name` | String | Nama template |
+| `family` | Enum | MITRA / PKWT |
+| `templateKey` | String | Kunci generator (PKWT_DRIVER, MITRA_KOMART, dll) |
+| `isActive` | Boolean | Status template aktif |
 
 ---
 
@@ -323,53 +331,41 @@ backend/
 | POST | `/api/employees` | Tambah karyawan |
 | GET | `/api/employees/:id` | Detail karyawan + kontrak |
 | PUT | `/api/employees/:id` | Edit karyawan |
-| POST | `/api/employees/:id/offboarding` | Proses offboarding karyawan (RESIGN / PHK) |
+| POST | `/api/employees/:id/offboarding` | Proses offboarding |
 | DELETE | `/api/employees/:id` | Hapus karyawan |
 | POST | `/api/employees/:id/photo` | Upload foto |
 | GET | `/api/contracts` | List kontrak |
 | POST | `/api/contracts` | Tambah kontrak |
 | PUT | `/api/contracts/:id` | Edit kontrak |
 | DELETE | `/api/contracts/:id` | Hapus kontrak |
-| GET | `/api/lookups` | Semua lookup data |
-| GET | `/api/lookups/work-locations` | List lokasi kerja |
-| POST | `/api/lookups/work-locations` | Tambah lokasi kerja |
-| PUT | `/api/lookups/work-locations/:id` | Edit lokasi kerja |
-| DELETE | `/api/lookups/work-locations/:id` | Hapus lokasi kerja |
-| GET | `/api/lookups/contract-types` | List tipe kontrak |
-| POST | `/api/lookups/contract-types` | Tambah tipe kontrak |
-| PUT | `/api/lookups/contract-types/:id` | Edit tipe kontrak |
-| DELETE | `/api/lookups/contract-types/:id` | Hapus tipe kontrak |
-| GET | `/api/lookups/departments` | List departement |
-| POST | `/api/lookups/departments` | Tambah departement |
-| PUT | `/api/lookups/departments/:id` | Edit departement |
-| DELETE | `/api/lookups/departments/:id` | Hapus departement |
+| GET | `/api/contracts/:id/download-pdf` | Download/generate PDF kontrak |
+| GET | `/api/contracts/:id/document-preview` | Preview metadata dokumen kontrak |
+| POST | `/api/contracts/:id/generate-document` | Generate ulang PDF kontrak |
+| POST | `/api/contracts/:id/document` | Upload dokumen scan PDF (multipart) |
+| GET | `/api/warning-letters` | List surat peringatan |
+| POST | `/api/warning-letters` | Tambah surat peringatan |
+| GET | `/api/warning-letters/:id` | Detail surat peringatan |
+| PUT | `/api/warning-letters/:id` | Edit surat peringatan |
+| DELETE | `/api/warning-letters/:id` | Hapus surat peringatan |
+| GET | `/api/warning-letters/:id/generate` | Generate PDF SP (download) |
+| GET | `/api/warning-letters/:id/preview` | Preview PDF SP (inline) |
+| GET | `/api/warning-letters/escalation/:employeeId` | Status eskalasi SP per karyawan |
 | GET | `/api/users` | List master user (admin only) |
 | GET | `/api/users/pengurus` | List pengurus (semua role) |
 | POST | `/api/users` | Tambah user internal |
 | PUT | `/api/users/:id` | Edit user internal |
 | DELETE | `/api/users/:id` | Hapus user internal |
-| GET | `/api/warning-letters` | List surat peringatan (pagination, search) |
-| POST | `/api/warning-letters` | Tambah surat peringatan |
-| GET | `/api/warning-letters/:id` | Detail surat peringatan |
-| PUT | `/api/warning-letters/:id` | Edit surat peringatan |
-| DELETE | `/api/warning-letters/:id` | Hapus surat peringatan |
-| GET | `/api/warning-letters/:id/generate` | Generate PDF surat peringatan |
+| GET | `/api/lookups/*` | CRUD lookup data |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
+| GET | `/uploads/contracts/**` | Serve PDF kontrak statis |
 
 ---
 
 ## Export Data
 
-- **Excel**: `xlsx` library - semua data + 22 kolom lengkap termasuk `Departement`, status kepegawaian otomatis, dan kontrak relevan terbaru -> `.xlsx`
-- **PDF**: `jspdf` + `jspdf-autotable` - landscape A4, semua kolom lama -> `.pdf`
-- **Kolom export Excel**: No. Induk, Nama, Status, Gender, Tgl. Lahir, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
-- **Riwayat kontrak**: Tersedia read-only dari halaman Data Karyawan dalam bentuk timeline kontrak terbaru ke lama
-- **Sorting tabel**: Kedua halaman (Data Karyawan & Manajemen Kontrak) mendukung sorting header kolom dengan 3-state cycle (asc → desc → null) menggunakan icon lucide (arrow-up-down/arrow-up/arrow-down)
-- **Hapus data**: Karyawan, kontrak, master data, dan user memakai toast konfirmasi sebelum delete dijalankan
-- **Master User**: Admin dapat membuat akun internal dengan role `ADMIN` atau `PENGELOLA_KOPERASI`; password disimpan hash, seed sudah menambahkan akun Admin dan Pengelola, login mendukung `username` atau `NIK`, dan duplikat `NIK/Email/Username` menampilkan pesan validasi yang ramah
-- **Master Data Departement**: Lookup baru tersedia dengan rule CRUD yang sama seperti master data lain, dan masuk ke seed awal
-- **Surat Peringatan**: CRUD lengkap dengan generate PDF (pdfkit) sesuai template asli (logo, kop surat, font TimesNewRoman + Calibri). Form AddModal menggunakan UForm + zod validation, dynamic violation list (add/remove), auto-fill pengurus dari user login, auto-calculate "Berlaku Sampai" = Tanggal Surat + 6 bulan (read-only field). Endpoint `/api/users/pengurus` dibuat terpisah dari `/api/users` karena `GET /api/users` memerlukan role ADMIN, sedangkan pengurus perlu diakses semua role untuk dropdown form SP
-- **Sidebar Dokumen Karyawan**: Group baru di sidebar dengan icon `i-lucide-file-badge`, berisi submenu "Surat Peringatan"
+- **Excel**: `xlsx` library - semua data + 25 kolom termasuk NIK, Tempat Lahir, Alamat, Departement -> `.xlsx`
+- **PDF**: `jspdf` + `jspdf-autotable` - landscape A4 -> `.pdf`
+- **Kolom export Excel**: No. Induk, Nama, NIK, Status, Gender, Tempat Lahir, Tgl. Lahir, Alamat, Tgl. Gabung, Email, HP, Pendidikan, Lokasi, Jabatan, Level, Departement, Status Pajak, No. Kontrak Aktif, Tgl. Mulai/Selesai Kontrak, Status Kontrak, Foto, Dibuat, Diperbarui
 
 ---
 
@@ -377,21 +373,17 @@ backend/
 
 | Masalah | Solusi |
 |---------|--------|
-| Bearer token ter-mask Hermes | Gunakan Python `base64.b64decode('QmVhcmVyIA==')` untuk generate string |
-| Backend tidak start | Compile dulu: `npx tsc -p tsconfig.json` |
-| Backend `node dist/main.js` gagal baca env | `backend/src/main.ts` sudah load `dotenv/config`, pastikan dijalankan dari folder `backend` |
-| Prisma migrate gagal auth | Pastikan `DATABASE_URL` mengarah ke `kokarsi-postgres` di port `5435` |
+| Backend tidak start | Compile dulu: `NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json` |
+| Backend `node dist/main.js` gagal baca env | Load `dotenv/config`, pastikan run dari folder `backend` |
+| PDF kontrak masih versi lama setelah ubah kode | Endpoint `download-pdf` selalu regenerate. Pastikan backend di-restart |
+| Preview PDF tidak muncul (iframe kosong) | Sudah diganti PdfViewer.client.vue (PDF.js canvas render). Cek console error |
 | Status Pajak tampil angka | Key backend `taxStatus` bukan `taxStatuses` |
 | USelect tidak resolve label | Race condition - watch lookups + watch employee keduanya diperlukan |
-| Upload foto tidak jalan | Restart backend setelah compile (endpoint baru) |
-| Export tidak include kontrak | Backend `findAll` tidak include contracts - gunakan endpoint `/api/employees/export` (limit=9999) |
-| Data master tidak muncul setelah save | Pastikan backend validasi DTO lookup aktif dan frontend me-refresh resource master data setelah CRUD |
-| Detail karyawan `/karyawan/:id` tidak render | Route conflict: `karyawan.vue` vs `karyawan/[id].vue`. Pindah list ke `karyawan/index.vue`, hapus `karyawan.vue` |
-| SSR auth gagal di detail karyawan | `$fetch` tidak forward cookie saat SSR. Ganti ke `useFetch + useRequestHeaders(['cookie'])` |
-| SSR crash `Cannot read properties of undefined` | Nested data (ex: `employee.fullName`) undefined saat SSR. Tambah optional chaining: `employee?.fullName` |
-| Sorting tidak konsisten antar halaman | Pola sorting: `toggleSort()` + `getSortValue()` + `sortableHeader()` + `UIcon` (lucide icons) |
-| Dropdown pengurus koperasi kosong | `GET /api/users` butuh role ADMIN. Gunakan `/api/users/pengurus` (tanpa admin guard) |
-| Modal tidak muncul saat klik tombol | Pastikan komponen modal di **luar** `<UDashboardPanel>`, bukan di dalamnya (slot `#body` atau `#default` saja yang valid) |
-| USelect value `null` vs `undefined` | Nuxt UI v4 `USelect` expect `undefined` bukan `null` untuk empty state. Gunakan `as number | undefined` |
-| `PrismaService` property tidak ditemukan | PrismaService pakai explicit getter proxy. Tambah getter baru untuk model baru: `get warningLetter() { return this.client.warningLetter }` |
-| Prisma `mode: 'insensitive'` type error | Gunakan `as const` atau cast `where: any` untuk avoid QueryMode type mismatch |
+| Upload foto/dokumen tidak jalan | Restart backend setelah compile (endpoint baru) |
+| Detail karyawan `/karyawan/:id` tidak render | Route conflict diselesaikan. Gunakan `useFetch + useRequestHeaders(['cookie'])` |
+| Sorting tidak konsisten | Pola: `toggleSort()` + `getSortValue()` + `sortableHeader()` |
+| Dropdown pengurus koperasi kosong | Gunakan `/api/users/pengurus` (tanpa admin guard) |
+| USelect value `null` vs `undefined` | Nuxt UI v4 expect `undefined` untuk empty state |
+| `PrismaService` property tidak ditemukan | Tambah getter baru di PrismaService |
+| TypeScript compile OOM | Gunakan `NODE_OPTIONS="--max-old-space-size=4096"` |
+| SP tidak bisa dibuat padahal tidak ada SP aktif | Cek endpoint escalation, pastikan `validUntil` SP lama sudah lewat |
