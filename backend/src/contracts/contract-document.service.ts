@@ -718,7 +718,7 @@ export class ContractDocumentService {
     let y = startY + 20
     
     // Check if there's enough space for closing + signature, if not add new page
-    if (y + 200 > pageBottom) {
+    if (y + 250 > pageBottom) {
       doc.addPage()
       this.drawCorporateHeader(doc, 'PKWT')
       y = 180
@@ -726,7 +726,7 @@ export class ContractDocumentService {
     
     // === BILINGUAL CLOSING PARAGRAPHS (two columns, no borders) ===
     const closingTextId = payload.definition.closingParagraphs.join('\n')
-    const closingTextEn = 'Thus the Agreement of Certain Time made without any pressure from either party, made in duplicate with sufficient stamp duty.'
+    const closingTextEn = 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.'
     const columnWidth = 252
     const leftX = 34
     const rightX = 310
@@ -741,30 +741,68 @@ export class ContractDocumentService {
     )
     y += closingHeight + 25
     
-    // === STANDALONE FULL-WIDTH SIGNATURE BLOCK (no borders) ===
+    // === STANDALONE FULL-WIDTH SIGNATURE BLOCK ===
     
-    // Date
+    // Line 1: Date
     doc.font('Times-Roman').fontSize(10)
     doc.text(`Bekasi, ${payload.meta.signedDate}`, 68, y)
-    y += 30
-    
-    // Signature labels - two pillars side by side
-    doc.font('Times-Bold').fontSize(10.5)
-    doc.text('Karyawan/employee', 68, y, { width: 200, align: 'center' })
-    doc.text('Pengusaha/Perusahaan', 330, y, { width: 200, align: 'center' })
-    
-    // Names
-    y += 50
-    doc.font('Times-Bold').fontSize(11)
-    doc.text(payload.employee.fullName, 68, y, { width: 200, align: 'center' })
-    doc.text(payload.meta.processedByName || '(...........................)', 330, y, { width: 200, align: 'center' })
-    
-    // Company header under pengusaha signature
     y += 20
-    doc.font('Times-Bold').fontSize(9)
-    doc.text('KOPERASI KARYAWAN', 330, y, { width: 200, align: 'center' })
-    doc.text('PT SANKYU INDONESIA INTERNATIONAL', 330, y + 12, { width: 200, align: 'center' })
-    doc.text('UNIT KANTOR PUSAT', 330, y + 24, { width: 200, align: 'center' })
+    
+    // Line 2: Company main header (centered, full width)
+    doc.font('Times-Bold').fontSize(10)
+    doc.text('KOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL', 68, y, { width: 459, align: 'center' })
+    y += 14
+    
+    // Line 3: Company sub-header (centered, full width)
+    doc.text('UNIT KANTOR PUSAT', 68, y, { width: 459, align: 'center' })
+    y += 25
+    
+    // === Signature Table Box (2-column with border) ===
+    const tableX = 68
+    const tableWidth = 459
+    const colWidth = tableWidth / 2
+    const cellPadding = 10
+    const labelHeight = 20
+    const signatureSpace = 60  // blank space for physical signature
+    const nameHeight = 20
+    const tableHeight = labelHeight + signatureSpace + nameHeight + (cellPadding * 2)
+    
+    // Draw outer border
+    doc.lineWidth(1)
+    doc.rect(tableX, y, tableWidth, tableHeight).stroke()
+    
+    // Draw vertical divider line
+    const dividerX = tableX + colWidth
+    doc.moveTo(dividerX, y).lineTo(dividerX, y + tableHeight).stroke()
+    
+    // Top row cells - labels
+    doc.font('Times-Bold').fontSize(10.5)
+    doc.text('Karyawan/employee', tableX, y + cellPadding, { width: colWidth, align: 'center' })
+    doc.text('Pengusaha/Perusahaan', dividerX, y + cellPadding, { width: colWidth, align: 'center' })
+    
+    // Bottom row cells - names (Uppercase, Bold, Underlined)
+    const nameY = y + cellPadding + labelHeight + signatureSpace
+    const empName = (payload.employee.fullName || '').toUpperCase()
+    const mgrName = (payload.meta.processedByName || '(...........................)').toUpperCase()
+    
+    doc.font('Times-Bold').fontSize(11)
+    
+    // Underline + name for left cell (Karyawan)
+    const empNameWidth = doc.widthOfString(empName)
+    const empNameX = tableX + (colWidth - empNameWidth) / 2
+    doc.text(empName, tableX, nameY, { width: colWidth, align: 'center' })
+    doc.moveTo(empNameX, nameY + 14).lineTo(empNameX + empNameWidth, nameY + 14).lineWidth(1).stroke()
+    doc.font('Times-Roman').fontSize(9)
+    doc.text('KARYAWAN', tableX, nameY + 16, { width: colWidth, align: 'center' })
+    
+    // Underline + name for right cell (Ketua Koperasi)
+    doc.font('Times-Bold').fontSize(11)
+    const mgrNameWidth = doc.widthOfString(mgrName)
+    const mgrNameX = dividerX + (colWidth - mgrNameWidth) / 2
+    doc.text(mgrName, dividerX, nameY, { width: colWidth, align: 'center' })
+    doc.moveTo(mgrNameX, nameY + 14).lineTo(mgrNameX + mgrNameWidth, nameY + 14).lineWidth(1).stroke()
+    doc.font('Times-Roman').fontSize(9)
+    doc.text('KETUA KOPERASI', dividerX, nameY + 16, { width: colWidth, align: 'center' })
   }
 
   private renderSignaturePage(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
