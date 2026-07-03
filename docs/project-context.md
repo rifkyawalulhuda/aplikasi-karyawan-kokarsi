@@ -1,6 +1,6 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-02 (v3) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-03 (v4) | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -72,6 +72,10 @@ npx tsc -p tsconfig.json
 | 21 | Manajemen Surat Peringatan + generate PDF (pdfkit, template kop surat + logo) | `app/pages/dokumen/surat-peringatan/index.vue`, `app/components/warning-letters/AddModal.vue`, `backend/src/warning-letters/`, `server/api/warning-letters/` |
 | 22 | Auto-calculate "Berlaku Sampai" (6 bulan dari Tanggal Surat) + field read-only | `app/components/warning-letters/AddModal.vue` |
 | 23 | Endpoint pengurus koperasi (tanpa admin-only guard) untuk dropdown | `backend/src/users/users.controller.ts`, `server/api/users/pengurus.get.ts` |
+| 24 | Fondasi template dokumen kontrak otomatis: master template, preview, generate DOCX/PDF, dan field legal kontrak | `backend/src/contracts/`, `backend/src/contract-templates/`, `app/pages/kontrak.vue`, `app/pages/settings/contract-templates.vue` |
+| 25 | Generator dokumen kontrak langsung ke PDF native (pdfkit), tanpa template DOCX atau LibreOffice | `backend/src/contracts/contract-document.service.ts` |
+| 26 | Layout PDF kontrak: 2 kolom paralel (ID/EN) untuk PKWT, sequential untuk MITRA | `backend/src/contracts/contract-document.service.ts` |
+| 27 | Dashboard admin untuk melihat status kesiapan template kontrak dan menyiapkan starter template otomatis | `app/pages/index.vue`, `backend/src/contract-templates/contract-template-assets.service.ts`, `server/api/contract-templates/system-status/` |
 ---
 
 ## Arsitektur
@@ -98,6 +102,14 @@ Aturan yang dipakai:
 - `AKAN_HABIS` jika sisa kontrak 30 hari atau kurang
 - `AKTIF` jika sisa kontrak lebih dari 30 hari
 - `DIBATALKAN` tetap dipertahankan bila kontrak memang dibatalkan
+
+### Dokumen Kontrak Otomatis
+Modul kontrak menggunakan **generator PDF native** (pdfkit) — tidak ada dependency DOCX/LibreOffice:
+- Master data template kontrak (`ContractTemplate`) terhubung ke kontrak karyawan
+- Preview kontrak menampilkan metadata template legal, status missing field, dan susunan generator
+- Generate dokumen menghasilkan PDF langsung dari kode (tanpa template DOCX atau LibreOffice)
+- Layout PDF: 2 kolom paralel (ID/EN) untuk PKWT, sequential untuk MITRA, signature page di halaman akhir
+- Admin bisa memantau kesiapan template dari Dashboard
 
 ### Status Kepegawaian Otomatis
 Status kepegawaian tidak lagi diinput manual di form karyawan.
@@ -177,6 +189,7 @@ backend/
   src/
     employees/              # CRUD + upload foto endpoint
     contracts/              # CRUD kontrak
+    contract-templates/     # CRUD master template kontrak
     warning-letters/        # CRUD surat peringatan + PDF generator (pdfkit)
     lookups/                # Work locations, job roles, levels, tax status, contract types
     users/                  # CRUD master user internal + pengurus endpoint
@@ -187,8 +200,10 @@ backend/
     schema.prisma           # Employee, Contract, WarningLetter, MasterAdmin, UserAccount, dll
   assets/
     logo-sp.png             # Logo PT Sankyu untuk PDF surat peringatan
+    contract-templates/     # (kosong — arsip non-runtime)
   uploads/
     photos/                 # Foto karyawan tersimpan di sini
+    contracts/              # Hasil generate dokumen kontrak PDF
 ```
 
 ---
@@ -219,9 +234,27 @@ backend/
 | `contractNo` | String | Nomor kontrak |
 | `employeeId` | Int | FK ke Employee |
 | `contractTypeId` | Int? | FK ke ContractType |
+| `templateId` | Int? | FK ke ContractTemplate |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
 | `status` | Enum | Dihitung otomatis dari status karyawan + tanggal (AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
+| `signedDate` | Date? | Tanggal penandatanganan dokumen |
+| `positionLabel` | String? | Label posisi untuk dokumen kontrak |
+| `workLocationLabel` | String? | Label lokasi kerja untuk dokumen kontrak |
+| `baseCompensation` | Decimal/Number? | Nilai kompensasi/upah di dokumen |
+| `generatedPdfUrl` | String? | Path hasil generate PDF |
+| `generatedAt` | DateTime? | Tanggal generate PDF |
+
+### ContractTemplate
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `code` | String | Kode template internal |
+| `name` | String | Nama template |
+| `family` | Enum | MITRA / PKWT |
+| `templateKey` | String | Kunci generator / mapping sample legal |
+| `contractTypeId` | Int? | FK opsional ke tipe kontrak |
+| `jobRoleId` | Int? | FK opsional ke jabatan |
+| `isActive` | Boolean | Status template aktif |
 
 ### ContractType
 | Field | Type | Keterangan |

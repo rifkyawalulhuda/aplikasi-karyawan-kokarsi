@@ -26,6 +26,7 @@ model ContractType {
   id        Int        @id @default(autoincrement())
   name      String     @unique @db.VarChar(255)
   contracts Contract[]
+  templates ContractTemplate[]
 
   @@map("contract_types")
 }
@@ -57,6 +58,7 @@ model JobRole {
   id        Int        @id @default(autoincrement())
   name      String     @db.VarChar(255)
   employees Employee[]
+  contractTemplates ContractTemplate[]
 
   @@map("job_roles")
 }
@@ -73,6 +75,9 @@ model Employee {
   id               Int              @id @default(autoincrement())
   employeeNo       String           @unique @db.VarChar(100)
   fullName         String           @db.VarChar(255)
+  nik              String?          @unique @db.VarChar(100)
+  birthPlace       String?          @db.VarChar(100)
+  address          String?
   employmentStatus EmploymentStatus
   taxStatusId      Int
   departmentId     Int?
@@ -137,23 +142,56 @@ model MasterAdmin {
 }
 
 model Contract {
-  id           Int            @id @default(autoincrement())
-  employeeId   Int
-  contractNo   String         @unique @db.VarChar(100)
-  startDate    DateTime       @db.Date
-  endDate      DateTime       @db.Date
+  id             Int            @id @default(autoincrement())
+  employeeId     Int
+  contractNo     String         @unique @db.VarChar(100)
+  startDate      DateTime       @db.Date
+  endDate        DateTime       @db.Date
   contractTypeId Int?
-  status       ContractStatus @default(AKTIF)
-  documentUrl  String?
+  templateId     Int?
+  status         ContractStatus @default(AKTIF)
+  signedDate     DateTime?      @db.Date
+  positionLabel  String?        @db.VarChar(255)
+  workLocationLabel String?     @db.VarChar(255)
+  baseCompensation Int?
+  templateData   Json?
+  documentUrl    String?
+  generatedPdfUrl String?
+  generatedAt    DateTime?
 
-  employee  Employee           @relation(fields: [employeeId], references: [id])
-  contractType ContractType?   @relation(fields: [contractTypeId], references: [id])
-  documents ContractDocument[]
+  employee       Employee           @relation(fields: [employeeId], references: [id])
+  contractType   ContractType?      @relation(fields: [contractTypeId], references: [id])
+  template       ContractTemplate?  @relation(fields: [templateId], references: [id])
+  documents      ContractDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("contracts")
+}
+
+model ContractTemplate {
+  id             Int            @id @default(autoincrement())
+  code           String         @unique @db.VarChar(100)
+  name           String         @db.VarChar(255)
+  family         ContractFamily
+  contractTypeId Int?
+  jobRoleId      Int?
+  description    String?
+  templateKey    String         @db.VarChar(100)
+  requiredFields Json?
+  isActive       Boolean        @default(true)
+  version        Int            @default(1)
+  notes          String?
+
+  contractType ContractType? @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
+  jobRole      JobRole?      @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
+  contracts    Contract[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contract_templates")
 }
 
 model ContractDocument {
@@ -227,6 +265,11 @@ enum ContractStatus {
   EXPIRED
   SELESAI
   DIBATALKAN
+}
+
+enum ContractFamily {
+  MITRA
+  PKWT
 }
 
 enum TerminationType {

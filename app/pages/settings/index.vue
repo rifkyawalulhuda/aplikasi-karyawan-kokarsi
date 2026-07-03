@@ -65,6 +65,27 @@ const auth = useAuthStore()
         <UCard v-if="auth.canManageMasterData">
           <template #header>
             <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-file-text" class="size-4 text-muted" />
+              <span class="font-semibold text-sm">Template Kontrak</span>
+            </div>
+          </template>
+          <div class="space-y-4">
+            <p class="text-sm text-muted">
+              Kelola template dokumen PKWT dan Mitra yang dipakai saat generate kontrak kerja otomatis.
+            </p>
+            <UButton
+              to="/settings/contract-templates"
+              label="Buka Template Kontrak"
+              icon="i-lucide-arrow-right"
+              color="primary"
+              variant="soft"
+            />
+          </div>
+        </UCard>
+
+        <UCard v-if="auth.canManageMasterData">
+          <template #header>
+            <div class="flex items-center gap-2">
               <UIcon name="i-lucide-users" class="size-4 text-muted" />
               <span class="font-semibold text-sm">Master User</span>
             </div>

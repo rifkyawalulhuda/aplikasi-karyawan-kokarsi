@@ -10,6 +10,7 @@ interface DashboardStats {
   byLevel: { name: string; count: number }[]
 }
 
+const auth = useAuthStore()
 const { data: stats } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
 
 const statCards = computed(() => [

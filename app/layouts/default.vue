@@ -59,6 +59,13 @@ const links = computed<NavigationMenuItem[]>(() => [
         : null,
       auth.canManageMasterData
         ? {
+            label: 'Template Kontrak',
+            to: '/settings/contract-templates',
+            onSelect: () => { open.value = false },
+          }
+        : null,
+      auth.canManageMasterData
+        ? {
             label: 'User',
             to: '/settings/users',
             onSelect: () => { open.value = false },

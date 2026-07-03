@@ -7,11 +7,14 @@ import { resolveContractStatus, resolveEmploymentStatus } from './employment-sta
 export class CreateEmployeeDto {
   @IsString() employeeNo: string
   @IsString() fullName: string
+  @IsOptional() @IsString() nik?: string
+  @IsOptional() @IsString() birthPlace?: string
   @IsEnum(Gender) gender: Gender
   @IsDateString() birthDate: string
   @IsDateString() joinDate: string
   @IsEmail() email: string
   @IsOptional() @IsString() phoneNumber?: string
+  @IsOptional() @IsString() address?: string
   @IsEnum(EducationLevel) educationLevel: EducationLevel
   @IsInt() workLocationId: number
   @IsInt() jobRoleId: number
@@ -103,6 +106,7 @@ export class EmployeesService {
       where.OR = [
         { fullName: { contains: search, mode: 'insensitive' } },
         { employeeNo: { contains: search, mode: 'insensitive' } },
+        { nik: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
       ]
     }

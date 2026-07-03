@@ -35,6 +35,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get masterAdmin() { return this.client.masterAdmin }
   get userAccount() { return this.client.userAccount }
   get contract() { return this.client.contract }
+  get contractTemplate() { return this.client.contractTemplate }
   get contractDocument() { return this.client.contractDocument }
   get contractType() { return this.client.contractType }
   get department() { return this.client.department }

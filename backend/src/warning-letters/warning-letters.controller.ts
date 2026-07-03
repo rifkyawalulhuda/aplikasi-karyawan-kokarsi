@@ -1,6 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, Res, UseGuards, ParseIntPipe } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
-import { Response } from 'express'
 import { WarningLettersService, CreateWarningLetterDto, UpdateWarningLetterDto } from './warning-letters.service'
 import { PdfGeneratorService } from './pdf-generator.service'
 
@@ -31,7 +30,7 @@ export class WarningLettersController {
   }
 
   @Get(':id/generate')
-  async generate(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+  async generate(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
     const letter = await this.service.findOne(id)
     const buffer = await this.pdfGenerator.generateWarningLetter(letter)
 
@@ -41,7 +40,7 @@ export class WarningLettersController {
   }
 
   @Get(':id/preview')
-  async preview(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+  async preview(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
     const letter = await this.service.findOne(id)
     const buffer = await this.pdfGenerator.generateWarningLetter(letter)
 

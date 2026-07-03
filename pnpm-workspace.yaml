@@ -1,10 +1,11 @@
 allowBuilds:
   '@parcel/watcher': true
-  core-js: set this to true or false
+  core-js: true
   esbuild: true
   maplibre-gl: true
   unrs-resolver: true
   vue-demi: true
+confirmModulesPurge: false
 ignoredBuiltDependencies:
   - '@parcel/watcher'
   - '@tailwindcss/oxide'

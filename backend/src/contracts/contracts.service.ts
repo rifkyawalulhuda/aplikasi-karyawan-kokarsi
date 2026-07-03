@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { IsString, IsInt, IsDateString, IsOptional, IsEnum } from 'class-validator'
+import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber } from 'class-validator'
 import { ContractStatus } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 
@@ -10,7 +10,13 @@ export class CreateContractDto {
   @IsDateString() startDate: string
   @IsDateString() endDate: string
   @IsOptional() @IsInt() contractTypeId?: number
+  @IsOptional() @IsInt() templateId?: number
   @IsOptional() @IsEnum(ContractStatus) status?: ContractStatus
+  @IsOptional() @IsDateString() signedDate?: string
+  @IsOptional() @IsString() positionLabel?: string
+  @IsOptional() @IsString() workLocationLabel?: string
+  @IsOptional() @IsNumber() baseCompensation?: number
+  @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
 }
 
@@ -21,8 +27,28 @@ export class ContractsService {
   constructor(private prisma: PrismaService) {}
 
   private include = {
-    employee: { select: { id: true, employeeNo: true, fullName: true, employmentStatus: true } },
+    employee: {
+      select: {
+        id: true,
+        employeeNo: true,
+        fullName: true,
+        employmentStatus: true,
+        nik: true,
+        birthPlace: true,
+        address: true,
+      },
+    },
     contractType: { select: { id: true, name: true } },
+    template: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        family: true,
+        templateKey: true,
+        isActive: true,
+      },
+    },
   }
 
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
@@ -91,6 +117,7 @@ export class ContractsService {
         ...dto,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
+        signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
       },
       include: this.include,
     })
@@ -106,6 +133,7 @@ export class ContractsService {
         ...dto,
         startDate: new Date(dto.startDate),
         endDate: new Date(dto.endDate),
+        signedDate: dto.signedDate ? new Date(dto.signedDate) : null,
       },
       include: this.include,
     })

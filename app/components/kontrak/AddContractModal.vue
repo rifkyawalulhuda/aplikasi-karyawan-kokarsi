@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import type { ContractTemplate } from '~/types'
 
 interface EmployeeOption { label: string; value: number }
 interface LookupOption { label: string; value: number }
@@ -21,6 +22,9 @@ const { data: employeesRes } = await useFetch<{ data: { id: number; fullName: st
 })
 
 const { data: contractTypesRes } = await useFetch<{ id: number; name: string }[]>('/api/lookups/contract-types')
+const { data: contractTemplatesRes } = await useFetch<ContractTemplate[]>('/api/contract-templates', {
+  query: { activeOnly: true },
+})
 
 const employeeOptions = computed<EmployeeOption[]>(() =>
   (employeesRes.value?.data ?? []).map(e => ({
@@ -36,12 +40,24 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
+const contractTemplateOptions = computed<LookupOption[]>(() =>
+  (contractTemplatesRes.value ?? []).map(template => ({
+    label: `${template.name} (${template.family})`,
+    value: template.id,
+  })),
+)
+
 const schema = z.object({
   employeeId: z.number({ error: 'Karyawan wajib dipilih' }),
   contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
+  templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
+  signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
+  positionLabel: z.string().optional(),
+  workLocationLabel: z.string().optional(),
+  baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
   documentUrl: z.string().optional(),
 })
 
@@ -53,6 +69,11 @@ const state = reactive<Partial<Schema>>({
   startDate: '',
   endDate: '',
   contractTypeId: undefined,
+  templateId: undefined,
+  signedDate: '',
+  positionLabel: '',
+  workLocationLabel: '',
+  baseCompensation: undefined,
   documentUrl: '',
 })
 
@@ -80,6 +101,11 @@ function resetForm() {
   state.startDate = ''
   state.endDate = ''
   state.contractTypeId = undefined
+  state.templateId = undefined
+  state.signedDate = ''
+  state.positionLabel = ''
+  state.workLocationLabel = ''
+  state.baseCompensation = undefined
   state.documentUrl = ''
 }
 </script>
@@ -118,6 +144,33 @@ function resetForm() {
             class="w-full"
           />
         </UFormField>
+
+        <UFormField label="Template Dokumen" name="templateId" required>
+          <USelect
+            v-model="state.templateId"
+            :items="contractTemplateOptions"
+            placeholder="Pilih template kontrak..."
+            class="w-full"
+          />
+        </UFormField>
+
+        <div class="grid grid-cols-2 gap-3">
+          <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>
+            <UInput v-model="state.signedDate" type="date" class="w-full" />
+          </UFormField>
+          <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
+            <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
+          </UFormField>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <UFormField label="Label Posisi di Dokumen" name="positionLabel">
+            <UInput v-model="state.positionLabel" placeholder="Staff Admin" class="w-full" />
+          </UFormField>
+          <UFormField label="Label Lokasi Kerja di Dokumen" name="workLocationLabel">
+            <UInput v-model="state.workLocationLabel" placeholder="Head Office Jakarta" class="w-full" />
+          </UFormField>
+        </div>
 
         <UFormField label="URL Dokumen" name="documentUrl">
           <UInput v-model="state.documentUrl" placeholder="https://..." class="w-full" />

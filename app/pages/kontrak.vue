@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Contract, ContractStatus } from '~/types'
+import type { Contract, ContractDocumentPreview, ContractStatus } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -57,6 +57,11 @@ const addModal = ref(false)
 const editModal = ref(false)
 const editTarget = ref<Contract | null>(null)
 const deleteLoading = ref(false)
+const previewModal = ref(false)
+const previewLoading = ref(false)
+const previewContract = ref<Contract | null>(null)
+const previewData = ref<ContractDocumentPreview | null>(null)
+const previewPdfSrc = ref('')
 
 function openEdit(contract: Contract) {
   reopenHistoryAfterEdit.value = false
@@ -94,6 +99,60 @@ async function handleEditSaved() {
 
 function openDocument(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function openPreview(contract: Contract) {
+  previewContract.value = contract
+  previewModal.value = true
+  previewLoading.value = true
+  previewData.value = null
+  previewPdfSrc.value = ''
+
+  try {
+    previewData.value = await $fetch<ContractDocumentPreview>(`/api/contracts/${contract.id}/document-preview`)
+    if ((previewData.value?.missingFields?.length ?? 0) === 0) {
+      previewPdfSrc.value = `/api/contracts/${contract.id}/download-pdf?preview=${Date.now()}`
+    }
+  } catch (e: any) {
+    toast.add({
+      title: 'Gagal memuat preview dokumen',
+      description: e?.data?.message ?? 'Terjadi kesalahan',
+      color: 'error',
+    })
+    previewModal.value = false
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+async function generateContractDocument(contract: Contract) {
+  try {
+    const result = await $fetch<{ generatedPdfUrl?: string | null; pdfReady?: boolean; renderEngine?: 'PDF_NATIVE'; layoutMode?: 'LEGAL_PDF_TEMPLATE' }>(`/api/contracts/${contract.id}/generate-document`, {
+      method: 'POST',
+    })
+    toast.add({
+      title: result.pdfReady ? 'Dokumen kontrak berhasil digenerate' : 'Preview kontrak diproses',
+      description: result.pdfReady
+        ? 'Dokumen memakai generator PDF native dan siap ditinjau atau diunduh.'
+        : 'Dokumen kontrak sedang diproses.',
+      color: 'success',
+    })
+    await refresh()
+    if (previewContract.value?.id === contract.id) {
+      await openPreview(contract)
+    }
+  } catch (e: any) {
+    const missing = e?.data?.missingFields
+    toast.add({
+      title: 'Gagal generate dokumen',
+      description: Array.isArray(missing) ? `Lengkapi dulu: ${missing.join(', ')}` : e?.data?.message ?? 'Terjadi kesalahan',
+      color: 'error',
+    })
+  }
+}
+
+function downloadGenerated(contract: Contract, format: 'pdf') {
+  window.open(`/api/contracts/${contract.id}/download-${format}`, '_blank', 'noopener,noreferrer')
 }
 
 function confirmDelete(contract: Contract) {
@@ -190,6 +249,16 @@ function getRowItems(row: Row<Contract>) {
   return [
     { type: 'label', label: 'Aksi' },
     {
+      label: 'Preview Dokumen',
+      icon: 'i-lucide-file-search',
+      onSelect() { openPreview(row.original) }
+    },
+    {
+      label: 'Generate Dokumen',
+      icon: 'i-lucide-file-cog',
+      onSelect() { generateContractDocument(row.original) }
+    },
+    {
       label: 'Riwayat Karyawan',
       icon: 'i-lucide-history',
       onSelect() { openHistory(row.original) }
@@ -200,11 +269,10 @@ function getRowItems(row: Row<Contract>) {
       onSelect() { openEdit(row.original) }
     },
     {
-      label: 'Unduh Dokumen',
+      label: 'Unduh PDF',
       icon: 'i-lucide-download',
-      disabled: !row.original.documentUrl,
       onSelect() {
-        if (row.original.documentUrl) window.open(row.original.documentUrl, '_blank')
+        downloadGenerated(row.original, 'pdf')
       }
     },
     { type: 'separator' },
@@ -547,6 +615,108 @@ watch([statusFilter, searchQuery], () => {
       </div>
       <div v-else class="text-sm text-muted">
         Belum ada karyawan yang dipilih.
+      </div>
+    </template>
+  </UModal>
+
+  <UModal
+    v-model:open="previewModal"
+    title="Preview Dokumen Kontrak"
+    :ui="{ content: 'max-w-5xl h-[90vh]' }"
+  >
+    <template #body>
+      <div class="flex items-center justify-between gap-3 border-b border-default pb-3 mb-3">
+        <div class="min-w-0">
+          <p class="font-semibold text-highlighted truncate">
+            {{ previewContract?.contractNo ?? 'Preview Dokumen' }}
+          </p>
+          <p class="text-sm text-muted truncate">
+            {{ previewContract?.employee?.fullName ?? '-' }}
+          </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <UButton
+            label="Generate Ulang"
+            icon="i-lucide-file-cog"
+            color="neutral"
+            variant="subtle"
+            :disabled="!previewContract"
+            @click="previewContract && generateContractDocument(previewContract)"
+          />
+          <UButton
+            label="Unduh PDF"
+            icon="i-lucide-download"
+            color="primary"
+            :disabled="!previewContract"
+            @click="previewContract && downloadGenerated(previewContract, 'pdf')"
+          />
+        </div>
+      </div>
+
+      <div class="h-[calc(90vh-8rem)] rounded-xl border border-default bg-elevated/30 overflow-auto p-4 md:p-6">
+        <div v-if="previewLoading" class="flex h-full items-center justify-center">
+          <UIcon name="i-lucide-loader-circle" class="w-8 h-8 text-muted animate-spin" />
+        </div>
+
+        <div v-else-if="previewData" class="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
+          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_360px]">
+            <div class="rounded-2xl border border-default bg-default p-2 shadow-sm">
+              <div v-if="previewData.missingFields.length" class="flex h-[calc(90vh-15rem)] items-center justify-center rounded-xl border border-dashed border-warning/40 bg-warning/10 p-6 text-center text-sm text-warning">
+                Lengkapi dulu data berikut sebelum preview PDF final bisa ditampilkan:
+                {{ previewData.missingFields.join(', ') }}.
+              </div>
+              <iframe
+                v-else
+                :src="previewPdfSrc"
+                class="h-[calc(90vh-15rem)] w-full rounded-xl bg-white"
+                title="Preview PDF Kontrak"
+              />
+            </div>
+
+            <div class="space-y-3">
+              <div class="rounded-2xl border border-info/30 bg-info/10 p-4 text-sm text-info">
+                <p class="font-semibold">Generator PDF Native</p>
+                <p class="mt-1 text-slate-700">
+                  Dokumen digenerate langsung dari sistem dan mengacu pada sample PDF legal internal.
+                </p>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <UBadge color="info" variant="subtle">{{ previewData.renderEngine }}</UBadge>
+                  <UBadge color="neutral" variant="subtle">{{ previewData.layoutMode }}</UBadge>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-default bg-default p-4 text-sm">
+                <p class="font-semibold text-highlighted">Template Referensi</p>
+                <p class="mt-2">{{ previewData.template.name ?? 'Template kontrak' }}</p>
+                <p v-if="previewData.template.templateKey" class="text-muted">
+                  Key: {{ previewData.template.templateKey }}
+                </p>
+                <p v-if="previewData.template.sourceTemplateRelativePath" class="mt-2 break-all text-muted">
+                  Referensi PDF: {{ previewData.template.sourceTemplateRelativePath }}
+                </p>
+                <p v-if="previewData.template.fidelityNote" class="mt-2 text-muted">
+                  {{ previewData.template.fidelityNote }}
+                </p>
+              </div>
+
+              <div class="rounded-2xl border border-default bg-default p-4 text-sm">
+                <p class="font-semibold text-highlighted">Ringkasan Data</p>
+                <div class="mt-3 space-y-2 text-muted">
+                  <p><span class="text-highlighted">Karyawan:</span> {{ previewData.employee.fullName }}</p>
+                  <p><span class="text-highlighted">No. Induk:</span> {{ previewData.employee.employeeNo }}</p>
+                  <p><span class="text-highlighted">Posisi:</span> {{ previewData.contract.positionLabel }}</p>
+                  <p><span class="text-highlighted">Lokasi:</span> {{ previewData.contract.locationLabel }}</p>
+                  <p><span class="text-highlighted">Periode:</span> {{ previewData.contract.startDate }} - {{ previewData.contract.endDate }}</p>
+                  <p><span class="text-highlighted">{{ previewData.compensationLabel }}:</span> {{ previewData.contract.compensation }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="flex h-full items-center justify-center text-sm text-muted">
+          Preview dokumen belum tersedia.
+        </div>
       </div>
     </template>
   </UModal>
