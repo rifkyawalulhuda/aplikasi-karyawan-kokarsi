@@ -36,6 +36,53 @@ const userItems = computed(() =>
 
 const selectedEmployee = ref<Employee | null>(null)
 
+interface EscalationStatus {
+  employeeId: number
+  highestActiveLevel: number
+  allowedLevels: number[]
+  defaultLevel: number | null
+  blocked: boolean
+  message: string
+  activeLetters: Array<{ id: number; letterNumber: string; warningLevel: number; letterDate: string; validUntil: string }>
+}
+
+const escalation = ref<EscalationStatus | null>(null)
+const escalationLoading = ref(false)
+
+const warningLevelItems = computed(() => {
+  const allowed = escalation.value?.allowedLevels ?? [1, 2, 3]
+  return [
+    { label: 'SP 1', value: 1, disabled: !allowed.includes(1) },
+    { label: 'SP 2', value: 2, disabled: !allowed.includes(2) },
+    { label: 'SP 3', value: 3, disabled: !allowed.includes(3) },
+  ]
+})
+
+const isBlocked = computed(() => escalation.value?.blocked ?? false)
+
+async function loadEscalation(employeeId: number) {
+  escalationLoading.value = true
+  escalation.value = null
+  try {
+    const status = await $fetch<EscalationStatus>(`/api/warning-letters/escalation/${employeeId}`, {
+      credentials: 'include',
+    })
+    escalation.value = status
+    // Apply default level from escalation rule
+    if (status.blocked) {
+      state.warningLevel = undefined
+    } else if (status.defaultLevel != null) {
+      state.warningLevel = status.defaultLevel
+    } else if (state.warningLevel != null && !status.allowedLevels.includes(state.warningLevel)) {
+      state.warningLevel = undefined
+    }
+  } catch {
+    escalation.value = null
+  } finally {
+    escalationLoading.value = false
+  }
+}
+
 const schema = z.object({
   letterNumber: z.string().min(1, 'Nomor surat wajib diisi'),
   employeeId: z.number({ error: 'Karyawan wajib dipilih' }),
@@ -90,6 +137,11 @@ watch(() => state.letterDate, (date) => {
 
 function onEmployeeChange(id: number | undefined) {
   selectedEmployee.value = employees.value.find(e => e.id === id) ?? null
+  if (id != null) {
+    loadEscalation(id)
+  } else {
+    escalation.value = null
+  }
 }
 
 function addViolation() {
@@ -140,6 +192,7 @@ function resetForm() {
   state.processedById = undefined
   state.processedByName = ''
   selectedEmployee.value = null
+  escalation.value = null
 }
 </script>
 
@@ -200,16 +253,31 @@ function resetForm() {
           </div>
         </UFormField>
 
+        <!-- Info eskalasi / blokir SP -->
+        <UAlert
+          v-if="selectedEmployee && isBlocked"
+          color="error"
+          variant="subtle"
+          icon="i-lucide-ban"
+          title="Pembuatan SP diblokir"
+          :description="escalation?.message"
+        />
+        <UAlert
+          v-else-if="selectedEmployee && escalation && escalation.highestActiveLevel > 0"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-triangle-alert"
+          :title="`Karyawan masih memiliki SP${escalation.highestActiveLevel} aktif`"
+          :description="`Sesuai rule eskalasi, level peringatan yang tersedia: ${escalation.allowedLevels.map(l => 'SP' + l).join(', ')}.`"
+        />
+
         <UFormField label="Level Peringatan" name="warningLevel" required>
           <USelect
             v-model="state.warningLevel"
-            :items="[
-              { label: 'SP 1', value: 1 },
-              { label: 'SP 2', value: 2 },
-              { label: 'SP 3', value: 3 },
-            ]"
+            :items="warningLevelItems"
             placeholder="Pilih level..."
             class="w-full"
+            :disabled="isBlocked || escalationLoading"
           />
         </UFormField>
 
@@ -239,7 +307,7 @@ function resetForm() {
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />
-          <UButton type="submit" label="Simpan" color="primary" :loading="loading" />
+          <UButton type="submit" label="Simpan" color="primary" :loading="loading" :disabled="isBlocked" />
         </div>
       </UForm>
     </template>

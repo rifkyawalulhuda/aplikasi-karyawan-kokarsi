@@ -24,6 +24,11 @@ export class WarningLettersController {
     )
   }
 
+  @Get('escalation/:employeeId')
+  getEscalationStatus(@Param('employeeId', ParseIntPipe) employeeId: number) {
+    return this.service.getEscalationStatus(employeeId)
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)
