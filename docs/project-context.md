@@ -1,6 +1,6 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-03 (v4) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-03 (v5) | Stack: Nuxt 3 + NestJS + PostgreSQL
 
 ---
 
@@ -73,10 +73,13 @@ npx tsc -p tsconfig.json
 | 22 | Auto-calculate "Berlaku Sampai" (6 bulan dari Tanggal Surat) + field read-only | `app/components/warning-letters/AddModal.vue` |
 | 23 | Endpoint pengurus koperasi (tanpa admin-only guard) untuk dropdown | `backend/src/users/users.controller.ts`, `server/api/users/pengurus.get.ts` |
 | 24 | Fondasi template dokumen kontrak otomatis: master template, preview, generate DOCX/PDF, dan field legal kontrak | `backend/src/contracts/`, `backend/src/contract-templates/`, `app/pages/kontrak.vue`, `app/pages/settings/contract-templates.vue` |
-| 25 | Generator dokumen kontrak langsung ke PDF native (pdfkit), tanpa template DOCX atau LibreOffice | `backend/src/contracts/contract-document.service.ts` |
-| 26 | Layout PDF kontrak: 2 kolom paralel (ID/EN) untuk PKWT, sequential untuk MITRA | `backend/src/contracts/contract-document.service.ts` |
-| 27 | Dashboard admin untuk melihat status kesiapan template kontrak dan menyiapkan starter template otomatis | `app/pages/index.vue`, `backend/src/contract-templates/contract-template-assets.service.ts`, `server/api/contract-templates/system-status/` |
----
+|| 25 | Generator dokumen kontrak langsung ke PDF native (pdfkit), tanpa template DOCX atau LibreOffice | `backend/src/contracts/contract-document.service.ts` |
+|| 26 | Layout PDF kontrak: 2 kolom paralel (ID/EN) untuk PKWT, single column untuk MITRA | `backend/src/contracts/contract-document.service.ts` |
+|| 27 | PDF PKWT 1:1 dengan sample: 11 pasal bilingual, terminologi Perusahaan/Karyawan, font Times New Roman, data dinamis (tanggal mulai/akhir, upah) | `backend/src/contracts/contract-document.service.ts`, `backend/src/contracts/contract-document-definitions.ts` |
+|| 28 | PDF MITRA: preambule detail (akta pendirian, keputusan kementerian, identitas mitra), single column full-width | `backend/src/contracts/contract-document.service.ts` |
+|| 29 | Signature block: table box 2-kolom dengan border, nama uppercase+bold+underline, role label (KARYAWAN/KETUA KOPERASI) | `backend/src/contracts/contract-document.service.ts` |
+|| 30 | Multi-page layout fix: title block hanya di halaman 1, border kolom menyesuaikan tinggi konten, no blank gap di halaman 2+ | `backend/src/contracts/contract-document.service.ts` |
+|---
 
 ## Arsitektur
 
@@ -108,8 +111,20 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit) — tidak ada depend
 - Master data template kontrak (`ContractTemplate`) terhubung ke kontrak karyawan
 - Preview kontrak menampilkan metadata template legal, status missing field, dan susunan generator
 - Generate dokumen menghasilkan PDF langsung dari kode (tanpa template DOCX atau LibreOffice)
-- Layout PDF: 2 kolom paralel (ID/EN) untuk PKWT, sequential untuk MITRA, signature page di halaman akhir
-- Admin bisa memantau kesiapan template dari Dashboard
+
+**Layout PDF PKWT (Kesepakatan Kerja Waktu Tertentu):**
+- 2 kolom paralel bilingual (Indonesia kiri, English kanan) dengan border vertikal
+- Font Times New Roman, terminologi "Perusahaan/Karyawan" (bukan PIHAK PERTAMA/PIHAK KEDUA)
+- 11 pasal lengkap dengan data dinamis: tanggal mulai/akhir, nominal upah
+- Title block hanya di halaman 1, halaman berikutnya langsung header + konten
+- Border kolom menyesuaikan tinggi konten (tidak full-page height)
+- Closing paragraph bilingual di luar border kolom
+- Signature block: table box 2-kolom dengan border, nama uppercase+bold+underline, role label (KARYAWAN/KETUA KOPERASI)
+
+**Layout PDF MITRA (Perjanjian Kemitraan):**
+- Single column full-width (tanpa border)
+- Preambule detail: akta pendirian, keputusan kementerian, identitas mitra lengkap
+- Closing paragraph dan signature di halaman terpisah
 
 ### Status Kepegawaian Otomatis
 Status kepegawaian tidak lagi diinput manual di form karyawan.

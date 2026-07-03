@@ -74,6 +74,9 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - Sistem dapat melakukan **preview dokumen kontrak** sebelum unduh/generate final
 - Sistem dapat menghasilkan **PDF native** langsung dari kode (pdfkit), tanpa template DOCX atau LibreOffice
 - Sample legal asli (`.doc`) hanya digunakan sebagai referensi visual untuk layout PDF, tidak lagi sebagai template runtime
+- **PKWT**: 2 kolom paralel bilingual (ID/EN), 11 pasal, font Times New Roman, terminologi Perusahaan/Karyawan, data dinamis (tanggal mulai/akhir, nominal upah), signature table box dengan border
+- **MITRA**: single column full-width, preambule detail (akta pendirian, identitas mitra), signature di halaman terpisah
+- Multi-page layout: title block hanya di halaman 1, border kolom menyesuaikan tinggi konten (no blank gap)
 
 ### 4.3 Status & Validitas
 - Filter & search karyawan berdasarkan status (`AKTIF` / `KONTRAK_EXPIRED` / `RESIGN` / `PHK`)
@@ -244,6 +247,10 @@ CREATE TABLE employee_offboarding (
 | FR-12 | Halaman detail karyawan global dengan biodata, offboarding, dan kontrak    | P1        |
 | FR-13 | Preview dan generate dokumen kontrak otomatis berbasis template            | P1        |
 | FR-14 | Generator PDF native langsung dari kode (pdfkit), tanpa dependency DOCX/LibreOffice | P1        |
+| FR-15 | Layout PDF PKWT 1:1 dengan sample: 11 pasal bilingual, terminologi Perusahaan/Karyawan, font Times New Roman | P1        |
+| FR-16 | Layout PDF MITRA: preambule detail, single column full-width | P1        |
+| FR-17 | Signature block dengan table box border, nama uppercase+bold+underline | P1        |
+| FR-18 | Multi-page layout fix: no blank gap di halaman 2+ | P1        |
 
 ---
 

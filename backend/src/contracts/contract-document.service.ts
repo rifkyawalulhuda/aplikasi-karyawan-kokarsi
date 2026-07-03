@@ -513,13 +513,14 @@ export class ContractDocumentService {
     })
   }
 
-  private buildLayoutContext(doc: any, headerBottomY: number): LayoutContext {
+  private buildLayoutContext(doc: any, headerBottomY: number, hasTitleBlock: boolean = false): LayoutContext {
     const pageWidth = doc.page.width
     const pageHeight = doc.page.height
     const leftX = 34
     const rightX = 310
     const columnWidth = 252
-    const topY = headerBottomY + 108
+    // On first page (with title block), content starts lower. On subsequent pages, start right after header.
+    const topY = hasTitleBlock ? headerBottomY + 108 : headerBottomY + 20
     const bottomY = pageHeight - 72
 
     return {
@@ -621,7 +622,7 @@ export class ContractDocumentService {
         this.drawTitleBlock(doc, payload, headerBottomY)
       }
       
-      const layout = this.buildLayoutContext(doc, headerBottomY)
+      const layout = this.buildLayoutContext(doc, headerBottomY, firstPage)
 
       let leftY = layout.topY
       while (leftIndex < leftBlocks.length) {
