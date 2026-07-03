@@ -22,6 +22,7 @@ const editTarget = ref<WarningLetter | null>(null)
 const previewModal = ref(false)
 const previewTarget = ref<WarningLetter | null>(null)
 const previewLoading = ref(false)
+const previewPdfSrc = ref('')
 
 const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLetter[]; total: number }>('/api/warning-letters', {
   query: { limit: 999 },
@@ -40,10 +41,6 @@ const counts = computed(() => ({
 
 function formatDate(date: string) {
   return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function formatLongDate(date: string) {
-  return new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function getSearchTokens(letter: WarningLetter) {
@@ -171,12 +168,15 @@ function openEdit(letter: WarningLetter) {
 function closePreview() {
   previewTarget.value = null
   previewLoading.value = false
+  previewPdfSrc.value = ''
   previewModal.value = false
 }
 
 async function openPreview(letter: WarningLetter) {
   previewTarget.value = letter
   previewLoading.value = false
+  // PdfViewer will fetch and render this URL to canvas
+  previewPdfSrc.value = `/api/warning-letters/${letter.id}/preview?preview=${Date.now()}`
   previewModal.value = true
 }
 
@@ -406,112 +406,8 @@ const columns: TableColumn<WarningLetter>[] = [
       </div>
 
       <div class="h-[calc(90vh-8rem)] rounded-xl border border-default bg-elevated/30 overflow-auto p-4 md:p-6">
-        <div v-if="previewLoading" class="flex h-full items-center justify-center">
-          <UIcon name="i-lucide-loader-circle" class="w-8 h-8 text-muted animate-spin" />
-        </div>
-        <div
-          v-else-if="previewTarget"
-          class="mx-auto w-full max-w-[794px] rounded-[20px] border border-slate-200 bg-[#f4f1ea] p-3 shadow-[0_20px_50px_rgba(15,23,42,0.12)]"
-        >
-          <div
-            class="min-h-[1123px] rounded-[16px] bg-white px-5 py-6 text-slate-950 md:px-9 md:py-7"
-            style="font-family: Calibri, Arial, sans-serif;"
-          >
-            <div class="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-4">
-              <div class="flex h-[86px] w-[88px] items-center justify-center rounded-full border border-slate-300 text-center">
-                <div class="leading-tight">
-                  <p class="text-[11px] font-semibold tracking-[0.18em] text-slate-700">KK</p>
-                  <p class="text-[9px] uppercase tracking-[0.12em] text-slate-500">Kokarsi</p>
-                </div>
-              </div>
-              <div class="pt-1 text-center text-slate-950" style="font-family: 'Times New Roman', serif;">
-                <p class="text-[21px] font-bold uppercase leading-none">KOPERASI KARYAWAN</p>
-                <p class="mt-2 text-[21px] font-bold uppercase leading-none">PT. SANKYU INDONESIA INTERNASIONAL</p>
-                <p class="mt-2 text-[21px] font-bold uppercase leading-none">UNIT KANTOR PUSAT</p>
-                <div class="mt-3 text-[14px] leading-[1.2] text-slate-800">
-                  <p>Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20</p>
-                  <p class="mt-1">GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330</p>
-                  <p class="mt-1">TELP. 021 - 50555340, FAX. 021- 50555341</p>
-                </div>
-              </div>
-            </div>
-
-            <div class="mt-4 border-t border-slate-900" />
-
-            <div class="mt-4 text-center">
-              <h3 class="text-[18px] font-bold uppercase tracking-[0.02em]">
-                SURAT PERINGATAN KARYAWAN
-              </h3>
-              <p class="mt-1 text-[16px] font-bold">
-                No : {{ previewTarget.letterNumber }}
-              </p>
-            </div>
-
-            <div class="mx-auto mt-10 max-w-[640px] text-[16px] leading-[1.45]">
-              <p>Surat peringatan ini di tujukan kepada&nbsp;&nbsp;:</p>
-
-              <div class="mt-6 grid grid-cols-[120px_20px_minmax(0,1fr)] gap-y-3">
-                <div>Nama</div>
-                <div>:</div>
-                <div>{{ previewTarget.employee?.fullName ?? '-' }}</div>
-
-                <div>NIK</div>
-                <div>:</div>
-                <div>{{ previewTarget.employee?.employeeNo ?? '-' }}</div>
-
-                <div>Jabatan</div>
-                <div>:</div>
-                <div>{{ previewTarget.employee?.jobRole?.name ?? '-' }}</div>
-
-                <div class="self-start">Jenis Pelanggaran</div>
-                <div class="self-start">:</div>
-                <div />
-              </div>
-
-              <div class="mt-3 space-y-3">
-                <template v-if="previewTarget.violationType?.length">
-                  <p
-                    v-for="(violation, index) in previewTarget.violationType"
-                    :key="`${previewTarget.id}-violation-${index}`"
-                    class="text-justify"
-                  >
-                    {{ index + 1 }}. {{ violation }}
-                  </p>
-                </template>
-                <p v-else>-</p>
-              </div>
-
-              <p class="mt-5 text-justify">
-                Surat peringatan ini diterbitkan berdasarkan kesalahan yang telah saudara {{ previewTarget.employee?.fullName ?? '-' }} lakukan.
-                Oleh karena itu perusahaan memberikan Surat Peringatan Ke {{ previewTarget.warningLevel }}, hal ini bertujuan untuk dapat
-                memberikan arahan serta peringatan terhadap saudara agar mematuhi tata tertib perusahaan dan tidak melakukan kesalahan lagi
-                yang dapat merugikan perusahaan.
-              </p>
-
-              <p class="mt-6 text-justify">
-                Surat peringatan ini berlaku semenjak di terbitkan sampai dengan {{ formatLongDate(previewTarget.validUntil) }}.
-                Surat peringatan ini dibuat agar dapat diperhatikan dan ditaati oleh yang bersangkutan.
-              </p>
-
-              <div class="mt-16">
-                <p>Bekasi, {{ formatLongDate(previewTarget.letterDate) }}</p>
-
-                <div class="mt-16 grid grid-cols-2 gap-16 text-center">
-                  <div>
-                    <p>Penerima SP</p>
-                    <p class="mt-24">( {{ previewTarget.employee?.fullName ?? '-' }} )</p>
-                  </div>
-                  <div>
-                    <p>Pengurus Koperasi</p>
-                    <p class="mt-24">( {{ previewTarget.processedByName || '-' }} )</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="flex h-full items-center justify-center text-sm text-muted">
-          Preview tidak tersedia.
+        <div class="mx-auto h-full w-full max-w-[794px] rounded-xl bg-white p-2">
+          <PdfViewer v-if="previewPdfSrc" :src="previewPdfSrc" />
         </div>
       </div>
     </template>
