@@ -280,18 +280,17 @@ export class ContractDocumentService {
         gapAfter: 8,
       },
       {
-        text: [
-          `II. Nama          : ${payload.employee.fullName}`,
-          `Tgl. Lahir    : ${payload.employee.birthPlace ?? '-'}, ${this.formatDate(payload.employee.birthDate)}`,
-          `Jenis Kelamin : ${genderLabel}`,
-          `Alamat        : ${payload.employee.address ?? '-'}`,
-          '',
-          'Selanjutnya disebut KARYAWAN',
-        ].join('\n'),
+        text: '__PARTY_II_BLOCK__',
         font: 'Times-Bold',
         fontSize: 10.2,
         gapAfter: 10,
-      },
+        partyII: {
+          name: payload.employee.fullName,
+          birthInfo: `${payload.employee.birthPlace ?? '-'}, ${this.formatDate(payload.employee.birthDate)}`,
+          gender: genderLabel,
+          address: payload.employee.address ?? '-',
+        },
+      } as any,
       {
         text: 'Kedua belah pihak telah menyetujui untuk mengadakan Kesepakatan Kerja untuk Waktu Tertentu dengan syarat-syarat sebagai berikut:',
         font: 'Times-Roman',
@@ -352,18 +351,19 @@ export class ContractDocumentService {
         gapAfter: 8,
       },
       {
-        text: [
-          `II. Name        : ${payload.employee.fullName}`,
-          `Birth date  : ${payload.employee.birthPlace ?? '-'}, ${this.formatEnglishDate(payload.employee.birthDate)}`,
-          `Gender      : ${genderLabel}`,
-          `Address     : ${payload.employee.address ?? '-'}`,
-          '',
-          'Hereinafter refer to EMPLOYEE',
-        ].join('\n'),
+        text: '__PARTY_II_BLOCK__',
         font: 'Times-Bold',
         fontSize: 10.2,
         gapAfter: 10,
-      },
+        partyII: {
+          name: payload.employee.fullName,
+          birthInfo: `${payload.employee.birthPlace ?? '-'}, ${this.formatEnglishDate(payload.employee.birthDate)}`,
+          gender: genderLabel,
+          address: payload.employee.address ?? '-',
+          labels: ['Name', 'Birth date', 'Gender', 'Address'],
+          suffix: 'Hereinafter refer to EMPLOYEE',
+        },
+      } as any,
       {
         text: 'Both parties have been agreed to engage Stated Periods Labour Agreement by requirements as follows :',
         font: 'Times-Roman',
@@ -593,6 +593,42 @@ export class ContractDocumentService {
   ) {
     const effectiveY = y + (block.gapBefore ?? 0)
     doc.font(block.font).fontSize(block.fontSize)
+
+    // Special handling for party II tabular block
+    const anyBlock = block as any
+    if (anyBlock.partyII) {
+      const data = anyBlock.partyII
+      const labelX = x + 18 // indent after "II."
+      const colonX = x + 100 // fixed colon position
+      const valueX = x + 108 // value starts after ": "
+      const lineHeight = 14
+
+      let currentY = effectiveY
+
+      // "II." prefix
+      doc.text('II.', x, currentY)
+
+      // Determine labels (Indonesian or English)
+      const labels = data.labels ?? ['Nama', 'Tgl. Lahir', 'Jenis Kelamin', 'Alamat']
+      const values = [data.name, data.birthInfo, data.gender, data.address]
+      const suffix = data.suffix ?? 'Selanjutnya disebut KARYAWAN'
+
+      // Render each row
+      for (let i = 0; i < labels.length; i++) {
+        doc.text(labels[i], labelX, currentY)
+        doc.text(':', colonX, currentY)
+        doc.text(values[i], valueX, currentY, { width: width - (valueX - x) })
+        currentY += lineHeight
+      }
+
+      // Empty line + suffix
+      currentY += 6
+      doc.text(suffix, x + 18, currentY, { width })
+      currentY += lineHeight
+
+      return currentY + (block.gapAfter ?? 0)
+    }
+
     const height = doc.heightOfString(block.text, {
       width,
       align: block.align ?? 'left',
@@ -637,11 +673,18 @@ export class ContractDocumentService {
         const block = leftBlocks[leftIndex]
         const testY = leftY + (block.gapBefore ?? 0)
         doc.font(block.font).fontSize(block.fontSize)
-        const height = doc.heightOfString(block.text, {
-          width: layout.columnWidth,
-          align: block.align ?? 'left',
-          lineGap: 2,
-        })
+        // Special height estimation for partyII tabular block
+        const anyBlock = block as any
+        let height: number
+        if (anyBlock.partyII) {
+          height = 14 * 4 + 6 + 14 // 4 rows + gap + "Selanjutnya" line
+        } else {
+          height = doc.heightOfString(block.text, {
+            width: layout.columnWidth,
+            align: block.align ?? 'left',
+            lineGap: 2,
+          })
+        }
         if (testY + height > layout.bottomY) break
         leftY = this.renderBlockInColumn(doc, block, layout.leftX, leftY, layout.columnWidth)
         leftIndex += 1
@@ -652,11 +695,17 @@ export class ContractDocumentService {
         const block = rightBlocks[rightIndex]
         const testY = rightY + (block.gapBefore ?? 0)
         doc.font(block.font).fontSize(block.fontSize)
-        const height = doc.heightOfString(block.text, {
-          width: layout.columnWidth,
-          align: block.align ?? 'left',
-          lineGap: 2,
-        })
+        const anyRBlock = block as any
+        let height: number
+        if (anyRBlock.partyII) {
+          height = 14 * 4 + 6 + 14
+        } else {
+          height = doc.heightOfString(block.text, {
+            width: layout.columnWidth,
+            align: block.align ?? 'left',
+            lineGap: 2,
+          })
+        }
         if (testY + height > layout.bottomY) break
         rightY = this.renderBlockInColumn(doc, block, layout.rightX, rightY, layout.columnWidth)
         rightIndex += 1
