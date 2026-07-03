@@ -48,15 +48,36 @@ export class ContractsController {
 
   @Get(':id/download-pdf')
   async downloadPdf(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
-    const result = await this.contractDocumentService.generate(id)
+    const { join } = require('path')
+    const { readFileSync, existsSync } = require('fs')
+
+    // First try serving existing generated PDF without re-generating
     const contract = await this.service.findOne(id)
-    const target = result.generatedPdfUrl ?? contract.generatedPdfUrl
+    if (contract.generatedPdfUrl) {
+      const existingPath = join(process.cwd(), contract.generatedPdfUrl)
+      if (existsSync(existingPath)) {
+        const pdfBuffer = readFileSync(existingPath)
+        res.setHeader('Content-Type', 'application/pdf')
+        res.setHeader('Content-Disposition', 'inline; filename="contract.pdf"')
+        res.send(pdfBuffer)
+        return
+      }
+    }
+
+    // Otherwise generate fresh
+    const result = await this.contractDocumentService.generate(id)
+    const target = result.generatedPdfUrl
     if (!target) {
       throw new BadRequestException('PDF belum tersedia. Coba generate ulang dokumen kontrak.')
     }
-    res.status(302)
-    res.setHeader('Location', target)
-    return res.end()
+    const filePath = join(process.cwd(), target)
+    if (!existsSync(filePath)) {
+      throw new BadRequestException('File PDF tidak ditemukan di server.')
+    }
+    const pdfBuffer = readFileSync(filePath)
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'inline; filename="contract.pdf"')
+    res.send(pdfBuffer)
   }
 
   @Post()

@@ -25,6 +25,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "nuxt": "^4.4.6",
+    "pdfjs-dist": "^6.1.200",
     "pinia": "^3.0.4",
     "scule": "^1.3.0",
     "tailwindcss": "^4.3.0",

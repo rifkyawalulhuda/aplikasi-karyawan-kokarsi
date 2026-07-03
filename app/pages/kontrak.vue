@@ -111,6 +111,7 @@ async function openPreview(contract: Contract) {
   try {
     previewData.value = await $fetch<ContractDocumentPreview>(`/api/contracts/${contract.id}/document-preview`)
     if ((previewData.value?.missingFields?.length ?? 0) === 0) {
+      // PdfViewer will fetch and render this URL to canvas
       previewPdfSrc.value = `/api/contracts/${contract.id}/download-pdf?preview=${Date.now()}`
     }
   } catch (e: any) {
@@ -665,12 +666,9 @@ watch([statusFilter, searchQuery], () => {
                 Lengkapi dulu data berikut sebelum preview PDF final bisa ditampilkan:
                 {{ previewData.missingFields.join(', ') }}.
               </div>
-              <iframe
-                v-else
-                :src="previewPdfSrc"
-                class="h-[calc(90vh-15rem)] w-full rounded-xl bg-white"
-                title="Preview PDF Kontrak"
-              />
+              <div v-else class="h-[calc(90vh-15rem)] w-full rounded-xl bg-white p-2">
+                <PdfViewer v-if="previewPdfSrc" :src="previewPdfSrc" />
+              </div>
             </div>
 
             <div class="space-y-3">
