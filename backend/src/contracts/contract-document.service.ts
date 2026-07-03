@@ -11,6 +11,13 @@ type HeaderVariant = 'PKWT' | 'MITRA'
 
 type TextAlign = 'left' | 'center' | 'justify'
 
+interface SignaturePillar {
+  header: string
+  org?: string
+  name: string
+  role: string
+}
+
 interface TextBlock {
   text: string
   font: string
@@ -18,6 +25,7 @@ interface TextBlock {
   align?: TextAlign
   gapBefore?: number
   gapAfter?: number
+  sigPillar?: SignaturePillar
 }
 
 interface LayoutContext {
@@ -484,7 +492,7 @@ export class ContractDocumentService {
       }
     }
 
-    // === Penutup ===
+    // === Penutup === (tanda tangan ditangani terpisah sebagai dua pilar di renderMitraPdf)
     addPara('Demikian Perjanjian ini dibuat dalam 2 (dua) rangkap serta bermeterai cukup dan masing-masing mempunyai kekuatan hukum yang sama. Perjanjian ini ditandatangani oleh Para Pihak untuk dipedomani sebagaimana mestinya.', { gapBefore: 8 })
 
     return blocks
@@ -586,7 +594,7 @@ export class ContractDocumentService {
       doc.text(payload.definition.title.toUpperCase(), 0, headerBottomY + 36, { width: doc.page.width, align: 'center' })
       doc.font('Times-Roman').fontSize(12)
       doc.text(`Nomor: ${payload.meta.contractNo}`, 0, headerBottomY + 58, { width: doc.page.width, align: 'center' })
-      doc.text(`Tanggal ${payload.meta.signedDate}`, 0, headerBottomY + 76, { width: doc.page.width, align: 'center' })
+      doc.text(`Tanggal: ${payload.meta.signedDate}`, 0, headerBottomY + 76, { width: doc.page.width, align: 'center' })
     }
   }
 
@@ -916,7 +924,10 @@ export class ContractDocumentService {
     this.renderParallelColumns(doc, payload)
   }
 
+  private readonly MITRA_SIG_HEIGHT = 104
+
   private measureBlockHeight(doc: any, block: TextBlock, width: number): number {
+    if (block.sigPillar) return this.MITRA_SIG_HEIGHT
     doc.font(block.font).fontSize(block.fontSize)
     return doc.heightOfString(block.text, {
       width,
@@ -925,8 +936,35 @@ export class ContractDocumentService {
     })
   }
 
+  // Render satu pilar tanda tangan (single column, centered). Offset baris fixed
+  // agar nama pada pilar kiri & kanan sejajar meski pilar kanan tanpa baris organisasi.
+  private renderMitraSignaturePillar(doc: any, sig: SignaturePillar, x: number, y: number, width: number): number {
+    doc.font('Times-Bold').fontSize(10)
+    doc.text(sig.header, x, y, { width, align: 'center' })
+
+    if (sig.org) {
+      doc.font('Times-Bold').fontSize(9)
+      doc.text(sig.org, x, y + 14, { width, align: 'center' })
+    }
+
+    // Nama penandatangan (bold) pada offset tetap, memberi ruang tanda tangan di atasnya
+    doc.font('Times-Bold').fontSize(10)
+    doc.text(sig.name, x, y + 78, { width, align: 'center' })
+
+    doc.font('Times-Roman').fontSize(9)
+    doc.text(sig.role, x, y + 92, { width, align: 'center' })
+
+    return y + this.MITRA_SIG_HEIGHT
+  }
+
   private renderMitraBlock(doc: any, block: TextBlock, x: number, y: number, width: number): number {
     const effectiveY = y + (block.gapBefore ?? 0)
+
+    if (block.sigPillar) {
+      const endY = this.renderMitraSignaturePillar(doc, block.sigPillar, x, effectiveY, width)
+      return endY + (block.gapAfter ?? 0)
+    }
+
     doc.font(block.font).fontSize(block.fontSize)
     const height = doc.heightOfString(block.text, {
       width,
@@ -941,22 +979,109 @@ export class ContractDocumentService {
     return effectiveY + height + (block.gapAfter ?? 0)
   }
 
+  private isMitraHeading(block: TextBlock): boolean {
+    return block.font === 'Times-Bold' && block.align === 'center'
+  }
+
+  /**
+   * Mengisi satu kolom dengan aliran teks sekuensial (newspaper flow).
+   * Menerapkan aturan "break-inside: avoid" untuk heading PASAL: heading tidak
+   * boleh yatim di dasar kolom, selalu menyatu dengan paragraf pertamanya.
+   * Mengembalikan index blok berikutnya dan posisi Y akhir kolom.
+   */
+  private fillMitraColumn(
+    doc: any,
+    blocks: TextBlock[],
+    startIndex: number,
+    x: number,
+    topY: number,
+    bottomY: number,
+    colWidth: number,
+  ): { nextIndex: number; endY: number } {
+    let y = topY
+    let index = startIndex
+
+    while (index < blocks.length) {
+      const block = blocks[index]
+      const testY = y + (block.gapBefore ?? 0)
+      const h = this.measureBlockHeight(doc, block, colWidth)
+
+      // Blok tunggal tidak muat di sisa kolom -> pindah kolom (kecuali kolom masih kosong)
+      if (testY + h > bottomY) {
+        if (y === topY) {
+          // Blok terlalu tinggi untuk satu kolom penuh: render paksa agar tidak infinite loop
+          y = this.renderMitraBlock(doc, block, x, y, colWidth)
+          index += 1
+        }
+        break
+      }
+
+      // break-inside: avoid untuk heading + paragraf pertama
+      if (this.isMitraHeading(block) && index + 1 < blocks.length) {
+        const next = blocks[index + 1]
+        const nextH = this.measureBlockHeight(doc, next, colWidth)
+        const afterHeadingY = testY + h + (next.gapBefore ?? 0)
+        if (afterHeadingY + nextH > bottomY && y !== topY) {
+          // Heading + paragraf pertama tidak muat bersama -> dorong ke kolom berikutnya
+          break
+        }
+      }
+
+      y = this.renderMitraBlock(doc, block, x, y, colWidth)
+      index += 1
+    }
+
+    return { nextIndex: index, endY: y }
+  }
+
   private renderMitraPdf(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
-    const blocks = this.buildMitraBlocks(payload)
+    const body = this.buildMitraBlocks(payload)
+    const colWidth = 249
+
+    // Pilar tanda tangan (single column)
+    const sigFirst: TextBlock = {
+      text: '', font: 'Times-Bold', fontSize: 10, align: 'center', gapBefore: 16,
+      sigPillar: { header: 'PIHAK PERTAMA', org: "KOPERASI PT. SANKYU INT'L", name: 'Hari Suhono', role: '(Ketua Koperasi)' },
+    }
+    const sigSecond: TextBlock = {
+      text: '', font: 'Times-Bold', fontSize: 10, align: 'center', gapBefore: 16,
+      sigPillar: { header: 'PIHAK KEDUA', name: payload.employee.fullName || '.................', role: '(Mitra)' },
+    }
+
+    // Bagi konten 50/50 berdasar tinggi kumulatif. Paruh pertama -> kolom kiri
+    // (semua halaman), paruh kedua -> kolom kanan (semua halaman) = layout booklet asli.
+    const heights = body.map(b =>
+      (b.gapBefore ?? 0) + this.measureBlockHeight(doc, b, colWidth) + (b.gapAfter ?? 0),
+    )
+    const total = heights.reduce((a, b) => a + b, 0)
+    let acc = 0
+    let splitIdx = body.length
+    for (let i = 0; i < body.length; i++) {
+      acc += heights[i]
+      if (acc >= total / 2) { splitIdx = i + 1; break }
+    }
+    // Jangan akhiri paruh pertama pada sebuah heading (hindari heading yatim)
+    if (splitIdx > 0 && splitIdx < body.length && this.isMitraHeading(body[splitIdx - 1])) {
+      splitIdx -= 1
+    }
+
+    const firstHalf = [...body.slice(0, splitIdx), sigFirst]
+    const secondHalf = [...body.slice(splitIdx), sigSecond]
 
     const leftX = 40
     const rightX = 306
-    const colWidth = 249
-    let index = 0
+    const dividerX = doc.page.width / 2
+
+    let li = 0
+    let ri = 0
     let firstPage = true
 
-    while (index < blocks.length) {
+    while (li < firstHalf.length || ri < secondHalf.length) {
       if (!firstPage) doc.addPage()
 
-      let headerBottomY = 0
       let topY: number
       if (firstPage) {
-        headerBottomY = this.drawCorporateHeader(doc, 'MITRA')
+        const headerBottomY = this.drawCorporateHeader(doc, 'MITRA')
         this.drawTitleBlock(doc, payload, headerBottomY)
         topY = headerBottomY + 100
       } else {
@@ -964,55 +1089,19 @@ export class ContractDocumentService {
       }
       const bottomY = doc.page.height - 55
 
-      // Fill left column, then right column
-      for (const columnX of [leftX, rightX]) {
-        let y = topY
-        while (index < blocks.length) {
-          const block = blocks[index]
-          const testY = y + (block.gapBefore ?? 0)
-          const h = this.measureBlockHeight(doc, block, colWidth)
-          if (testY + h > bottomY) break
-          y = this.renderMitraBlock(doc, block, columnX, y, colWidth)
-          index += 1
-        }
-      }
+      const left = this.fillMitraColumn(doc, firstHalf, li, leftX, topY, bottomY, colWidth)
+      li = left.nextIndex
+
+      const right = this.fillMitraColumn(doc, secondHalf, ri, rightX, topY, bottomY, colWidth)
+      ri = right.nextIndex
+
+      const isLastPage = li >= firstHalf.length && ri >= secondHalf.length
+      const contentBottom = Math.max(left.endY, right.endY)
+      const dividerBottom = isLastPage ? contentBottom : bottomY
+      doc.moveTo(dividerX, topY).lineTo(dividerX, dividerBottom).lineWidth(0.75).stroke()
 
       firstPage = false
     }
-
-    this.renderMitraSignature(doc, payload)
-  }
-
-  private renderMitraSignature(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
-    const leftX = 40
-    const rightX = 306
-    const colWidth = 249
-    const needed = 150
-
-    let y = doc.y + 20
-    if (y + needed > doc.page.height - 55) {
-      doc.addPage()
-      y = 60
-    }
-
-    doc.font('Times-Bold').fontSize(11)
-    doc.text('PIHAK PERTAMA', leftX, y, { width: colWidth, align: 'center' })
-    doc.text('PIHAK KEDUA', rightX, y, { width: colWidth, align: 'center' })
-
-    doc.font('Times-Bold').fontSize(10)
-    doc.text('KOPERASI PT. SANKYU INT\'L', leftX, y + 16, { width: colWidth, align: 'center' })
-
-    // Ruang tanda tangan
-    const nameY = y + 90
-    doc.font('Times-Bold').fontSize(11)
-    const firstName = 'Hari Suhono'
-    const secondName = payload.employee.fullName || '.................'
-    doc.text(firstName, leftX, nameY, { width: colWidth, align: 'center' })
-    doc.text(secondName, rightX, nameY, { width: colWidth, align: 'center' })
-
-    doc.font('Times-Roman').fontSize(10)
-    doc.text('(Ketua Koperasi)', leftX, nameY + 16, { width: colWidth, align: 'center' })
-    doc.text('(Mitra)', rightX, nameY + 16, { width: colWidth, align: 'center' })
   }
 
   async generate(id: number) {

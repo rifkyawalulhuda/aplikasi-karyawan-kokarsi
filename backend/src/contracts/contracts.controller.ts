@@ -51,20 +51,8 @@ export class ContractsController {
     const { join } = require('path')
     const { readFileSync, existsSync } = require('fs')
 
-    // First try serving existing generated PDF without re-generating
-    const contract = await this.service.findOne(id)
-    if (contract.generatedPdfUrl) {
-      const existingPath = join(process.cwd(), contract.generatedPdfUrl)
-      if (existsSync(existingPath)) {
-        const pdfBuffer = readFileSync(existingPath)
-        res.setHeader('Content-Type', 'application/pdf')
-        res.setHeader('Content-Disposition', 'inline; filename="contract.pdf"')
-        res.send(pdfBuffer)
-        return
-      }
-    }
-
-    // Otherwise generate fresh
+    // Selalu regenerate agar preview/unduhan selalu mencerminkan template terbaru
+    // (mencegah PDF basi yang ter-cache dari versi kode lama)
     const result = await this.contractDocumentService.generate(id)
     const target = result.generatedPdfUrl
     if (!target) {
