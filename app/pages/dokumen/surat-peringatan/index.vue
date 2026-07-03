@@ -7,6 +7,7 @@ import { h } from 'vue'
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UDropdownMenu = resolveComponent('UDropdownMenu')
+const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
@@ -14,9 +15,14 @@ const table = useTemplateRef('table')
 
 const searchQuery = ref('')
 const levelFilter = ref('all')
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 const addModal = ref(false)
 const editModal = ref(false)
 const editTarget = ref<WarningLetter | null>(null)
+const previewModal = ref(false)
+const previewTarget = ref<WarningLetter | null>(null)
+const previewLoading = ref(false)
+const previewPdfSrc = ref('')
 
 const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLetter[]; total: number }>('/api/warning-letters', {
   query: { limit: 999 },
@@ -33,30 +39,120 @@ const counts = computed(() => ({
   sp3: letters.value.filter(l => l.warningLevel === 3).length,
 }))
 
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function getSearchTokens(letter: WarningLetter) {
+  return [
+    letter.letterNumber,
+    String(letter.warningLevel),
+    `SP ${letter.warningLevel}`,
+    letter.letterDate,
+    formatDate(letter.letterDate),
+    letter.validUntil,
+    formatDate(letter.validUntil),
+    letter.processedByName,
+    letter.employee?.fullName,
+    letter.employee?.employeeNo,
+    letter.employee?.jobRole?.name,
+    ...(letter.violationType ?? []),
+  ]
+    .flatMap(value => String(value ?? '').toLowerCase().split(/\s+/))
+    .filter(Boolean)
+}
+
+function getSearchText(letter: WarningLetter) {
+  return getSearchTokens(letter).join(' ')
+}
+
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+
+  sorting.value = null
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
+}
+
+function getSortValue(letter: WarningLetter, key: string) {
+  switch (key) {
+    case 'letterNumber':
+      return letter.letterNumber ?? ''
+    case 'employee':
+      return `${letter.employee?.fullName ?? ''} ${letter.employee?.employeeNo ?? ''}`
+    case 'warningLevel':
+      return letter.warningLevel ?? 0
+    case 'letterDate':
+      return letter.letterDate ?? ''
+    case 'validUntil':
+      return letter.validUntil ?? ''
+    case 'processedByName':
+      return letter.processedByName ?? ''
+    case 'violationType':
+      return (letter.violationType ?? []).join(' ')
+    default:
+      return ''
+  }
+}
+
 const filteredData = computed(() => {
   let result = letters.value
 
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    result = result.filter(letter =>
-      letter.letterNumber.toLowerCase().includes(q) ||
-      letter.employee?.fullName?.toLowerCase().includes(q) ||
-      letter.processedByName.toLowerCase().includes(q),
-    )
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim().replace(/\s+/g, ' ')
+    result = result.filter(letter => getSearchText(letter).includes(q))
   }
 
   if (levelFilter.value !== 'all') {
     result = result.filter(letter => letter.warningLevel === +levelFilter.value)
   }
 
-  return result
+  const sort = sorting.value
+  if (!sort) return result
+
+  return [...result].sort((a, b) => {
+    const aValue = getSortValue(a, sort.key)
+    const bValue = getSortValue(b, sort.key)
+    let compare = 0
+
+    if (sort.key === 'warningLevel') {
+      compare = Number(aValue) - Number(bValue)
+    } else if (sort.key === 'letterDate' || sort.key === 'validUntil') {
+      compare = new Date(String(aValue)).getTime() - new Date(String(bValue)).getTime()
+    } else {
+      compare = String(aValue).localeCompare(String(bValue), 'id', { sensitivity: 'base' })
+    }
+
+    return sort.direction === 'asc' ? compare : -compare
+  })
 })
 
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
-
-function formatDate(date: string) {
-  return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-}
 
 function spBadgeColor(level: number) {
   if (level === 1) return 'info'
@@ -67,6 +163,25 @@ function spBadgeColor(level: number) {
 function openEdit(letter: WarningLetter) {
   editTarget.value = letter
   editModal.value = true
+}
+
+function closePreview() {
+  previewTarget.value = null
+  previewLoading.value = false
+  previewPdfSrc.value = ''
+  previewModal.value = false
+}
+
+async function openPreview(letter: WarningLetter) {
+  previewTarget.value = letter
+  previewLoading.value = false
+  // PdfViewer will fetch and render this URL to canvas
+  previewPdfSrc.value = `/api/warning-letters/${letter.id}/preview?preview=${Date.now()}`
+  previewModal.value = true
+}
+
+function openDownload(letter: WarningLetter) {
+  handleGeneratePDF(letter)
 }
 
 async function handleDelete(id: number) {
@@ -113,12 +228,12 @@ watch([searchQuery, levelFilter], () => {
 const columns: TableColumn<WarningLetter>[] = [
   {
     accessorKey: 'letterNumber',
-    header: 'Nomor Surat',
+    header: () => sortableHeader('Nomor Surat', 'letterNumber'),
     cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.letterNumber),
   },
   {
     accessorKey: 'employee',
-    header: 'Nama Karyawan',
+    header: () => sortableHeader('Nama Karyawan', 'employee'),
     cell: ({ row }) => h('div', undefined, [
       h('p', { class: 'font-medium text-sm text-highlighted' }, row.original.employee?.fullName ?? '-'),
       h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-'),
@@ -126,7 +241,7 @@ const columns: TableColumn<WarningLetter>[] = [
   },
   {
     accessorKey: 'warningLevel',
-    header: 'Level SP',
+    header: () => sortableHeader('Level SP', 'warningLevel'),
     cell: ({ row }) => h(UBadge, {
       color: spBadgeColor(row.original.warningLevel),
       variant: 'subtle',
@@ -135,17 +250,17 @@ const columns: TableColumn<WarningLetter>[] = [
   },
   {
     accessorKey: 'letterDate',
-    header: 'Tanggal Surat',
+    header: () => sortableHeader('Tanggal Surat', 'letterDate'),
     cell: ({ row }) => h('span', { class: 'text-sm text-muted' }, formatDate(row.original.letterDate)),
   },
   {
     accessorKey: 'validUntil',
-    header: 'Berlaku Sampai',
+    header: () => sortableHeader('Berlaku Sampai', 'validUntil'),
     cell: ({ row }) => h('span', { class: 'text-sm text-muted' }, formatDate(row.original.validUntil)),
   },
   {
     accessorKey: 'processedByName',
-    header: 'Pengurus Koperasi',
+    header: () => sortableHeader('Pengurus Koperasi', 'processedByName'),
     cell: ({ row }) => h('span', { class: 'text-sm text-highlighted' }, row.original.processedByName || '-'),
   },
   {
@@ -154,6 +269,7 @@ const columns: TableColumn<WarningLetter>[] = [
     cell: ({ row }) => h('div', { class: 'flex justify-end' }, [
       h(UDropdownMenu, {
         items: [
+          [{ label: 'Lihat Dokumen', icon: 'i-lucide-eye', onClick: () => openPreview(row.original) }],
           [{ label: 'Unduh PDF', icon: 'i-lucide-download', onClick: () => handleGeneratePDF(row.original) }],
           [{ label: 'Edit', icon: 'i-lucide-pencil', onClick: () => openEdit(row.original) }],
           [{ label: 'Hapus', icon: 'i-lucide-trash', onClick: () => handleDelete(row.original.id) }],
@@ -261,4 +377,39 @@ const columns: TableColumn<WarningLetter>[] = [
     :warning-letter="editTarget"
     @saved="refresh()"
   />
+
+  <UModal
+    v-model:open="previewModal"
+    title="Preview Surat Peringatan"
+    :ui="{ content: 'max-w-5xl h-[90vh]' }"
+    @update:open="(open) => { if (!open) closePreview() }"
+  >
+    <template #body>
+      <div class="flex items-center justify-between gap-3 border-b border-default pb-3 mb-3">
+        <div class="min-w-0">
+          <p class="font-semibold text-highlighted truncate">
+            {{ previewTarget?.letterNumber ?? 'Preview Surat Peringatan' }}
+          </p>
+          <p class="text-sm text-muted truncate">
+            {{ previewTarget?.employee?.fullName ?? '-' }}
+          </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <UButton
+            label="Unduh PDF"
+            icon="i-lucide-download"
+            color="primary"
+            :disabled="!previewTarget"
+            @click="previewTarget && openDownload(previewTarget)"
+          />
+        </div>
+      </div>
+
+      <div class="h-[calc(90vh-8rem)] rounded-xl border border-default bg-elevated/30 overflow-auto p-4 md:p-6">
+        <div class="mx-auto h-full w-full max-w-[794px] rounded-xl bg-white p-2">
+          <PdfViewer v-if="previewPdfSrc" :src="previewPdfSrc" />
+        </div>
+      </div>
+    </template>
+  </UModal>
 </template>

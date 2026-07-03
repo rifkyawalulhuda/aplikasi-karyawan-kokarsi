@@ -65,12 +65,15 @@ export interface Employee {
   id: number
   employeeNo: string
   fullName: string
+  nik?: string | null
+  birthPlace?: string | null
   employmentStatus: EmploymentStatus
   taxStatusId: number
   taxStatus?: TaxStatus
   departmentId?: number | null
   department?: Department | null
   birthDate: string
+  address?: string | null
   gender: Gender
   workLocationId: number
   workLocation?: WorkLocation
@@ -96,16 +99,102 @@ export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'SELESAI' | 'D
 export interface Contract {
   id: number
   employeeId: number
-  employee?: Pick<Employee, 'id' | 'employeeNo' | 'fullName'>
+  employee?: Pick<Employee, 'id' | 'employeeNo' | 'fullName' | 'nik' | 'birthPlace' | 'address'> & {
+    jobRole?: JobRole | null
+    workLocation?: WorkLocation | null
+    department?: Department | null
+  }
   contractNo: string
   startDate: string
   endDate: string
   contractTypeId?: number | null
   contractType?: ContractType | null
+  templateId?: number | null
+  template?: ContractTemplate | null
   status: ContractStatus
+  signedDate?: string | null
+  positionLabel?: string | null
+  workLocationLabel?: string | null
+  baseCompensation?: number | null
+  templateData?: Record<string, any> | null
   documentUrl?: string
+  generatedPdfUrl?: string | null
+  generatedAt?: string | null
   createdAt: string
   updatedAt?: string
+}
+
+export type ContractFamily = 'MITRA' | 'PKWT'
+
+export interface ContractTemplate {
+  id: number
+  code: string
+  name: string
+  family: ContractFamily
+  contractTypeId?: number | null
+  contractType?: ContractType | null
+  jobRoleId?: number | null
+  jobRole?: JobRole | null
+  description?: string | null
+  templateKey: string
+  requiredFields?: unknown
+  isActive: boolean
+  version: number
+  notes?: string | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ContractDocumentPreview {
+  id: number
+  title: string
+  subtitle?: string | null
+  openingLine: string
+  recitals: string[]
+  locationLine: string
+  termLine: string
+  compensationLabel: string
+  closingParagraphs: string[]
+  firstPartyLabel: string
+  secondPartyLabel: string
+  missingFields: string[]
+  downloadable: boolean
+  generatedPdfUrl?: string | null
+  renderEngine?: 'PDF_NATIVE'
+  layoutMode?: 'LEGAL_PDF_TEMPLATE'
+  employee: {
+    employeeNo: string
+    fullName: string
+    nik?: string | null
+    birthPlace?: string | null
+    birthDate: string
+    address?: string | null
+  }
+  contract: {
+    contractNo: string
+    contractTypeName: string
+    templateName: string
+    signedDate: string
+    startDate: string
+    endDate: string
+    compensation: string
+    locationLabel: string
+    positionLabel: string
+  }
+  template: {
+    id?: number | null
+    name?: string | null
+    code?: string | null
+    templateKey?: string | null
+    family?: ContractFamily | null
+    sourceTemplateRelativePath?: string | null
+    sourceTemplateFormat?: 'PDF' | null
+    fidelityNote?: string | null
+  }
+  sections: Array<{
+    heading: string
+    paragraphs: string[]
+  }>
 }
 
 // --- Warning Letter ---

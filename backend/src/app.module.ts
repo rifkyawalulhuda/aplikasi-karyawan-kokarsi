@@ -7,6 +7,7 @@ import { ContractsModule } from './contracts/contracts.module'
 import { LookupsModule } from './lookups/lookups.module'
 import { UsersModule } from './users/users.module'
 import { WarningLettersModule } from './warning-letters/warning-letters.module'
+import { ContractTemplatesModule } from './contract-templates/contract-templates.module'
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WarningLettersModule } from './warning-letters/warning-letters.module'
     LookupsModule,
     UsersModule,
     WarningLettersModule,
+    ContractTemplatesModule,
   ],
 })
 export class AppModule {}

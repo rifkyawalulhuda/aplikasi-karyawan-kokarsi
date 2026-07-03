@@ -1,0 +1,5 @@
+raw-doc/
+docx-ready/
+!manifest.json
+!PLACEHOLDERS.md
+!.gitignore

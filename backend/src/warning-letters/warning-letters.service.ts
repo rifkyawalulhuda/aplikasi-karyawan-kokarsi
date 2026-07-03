@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsArray, IsDateString, IsNotEmpty } from 'class-validator'
 
@@ -70,7 +70,83 @@ export class WarningLettersService {
     },
   }
 
+  /**
+   * Menentukan status eskalasi Surat Peringatan untuk seorang karyawan.
+   * Rule final:
+   * - Tidak ada SP aktif        -> boleh SP1, SP2, atau SP3 (admin bebas memilih)
+   * - Masih ada SP1 aktif       -> default SP2, SP1 dinonaktifkan, SP3 tetap boleh
+   * - Masih ada SP2 aktif       -> hanya boleh SP3
+   * - Masih ada SP3 aktif       -> pembuatan SP baru diblokir sampai masa SP selesai
+   *
+   * "Aktif" = validUntil masih >= hari ini.
+   */
+  async getEscalationStatus(employeeId: number) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const activeLetters = await this.prisma.warningLetter.findMany({
+      where: {
+        employeeId,
+        validUntil: { gte: today },
+      },
+      orderBy: { warningLevel: 'desc' },
+    })
+
+    const highestActiveLevel = activeLetters.length
+      ? Math.max(...activeLetters.map(l => l.warningLevel))
+      : 0
+
+    let allowedLevels: number[] = []
+    let defaultLevel: number | null = null
+    let blocked = false
+    let message = ''
+
+    if (highestActiveLevel === 0) {
+      allowedLevels = [1, 2, 3]
+      defaultLevel = null
+    } else if (highestActiveLevel === 1) {
+      allowedLevels = [2, 3]
+      defaultLevel = 2
+    } else if (highestActiveLevel === 2) {
+      allowedLevels = [3]
+      defaultLevel = 3
+    } else {
+      allowedLevels = []
+      defaultLevel = null
+      blocked = true
+      message = 'Karyawan masih memiliki SP3 aktif. Pembuatan surat peringatan baru diblokir sampai masa SP selesai.'
+    }
+
+    return {
+      employeeId,
+      highestActiveLevel,
+      allowedLevels,
+      defaultLevel,
+      blocked,
+      message,
+      activeLetters: activeLetters.map(l => ({
+        id: l.id,
+        letterNumber: l.letterNumber,
+        warningLevel: l.warningLevel,
+        letterDate: l.letterDate,
+        validUntil: l.validUntil,
+      })),
+    }
+  }
+
   async create(dto: CreateWarningLetterDto) {
+    // Enforce escalation rules server-side (source of truth)
+    const status = await this.getEscalationStatus(dto.employeeId)
+    if (status.blocked) {
+      throw new BadRequestException(status.message)
+    }
+    if (!status.allowedLevels.includes(dto.warningLevel)) {
+      const allowedLabel = status.allowedLevels.map(l => `SP${l}`).join(', ')
+      throw new BadRequestException(
+        `Level SP${dto.warningLevel} tidak diizinkan untuk karyawan ini. Level yang diizinkan: ${allowedLabel}.`,
+      )
+    }
+
     return this.prisma.warningLetter.create({
       data: {
         letterNumber: dto.letterNumber,

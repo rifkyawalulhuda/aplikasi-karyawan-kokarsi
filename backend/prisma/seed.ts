@@ -28,6 +28,10 @@ async function main() {
     prisma.jobRole.upsert({ where: { id: 2 }, update: {}, create: { name: 'Operator Forklift' } }),
     prisma.jobRole.upsert({ where: { id: 3 }, update: {}, create: { name: 'Supervisor Gudang' } }),
     prisma.jobRole.upsert({ where: { id: 4 }, update: {}, create: { name: 'Teknisi Mesin' } }),
+    prisma.jobRole.upsert({ where: { id: 5 }, update: {}, create: { name: 'Driver' } }),
+    prisma.jobRole.upsert({ where: { id: 6 }, update: {}, create: { name: 'Kasir' } }),
+    prisma.jobRole.upsert({ where: { id: 7 }, update: {}, create: { name: 'Karyawan Gudang' } }),
+    prisma.jobRole.upsert({ where: { id: 8 }, update: {}, create: { name: 'Staff Admin' } }),
   ])
 
   const jobLevels = await Promise.all([
@@ -47,6 +51,7 @@ async function main() {
 
   const contractTypes = await Promise.all([
     prisma.contractType.upsert({ where: { name: 'PKWT' }, update: {}, create: { name: 'PKWT' } }),
+    prisma.contractType.upsert({ where: { name: 'MITRA' }, update: {}, create: { name: 'MITRA' } }),
     prisma.contractType.upsert({ where: { name: 'PKWTT' }, update: {}, create: { name: 'PKWTT' } }),
     prisma.contractType.upsert({ where: { name: 'Magang' }, update: {}, create: { name: 'Magang' } }),
   ])
@@ -72,6 +77,9 @@ async function main() {
     create: {
       employeeNo: 'EMP001',
       fullName: 'Budi Santoso',
+      nik: '3275011505900001',
+      birthPlace: 'Bekasi',
+      address: 'Jl. Melati No. 10, Cikarang, Bekasi',
       employmentStatus: 'AKTIF',
       gender: 'MALE',
       birthDate: new Date('1990-05-15'),
@@ -146,8 +154,97 @@ async function main() {
       endDate: new Date('2026-12-31'),
       contractTypeId: contractTypes[0].id,
       status: 'AKTIF',
+      signedDate: new Date('2024-01-01'),
+      positionLabel: 'Staff Admin',
+      workLocationLabel: 'Head Office Jakarta',
+      baseCompensation: 5941759,
     },
   })
+
+  const templateSeeds = [
+    {
+      code: 'MITRA_DRIVER',
+      name: 'Mitra Driver',
+      family: 'MITRA' as const,
+      templateKey: 'MITRA_DRIVER',
+      contractTypeId: contractTypes.find(item => item.name === 'MITRA')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Driver')?.id,
+    },
+    {
+      code: 'MITRA_KOMART',
+      name: 'Mitra Kasir Komart',
+      family: 'MITRA' as const,
+      templateKey: 'MITRA_KOMART',
+      contractTypeId: contractTypes.find(item => item.name === 'MITRA')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Kasir')?.id,
+    },
+    {
+      code: 'MITRA_STAFF',
+      name: 'Mitra Staff Admin',
+      family: 'MITRA' as const,
+      templateKey: 'MITRA_STAFF',
+      contractTypeId: contractTypes.find(item => item.name === 'MITRA')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Staff Admin')?.id,
+    },
+    {
+      code: 'MITRA_WAREHOUSE',
+      name: 'Mitra Warehouse',
+      family: 'MITRA' as const,
+      templateKey: 'MITRA_WAREHOUSE',
+      contractTypeId: contractTypes.find(item => item.name === 'MITRA')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Karyawan Gudang')?.id,
+    },
+    {
+      code: 'PKWT_DRIVER',
+      name: 'PKWT Driver',
+      family: 'PKWT' as const,
+      templateKey: 'PKWT_DRIVER',
+      contractTypeId: contractTypes.find(item => item.name === 'PKWT')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Driver')?.id,
+    },
+    {
+      code: 'PKWT_KASIR',
+      name: 'PKWT Kasir',
+      family: 'PKWT' as const,
+      templateKey: 'PKWT_KASIR',
+      contractTypeId: contractTypes.find(item => item.name === 'PKWT')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Kasir')?.id,
+    },
+    {
+      code: 'PKWT_STAFF',
+      name: 'PKWT Staff Admin',
+      family: 'PKWT' as const,
+      templateKey: 'PKWT_STAFF',
+      contractTypeId: contractTypes.find(item => item.name === 'PKWT')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Staff Admin')?.id,
+    },
+    {
+      code: 'PKWT_WAREHOUSE',
+      name: 'PKWT Warehouse',
+      family: 'PKWT' as const,
+      templateKey: 'PKWT_WAREHOUSE',
+      contractTypeId: contractTypes.find(item => item.name === 'PKWT')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Karyawan Gudang')?.id,
+    },
+  ]
+
+  for (const templateSeed of templateSeeds) {
+    await prisma.contractTemplate.upsert({
+      where: { code: templateSeed.code },
+      update: {
+        name: templateSeed.name,
+        family: templateSeed.family,
+        templateKey: templateSeed.templateKey,
+        contractTypeId: templateSeed.contractTypeId,
+        jobRoleId: templateSeed.jobRoleId,
+        isActive: true,
+      },
+      create: {
+        ...templateSeed,
+        isActive: true,
+      },
+    })
+  }
 
   console.log('Seed selesai!')
   console.log('Login admin: employeeNo=EMP001, password=admin123')

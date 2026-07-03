@@ -72,11 +72,14 @@ const { data: lookups } = await useFetch<LookupsResponse>('/api/lookups')
 const schema = z.object({
   employeeNo: z.string().min(3, 'Min. 3 karakter'),
   fullName: z.string().min(3, 'Min. 3 karakter'),
+  nik: z.string().min(8, 'Min. 8 karakter').optional().or(z.literal('')),
+  birthPlace: z.string().min(2, 'Min. 2 karakter').optional().or(z.literal('')),
   gender: z.enum(['MALE', 'FEMALE']),
   birthDate: z.string().min(1, 'Wajib diisi'),
   joinDate: z.string().min(1, 'Wajib diisi'),
   email: z.string().email('Email tidak valid'),
   phoneNumber: z.string().min(8, 'Min. 8 karakter'),
+  address: z.string().min(5, 'Min. 5 karakter').optional().or(z.literal('')),
   educationLevel: z.enum(['SMA', 'D3', 'S1', 'S2']),
   workLocationId: z.number({ error: 'Wajib dipilih' }),
   jobRoleId: z.number({ error: 'Wajib dipilih' }),
@@ -90,11 +93,14 @@ type Schema = z.output<typeof schema>
 const state = reactive<Partial<Schema>>({
   employeeNo: '',
   fullName: '',
+  nik: '',
+  birthPlace: '',
   gender: 'MALE',
   birthDate: '',
   joinDate: '',
   email: '',
   phoneNumber: '',
+  address: '',
   educationLevel: 'SMA',
   workLocationId: undefined,
   jobRoleId: undefined,
@@ -203,6 +209,15 @@ function onClose() {
           </UFormField>
         </div>
 
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField label="NIK" name="nik">
+            <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" />
+          </UFormField>
+          <UFormField label="Tempat Lahir" name="birthPlace">
+            <UInput v-model="state.birthPlace" placeholder="Bekasi" class="w-full" />
+          </UFormField>
+        </div>
+
         <!-- Baris 2: Gender -->
         <div class="grid grid-cols-2 gap-4">
           <div class="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 text-xs text-muted">
@@ -236,6 +251,10 @@ function onClose() {
             <UInput v-model="state.phoneNumber" placeholder="08xxxxxxxxxx" class="w-full" />
           </UFormField>
         </div>
+
+        <UFormField label="Alamat Lengkap" name="address">
+          <UTextarea v-model="state.address" :rows="3" placeholder="Alamat lengkap sesuai identitas" class="w-full" />
+        </UFormField>
 
         <!-- Baris 5: Lokasi + Jabatan -->
         <div class="grid grid-cols-2 gap-4">

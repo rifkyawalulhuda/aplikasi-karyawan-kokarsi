@@ -1,6 +1,5 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, Query, Res, UseGuards, ParseIntPipe } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
-import { Response } from 'express'
 import { WarningLettersService, CreateWarningLetterDto, UpdateWarningLetterDto } from './warning-letters.service'
 import { PdfGeneratorService } from './pdf-generator.service'
 
@@ -25,18 +24,33 @@ export class WarningLettersController {
     )
   }
 
+  @Get('escalation/:employeeId')
+  getEscalationStatus(@Param('employeeId', ParseIntPipe) employeeId: number) {
+    return this.service.getEscalationStatus(employeeId)
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)
   }
 
   @Get(':id/generate')
-  async generate(@Param('id', ParseIntPipe) id: number, @Res() res: Response) {
+  async generate(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
     const letter = await this.service.findOne(id)
     const buffer = await this.pdfGenerator.generateWarningLetter(letter)
 
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', `attachment; filename="SP-${letter.letterNumber}.pdf"`)
+    res.send(buffer)
+  }
+
+  @Get(':id/preview')
+  async preview(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
+    const letter = await this.service.findOne(id)
+    const buffer = await this.pdfGenerator.generateWarningLetter(letter)
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `inline; filename="SP-${letter.letterNumber}.pdf"`)
     res.send(buffer)
   }
 

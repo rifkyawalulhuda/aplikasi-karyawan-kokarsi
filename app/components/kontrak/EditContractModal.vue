@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { Contract } from '~/types'
+import type { Contract, ContractTemplate } from '~/types'
 
 interface LookupOption { label: string; value: number }
 
@@ -13,8 +13,44 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const loading = ref(false)
+const uploadingDoc = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+async function onFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !props.contract) return
+
+  if (file.type !== 'application/pdf') {
+    toast.add({ title: 'Hanya file PDF yang diizinkan', color: 'error' })
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({ title: 'Ukuran file maksimal 10MB', color: 'error' })
+    return
+  }
+
+  uploadingDoc.value = true
+  try {
+    const formData = new FormData()
+    formData.append('document', file)
+    const res = await $fetch<{ documentUrl?: string }>(`/api/contracts/${props.contract.id}/document`, {
+      method: 'POST',
+      body: formData,
+    })
+    state.documentUrl = res?.documentUrl ?? ''
+    toast.add({ title: 'Dokumen berhasil diupload', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal upload dokumen', description: err?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadingDoc.value = false
+  }
+}
 
 const { data: contractTypesRes } = await useFetch<{ id: number; name: string }[]>('/api/lookups/contract-types')
+const { data: contractTemplatesRes } = await useFetch<ContractTemplate[]>('/api/contract-templates', {
+  query: { activeOnly: true },
+})
 
 const contractTypeOptions = computed<LookupOption[]>(() =>
   (contractTypesRes.value ?? []).map(type => ({
@@ -23,21 +59,37 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
+const contractTemplateOptions = computed<LookupOption[]>(() =>
+  (contractTemplatesRes.value ?? []).map(template => ({
+    label: `${template.name} (${template.family})`,
+    value: template.id,
+  })),
+)
+
 const schema = z.object({
   contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
-  documentUrl: z.string().optional(),
+  templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
+  signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
+  positionLabel: z.string().optional(),
+  workLocationLabel: z.string().optional(),
+  baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
 })
 
 type Schema = z.output<typeof schema>
 
-const state = reactive<Partial<Schema>>({
+const state = reactive<Partial<Schema> & { documentUrl?: string }>({
   contractNo: '',
   startDate: '',
   endDate: '',
   contractTypeId: undefined,
+  templateId: undefined,
+  signedDate: '',
+  positionLabel: '',
+  workLocationLabel: '',
+  baseCompensation: undefined,
   documentUrl: '',
 })
 
@@ -47,6 +99,11 @@ function fillState(c: Contract | null) {
   state.startDate = c.startDate ? c.startDate.slice(0, 10) : ''
   state.endDate = c.endDate ? c.endDate.slice(0, 10) : ''
   state.contractTypeId = c.contractTypeId ?? undefined
+  state.templateId = c.templateId ?? undefined
+  state.signedDate = c.signedDate ? c.signedDate.slice(0, 10) : c.startDate ? c.startDate.slice(0, 10) : ''
+  state.positionLabel = c.positionLabel ?? ''
+  state.workLocationLabel = c.workLocationLabel ?? ''
+  state.baseCompensation = c.baseCompensation ?? undefined
   state.documentUrl = c.documentUrl ?? ''
 }
 
@@ -102,8 +159,51 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           />
         </UFormField>
 
-        <UFormField label="URL Dokumen" name="documentUrl">
-          <UInput v-model="state.documentUrl" placeholder="https://..." class="w-full" />
+        <UFormField label="Template Dokumen" name="templateId" required>
+          <USelect
+            v-model="state.templateId"
+            :items="contractTemplateOptions"
+            placeholder="Pilih template kontrak..."
+            class="w-full"
+          />
+        </UFormField>
+
+        <div class="grid grid-cols-2 gap-3">
+          <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>
+            <UInput v-model="state.signedDate" type="date" class="w-full" />
+          </UFormField>
+          <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
+            <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
+          </UFormField>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <UFormField label="Label Posisi di Dokumen" name="positionLabel">
+            <UInput v-model="state.positionLabel" placeholder="Staff Admin" class="w-full" />
+          </UFormField>
+          <UFormField label="Label Lokasi Kerja di Dokumen" name="workLocationLabel">
+            <UInput v-model="state.workLocationLabel" placeholder="Head Office Jakarta" class="w-full" />
+          </UFormField>
+        </div>
+
+        <UFormField label="Upload Dokumen Kontrak (PDF Scan)" name="documentFile">
+          <div class="space-y-2">
+            <input
+              ref="fileInput"
+              type="file"
+              accept="application/pdf"
+              class="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20 cursor-pointer"
+              @change="onFileSelected"
+            >
+            <div v-if="uploadingDoc" class="flex items-center gap-2 text-xs text-muted">
+              <UIcon name="i-lucide-loader-circle" class="w-3.5 h-3.5 animate-spin" />
+              Mengupload...
+            </div>
+            <div v-else-if="state.documentUrl" class="flex items-center gap-2 text-xs text-success">
+              <UIcon name="i-lucide-check-circle" class="w-3.5 h-3.5" />
+              <span class="truncate">{{ state.documentUrl.split('/').pop() }}</span>
+            </div>
+          </div>
         </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">

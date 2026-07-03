@@ -48,11 +48,12 @@ export class UsersService {
   }
 
   private handleUniqueError(error: unknown) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+    const prismaError = error as any
+    if (!(prismaError instanceof Prisma.PrismaClientKnownRequestError) || prismaError.code !== 'P2002') {
       throw error
     }
 
-    const targets = Array.isArray(error.meta?.target) ? error.meta?.target : [error.meta?.target].filter(Boolean)
+    const targets = Array.isArray(prismaError.meta?.target) ? prismaError.meta?.target : [prismaError.meta?.target].filter(Boolean)
     const fieldLabels: Record<string, string> = {
       nik: 'NIK',
       email: 'Email',
@@ -97,7 +98,7 @@ export class UsersService {
         },
         select: this.userSelect,
       })
-    } catch (error) {
+    } catch (error: any) {
       this.handleUniqueError(error)
     }
   }
@@ -125,7 +126,7 @@ export class UsersService {
         data: updateData,
         select: this.userSelect,
       })
-    } catch (error) {
+    } catch (error: any) {
       this.handleUniqueError(error)
     }
   }
