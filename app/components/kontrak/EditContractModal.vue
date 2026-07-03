@@ -13,6 +13,39 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const loading = ref(false)
+const uploadingDoc = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+async function onFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !props.contract) return
+
+  if (file.type !== 'application/pdf') {
+    toast.add({ title: 'Hanya file PDF yang diizinkan', color: 'error' })
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({ title: 'Ukuran file maksimal 10MB', color: 'error' })
+    return
+  }
+
+  uploadingDoc.value = true
+  try {
+    const formData = new FormData()
+    formData.append('document', file)
+    const res = await $fetch<{ documentUrl?: string }>(`/api/contracts/${props.contract.id}/document`, {
+      method: 'POST',
+      body: formData,
+    })
+    state.documentUrl = res?.documentUrl ?? ''
+    toast.add({ title: 'Dokumen berhasil diupload', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal upload dokumen', description: err?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadingDoc.value = false
+  }
+}
 
 const { data: contractTypesRes } = await useFetch<{ id: number; name: string }[]>('/api/lookups/contract-types')
 const { data: contractTemplatesRes } = await useFetch<ContractTemplate[]>('/api/contract-templates', {
@@ -43,12 +76,11 @@ const schema = z.object({
   positionLabel: z.string().optional(),
   workLocationLabel: z.string().optional(),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
-  documentUrl: z.string().optional(),
 })
 
 type Schema = z.output<typeof schema>
 
-const state = reactive<Partial<Schema>>({
+const state = reactive<Partial<Schema> & { documentUrl?: string }>({
   contractNo: '',
   startDate: '',
   endDate: '',
@@ -154,8 +186,24 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
         </div>
 
-        <UFormField label="URL Dokumen" name="documentUrl">
-          <UInput v-model="state.documentUrl" placeholder="https://..." class="w-full" />
+        <UFormField label="Upload Dokumen Kontrak (PDF Scan)" name="documentFile">
+          <div class="space-y-2">
+            <input
+              ref="fileInput"
+              type="file"
+              accept="application/pdf"
+              class="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20 cursor-pointer"
+              @change="onFileSelected"
+            >
+            <div v-if="uploadingDoc" class="flex items-center gap-2 text-xs text-muted">
+              <UIcon name="i-lucide-loader-circle" class="w-3.5 h-3.5 animate-spin" />
+              Mengupload...
+            </div>
+            <div v-else-if="state.documentUrl" class="flex items-center gap-2 text-xs text-success">
+              <UIcon name="i-lucide-check-circle" class="w-3.5 h-3.5" />
+              <span class="truncate">{{ state.documentUrl.split('/').pop() }}</span>
+            </div>
+          </div>
         </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">

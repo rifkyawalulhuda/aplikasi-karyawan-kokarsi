@@ -1097,7 +1097,16 @@ export class ContractDocumentService {
       const isLastPage = li >= firstHalf.length && ri >= secondHalf.length
       const contentBottom = Math.max(left.endY, right.endY)
       const dividerBottom = isLastPage ? contentBottom : bottomY
+
+      // Garis pembatas vertikal di tengah
       doc.moveTo(dividerX, topY).lineTo(dividerX, dividerBottom).lineWidth(0.75).stroke()
+
+      // Border luar (kotak mengelilingi kedua kolom) — sesuai dokumen sample asli
+      const borderLeft = leftX - 8
+      const borderRight = rightX + colWidth + 8
+      const borderTop = topY - 6
+      const borderBot = isLastPage ? contentBottom + 6 : bottomY
+      doc.rect(borderLeft, borderTop, borderRight - borderLeft, borderBot - borderTop).lineWidth(0.75).stroke()
 
       if (isLastPage) lastContentBottom = contentBottom
       firstPage = false

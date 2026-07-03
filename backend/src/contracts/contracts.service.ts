@@ -164,4 +164,14 @@ export class ContractsService {
     })
     return this.withComputedStatuses(contracts).filter(contract => contract.status === 'AKAN_HABIS')
   }
+
+  async updateDocumentUrl(id: number, documentUrl: string) {
+    await this.findOne(id)
+    const contract = await this.prisma.contract.update({
+      where: { id },
+      data: { documentUrl },
+      include: this.include,
+    })
+    return this.withComputedStatus(contract)
+  }
 }

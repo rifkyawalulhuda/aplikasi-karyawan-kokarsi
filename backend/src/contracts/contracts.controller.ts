@@ -1,5 +1,8 @@
-import { BadRequestException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res } from '@nestjs/common'
+import { BadRequestException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res, UseInterceptors, UploadedFile } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
+import { FileInterceptor } from '@nestjs/platform-express'
+import { diskStorage } from 'multer'
+import { join, extname } from 'path'
 import { ContractsService, CreateContractDto, UpdateContractDto } from './contracts.service'
 import { ContractDocumentService } from './contract-document.service'
 
@@ -81,5 +84,31 @@ export class ContractsController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id)
+  }
+
+  @Post(':id/document')
+  @UseInterceptors(FileInterceptor('document', {
+    storage: diskStorage({
+      destination: join(process.cwd(), 'uploads', 'contracts', 'scanned'),
+      filename: (_req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9)
+        cb(null, `contract-${unique}${extname(file.originalname)}`)
+      },
+    }),
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype !== 'application/pdf') {
+        return cb(new BadRequestException('Hanya file PDF yang diizinkan'), false)
+      }
+      cb(null, true)
+    },
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  }))
+  async uploadDocument(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('File tidak ditemukan')
+    const documentUrl = `/uploads/contracts/scanned/${file.filename}`
+    return this.service.updateDocumentUrl(id, documentUrl)
   }
 }

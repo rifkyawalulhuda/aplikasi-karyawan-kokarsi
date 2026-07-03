@@ -58,7 +58,6 @@ const schema = z.object({
   positionLabel: z.string().optional(),
   workLocationLabel: z.string().optional(),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
-  documentUrl: z.string().optional(),
 })
 
 type Schema = z.output<typeof schema>
@@ -74,7 +73,6 @@ const state = reactive<Partial<Schema>>({
   positionLabel: '',
   workLocationLabel: '',
   baseCompensation: undefined,
-  documentUrl: '',
 })
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
@@ -106,7 +104,6 @@ function resetForm() {
   state.positionLabel = ''
   state.workLocationLabel = ''
   state.baseCompensation = undefined
-  state.documentUrl = ''
 }
 </script>
 
@@ -171,10 +168,6 @@ function resetForm() {
             <UInput v-model="state.workLocationLabel" placeholder="Head Office Jakarta" class="w-full" />
           </UFormField>
         </div>
-
-        <UFormField label="URL Dokumen" name="documentUrl">
-          <UInput v-model="state.documentUrl" placeholder="https://..." class="w-full" />
-        </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />
