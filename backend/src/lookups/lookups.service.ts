@@ -5,6 +5,8 @@ import { PrismaService } from '../prisma/prisma.service'
 export class LookupsService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly defaultContractTypes = ['MITRA', 'PKWT', 'PKWTT', 'Magang'] as const
+
   private isMissingContractTypesTable(error: any) {
     return error?.code === 'P2021' || error?.meta?.modelName === 'ContractType'
   }
@@ -29,7 +31,27 @@ export class LookupsService {
     return new ConflictException(`Data ${label} sedang dipakai oleh karyawan dan tidak bisa dihapus. Ubah referensi karyawan terlebih dahulu.`)
   }
 
+  private async ensureDefaultContractTypes() {
+    const existing = await this.prisma.contractType.findMany({
+      select: { name: true },
+      where: { name: { in: [...this.defaultContractTypes] } },
+    })
+
+    const existingNames = new Set(existing.map(item => item.name))
+
+    for (const name of this.defaultContractTypes) {
+      if (!existingNames.has(name)) {
+        await this.prisma.contractType.create({ data: { name } })
+      }
+    }
+  }
+
   async getAll() {
+    await this.ensureDefaultContractTypes().catch((error) => {
+      if (this.isMissingContractTypesTable(error)) return
+      throw error
+    })
+
     const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments] = await Promise.all([
       this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }),
@@ -88,10 +110,16 @@ export class LookupsService {
   }
 
   getContractTypes() {
-    return this.prisma.contractType.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+    return this.ensureDefaultContractTypes()
+      .catch((error) => {
+        if (this.isMissingContractTypesTable(error)) return
+        throw error
+      })
+      .then(() => this.prisma.contractType.findMany({ orderBy: { name: 'asc' } }))
+      .catch((error) => {
       if (this.isMissingContractTypesTable(error)) return []
       throw error
-    })
+      })
   }
 
   createContractType(name: string) {

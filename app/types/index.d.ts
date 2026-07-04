@@ -244,6 +244,10 @@ export interface UserAccount {
   updatedAt?: string
 }
 
+export interface GeneralSettings {
+  cooperativeChairmanName: string
+}
+
 // --- Misc ---
 export type Period = 'daily' | 'weekly' | 'monthly'
 
