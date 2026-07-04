@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs'
 import * as XLSX from 'xlsx'
 
 interface LookupItem {
@@ -144,115 +143,9 @@ function getCellValue(val: unknown): string {
 
 export function useImportTemplate() {
   async function generateTemplate(): Promise<void> {
-    const lookups = await $fetch<LookupsResponse>('/api/lookups', { credentials: 'include' })
-
-    const workbook = new ExcelJS.Workbook()
-    const sheet = workbook.addWorksheet('Data Karyawan')
-
-    const headerFill: ExcelJS.FillPattern = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF2563EB' },
-    }
-    const headerFont: Partial<ExcelJS.Font> = {
-      bold: true,
-      color: { argb: 'FFFFFFFF' },
-      size: 11,
-    }
-    const requiredFont: Partial<ExcelJS.Font> = {
-      bold: true,
-      color: { argb: 'FFFFFFFF' },
-      size: 11,
-    }
-
-    const requiredColumns = new Set([1, 2, 4, 6, 8, 9, 11, 12, 13, 14, 15, 16])
-
-    const headerRow = sheet.addRow(COLUMN_HEADERS)
-    headerRow.eachCell((cell, colNumber) => {
-      cell.fill = headerFill
-      cell.font = requiredColumns.has(colNumber) ? requiredFont : headerFont
-      cell.alignment = { horizontal: 'center', vertical: 'middle' }
-      cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
-      }
-    })
-    sheet.getRow(1).height = 24
-
-    const hiddenSheet = workbook.addWorksheet('RefData')
-    hiddenSheet.state = 'hidden'
-
-    const addDropdown = (
-      colNumber: number,
-      sheetColTitle: string,
-      items: string[],
-      errorTitle: string,
-      errorMsg: string,
-    ) => {
-      if (items.length === 0) return
-
-      const formulaStr = `"${items.join(',')}"`
-      if (formulaStr.length <= 255) {
-        ;(sheet.getColumn(colNumber) as any).dataValidation = {
-          type: 'list',
-          allowBlank: false,
-          formulae: [formulaStr],
-          showErrorMessage: true,
-          errorTitle,
-          error: errorMsg,
-        }
-      } else {
-        const refCol = hiddenSheet.getColumn(hiddenSheet.columnCount + 1)
-        refCol.header = sheetColTitle
-        items.forEach((item, i) => {
-          hiddenSheet.getCell(i + 2, refCol.number).value = item
-        })
-        const colLetter = refCol.letter
-        const endRow = items.length + 1
-        ;(sheet.getColumn(colNumber) as any).dataValidation = {
-          type: 'list',
-          allowBlank: false,
-          formulae: [`=RefData!$${colLetter}$2:$${colLetter}$${endRow}`],
-          showErrorMessage: true,
-          errorTitle,
-          error: errorMsg,
-        }
-      }
-    }
-
-    addDropdown(4, 'JK', GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
-    addDropdown(11, 'Pendidikan', EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
-    addDropdown(12, 'Lokasi', lookups.workLocations.map(l => l.name), 'Lokasi Kerja Tidak Valid', 'Pilih dari daftar lokasi kerja yang tersedia.')
-    addDropdown(13, 'Jabatan', lookups.jobRoles.map(l => l.name), 'Jabatan Tidak Valid', 'Pilih dari daftar jabatan yang tersedia.')
-    addDropdown(14, 'Level', lookups.jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
-    addDropdown(15, 'Departemen', lookups.departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
-    addDropdown(16, 'Pajak', lookups.taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
-
-    const dataRowCount = 100
-    for (let i = 2; i <= dataRowCount + 1; i++) {
-      for (let col = 1; col <= COLUMN_HEADERS.length; col++) {
-        const cell = sheet.getCell(i, col)
-        cell.border = {
-          top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-          left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-          bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-          right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-        }
-      }
-    }
-
-    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18]
-    COLUMN_HEADERS.forEach((_, i) => {
-      sheet.getColumn(i + 1).width = columnWidths[i]
-    })
-
-    sheet.views = [{ state: 'frozen', ySplit: 1 }]
-
-    const buffer = await workbook.xlsx.writeBuffer()
-    const blob = new Blob([buffer], {
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    const blob = await $fetch<Blob>('/api/employees/import-template', {
+      responseType: 'blob',
+      credentials: 'include',
     })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')

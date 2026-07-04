@@ -229,9 +229,10 @@ export class EmployeesService {
       const result = await this.prisma.$transaction(async (tx) => {
         const created = []
         for (const emp of employees) {
+          const { rowNumber, ...employeeData } = emp as any
           const record = await tx.employee.create({
             data: {
-              ...emp,
+              ...employeeData,
               employmentStatus: 'KONTRAK_EXPIRED',
               birthDate: new Date(emp.birthDate),
               joinDate: new Date(emp.joinDate),
@@ -453,32 +454,59 @@ export class EmployeesService {
     })
     sheet.getRow(1).height = 24
 
+    const hiddenSheet = workbook.addWorksheet('RefData')
+    hiddenSheet.state = 'hidden'
+
+    const maxDataRow = 101
+
     const addDropdown = (
       colNumber: number,
+      sheetColTitle: string,
       items: string[],
       errorTitle: string,
       errorMsg: string,
     ) => {
       if (items.length === 0) return
 
+      const colLetter = String.fromCharCode(64 + colNumber)
+      const range = `${colLetter}2:${colLetter}${maxDataRow}`
       const formulaStr = `"${items.join(',')}"`
-      ;(sheet.getColumn(colNumber) as any).dataValidation = {
-        type: 'list',
-        allowBlank: false,
-        formulae: [formulaStr],
-        showErrorMessage: true,
-        errorTitle,
-        error: errorMsg,
+
+      if (formulaStr.length <= 255) {
+        ;(sheet as any).dataValidations.add(range, {
+          type: 'list',
+          allowBlank: false,
+          showErrorMessage: true,
+          formulae: [formulaStr],
+          errorTitle,
+          error: errorMsg,
+        })
+      } else {
+        const refCol = hiddenSheet.getColumn(hiddenSheet.columnCount + 1)
+        refCol.header = sheetColTitle
+        items.forEach((item, i) => {
+          hiddenSheet.getCell(i + 2, refCol.number).value = item
+        })
+        const refLetter = refCol.letter
+        const endRow = items.length + 1
+        ;(sheet as any).dataValidations.add(range, {
+          type: 'list',
+          allowBlank: false,
+          showErrorMessage: true,
+          formulae: [`=RefData!$${refLetter}$2:$${refLetter}$${endRow}`],
+          errorTitle,
+          error: errorMsg,
+        })
       }
     }
 
-    addDropdown(4, GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
-    addDropdown(11, EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
-    addDropdown(12, workLocations.map(l => l.name), 'Lokasi Kerja Tidak Valid', 'Pilih dari daftar lokasi kerja yang tersedia.')
-    addDropdown(13, jobRoles.map(l => l.name), 'Jabatan Tidak Valid', 'Pilih dari daftar jabatan yang tersedia.')
-    addDropdown(14, jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
-    addDropdown(15, departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
-    addDropdown(16, taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
+    addDropdown(4, 'JK', GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
+    addDropdown(11, 'Pendidikan', EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
+    addDropdown(12, 'Lokasi', workLocations.map(l => l.name), 'Lokasi Kerja Tidak Valid', 'Pilih dari daftar lokasi kerja yang tersedia.')
+    addDropdown(13, 'Jabatan', jobRoles.map(l => l.name), 'Jabatan Tidak Valid', 'Pilih dari daftar jabatan yang tersedia.')
+    addDropdown(14, 'Level', jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
+    addDropdown(15, 'Departemen', departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
+    addDropdown(16, 'Pajak', taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
 
     for (let i = 2; i <= 101; i++) {
       for (let col = 1; col <= COLUMN_HEADERS.length; col++) {

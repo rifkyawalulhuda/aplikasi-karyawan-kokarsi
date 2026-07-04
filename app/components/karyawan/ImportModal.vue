@@ -150,7 +150,9 @@ async function handleImport() {
       '/api/employees/bulk-import',
       {
         method: 'POST',
-        body: { employees: validRows.value },
+        body: {
+          employees: validRows.value.map(({ rowNumber, ...emp }) => emp),
+        },
       },
     )
 
