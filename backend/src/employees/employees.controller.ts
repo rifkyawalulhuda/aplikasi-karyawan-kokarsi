@@ -42,6 +42,11 @@ export class EmployeesController {
     return this.service.create(dto)
   }
 
+  @Post('bulk-import')
+  bulkCreate(@Body() body: { employees: CreateEmployeeDto[] }) {
+    return this.service.bulkCreate(body.employees)
+  }
+
   @Put(':id')
   update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDto) {
     return this.service.update(id, dto)

@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
+import ExcelJS from 'exceljs'
 
 export class CreateEmployeeDto {
   @IsString() employeeNo: string
@@ -172,6 +173,84 @@ export class EmployeesService {
     return this.findOne(employee.id)
   }
 
+  async bulkCreate(employees: CreateEmployeeDto[]) {
+    if (!employees.length) {
+      return { imported: 0, errors: [] }
+    }
+
+    const employeeNos = employees.map(e => e.employeeNo)
+    const emails = employees.map(e => e.email)
+    const niks = employees.filter(e => e.nik).map(e => e.nik!)
+
+    const [existingEmployeeNos, existingEmails, existingNiks] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: { employeeNo: { in: employeeNos } },
+        select: { employeeNo: true },
+      }),
+      this.prisma.employee.findMany({
+        where: { email: { in: emails } },
+        select: { email: true },
+      }),
+      niks.length > 0
+        ? this.prisma.employee.findMany({
+            where: { nik: { in: niks } },
+            select: { nik: true },
+          })
+        : Promise.resolve([]),
+    ])
+
+    const conflicts = new Set<string>()
+    existingEmployeeNos.forEach(e => conflicts.add(`employeeNo:${e.employeeNo}`))
+    existingEmails.forEach(e => conflicts.add(`email:${e.email}`))
+    existingNiks.forEach(e => conflicts.add(`nik:${e.nik}`))
+
+    if (conflicts.size > 0) {
+      const errors: Array<{ row: number; message: string }> = []
+      for (let i = 0; i < employees.length; i++) {
+        const emp = employees[i]!
+        const row = i + 2
+        if (conflicts.has(`employeeNo:${emp.employeeNo}`)) {
+          errors.push({ row, message: `No. Induk Karyawan "${emp.employeeNo}" sudah ada di database` })
+        }
+        if (conflicts.has(`email:${emp.email}`)) {
+          errors.push({ row, message: `Email "${emp.email}" sudah ada di database` })
+        }
+        if (emp.nik && conflicts.has(`nik:${emp.nik}`)) {
+          errors.push({ row, message: `NIK "${emp.nik}" sudah ada di database` })
+        }
+      }
+      throw new BadRequestException({
+        message: 'Import dibatalkan. Beberapa data sudah ada di database.',
+        errors,
+      })
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const created = []
+        for (const emp of employees) {
+          const record = await tx.employee.create({
+            data: {
+              ...emp,
+              employmentStatus: 'KONTRAK_EXPIRED',
+              birthDate: new Date(emp.birthDate),
+              joinDate: new Date(emp.joinDate),
+            },
+          })
+          created.push(record)
+        }
+        return created
+      })
+      return { imported: result.length, errors: [] }
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err
+      throw new BadRequestException({
+        message: 'Import gagal. Pastikan semua data valid dan tidak ada duplikat.',
+        details: err?.message ?? 'Unknown error',
+      })
+    }
+  }
+
   async update(id: number, dto: UpdateEmployeeDto) {
     await this.findOne(id)
     const employee = await this.prisma.employee.update({
@@ -311,5 +390,116 @@ export class EmployeesService {
       .filter(l => l.count > 0)
 
     return { total, aktif, kontrakExpired, resign, phk, expiringContracts, byLocation, byLevel }
+  }
+
+  async generateImportTemplate(): Promise<Buffer> {
+    const [workLocations, jobRoles, jobLevels, departments, taxStatus] = await Promise.all([
+      this.prisma.workLocation.findMany(),
+      this.prisma.jobRole.findMany(),
+      this.prisma.jobLevel.findMany(),
+      this.prisma.department.findMany(),
+      this.prisma.taxStatus.findMany(),
+    ])
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Data Karyawan')
+
+    const COLUMN_HEADERS = [
+      'No. Induk Karyawan',
+      'Nama Lengkap',
+      'NIK',
+      'Jenis Kelamin',
+      'Tempat Lahir',
+      'Tanggal Lahir',
+      'Alamat',
+      'Tanggal Bergabung',
+      'Email',
+      'No. HP',
+      'Pendidikan',
+      'Lokasi Kerja',
+      'Jabatan',
+      'Level Jabatan',
+      'Departemen',
+      'Status Pajak',
+    ]
+
+    const GENDER_LABELS = ['Laki-laki', 'Perempuan']
+    const EDUCATION_LABELS = ['SMA', 'D3', 'S1', 'S2']
+
+    const headerFill: ExcelJS.FillPattern = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF2563EB' },
+    }
+    const headerFont: Partial<ExcelJS.Font> = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+    }
+
+    const requiredColumns = new Set([1, 2, 4, 6, 8, 9, 11, 12, 13, 14, 15, 16])
+
+    const headerRow = sheet.addRow(COLUMN_HEADERS)
+    headerRow.eachCell((cell, colNumber) => {
+      cell.fill = headerFill
+      cell.font = headerFont
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      }
+    })
+    sheet.getRow(1).height = 24
+
+    const addDropdown = (
+      colNumber: number,
+      items: string[],
+      errorTitle: string,
+      errorMsg: string,
+    ) => {
+      if (items.length === 0) return
+
+      const formulaStr = `"${items.join(',')}"`
+      ;(sheet.getColumn(colNumber) as any).dataValidation = {
+        type: 'list',
+        allowBlank: false,
+        formulae: [formulaStr],
+        showErrorMessage: true,
+        errorTitle,
+        error: errorMsg,
+      }
+    }
+
+    addDropdown(4, GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
+    addDropdown(11, EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
+    addDropdown(12, workLocations.map(l => l.name), 'Lokasi Kerja Tidak Valid', 'Pilih dari daftar lokasi kerja yang tersedia.')
+    addDropdown(13, jobRoles.map(l => l.name), 'Jabatan Tidak Valid', 'Pilih dari daftar jabatan yang tersedia.')
+    addDropdown(14, jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
+    addDropdown(15, departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
+    addDropdown(16, taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
+
+    for (let i = 2; i <= 101; i++) {
+      for (let col = 1; col <= COLUMN_HEADERS.length; col++) {
+        const cell = sheet.getCell(i, col)
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        }
+      }
+    }
+
+    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18]
+    COLUMN_HEADERS.forEach((_, i) => {
+      sheet.getColumn(i + 1).width = columnWidths[i]
+    })
+
+    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    return Buffer.from(buffer)
   }
 }
