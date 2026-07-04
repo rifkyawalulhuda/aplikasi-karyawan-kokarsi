@@ -120,8 +120,30 @@ export interface Contract {
   documentUrl?: string
   generatedPdfUrl?: string | null
   generatedAt?: string | null
+  parentContractId?: number | null
+  parentContract?: { id: number; contractNo: string; status: ContractStatus } | null
   createdAt: string
   updatedAt?: string
+}
+
+export interface ContractSummaryRow {
+  employeeId: number
+  employeeNo: string
+  fullName: string
+  contractId: number
+  contractNo: string
+  contractType: { id: number; name: string } | null
+  startDate: string
+  endDate: string
+  status: ContractStatus
+  daysRemaining: number
+  historyCount: number
+  canRenew: boolean
+}
+
+export interface ContractHistoryResponse {
+  employee: { id: number; employeeNo: string; fullName: string }
+  contracts: Contract[]
 }
 
 export type ContractFamily = 'MITRA' | 'PKWT'

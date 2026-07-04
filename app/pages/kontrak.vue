@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
-import type { Contract, ContractDocumentPreview, ContractStatus } from '~/types'
+import type { Contract, ContractSummaryRow, ContractHistoryResponse, ContractStatus, ContractDocumentPreview } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
@@ -13,39 +13,11 @@ const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 
-const { data: contractsRes, status, refresh } = await useFetch<{ data: Contract[]; total: number }>('/api/contracts', {
-  query: { limit: 999 },
-  lazy: true
+const { data: summaryRes, status, refresh } = await useFetch<ContractSummaryRow[]>('/api/contracts/summary', {
+  lazy: true,
 })
 
-const contracts = computed<Contract[]>(() => contractsRes.value?.data ?? [])
-
-const selectedEmployeeId = ref<number | null>(null)
-const historyModal = ref(false)
-const reopenHistoryAfterEdit = ref(false)
-
-const employeeContractCounts = computed<Record<number, number>>(() => {
-  return contracts.value.reduce((acc, contract) => {
-    acc[contract.employeeId] = (acc[contract.employeeId] ?? 0) + 1
-    return acc
-  }, {} as Record<number, number>)
-})
-
-const selectedEmployeeContracts = computed(() => {
-  if (!selectedEmployeeId.value) return []
-  return contracts.value
-    .filter(contract => contract.employeeId === selectedEmployeeId.value)
-    .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
-})
-
-const selectedEmployee = computed(() => selectedEmployeeContracts.value[0]?.employee ?? null)
-const selectedEmployeeStats = computed(() => ({
-  total: selectedEmployeeContracts.value.length,
-  active: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKTIF').length,
-  expiring: selectedEmployeeContracts.value.filter(contract => contract.status === 'AKAN_HABIS').length,
-  expired: selectedEmployeeContracts.value.filter(contract => contract.status === 'EXPIRED').length,
-  finished: selectedEmployeeContracts.value.filter(contract => contract.status === 'SELESAI').length,
-}))
+const summaryRows = computed<ContractSummaryRow[]>(() => summaryRes.value ?? [])
 
 const statusFilter = ref('all')
 const searchQuery = ref('')
@@ -63,23 +35,73 @@ const previewContract = ref<Contract | null>(null)
 const previewData = ref<ContractDocumentPreview | null>(null)
 const previewPdfSrc = ref('')
 
-function openEdit(contract: Contract) {
-  reopenHistoryAfterEdit.value = false
-  editTarget.value = contract
-  editModal.value = true
+// History modal
+const historyModal = ref(false)
+const historyLoading = ref(false)
+const historyEmployee = ref<ContractHistoryResponse['employee'] | null>(null)
+const historyContracts = ref<Contract[]>([])
+const reopenHistoryAfterEdit = ref(false)
+const reopenHistoryAfterPreview = ref(false)
+const lastHistoryEmployeeId = ref<number | null>(null)
+
+// Renew modal
+const renewModal = ref(false)
+const renewParent = ref<Contract | null>(null)
+
+const historyStats = computed(() => {
+  const list = historyContracts.value
+  return {
+    total: list.length,
+    aktif: list.filter(c => c.status === 'AKTIF').length,
+    akanHabis: list.filter(c => c.status === 'AKAN_HABIS').length,
+    expired: list.filter(c => c.status === 'EXPIRED').length,
+    selesai: list.filter(c => c.status === 'SELESAI').length,
+  }
+})
+
+function hasBeenRenewed(contract: Contract, allContracts: Contract[]): boolean {
+  return allContracts.some(c => c.parentContractId === contract.id)
 }
 
-function openHistory(contract: Contract) {
+// Auto-reopen history modal after preview is closed
+watch(previewModal, async (isOpen) => {
+  if (!isOpen && reopenHistoryAfterPreview.value && lastHistoryEmployeeId.value) {
+    reopenHistoryAfterPreview.value = false
+    const employeeId = lastHistoryEmployeeId.value
+    lastHistoryEmployeeId.value = null
+    await nextTick()
+    await openHistoryById(employeeId)
+  }
+})
+
+const statusColorMap: Record<ContractStatus, string> = {
+  DRAFT: 'neutral',
+  AKTIF: 'success',
+  AKAN_HABIS: 'warning',
+  EXPIRED: 'error',
+  SELESAI: 'info',
+  DIBATALKAN: 'neutral'
+}
+
+const statusLabelMap: Record<ContractStatus, string> = {
+  DRAFT: 'Draft',
+  AKTIF: 'Aktif',
+  AKAN_HABIS: 'Akan Habis',
+  EXPIRED: 'Expired',
+  SELESAI: 'Selesai',
+  DIBATALKAN: 'Dibatalkan'
+}
+
+function openEditFromSummary(row: ContractSummaryRow) {
   reopenHistoryAfterEdit.value = false
-  selectedEmployeeId.value = contract.employeeId
-  historyModal.value = true
+  editTarget.value = { id: row.contractId } as Contract
+  editModal.value = true
 }
 
 function openEditFromHistory(contract: Contract) {
   reopenHistoryAfterEdit.value = true
-  selectedEmployeeId.value = contract.employeeId
-  historyModal.value = false
   editTarget.value = contract
+  historyModal.value = false
   nextTick(() => {
     editModal.value = true
   })
@@ -87,32 +109,77 @@ function openEditFromHistory(contract: Contract) {
 
 async function handleEditSaved() {
   await refresh()
-
-  if (!reopenHistoryAfterEdit.value || !selectedEmployeeId.value) return
-
-  const employeeId = selectedEmployeeId.value
+  if (!reopenHistoryAfterEdit.value || !historyEmployee.value) return
+  const employeeId = historyEmployee.value.id
   reopenHistoryAfterEdit.value = false
-  selectedEmployeeId.value = employeeId
   await nextTick()
+  await openHistoryById(employeeId)
+}
+
+async function openHistory(row: ContractSummaryRow) {
+  await openHistoryById(row.employeeId)
+}
+
+async function openHistoryById(employeeId: number) {
+  historyLoading.value = true
   historyModal.value = true
+  historyContracts.value = []
+  historyEmployee.value = null
+  lastHistoryEmployeeId.value = employeeId
+
+  try {
+    const res = await $fetch<ContractHistoryResponse>(`/api/contracts/history/${employeeId}`)
+    historyEmployee.value = res.employee
+    historyContracts.value = res.contracts
+  } catch (e: any) {
+    toast.add({
+      title: 'Gagal memuat riwayat kontrak',
+      description: e?.data?.message ?? 'Terjadi kesalahan',
+      color: 'error',
+    })
+    historyModal.value = false
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function openRenewFromSummary(row: ContractSummaryRow) {
+  const contract: Contract = {
+    id: row.contractId,
+    employeeId: row.employeeId,
+    contractNo: row.contractNo,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    status: row.status,
+    contractType: row.contractType,
+  } as Contract
+  openRenew(contract)
+}
+
+function openRenew(contract: Contract) {
+  renewParent.value = contract
+  renewModal.value = true
+}
+
+function handleRenewSaved() {
+  refresh()
 }
 
 function openDocument(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-async function openPreview(contract: Contract) {
-  previewContract.value = contract
+async function openPreview(contractId: number, contractObj?: Contract) {
+  previewContract.value = contractObj ?? { id: contractId } as Contract
   previewModal.value = true
   previewLoading.value = true
   previewData.value = null
   previewPdfSrc.value = ''
 
   try {
-    previewData.value = await $fetch<ContractDocumentPreview>(`/api/contracts/${contract.id}/document-preview`)
+    previewData.value = await $fetch<ContractDocumentPreview>(`/api/contracts/${contractId}/document-preview`)
     if ((previewData.value?.missingFields?.length ?? 0) === 0) {
-      // PdfViewer will fetch and render this URL to canvas
-      previewPdfSrc.value = `/api/contracts/${contract.id}/download-pdf?preview=${Date.now()}`
+      previewPdfSrc.value = `/api/contracts/${contractId}/download-pdf?preview=${Date.now()}`
     }
   } catch (e: any) {
     toast.add({
@@ -126,9 +193,17 @@ async function openPreview(contract: Contract) {
   }
 }
 
-async function generateContractDocument(contract: Contract) {
+function openPreviewFromHistory(contract: Contract) {
+  reopenHistoryAfterPreview.value = true
+  historyModal.value = false
+  nextTick(() => {
+    openPreview(contract.id, contract)
+  })
+}
+
+async function generateContractDocument(contractId: number, contractNo?: string) {
   try {
-    const result = await $fetch<{ generatedPdfUrl?: string | null; pdfReady?: boolean; renderEngine?: 'PDF_NATIVE'; layoutMode?: 'LEGAL_PDF_TEMPLATE' }>(`/api/contracts/${contract.id}/generate-document`, {
+    const result = await $fetch<{ generatedPdfUrl?: string | null; pdfReady?: boolean }>(`/api/contracts/${contractId}/generate-document`, {
       method: 'POST',
     })
     toast.add({
@@ -139,9 +214,6 @@ async function generateContractDocument(contract: Contract) {
       color: 'success',
     })
     await refresh()
-    if (previewContract.value?.id === contract.id) {
-      await openPreview(contract)
-    }
   } catch (e: any) {
     const missing = e?.data?.missingFields
     toast.add({
@@ -152,23 +224,23 @@ async function generateContractDocument(contract: Contract) {
   }
 }
 
-function downloadGenerated(contract: Contract, format: 'pdf') {
-  window.open(`/api/contracts/${contract.id}/download-${format}`, '_blank', 'noopener,noreferrer')
+function downloadGeneratedPdf(contractId: number) {
+  window.open(`/api/contracts/${contractId}/download-pdf`, '_blank', 'noopener,noreferrer')
 }
 
-function confirmDelete(contract: Contract) {
+function confirmDelete(contractId: number, contractNo: string) {
   confirmDeleteToast({
     title: 'Hapus data kontrak?',
-    description: `Kontrak ${contract.contractNo} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    description: `Kontrak ${contractNo} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
     confirmLabel: 'Hapus Kontrak',
-    onConfirm: () => doDelete(contract),
+    onConfirm: () => doDelete(contractId),
   })
 }
 
-async function doDelete(contract: Contract) {
+async function doDelete(contractId: number) {
   deleteLoading.value = true
   try {
-    await $fetch(`/api/contracts/${contract.id}`, { method: 'DELETE' })
+    await $fetch(`/api/contracts/${contractId}`, { method: 'DELETE' })
     toast.add({ title: 'Kontrak berhasil dihapus', color: 'success' })
     refresh()
   } catch (e: any) {
@@ -183,31 +255,24 @@ function toggleSort(key: string) {
     sorting.value = { key, direction: 'asc' }
     return
   }
-
   if (sorting.value.direction === 'asc') {
     sorting.value = { key, direction: 'desc' }
     return
   }
-
   sorting.value = null
 }
 
-function getSortValue(contract: Contract, key: string) {
+function getSortValue(row: ContractSummaryRow, key: string) {
   switch (key) {
-    case 'contractNo':
-      return contract.contractNo ?? ''
-    case 'employee':
-      return contract.employee?.fullName ?? ''
-    case 'contractType':
-      return contract.contractType?.name ?? ''
-    case 'startDate':
-      return contract.startDate ?? ''
-    case 'endDate':
-      return contract.endDate ?? ''
-    case 'status':
-      return contract.status ?? ''
-    default:
-      return ''
+    case 'fullName': return row.fullName ?? ''
+    case 'employeeNo': return row.employeeNo ?? ''
+    case 'contractNo': return row.contractNo ?? ''
+    case 'contractType': return row.contractType?.name ?? ''
+    case 'startDate': return row.startDate ?? ''
+    case 'endDate': return row.endDate ?? ''
+    case 'status': return row.status ?? ''
+    case 'daysRemaining': return row.daysRemaining ?? 0
+    default: return ''
   }
 }
 
@@ -230,91 +295,33 @@ function sortableHeader(label: string, key: string) {
   ])
 }
 
-const statusColorMap: Record<ContractStatus, string> = {
-  DRAFT: 'neutral',
-  AKTIF: 'success',
-  AKAN_HABIS: 'warning',
-  EXPIRED: 'error',
-  SELESAI: 'info',
-  DIBATALKAN: 'neutral'
-}
-
-const statusLabelMap: Record<ContractStatus, string> = {
-  DRAFT: 'Draft',
-  AKTIF: 'Aktif',
-  AKAN_HABIS: 'Akan Habis',
-  EXPIRED: 'Expired',
-  SELESAI: 'Selesai',
-  DIBATALKAN: 'Dibatalkan'
-}
-
-function getRowItems(row: Row<Contract>) {
-  return [
-    { type: 'label', label: 'Aksi' },
-    {
-      label: 'Preview Dokumen',
-      icon: 'i-lucide-file-search',
-      onSelect() { openPreview(row.original) }
-    },
-    {
-      label: 'Generate Dokumen',
-      icon: 'i-lucide-file-cog',
-      onSelect() { generateContractDocument(row.original) }
-    },
-    {
-      label: 'Riwayat Karyawan',
-      icon: 'i-lucide-history',
-      onSelect() { openHistory(row.original) }
-    },
-    {
-      label: 'Edit Kontrak',
-      icon: 'i-lucide-pencil',
-      onSelect() { openEdit(row.original) }
-    },
-    {
-      label: 'Unduh PDF',
-      icon: 'i-lucide-download',
-      onSelect() {
-        downloadGenerated(row.original, 'pdf')
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Hapus Kontrak',
-      icon: 'i-lucide-trash',
-      color: 'error' as const,
-      onSelect() { confirmDelete(row.original) }
-    }
-  ]
-}
-
-const columns: TableColumn<Contract>[] = [
-  {
-    accessorKey: 'contractNo',
-    header: () => sortableHeader('No. Kontrak', 'contractNo'),
-    cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.contractNo)
-  },
+const columns: TableColumn<ContractSummaryRow>[] = [
   {
     accessorKey: 'employee',
-    header: () => sortableHeader('Karyawan', 'employee'),
+    header: () => sortableHeader('Karyawan', 'fullName'),
     cell: ({ row }) =>
       h('div', { class: 'flex items-center justify-between gap-3' }, [
         h('div', undefined, [
           h(resolveComponent('NuxtLink'), {
             to: `/karyawan/${row.original.employeeId}`,
             class: 'font-medium text-highlighted text-sm hover:text-primary hover:underline'
-          }, () => row.original.employee?.fullName ?? '-'),
-          h('p', { class: 'text-xs text-muted' }, row.original.employee?.employeeNo ?? '-')
+          }, () => row.original.fullName),
+          h('p', { class: 'text-xs text-muted' }, row.original.employeeNo)
         ]),
         h(UButton, {
           size: 'xs',
           color: 'neutral',
           variant: 'subtle',
           icon: 'i-lucide-history',
-          label: `${employeeContractCounts.value[row.original.employeeId] ?? 0} riwayat`,
+          label: `${row.original.historyCount} riwayat`,
           onClick: () => openHistory(row.original),
         })
       ])
+  },
+  {
+    accessorKey: 'contractNo',
+    header: () => sortableHeader('No. Kontrak', 'contractNo'),
+    cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.contractNo)
   },
   {
     accessorKey: 'contractType',
@@ -354,6 +361,16 @@ const columns: TableColumn<Contract>[] = [
     }
   },
   {
+    accessorKey: 'daysRemaining',
+    header: () => sortableHeader('Sisa Hari', 'daysRemaining'),
+    cell: ({ row }) => {
+      const days = row.original.daysRemaining
+      if (days < 0) return h('span', { class: 'text-sm text-error' }, 'Habis')
+      if (days <= 30) return h('span', { class: 'text-sm text-warning font-medium' }, `${days} hari`)
+      return h('span', { class: 'text-sm text-muted' }, `${days} hari`)
+    }
+  },
+  {
     id: 'actions',
     cell: ({ row }) =>
       h('div', { class: 'text-right' },
@@ -372,8 +389,59 @@ const columns: TableColumn<Contract>[] = [
   }
 ]
 
+function getRowItems(row: Row<ContractSummaryRow>) {
+  const items: any[] = [
+    { type: 'label', label: 'Aksi' },
+    {
+      label: 'Riwayat Karyawan',
+      icon: 'i-lucide-history',
+      onSelect() { openHistory(row.original) }
+    },
+  ]
+
+  if (row.original.canRenew) {
+    items.push({
+      label: 'Perpanjang Kontrak',
+      icon: 'i-lucide-refresh-cw',
+      onSelect() { openRenewFromSummary(row.original) }
+    })
+  }
+
+  items.push(
+    {
+      label: 'Preview Dokumen',
+      icon: 'i-lucide-file-search',
+      onSelect() { openPreview(row.original.contractId) }
+    },
+    {
+      label: 'Generate Dokumen',
+      icon: 'i-lucide-file-cog',
+      onSelect() { generateContractDocument(row.original.contractId, row.original.contractNo) }
+    },
+    {
+      label: 'Edit Kontrak',
+      icon: 'i-lucide-pencil',
+      onSelect() { openEditFromSummary(row.original) }
+    },
+    {
+      label: 'Unduh PDF',
+      icon: 'i-lucide-download',
+      onSelect() { downloadGeneratedPdf(row.original.contractId) }
+    },
+    { type: 'separator' },
+    {
+      label: 'Hapus Kontrak',
+      icon: 'i-lucide-trash',
+      color: 'error' as const,
+      onSelect() { confirmDelete(row.original.contractId, row.original.contractNo) }
+    }
+  )
+
+  return items
+}
+
 const filteredData = computed(() => {
-  let list = contracts.value
+  let list = summaryRows.value
   if (statusFilter.value !== 'all') {
     list = list.filter(c => c.status === statusFilter.value)
   }
@@ -381,8 +449,8 @@ const filteredData = computed(() => {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(c =>
       c.contractNo.toLowerCase().includes(q) ||
-      c.employee?.fullName?.toLowerCase().includes(q) ||
-      c.employee?.employeeNo?.toLowerCase().includes(q)
+      c.fullName?.toLowerCase().includes(q) ||
+      c.employeeNo?.toLowerCase().includes(q)
     )
   }
 
@@ -396,6 +464,8 @@ const filteredData = computed(() => {
 
     if (sort.key === 'startDate' || sort.key === 'endDate') {
       result = new Date(aValue).getTime() - new Date(bValue).getTime()
+    } else if (sort.key === 'daysRemaining') {
+      result = (aValue as number) - (bValue as number)
     } else {
       result = String(aValue).localeCompare(String(bValue), 'id', { sensitivity: 'base' })
     }
@@ -405,15 +475,13 @@ const filteredData = computed(() => {
 })
 
 const counts = computed(() => {
-  const list = contracts.value
-  const uniqueEmployees = new Set(list.map(c => c.employeeId)).size
+  const list = summaryRows.value
   return {
     total: list.length,
     aktif: list.filter(c => c.status === 'AKTIF').length,
     akanHabis: list.filter(c => c.status === 'AKAN_HABIS').length,
     expired: list.filter(c => c.status === 'EXPIRED').length,
     selesai: list.filter(c => c.status === 'SELESAI').length,
-    employees: uniqueEmployees
   }
 })
 
@@ -436,13 +504,9 @@ watch([statusFilter, searchQuery], () => {
     </template>
 
     <template #body>
-      <!-- Summary badges -->
       <div class="flex flex-wrap gap-3 mb-4">
         <UBadge variant="subtle" color="neutral" size="lg">
           Total: {{ counts.total }}
-        </UBadge>
-        <UBadge variant="subtle" color="primary" size="lg">
-          Karyawan: {{ counts.employees }}
         </UBadge>
         <UBadge variant="subtle" color="success" size="lg">
           Aktif: {{ counts.aktif }}
@@ -458,19 +522,17 @@ watch([statusFilter, searchQuery], () => {
         </UBadge>
       </div>
 
-      <!-- Toolbar -->
       <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
         <UInput
           v-model="searchQuery"
           class="max-w-xs"
           icon="i-lucide-search"
-          placeholder="Cari no. kontrak atau karyawan..."
+          placeholder="Cari nama karyawan atau no. kontrak..."
         />
         <USelect
           v-model="statusFilter"
           :items="[
             { label: 'Semua Status', value: 'all' },
-            { label: 'Draft', value: 'DRAFT' },
             { label: 'Aktif', value: 'AKTIF' },
             { label: 'Akan Habis', value: 'AKAN_HABIS' },
             { label: 'Expired', value: 'EXPIRED' },
@@ -482,7 +544,6 @@ watch([statusFilter, searchQuery], () => {
         />
       </div>
 
-      <!-- Table -->
       <UTable
         ref="table"
         v-model:pagination="pagination"
@@ -501,10 +562,9 @@ watch([statusFilter, searchQuery], () => {
         }"
       />
 
-      <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
         <div class="text-sm text-muted">
-          Menampilkan {{ filteredData.length }} kontrak
+          Menampilkan {{ filteredData.length }} karyawan
         </div>
         <UPagination
           :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
@@ -529,30 +589,41 @@ watch([statusFilter, searchQuery], () => {
     @saved="handleEditSaved"
   />
 
-  <!-- Modal Riwayat Kontrak per Karyawan -->
+  <!-- Modal Renew -->
+  <KontrakRenewContractModal
+    v-model:open="renewModal"
+    :parent-contract="renewParent"
+    @saved="handleRenewSaved"
+  />
+
+  <!-- Modal Riwayat Kontrak -->
   <UModal
     v-model:open="historyModal"
     title="Riwayat Kontrak Karyawan"
     :ui="{ content: 'max-w-3xl' }"
   >
     <template #body>
-      <div v-if="selectedEmployee" class="space-y-4">
+      <div v-if="historyLoading" class="flex items-center justify-center py-12">
+        <UIcon name="i-lucide-loader-circle" class="w-8 h-8 text-muted animate-spin" />
+      </div>
+
+      <div v-else-if="historyEmployee" class="space-y-4">
         <div class="flex flex-wrap items-center gap-4 rounded-xl border border-default bg-elevated/40 p-4">
           <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0">
             <span class="text-sm font-semibold text-primary">
-              {{ selectedEmployee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
+              {{ historyEmployee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
             </span>
           </div>
           <div class="min-w-0 flex-1">
-            <p class="font-semibold text-highlighted">{{ selectedEmployee.fullName }}</p>
-            <p class="text-sm text-muted">{{ selectedEmployee.employeeNo }}</p>
+            <p class="font-semibold text-highlighted">{{ historyEmployee.fullName }}</p>
+            <p class="text-sm text-muted">{{ historyEmployee.employeeNo }}</p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <UBadge variant="subtle" color="neutral">Total {{ selectedEmployeeStats.total }} kontrak</UBadge>
-            <UBadge variant="subtle" color="success">Aktif {{ selectedEmployeeStats.active }}</UBadge>
-            <UBadge variant="subtle" color="warning">Akan Habis {{ selectedEmployeeStats.expiring }}</UBadge>
-            <UBadge variant="subtle" color="error">Expired {{ selectedEmployeeStats.expired }}</UBadge>
-            <UBadge variant="subtle" color="info">Selesai {{ selectedEmployeeStats.finished }}</UBadge>
+            <UBadge variant="subtle" color="neutral">Total {{ historyStats.total }} kontrak</UBadge>
+            <UBadge variant="subtle" color="success">Aktif {{ historyStats.aktif }}</UBadge>
+            <UBadge variant="subtle" color="warning">Akan Habis {{ historyStats.akanHabis }}</UBadge>
+            <UBadge variant="subtle" color="error">Expired {{ historyStats.expired }}</UBadge>
+            <UBadge variant="subtle" color="info">Selesai {{ historyStats.selesai }}</UBadge>
           </div>
         </div>
 
@@ -560,7 +631,7 @@ watch([statusFilter, searchQuery], () => {
           <div class="absolute left-5 top-2 bottom-2 w-px bg-border/70" />
           <div class="space-y-3">
             <div
-              v-for="(contract, index) in selectedEmployeeContracts"
+              v-for="(contract, index) in historyContracts"
               :key="contract.id"
               class="relative pl-14"
             >
@@ -574,7 +645,10 @@ watch([statusFilter, searchQuery], () => {
                     <div class="mb-2 flex flex-wrap items-center gap-2">
                       <p class="font-medium text-highlighted">{{ contract.contractNo }}</p>
                       <UBadge variant="subtle" color="neutral" size="sm">
-                        #{{ selectedEmployeeContracts.length - index }}
+                        #{{ historyContracts.length - index }}
+                      </UBadge>
+                      <UBadge v-if="contract.parentContract" variant="subtle" color="neutral" size="sm">
+                        Dari: {{ contract.parentContract.contractNo }}
                       </UBadge>
                     </div>
                     <p class="text-sm text-muted">
@@ -598,7 +672,31 @@ watch([statusFilter, searchQuery], () => {
                     color="neutral"
                     variant="subtle"
                     size="xs"
-                    @click="openDocument(contract.documentUrl)"
+                    @click="openDocument(contract.documentUrl!)"
+                  />
+                  <UButton
+                    label="Preview"
+                    icon="i-lucide-file-search"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    @click="openPreviewFromHistory(contract)"
+                  />
+                  <UButton
+                    label="Unduh PDF"
+                    icon="i-lucide-download"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    @click="downloadGeneratedPdf(contract.id)"
+                  />
+                  <UButton
+                    label="Generate"
+                    icon="i-lucide-file-cog"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                    @click="generateContractDocument(contract.id, contract.contractNo)"
                   />
                   <UButton
                     label="Edit"
@@ -607,6 +705,15 @@ watch([statusFilter, searchQuery], () => {
                     variant="ghost"
                     size="xs"
                     @click="openEditFromHistory(contract)"
+                  />
+                  <UButton
+                    v-if="(contract.status === 'AKAN_HABIS' || contract.status === 'EXPIRED') && !hasBeenRenewed(contract, historyContracts)"
+                    label="Perpanjang"
+                    icon="i-lucide-refresh-cw"
+                    color="success"
+                    variant="ghost"
+                    size="xs"
+                    @click="openRenew(contract)"
                   />
                 </div>
               </div>
@@ -617,12 +724,13 @@ watch([statusFilter, searchQuery], () => {
           Riwayat diurutkan dari kontrak terbaru. Ini menampilkan seluruh kontrak karyawan untuk memudahkan pelacakan masa kerja.
         </p>
       </div>
-      <div v-else class="text-sm text-muted">
+      <div v-else class="text-sm text-muted text-center py-8">
         Belum ada karyawan yang dipilih.
       </div>
     </template>
   </UModal>
 
+  <!-- Modal Preview -->
   <UModal
     v-model:open="previewModal"
     title="Preview Dokumen Kontrak"
@@ -634,9 +742,6 @@ watch([statusFilter, searchQuery], () => {
           <p class="font-semibold text-highlighted truncate">
             {{ previewContract?.contractNo ?? 'Preview Dokumen' }}
           </p>
-          <p class="text-sm text-muted truncate">
-            {{ previewContract?.employee?.fullName ?? '-' }}
-          </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <UButton
@@ -645,14 +750,14 @@ watch([statusFilter, searchQuery], () => {
             color="neutral"
             variant="subtle"
             :disabled="!previewContract"
-            @click="previewContract && generateContractDocument(previewContract)"
+            @click="previewContract && generateContractDocument(previewContract.id)"
           />
           <UButton
             label="Unduh PDF"
             icon="i-lucide-download"
             color="primary"
             :disabled="!previewContract"
-            @click="previewContract && downloadGenerated(previewContract, 'pdf')"
+            @click="previewContract && downloadGeneratedPdf(previewContract.id)"
           />
         </div>
       </div>
@@ -680,35 +785,15 @@ watch([statusFilter, searchQuery], () => {
                 <p class="mt-1 text-slate-700">
                   Dokumen digenerate langsung dari sistem dan mengacu pada sample PDF legal internal.
                 </p>
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <UBadge color="info" variant="subtle">{{ previewData.renderEngine }}</UBadge>
-                  <UBadge color="neutral" variant="subtle">{{ previewData.layoutMode }}</UBadge>
-                </div>
-              </div>
-
-              <div class="rounded-2xl border border-default bg-default p-4 text-sm">
-                <p class="font-semibold text-highlighted">Template Referensi</p>
-                <p class="mt-2">{{ previewData.template.name ?? 'Template kontrak' }}</p>
-                <p v-if="previewData.template.templateKey" class="text-muted">
-                  Key: {{ previewData.template.templateKey }}
-                </p>
-                <p v-if="previewData.template.sourceTemplateRelativePath" class="mt-2 break-all text-muted">
-                  Referensi PDF: {{ previewData.template.sourceTemplateRelativePath }}
-                </p>
-                <p v-if="previewData.template.fidelityNote" class="mt-2 text-muted">
-                  {{ previewData.template.fidelityNote }}
-                </p>
               </div>
 
               <div class="rounded-2xl border border-default bg-default p-4 text-sm">
                 <p class="font-semibold text-highlighted">Ringkasan Data</p>
                 <div class="mt-3 space-y-2 text-muted">
+                  <p><span class="text-highlighted">Template:</span> {{ previewData.template.name ?? '-' }}</p>
                   <p><span class="text-highlighted">Karyawan:</span> {{ previewData.employee.fullName }}</p>
-                  <p><span class="text-highlighted">No. Induk:</span> {{ previewData.employee.employeeNo }}</p>
                   <p><span class="text-highlighted">Posisi:</span> {{ previewData.contract.positionLabel }}</p>
-                  <p><span class="text-highlighted">Lokasi:</span> {{ previewData.contract.locationLabel }}</p>
                   <p><span class="text-highlighted">Periode:</span> {{ previewData.contract.startDate }} - {{ previewData.contract.endDate }}</p>
-                  <p><span class="text-highlighted">{{ previewData.compensationLabel }}:</span> {{ previewData.contract.compensation }}</p>
                 </div>
               </div>
             </div>
@@ -722,5 +807,3 @@ watch([statusFilter, searchQuery], () => {
     </template>
   </UModal>
 </template>
-
-
