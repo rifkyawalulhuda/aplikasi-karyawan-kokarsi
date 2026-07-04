@@ -152,6 +152,20 @@ export class ContractsService {
     }
   }
 
+  private async checkTerminationLockout(employeeId: number) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { employmentStatus: true },
+    })
+    if (!employee) throw new NotFoundException('Karyawan tidak ditemukan')
+
+    if (employee.employmentStatus === 'RESIGN' || employee.employmentStatus === 'PHK') {
+      throw new ForbiddenException(
+        'Pembuatan atau perpanjangan kontrak diblokir karena karyawan sudah tidak aktif (RESIGN/PHK).',
+      )
+    }
+  }
+
   private async getBlockingContract(employeeId: number) {
     return this.prisma.contract.findFirst({
       where: {
@@ -238,9 +252,11 @@ export class ContractsService {
 
       if (!representative) continue
 
+      const isOffboarded = emp.employmentStatus === 'RESIGN' || emp.employmentStatus === 'PHK'
+      const contractStatus: ContractStatus = isOffboarded ? 'SELESAI' : representative.status
       const historyCount = computedContracts.length
-      const daysRemaining = calculateDaysRemaining(representative.endDate)
-      const canRenew = representative.status === 'AKAN_HABIS' || representative.status === 'EXPIRED'
+      const daysRemaining = isOffboarded ? 0 : calculateDaysRemaining(representative.endDate)
+      const canRenew = !isOffboarded && (representative.status === 'AKAN_HABIS' || representative.status === 'EXPIRED')
 
       rows.push({
         employeeId: emp.id,
@@ -251,7 +267,7 @@ export class ContractsService {
         contractType: representative.contractType ?? null,
         startDate: representative.startDate.toISOString(),
         endDate: representative.endDate.toISOString(),
-        status: representative.status,
+        status: contractStatus,
         daysRemaining,
         historyCount,
         canRenew,
@@ -281,6 +297,7 @@ export class ContractsService {
   }
 
   async create(dto: CreateContractDto) {
+    await this.checkTerminationLockout(dto.employeeId)
     await this.checkSp3Lockout(dto.employeeId)
 
     const blocking = await this.getBlockingContract(dto.employeeId)
@@ -332,6 +349,7 @@ export class ContractsService {
       )
     }
 
+    await this.checkTerminationLockout(parent.employeeId)
     await this.checkSp3Lockout(parent.employeeId)
 
     const newStart = startOfDay(new Date(dto.startDate)).getTime()

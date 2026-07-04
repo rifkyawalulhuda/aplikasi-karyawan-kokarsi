@@ -77,18 +77,24 @@ const state = reactive<Partial<Schema>>({
 // Contract status awareness
 const employeeContractStatus = ref<ContractStatus | null>(null)
 const employeeLatestContract = ref<ContractHistoryResponse['contracts'][0] | null>(null)
+const employeeEmploymentStatus = ref<string | null>(null)
 const checkingContract = ref(false)
 
 watch(() => state.employeeId, async (employeeId) => {
   employeeContractStatus.value = null
   employeeLatestContract.value = null
+  employeeEmploymentStatus.value = null
 
   if (!employeeId) return
 
   checkingContract.value = true
   try {
-    const res = await $fetch<ContractHistoryResponse>(`/api/contracts/history/${employeeId}`)
-    const latest = res.contracts[0]
+    const [historyRes, empRes] = await Promise.all([
+      $fetch<ContractHistoryResponse>(`/api/contracts/history/${employeeId}`),
+      $fetch<{ employmentStatus: string }>(`/api/employees/${employeeId}`),
+    ])
+    employeeEmploymentStatus.value = empRes.employmentStatus
+    const latest = historyRes.contracts[0]
     if (latest) {
       employeeContractStatus.value = latest.status
       employeeLatestContract.value = latest
@@ -99,7 +105,13 @@ watch(() => state.employeeId, async (employeeId) => {
   }
 })
 
+const isOffboarded = computed(() => {
+  const s = employeeEmploymentStatus.value
+  return s === 'RESIGN' || s === 'PHK'
+})
+
 const isBlocked = computed(() => {
+  if (isOffboarded.value) return true
   const s = employeeContractStatus.value
   return s === 'AKTIF' || s === 'AKAN_HABIS'
 })
@@ -163,6 +175,7 @@ function resetForm() {
   state.baseCompensation = undefined
   employeeContractStatus.value = null
   employeeLatestContract.value = null
+  employeeEmploymentStatus.value = null
 }
 </script>
 
@@ -183,6 +196,20 @@ function resetForm() {
         <div v-if="checkingContract" class="flex items-center gap-2 text-sm text-muted py-2">
           <UIcon name="i-lucide-loader-circle" class="w-4 h-4 animate-spin" />
           Memeriksa status kontrak karyawan...
+        </div>
+
+        <div v-else-if="isOffboarded" class="rounded-xl border border-error/40 bg-error/10 p-4">
+          <div class="flex items-start gap-3">
+            <UIcon name="i-lucide-user-x" class="w-5 h-5 text-error shrink-0 mt-0.5" />
+            <div class="text-sm">
+              <p class="font-semibold text-error">
+                Karyawan sudah tidak aktif ({{ employeeEmploymentStatus === 'PHK' ? 'PHK' : 'RESIGN' }})
+              </p>
+              <p class="mt-1 text-muted">
+                Karyawan ini sudah keluar dari perusahaan. Pembuatan kontrak baru tidak diizinkan.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div v-else-if="isBlocked && employeeLatestContract" class="rounded-xl border border-warning/40 bg-warning/10 p-4">
