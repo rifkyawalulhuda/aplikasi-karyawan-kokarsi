@@ -1,6 +1,8 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v6) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v7) | Stack: Nuxt 3 + NestJS + PostgreSQL
+>
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, dan sinkronisasi template kontrak `PKWT` / `MITRA` terbaru.
 
 ---
 
@@ -82,6 +84,9 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 31 | Preview PDF dokumen kontrak dan surat peringatan via PDF.js canvas render (bukan iframe) | `app/components/PdfViewer.client.vue`, `app/pages/kontrak.vue`, `app/pages/dokumen/surat-peringatan/index.vue` |
 | 32 | Eskalasi Surat Peringatan: rule SP1→SP2→SP3, blokir jika SP3 aktif, validasi backend + UI | `backend/src/warning-letters/warning-letters.service.ts`, `app/components/warning-letters/AddModal.vue` |
 | 33 | Upload dokumen kontrak PDF (scan tanda tangan) menggantikan field URL Dokumen | `backend/src/contracts/contracts.controller.ts`, `app/components/kontrak/EditContractModal.vue`, `server/api/contracts/[id]/document.post.ts` |
+| 34 | Pengaturan Umum untuk edit nama Ketua Koperasi (`cooperativeChairmanName`) | `app/pages/settings/index.vue`, `server/api/settings/general.get.ts`, `server/api/settings/general.put.ts`, `backend/src/settings/` |
+| 35 | Master template kontrak aktif untuk keluarga `PKWT` dan `MITRA` | `app/pages/settings/contract-templates.vue`, `backend/src/contract-templates/` |
+| 36 | Self-healing default `ContractType` dan sinkronisasi relasi template `PKWT` / `MITRA` | `backend/src/lookups/lookups.service.ts`, `backend/src/contract-templates/contract-templates.service.ts` |
 
 ---
 
@@ -114,6 +119,8 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Preview kontrak menampilkan PDF langsung via PDF.js (render ke canvas, bukan iframe)
 - Generate dokumen menghasilkan PDF dari kode
 - Endpoint `download-pdf` selalu regenerate (tidak serve cache basi)
+- Sample legal di `docs/sample-legal-doc/pdf` dipakai sebagai **referensi visual**, bukan template runtime
+- Runtime dokumen kontrak **tidak bergantung** pada DOC, DOCX, Microsoft Word, atau LibreOffice headless
 
 **Layout PDF PKWT (Kesepakatan Kerja Waktu Tertentu):**
 - 2 kolom paralel bilingual (Indonesia kiri, English kanan) dengan border
@@ -130,6 +137,11 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Border luar (kotak) mengelilingi kedua kolom + garis pembatas vertikal tengah
 - Heading PASAL tidak pernah terpisah dari paragraf pertamanya (break-inside: avoid)
 - Signature 2 pilar (PIHAK PERTAMA / PIHAK KEDUA) di **paling bawah di luar garis border**
+
+### Pengaturan Umum
+- Nama Ketua Koperasi disimpan di tabel `AppSetting` dengan key `cooperativeChairmanName`
+- Dikelola dari halaman `Pengaturan > Umum`
+- Nilai ini dipakai saat render dokumen kontrak PKWT / MITRA, terutama pada blok identitas legal dan signature
 
 ### Eskalasi Surat Peringatan
 Rule eskalasi aktif:
@@ -175,7 +187,9 @@ app/
     dokumen/
       surat-peringatan/
         index.vue          # Manajemen Surat Peringatan (preview PDF)
+    settings/index.vue      # Pengaturan umum (Ketua Koperasi)
     settings/master-data.vue  # Master data
+    settings/contract-templates.vue # Master template kontrak
     settings/users.vue        # Master user
     login.vue              # Login
   components/
@@ -219,8 +233,13 @@ server/
       [id]/generate.get.ts  # GET generate PDF (download)
       [id]/preview.get.ts   # GET preview PDF (inline)
       escalation/[employeeId].get.ts # GET status eskalasi SP per karyawan
+    settings/
+      general.get.ts        # GET pengaturan umum
+      general.put.ts        # PUT pengaturan umum
     users/
       pengurus.get.ts       # GET list pengurus (no admin guard)
+    contract-templates.ts   # GET/POST master template kontrak
+    contract-templates/[id].ts # PUT/DELETE master template kontrak
     lookups/
       [resource].ts         # GET list + POST
       [resource]/[id].ts    # PUT + DELETE
@@ -236,6 +255,7 @@ backend/
       contract-document.service.ts    # Generator PDF native (PKWT + MITRA)
       contract-document-definitions.ts # Definisi pasal legal per template (15 pasal MITRA, 11 pasal PKWT)
     contract-templates/     # CRUD master template kontrak
+    settings/               # Pengaturan umum aplikasi (AppSetting)
     warning-letters/        # CRUD SP + PDF generator + eskalasi rule
     lookups/                # Work locations, job roles, levels, tax status, contract types
     users/                  # CRUD master user internal + pengurus endpoint
@@ -319,6 +339,12 @@ backend/
 | `templateKey` | String | Kunci generator (PKWT_DRIVER, MITRA_KOMART, dll) |
 | `isActive` | Boolean | Status template aktif |
 
+### AppSetting
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `key` | String | Unique key setting, saat ini dipakai untuk `cooperativeChairmanName` |
+| `value` | String | Nilai setting |
+
 ---
 
 ## API Endpoints
@@ -342,6 +368,10 @@ backend/
 | GET | `/api/contracts/:id/document-preview` | Preview metadata dokumen kontrak |
 | POST | `/api/contracts/:id/generate-document` | Generate ulang PDF kontrak |
 | POST | `/api/contracts/:id/document` | Upload dokumen scan PDF (multipart) |
+| GET | `/api/contract-templates` | List master template kontrak |
+| POST | `/api/contract-templates` | Tambah master template kontrak |
+| PUT | `/api/contract-templates/:id` | Edit master template kontrak |
+| DELETE | `/api/contract-templates/:id` | Hapus master template kontrak |
 | GET | `/api/warning-letters` | List surat peringatan |
 | POST | `/api/warning-letters` | Tambah surat peringatan |
 | GET | `/api/warning-letters/:id` | Detail surat peringatan |
@@ -355,6 +385,8 @@ backend/
 | POST | `/api/users` | Tambah user internal |
 | PUT | `/api/users/:id` | Edit user internal |
 | DELETE | `/api/users/:id` | Hapus user internal |
+| GET | `/api/settings/general` | Ambil pengaturan umum |
+| PUT | `/api/settings/general` | Simpan pengaturan umum |
 | GET | `/api/lookups/*` | CRUD lookup data |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 | GET | `/uploads/contracts/**` | Serve PDF kontrak statis |
@@ -387,3 +419,5 @@ backend/
 | `PrismaService` property tidak ditemukan | Tambah getter baru di PrismaService |
 | TypeScript compile OOM | Gunakan `NODE_OPTIONS="--max-old-space-size=4096"` |
 | SP tidak bisa dibuat padahal tidak ada SP aktif | Cek endpoint escalation, pastikan `validUntil` SP lama sudah lewat |
+| Template kontrak `MITRA` tidak muncul | Cek data `contract_types`, jalankan sync/seed template, dan pastikan relasi `ContractTemplate` ke `MITRA` sudah terbentuk |
+| Nama Ketua Koperasi di PDF kontrak masih lama | Cek `Pengaturan > Umum`, pastikan `cooperativeChairmanName` sudah tersimpan di `AppSetting` |
