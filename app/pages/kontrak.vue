@@ -609,8 +609,14 @@ watch([statusFilter, searchQuery], () => {
 
       <div v-else-if="historyEmployee" class="space-y-4">
         <div class="flex flex-wrap items-center gap-4 rounded-xl border border-default bg-elevated/40 p-4">
-          <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0">
-            <span class="text-sm font-semibold text-primary">
+          <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
+            <img
+              v-if="historyEmployee.fotoKaryawan"
+              :src="`http://localhost:3001${historyEmployee.fotoKaryawan}`"
+              :alt="historyEmployee.fullName"
+              class="w-full h-full object-cover rounded-full"
+            />
+            <span v-else class="text-sm font-semibold text-primary">
               {{ historyEmployee.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
             </span>
           </div>

@@ -89,6 +89,7 @@ export interface Employee {
   contracts?: Contract[]
   offboarding?: EmployeeOffboarding | null
   statusHistory?: EmployeeStatusHistory[]
+  warningLetters?: WarningLetter[]
   createdAt?: string
   updatedAt?: string
 }
@@ -142,7 +143,7 @@ export interface ContractSummaryRow {
 }
 
 export interface ContractHistoryResponse {
-  employee: { id: number; employeeNo: string; fullName: string }
+  employee: { id: number; employeeNo: string; fullName: string; fotoKaryawan?: string | null }
   contracts: Contract[]
 }
 

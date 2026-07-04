@@ -280,7 +280,7 @@ export class ContractsService {
   async findHistoryByEmployee(employeeId: number) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { id: true, employeeNo: true, fullName: true },
+      select: { id: true, employeeNo: true, fullName: true, fotoKaryawan: true },
     })
     if (!employee) throw new NotFoundException('Karyawan tidak ditemukan')
 

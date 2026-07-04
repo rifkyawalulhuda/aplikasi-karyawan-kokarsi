@@ -150,6 +150,9 @@ export class EmployeesService {
         statusHistory: {
           orderBy: { changedAt: 'desc' },
         },
+        warningLetters: {
+          orderBy: { letterDate: 'desc' },
+        },
       },
     })
     if (!emp) throw new NotFoundException('Karyawan tidak ditemukan')
