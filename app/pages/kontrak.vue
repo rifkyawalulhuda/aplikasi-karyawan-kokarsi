@@ -231,6 +231,7 @@ function sortableHeader(label: string, key: string) {
 }
 
 const statusColorMap: Record<ContractStatus, string> = {
+  DRAFT: 'neutral',
   AKTIF: 'success',
   AKAN_HABIS: 'warning',
   EXPIRED: 'error',
@@ -239,6 +240,7 @@ const statusColorMap: Record<ContractStatus, string> = {
 }
 
 const statusLabelMap: Record<ContractStatus, string> = {
+  DRAFT: 'Draft',
   AKTIF: 'Aktif',
   AKAN_HABIS: 'Akan Habis',
   EXPIRED: 'Expired',
@@ -468,6 +470,7 @@ watch([statusFilter, searchQuery], () => {
           v-model="statusFilter"
           :items="[
             { label: 'Semua Status', value: 'all' },
+            { label: 'Draft', value: 'DRAFT' },
             { label: 'Aktif', value: 'AKTIF' },
             { label: 'Akan Habis', value: 'AKAN_HABIS' },
             { label: 'Expired', value: 'EXPIRED' },

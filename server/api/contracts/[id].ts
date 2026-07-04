@@ -12,10 +12,20 @@ export default defineEventHandler(async (event) => {
 
   const body = method !== 'GET' && method !== 'DELETE' ? await readBody(event) : undefined
 
-  return $fetch(`${BACKEND}/contracts/${id}`, {
+  const res = await $fetch.raw(`${BACKEND}/contracts/${id}`, {
     method: method as any,
     headers: authHeader,
     body,
     ignoreResponseError: true,
   })
+
+  if (res.status >= 400) {
+    throw createError({
+      statusCode: res.status,
+      statusMessage: res.statusText,
+      data: res._data,
+    })
+  }
+
+  return res._data
 })

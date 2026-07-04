@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber } from 'class-validator'
 import { ContractStatus } from '@prisma/client'
@@ -18,6 +18,7 @@ export class CreateContractDto {
   @IsOptional() @IsNumber() baseCompensation?: number
   @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
+  @IsOptional() @IsInt() parentContractId?: number
 }
 
 export class UpdateContractDto extends CreateContractDto {}
@@ -47,6 +48,13 @@ export class ContractsService {
         family: true,
         templateKey: true,
         isActive: true,
+      },
+    },
+    parentContract: {
+      select: {
+        id: true,
+        contractNo: true,
+        status: true,
       },
     },
   }
@@ -112,6 +120,34 @@ export class ContractsService {
   }
 
   async create(dto: CreateContractDto) {
+    // Guard 1: Anti-Overlap Rule — blokir jika karyawan punya kontrak AKTIF/AKAN_HABIS
+    const activeContract = await this.prisma.contract.findFirst({
+      where: {
+        employeeId: dto.employeeId,
+        status: { in: ['AKTIF', 'AKAN_HABIS'] },
+      },
+    })
+    if (activeContract) {
+      throw new ConflictException('Karyawan masih memiliki kontrak aktif berjalan.')
+    }
+
+    // Guard 2: SP3 Lockout — blokir jika karyawan punya SP3 aktif
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const sp3 = await this.prisma.warningLetter.findFirst({
+      where: {
+        employeeId: dto.employeeId,
+        warningLevel: 3,
+        validUntil: { gte: today },
+      },
+    })
+    if (sp3) {
+      throw new ForbiddenException(
+        'Pembuatan atau perpanjangan kontrak diblokir karena status eskalasi SP3 karyawan masih aktif.',
+      )
+    }
+
     const contract = await this.prisma.contract.create({
       data: {
         ...dto,
@@ -127,6 +163,21 @@ export class ContractsService {
 
   async update(id: number, dto: UpdateContractDto) {
     const existing = await this.findOne(id)
+
+    // Guard 3: State Lock — blokir perubahan field kritis jika dokumen sudah ditandatangani
+    if (existing.documentUrl) {
+      const lockedFields = ['baseCompensation', 'startDate', 'endDate', 'employeeId'] as const
+      for (const field of lockedFields) {
+        const newValue = dto[field]
+        const oldValue = existing[field]
+        if (newValue !== undefined && newValue !== oldValue) {
+          throw new BadRequestException(
+            'Kontrak yang sudah ditandatangani tidak dapat diubah pada field baseCompensation, startDate, endDate, dan employeeId.',
+          )
+        }
+      }
+    }
+
     const contract = await this.prisma.contract.update({
       where: { id },
       data: {

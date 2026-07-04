@@ -94,7 +94,7 @@ export interface Employee {
 }
 
 // --- Contract ---
-export type ContractStatus = 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'SELESAI' | 'DIBATALKAN'
+export type ContractStatus = 'DRAFT' | 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'SELESAI' | 'DIBATALKAN'
 
 export interface Contract {
   id: number

@@ -245,9 +245,12 @@ export class EmployeesService {
       await tx.contract.updateMany({
         where: {
           employeeId: id,
-          status: { not: 'DIBATALKAN' },
+          status: { in: ['AKTIF', 'AKAN_HABIS'] },
         },
-        data: { status: 'SELESAI' },
+        data: {
+          status: 'SELESAI',
+          endDate: new Date(dto.terminationDate),
+        },
       })
 
       await tx.employeeStatusHistory.create({
