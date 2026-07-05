@@ -269,6 +269,8 @@ export interface UserAccount {
 
 export interface GeneralSettings {
   cooperativeChairmanName: string
+  organizationName: string
+  appLogoUrl: string
 }
 
 // --- Misc ---
