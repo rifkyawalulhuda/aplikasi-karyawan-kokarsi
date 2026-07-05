@@ -3,6 +3,7 @@ definePageMeta({ layout: false })
 
 const auth = useAuthStore()
 const toast = useToast()
+const { logoUrl, organizationName } = useAppSettings()
 
 const form = reactive({
   employeeNo: '',
@@ -29,6 +30,8 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
 </script>
 
 <template>
@@ -43,15 +46,16 @@ async function handleLogin() {
 
       <div class="relative z-10">
         <div class="flex items-center gap-3">
-          <div class="flex size-11 items-center justify-center rounded-lg bg-white/15 backdrop-blur ring-1 ring-white/20">
-            <span class="text-lg font-bold tracking-tight">K</span>
+          <div class="flex size-11 items-center justify-center rounded-lg bg-white/15 backdrop-blur ring-1 ring-white/20 overflow-hidden">
+            <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
+            <span v-else class="text-lg font-bold tracking-tight">{{ orgFirstLetter }}</span>
           </div>
           <div class="leading-tight">
             <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-white/70">
               Koperasi Karyawan
             </p>
             <p class="mt-0.5 text-sm font-semibold">
-              PT. Sankyu Indonesia
+              {{ organizationName }}
             </p>
           </div>
         </div>
@@ -62,7 +66,7 @@ async function handleLogin() {
           Sistem Manajemen Karyawan
         </h1>
         <p class="mt-4 text-sm leading-7 text-white/75">
-          Platform internal untuk pengelolaan data karyawan, kontrak kerja, dan laporan operasional Koperasi PT. Sankyu.
+          Platform internal untuk pengelolaan data karyawan, kontrak kerja, dan laporan operasional {{ organizationName }}.
         </p>
 
         <div class="mt-8 space-y-4">
@@ -88,7 +92,7 @@ async function handleLogin() {
       </div>
 
       <div class="relative z-10 text-xs text-white/50">
-        &copy; {{ new Date().getFullYear() }} Kokarsi PT. Sankyu. Hak cipta dilindungi.
+        &copy; {{ new Date().getFullYear() }} {{ organizationName }}. Hak cipta dilindungi.
       </div>
     </div>
 
@@ -97,12 +101,13 @@ async function handleLogin() {
       <div class="w-full max-w-sm">
         <!-- Mobile logo -->
         <div class="mb-10 flex items-center gap-3 lg:hidden">
-          <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
-            K
+          <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white overflow-hidden">
+            <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
+            <span v-else>{{ orgFirstLetter }}</span>
           </div>
           <div class="leading-tight">
             <p class="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">
-              Kokarsi PT. Sankyu
+              {{ organizationName }}
             </p>
             <p class="text-sm font-semibold text-highlighted">
               Portal Internal

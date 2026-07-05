@@ -18,7 +18,6 @@ class UpdateGeneralSettingsDto {
   organizationName?: string
 }
 
-@UseGuards(AuthGuard('jwt'))
 @Controller('settings')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
@@ -28,11 +27,13 @@ export class SettingsController {
     return this.settingsService.getGeneralSettings()
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Put('general')
   updateGeneralSettings(@Request() req: any, @Body() dto: UpdateGeneralSettingsDto) {
     return this.settingsService.updateGeneralSettings(dto, req.user?.role)
   }
 
+  @UseGuards(AuthGuard('jwt'))
   @Post('logo')
   @UseInterceptors(FileInterceptor('logo', {
     storage: diskStorage({
