@@ -10,6 +10,105 @@ function toggleColorMode() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
 }
 
+function employmentStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    AKTIF: 'Aktif', KONTRAK_EXPIRED: 'Kontrak Expired', RESIGN: 'Resign', PHK: 'PHK',
+  }
+  return map[status] ?? status
+}
+
+function contractStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    AKTIF: 'Aktif', AKAN_HABIS: 'Akan Habis', EXPIRED: 'Expired',
+    SELESAI: 'Selesai', DIBATALKAN: 'Dibatalkan', DRAFT: 'Draft',
+  }
+  return map[status] ?? status
+}
+
+async function fetchGroups(query: string) {
+  if (!query || query.trim().length < 2) return []
+
+  try {
+    const results = await $fetch<{
+      employees: any[]
+      contracts: any[]
+      warningLetters: any[]
+    }>(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
+      credentials: 'include',
+    })
+
+    const groups: any[] = []
+
+    if (results.employees?.length) {
+      groups.push({
+        id: 'employees',
+        label: 'Karyawan',
+        ignoreFilter: true,
+        items: results.employees.map((e: any) => ({
+          id: `emp-${e.id}`,
+          label: e.fullName,
+          suffix: `${e.employeeNo} · ${employmentStatusLabel(e.employmentStatus)}`,
+          icon: 'i-lucide-user',
+          to: `/karyawan/${e.id}`,
+        })),
+      })
+    }
+
+    if (results.contracts?.length) {
+      groups.push({
+        id: 'contracts',
+        label: 'Kontrak',
+        ignoreFilter: true,
+        items: results.contracts.map((c: any) => ({
+          id: `contract-${c.id}`,
+          label: c.contractNo,
+          suffix: `${c.employee?.fullName ?? '-'} · ${contractStatusLabel(c.status)}`,
+          icon: 'i-lucide-file-text',
+          to: '/kontrak',
+        })),
+      })
+    }
+
+    if (results.warningLetters?.length) {
+      groups.push({
+        id: 'warning-letters',
+        label: 'Surat Peringatan',
+        ignoreFilter: true,
+        items: results.warningLetters.map((l: any) => ({
+          id: `sp-${l.id}`,
+          label: l.letterNumber,
+          suffix: `${l.employee?.fullName ?? '-'} · SP ${l.warningLevel}`,
+          icon: 'i-lucide-alert-triangle',
+          to: '/dokumen/surat-peringatan',
+        })),
+      })
+    }
+
+    return groups
+  } catch {
+    return []
+  }
+}
+
+// Reactive search: watch search term, debounce, fetch results
+const searchTerm = ref('')
+const searchGroups = ref<any[]>([])
+const searchLoading = ref(false)
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
+
+watch(searchTerm, (q) => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  if (!q || q.trim().length < 2) {
+    searchGroups.value = []
+    return
+  }
+  searchLoading.value = true
+  searchDebounce = setTimeout(async () => {
+    searchGroups.value = await fetchGroups(q)
+    searchLoading.value = false
+  }, 200)
+})
+
 const links = computed<NavigationMenuItem[]>(() => [
   {
     label: 'Dashboard',
@@ -84,12 +183,6 @@ const links = computed<NavigationMenuItem[]>(() => [
     ].filter(Boolean) as NavigationMenuItem[],
   },
 ])
-
-const groups = computed<any[]>(() => [{
-  id: 'links',
-  label: 'Navigasi',
-  items: links.value as any
-}])
 </script>
 
 <template>
@@ -134,7 +227,11 @@ const groups = computed<any[]>(() => [{
       </template>
     </UDashboardSidebar>
 
-    <UDashboardSearch :groups="groups" />
+    <UDashboardSearch
+      v-model:search-term="searchTerm"
+      :groups="searchGroups"
+      :loading="searchLoading"
+    />
 
     <slot />
   </UDashboardGroup>
