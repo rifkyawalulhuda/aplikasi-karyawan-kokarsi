@@ -4,6 +4,7 @@ import { promises as fs, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 import { getContractDocumentDefinition } from './contract-document-definitions'
+import { SettingsService } from '../settings/settings.service'
 
 type RenderEngine = 'PDF_NATIVE'
 type LayoutMode = 'LEGAL_PDF_TEMPLATE'
@@ -41,7 +42,10 @@ interface LayoutContext {
 
 @Injectable()
 export class ContractDocumentService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private settingsService: SettingsService,
+  ) {}
 
   private readonly renderEngine: RenderEngine = 'PDF_NATIVE'
   private readonly layoutMode: LayoutMode = 'LEGAL_PDF_TEMPLATE'
@@ -196,8 +200,11 @@ export class ContractDocumentService {
       compensation: this.formatRupiah(contract.baseCompensation),
       locationLabel: contract.workLocationLabel ?? employee.workLocation?.name ?? '-',
       positionLabel: contract.positionLabel ?? employee.jobRole?.name ?? definition.roleLabel,
-      processedByName: (contract as any).processedByName ?? '',
+      cooperativeChairmanName: '',
     }
+
+    const generalSettings = await this.settingsService.getGeneralSettings()
+    meta.cooperativeChairmanName = generalSettings.cooperativeChairmanName
 
     return {
       contract,
@@ -465,7 +472,7 @@ export class ContractDocumentService {
     addPara(`Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada hari ${signedDay} tanggal ${meta.signedDate} oleh dan antara:`)
 
     // Para Pihak
-    addPara('1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. Hari Suhono dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan')
+    addPara(`1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. ${meta.cooperativeChairmanName} dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan`)
     addPara(`2. Bpk./Ibu ${emp.fullName}, Warga Negara Indonesia, lahir di ${emp.birthPlace ?? '.................'} pada tanggal ${this.formatDate(emp.birthDate)}, pemegang Kartu Tanda Penduduk (KTP) Nomor ${emp.nik ?? '.................'}, beralamat di ${emp.address ?? '.................'}, dalam hal ini bertindak untuk dan atas nama pribadi (untuk selanjutnya disebut sebagai "PIHAK KEDUA").`)
 
     addPara('Kemudian PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").')
@@ -861,7 +868,7 @@ export class ContractDocumentService {
     // Bottom row cells - names (Uppercase, Bold, Underlined)
     const nameY = y + cellPadding + labelHeight + signatureSpace
     const empName = (payload.employee.fullName || '').toUpperCase()
-    const mgrName = (payload.meta.processedByName || '(...........................)').toUpperCase()
+    const mgrName = (payload.meta.cooperativeChairmanName || '(...........................)').toUpperCase()
     
     doc.font('Times-Bold').fontSize(11)
     
@@ -916,7 +923,7 @@ export class ContractDocumentService {
       y += 55
       doc.font('Times-Bold').fontSize(11)
       doc.text(payload.employee.fullName, 68, y, { width: 200, align: 'center' })
-      doc.text(payload.meta.processedByName || '(...........................)', 330, y, { width: 200, align: 'center' })
+      doc.text(payload.meta.cooperativeChairmanName || '(...........................)', 330, y, { width: 200, align: 'center' })
       
       // Company info
       y += 16
@@ -1135,7 +1142,7 @@ export class ContractDocumentService {
 
     this.renderMitraSignaturePillar(
       doc,
-      { header: 'PIHAK PERTAMA', org: "KOPERASI PT. SANKYU INT'L", name: 'Hari Suhono', role: '(Ketua Koperasi)' },
+      { header: 'PIHAK PERTAMA', org: "KOPERASI PT. SANKYU INT'L", name: payload.meta.cooperativeChairmanName || '(...........................)', role: '(Ketua Koperasi)' },
       leftX, y, colWidth,
     )
     this.renderMitraSignaturePillar(

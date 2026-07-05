@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
+import type { Row } from '@tanstack/table-core'
 import type { WarningLetter } from '~/types'
 import { h } from 'vue'
 
@@ -221,6 +222,19 @@ async function handleGeneratePDF(letter: WarningLetter) {
   }
 }
 
+function getRowItems(row: Row<WarningLetter>): DropdownMenuItem[][] {
+  return [
+    [
+      { label: 'Lihat Dokumen', icon: 'i-lucide-eye', onSelect: () => openPreview(row.original) },
+      { label: 'Unduh PDF', icon: 'i-lucide-download', onSelect: () => handleGeneratePDF(row.original) },
+      { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) },
+    ],
+    [
+      { label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => handleDelete(row.original.id) },
+    ],
+  ]
+}
+
 watch([searchQuery, levelFilter], () => {
   pagination.value.pageIndex = 0
 })
@@ -268,12 +282,7 @@ const columns: TableColumn<WarningLetter>[] = [
     header: 'Aksi',
     cell: ({ row }) => h('div', { class: 'flex justify-end' }, [
       h(UDropdownMenu, {
-        items: [
-          [{ label: 'Lihat Dokumen', icon: 'i-lucide-eye', onClick: () => openPreview(row.original) }],
-          [{ label: 'Unduh PDF', icon: 'i-lucide-download', onClick: () => handleGeneratePDF(row.original) }],
-          [{ label: 'Edit', icon: 'i-lucide-pencil', onClick: () => openEdit(row.original) }],
-          [{ label: 'Hapus', icon: 'i-lucide-trash', onClick: () => handleDelete(row.original.id) }],
-        ],
+        items: getRowItems(row),
       }, () => h(UButton, { icon: 'i-lucide-ellipsis', variant: 'ghost', color: 'neutral' })),
     ]),
   },

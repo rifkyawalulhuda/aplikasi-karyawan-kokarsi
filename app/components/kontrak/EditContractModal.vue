@@ -107,15 +107,38 @@ function fillState(c: Contract | null) {
   state.documentUrl = c.documentUrl ?? ''
 }
 
-watch(() => props.contract, fillState, { immediate: true })
+const fetchLoading = ref(false)
+const fullContract = ref<Contract | null>(null)
+
+watch(() => props.contract, async (c) => {
+  if (!c) return
+  fullContract.value = null
+  if (c.contractNo) {
+    fillState(c)
+    fullContract.value = c
+  } else if (c.id) {
+    fetchLoading.value = true
+    try {
+      const full = await $fetch<Contract>(`/api/contracts/${c.id}`)
+      fillState(full)
+      fullContract.value = full
+    } catch {
+      toast.add({ title: 'Gagal memuat data kontrak', color: 'error' })
+    } finally {
+      fetchLoading.value = false
+    }
+  }
+}, { immediate: true })
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
-  if (!props.contract) return
+  const contract = props.contract
+  if (!contract) return
   loading.value = true
   try {
-    await $fetch(`/api/contracts/${props.contract.id}`, {
+    const employeeId = fullContract.value?.employeeId ?? contract.employeeId
+    await $fetch(`/api/contracts/${contract.id}`, {
       method: 'PUT',
-      body: { ...event.data, employeeId: props.contract.employeeId },
+      body: { ...event.data, employeeId },
     })
     toast.add({ title: 'Kontrak berhasil diperbarui', color: 'success' })
     emit('saved')

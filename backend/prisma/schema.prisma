@@ -39,6 +39,16 @@ model Department {
   @@map("departments")
 }
 
+model AppSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique @db.VarChar(100)
+  value     String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
 model UserAccount {
   id        Int       @id @default(autoincrement())
   name      String    @db.VarChar(255)
@@ -158,10 +168,13 @@ model Contract {
   documentUrl    String?
   generatedPdfUrl String?
   generatedAt    DateTime?
+  parentContractId Int?
 
   employee       Employee           @relation(fields: [employeeId], references: [id])
   contractType   ContractType?      @relation(fields: [contractTypeId], references: [id])
   template       ContractTemplate?  @relation(fields: [templateId], references: [id])
+  parentContract Contract?          @relation("ContractChain", fields: [parentContractId], references: [id])
+  childContracts Contract[]         @relation("ContractChain")
   documents      ContractDocument[]
 
   createdAt DateTime @default(now())
@@ -260,6 +273,7 @@ enum EducationLevel {
 }
 
 enum ContractStatus {
+  DRAFT
   AKTIF
   AKAN_HABIS
   EXPIRED

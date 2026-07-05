@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ContractTemplate } from '~/types'
+import type { ContractTemplate, ContractHistoryResponse, ContractStatus } from '~/types'
 
 interface EmployeeOption { label: string; value: number }
 interface LookupOption { label: string; value: number }
@@ -15,7 +15,6 @@ const emit = defineEmits<{
 const toast = useToast()
 const loading = ref(false)
 
-// Fetch daftar karyawan untuk dropdown
 const { data: employeesRes } = await useFetch<{ data: { id: number; fullName: string; employeeNo: string }[] }>('/api/employees', {
   query: { limit: 999 },
   lazy: true
@@ -75,6 +74,76 @@ const state = reactive<Partial<Schema>>({
   baseCompensation: undefined,
 })
 
+// Contract status awareness
+const employeeContractStatus = ref<ContractStatus | null>(null)
+const employeeLatestContract = ref<ContractHistoryResponse['contracts'][0] | null>(null)
+const employeeEmploymentStatus = ref<string | null>(null)
+const checkingContract = ref(false)
+
+watch(() => state.employeeId, async (employeeId) => {
+  employeeContractStatus.value = null
+  employeeLatestContract.value = null
+  employeeEmploymentStatus.value = null
+
+  if (!employeeId) return
+
+  checkingContract.value = true
+  try {
+    const [historyRes, empRes] = await Promise.all([
+      $fetch<ContractHistoryResponse>(`/api/contracts/history/${employeeId}`),
+      $fetch<{ employmentStatus: string }>(`/api/employees/${employeeId}`),
+    ])
+    employeeEmploymentStatus.value = empRes.employmentStatus
+    const latest = historyRes.contracts[0]
+    if (latest) {
+      employeeContractStatus.value = latest.status
+      employeeLatestContract.value = latest
+    }
+  } catch {
+  } finally {
+    checkingContract.value = false
+  }
+})
+
+const isOffboarded = computed(() => {
+  const s = employeeEmploymentStatus.value
+  return s === 'RESIGN' || s === 'PHK'
+})
+
+const isBlocked = computed(() => {
+  if (isOffboarded.value) return true
+  const s = employeeContractStatus.value
+  return s === 'AKTIF' || s === 'AKAN_HABIS'
+})
+
+const canSubmitForm = computed(() => {
+  if (checkingContract.value) return false
+  if (isBlocked.value) return false
+  return true
+})
+
+const statusLabelMap: Record<string, string> = {
+  AKTIF: 'Aktif',
+  AKAN_HABIS: 'Akan Habis',
+  EXPIRED: 'Expired',
+  SELESAI: 'Selesai',
+  DIBATALKAN: 'Dibatalkan',
+}
+
+const statusColorMap: Record<string, string> = {
+  AKTIF: 'success',
+  AKAN_HABIS: 'warning',
+  EXPIRED: 'error',
+  SELESAI: 'info',
+  DIBATALKAN: 'neutral',
+}
+
+watch(() => props.open, (isOpen) => {
+  if (isOpen) {
+    resetForm()
+  }
+})
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
@@ -104,6 +173,9 @@ function resetForm() {
   state.positionLabel = ''
   state.workLocationLabel = ''
   state.baseCompensation = undefined
+  employeeContractStatus.value = null
+  employeeLatestContract.value = null
+  employeeEmploymentStatus.value = null
 }
 </script>
 
@@ -119,6 +191,69 @@ function resetForm() {
             class="w-full"
           />
         </UFormField>
+
+        <!-- Contract Status Alert -->
+        <div v-if="checkingContract" class="flex items-center gap-2 text-sm text-muted py-2">
+          <UIcon name="i-lucide-loader-circle" class="w-4 h-4 animate-spin" />
+          Memeriksa status kontrak karyawan...
+        </div>
+
+        <div v-else-if="isOffboarded" class="rounded-xl border border-error/40 bg-error/10 p-4">
+          <div class="flex items-start gap-3">
+            <UIcon name="i-lucide-user-x" class="w-5 h-5 text-error shrink-0 mt-0.5" />
+            <div class="text-sm">
+              <p class="font-semibold text-error">
+                Karyawan sudah tidak aktif ({{ employeeEmploymentStatus === 'PHK' ? 'PHK' : 'RESIGN' }})
+              </p>
+              <p class="mt-1 text-muted">
+                Karyawan ini sudah keluar dari perusahaan. Pembuatan kontrak baru tidak diizinkan.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="isBlocked && employeeLatestContract" class="rounded-xl border border-warning/40 bg-warning/10 p-4">
+          <div class="flex items-start gap-3">
+            <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-warning shrink-0 mt-0.5" />
+            <div class="text-sm">
+              <p class="font-semibold text-warning">
+                Karyawan masih memiliki kontrak {{ statusLabelMap[employeeLatestContract.status] ?? employeeLatestContract.status }}
+              </p>
+              <div class="mt-2 space-y-1 text-muted">
+                <p><span class="font-medium text-highlighted">No. Kontrak:</span> {{ employeeLatestContract.contractNo }}</p>
+                <p>
+                  <span class="font-medium text-highlighted">Periode:</span>
+                  {{ new Date(employeeLatestContract.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+                  -
+                  {{ new Date(employeeLatestContract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
+                </p>
+                <p>
+                  <span class="font-medium text-highlighted">Status:</span>
+                  <UBadge variant="subtle" :color="statusColorMap[employeeLatestContract.status] as any" size="sm" class="ml-1">
+                    {{ statusLabelMap[employeeLatestContract.status] }}
+                  </UBadge>
+                </p>
+              </div>
+              <p class="mt-2 text-xs text-muted">
+                Tidak dapat menambahkan kontrak baru. Gunakan menu Perpanjang dari halaman Manajemen Kontrak jika karyawan akan diperpanjang.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="employeeLatestContract && employeeContractStatus === 'EXPIRED'" class="rounded-xl border border-info/30 bg-info/10 p-4">
+          <div class="flex items-start gap-3">
+            <UIcon name="i-lucide-info" class="w-5 h-5 text-info shrink-0 mt-0.5" />
+            <div class="text-sm">
+              <p class="font-semibold text-info">Kontrak terakhir sudah Expired</p>
+              <p class="mt-1 text-muted">
+                Kontrak terakhir <span class="font-medium text-highlighted">{{ employeeLatestContract.contractNo }}</span>
+                berakhir pada {{ new Date(employeeLatestContract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}.
+                Histori kontrak akan otomatis tersambung.
+              </p>
+            </div>
+          </div>
+        </div>
 
         <UFormField label="No. Kontrak" name="contractNo" required>
           <UInput v-model="state.contractNo" placeholder="PKWT/2026/001" class="w-full" />
@@ -171,7 +306,13 @@ function resetForm() {
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />
-          <UButton type="submit" label="Simpan" color="primary" :loading="loading" />
+          <UButton
+            type="submit"
+            label="Simpan"
+            color="primary"
+            :loading="loading"
+            :disabled="!canSubmitForm"
+          />
         </div>
       </UForm>
     </template>

@@ -1,6 +1,8 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v6) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v8) | Stack: Nuxt 3 + NestJS + PostgreSQL
+>
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, dan modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode).
 
 ---
 
@@ -82,6 +84,17 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 31 | Preview PDF dokumen kontrak dan surat peringatan via PDF.js canvas render (bukan iframe) | `app/components/PdfViewer.client.vue`, `app/pages/kontrak.vue`, `app/pages/dokumen/surat-peringatan/index.vue` |
 | 32 | Eskalasi Surat Peringatan: rule SP1→SP2→SP3, blokir jika SP3 aktif, validasi backend + UI | `backend/src/warning-letters/warning-letters.service.ts`, `app/components/warning-letters/AddModal.vue` |
 | 33 | Upload dokumen kontrak PDF (scan tanda tangan) menggantikan field URL Dokumen | `backend/src/contracts/contracts.controller.ts`, `app/components/kontrak/EditContractModal.vue`, `server/api/contracts/[id]/document.post.ts` |
+| 34 | Pengaturan Umum untuk edit nama Ketua Koperasi (`cooperativeChairmanName`) | `app/pages/settings/index.vue`, `server/api/settings/general.get.ts`, `server/api/settings/general.put.ts`, `backend/src/settings/` |
+| 35 | Master template kontrak aktif untuk keluarga `PKWT` dan `MITRA` | `app/pages/settings/contract-templates.vue`, `backend/src/contract-templates/` |
+| 36 | Self-healing default `ContractType` dan sinkronisasi relasi template `PKWT` / `MITRA` | `backend/src/lookups/lookups.service.ts`, `backend/src/contract-templates/contract-templates.service.ts` |
+| 37 | Contract State Machine: enum `DRAFT` + cron job harian 00:01 WIB (`@nestjs/schedule`) untuk auto-shift `AKTIF`→`AKAN_HABIS`→`EXPIRED` + sync employment status atomik | `backend/prisma/schema.prisma`, `backend/src/contract-cron/`, `backend/src/app.module.ts` |
+| 38 | Contract Guards: Anti-Overlap (409 Conflict), SP3 Lockout (403 Forbidden), State Lock untuk kontrak bertanda tangan (400 BadRequest) | `backend/src/contracts/contracts.service.ts` |
+| 39 | Contract History Chain: field `parentContractId` self-referential untuk audit trail renewal, auto-link ke kontrak expired terakhir saat create biasa | `backend/prisma/schema.prisma`, `backend/src/contracts/contracts.service.ts` |
+| 40 | Contract Summary Mode: halaman kontrak tampil 1 baris per karyawan (bukan semua kontrak), endpoint `GET /api/contracts/summary` dengan prioritas `AKTIF`→`AKAN_HABIS`→`EXPIRED` | `backend/src/contracts/contracts.service.ts`, `app/pages/kontrak.vue`, `server/api/contracts/summary.get.ts` |
+| 41 | Contract Renewal Flow: endpoint `POST /api/contracts/:id/renew`, modal `RenewContractModal.vue`, validasi `startDate >= parent.endDate`, parent harus `AKAN_HABIS` atau `EXPIRED` | `backend/src/contracts/contracts.service.ts`, `app/components/kontrak/RenewContractModal.vue`, `server/api/contracts/[id]/renew.post.ts` |
+| 42 | Contract History API: endpoint `GET /api/contracts/history/:employeeId` untuk ambil semua kontrak karyawan, modal riwayat fetch per employee (bukan filter lokal) | `backend/src/contracts/contracts.service.ts`, `server/api/contracts/history/[employeeId].get.ts`, `app/pages/kontrak.vue` |
+| 43 | Add Contract Modal — Contract Status Awareness: saat employee dipilih, form cek kontrak terakhir, tampil warning untuk `AKTIF`/`AKAN_HABIS` (disable simpan), info untuk `EXPIRED` (boleh simpan) | `app/components/kontrak/AddContractModal.vue` |
+| 44 | Nitro Proxy Error Handling: semua proxy contracts pakai `$fetch.raw` + `createError` untuk forward error backend (409/403/400) ke frontend sebagai toast | `server/api/contracts.ts`, `server/api/contracts/[id].ts`, `server/api/contracts/summary.get.ts`, `server/api/contracts/history/[employeeId].get.ts`, `server/api/contracts/[id]/renew.post.ts` |
 
 ---
 
@@ -102,11 +115,45 @@ Backend return `{ data: [...], total, page, limit, totalPages }` untuk list endp
 
 ### Kontrak Otomatis
 Status kontrak dihitung dari `endDate` terhadap tanggal hari ini:
+- `DRAFT` kontrak yang belum final (tidak diproses cron, tidak hitung anti-overlap, tidak hitung employment status)
 - `SELESAI` jika karyawan sudah offboarding dan kontrak bukan `DIBATALKAN`
 - `EXPIRED` jika `endDate` sudah lewat
 - `AKAN_HABIS` jika sisa kontrak 30 hari atau kurang
 - `AKTIF` jika sisa kontrak lebih dari 30 hari
 - `DIBATALKAN` tetap dipertahankan
+
+### Contract State Machine & Cron Job
+Cron job harian jam 00:01 WIB (`@nestjs/schedule`, timezone `Asia/Jakarta`) di `ContractCronService`:
+- Query semua kontrak dengan status `AKTIF` atau `AKAN_HABIS`
+- Shift `AKTIF` → `AKAN_HABIS` jika sisa ≤30 hari
+- Shift `AKTIF` / `AKAN_HABIS` → `EXPIRED` jika `endDate` sudah lewat
+- Skip `SELESAI` dan `DIBATALKAN`
+- Dalam `$transaction` atomik: update contract status + sync `Employee.employmentStatus` ke `KONTRAK_EXPIRED` jika semua kontrak expired
+
+### Contract Guards (Multi-Layer Validations)
+- **Anti-Overlap Rule** (409 `ConflictException`): blokir create kontrak baru jika karyawan punya kontrak `AKTIF` atau `AKAN_HABIS`
+- **SP3 Lockout** (403 `ForbiddenException`): blokir create/renew jika karyawan punya SP3 aktif (`warningLevel: 3` AND `validUntil >= hari ini`)
+- **State Lock** (400 `BadRequestException`): blokir edit field `baseCompensation`, `startDate`, `endDate`, `employeeId` jika `documentUrl` sudah terisi (kontrak sudah ditandatangani)
+
+### Contract Renewal Flow
+Perpanjangan kontrak dipisah dari create biasa:
+- **Create biasa** (`POST /api/contracts`): untuk karyawan baru atau kontrak terakhir `EXPIRED`. Auto-link `parentContractId` ke kontrak expired terakhir jika ada
+- **Renewal** (`POST /api/contracts/:id/renew`): parent harus `AKAN_HABIS` atau `EXPIRED`. Validasi `startDate >= parent.endDate`. Auto-set `parentContractId = parent.id`
+- Renewal diblok untuk parent `AKTIF`, `SELESAI`, `DIBATALKAN`
+- Tombol `Perpanjang` muncul di UI hanya jika status `AKAN_HABIS` atau `EXPIRED`
+
+### Contract Summary Mode
+Halaman Manajemen Kontrak tampil **1 karyawan = 1 baris**, bukan list semua kontrak:
+- Endpoint `GET /api/contracts/summary` mengembalikan 1 kontrak representatif per karyawan
+- Prioritas pemilihan: `AKTIF` → `AKAN_HABIS` → `EXPIRED` → terbaru non-dibatalkan
+- Field summary: employeeId, employeeNo, fullName, contractId, contractNo, contractType, startDate, endDate, status, daysRemaining, historyCount, canRenew
+- Riwayat lengkap diakses via modal yang fetch `GET /api/contracts/history/:employeeId`
+
+### Add Contract Modal — Contract Status Awareness
+Form tambah kontrak menampilkan status kontrak karyawan saat dipilih:
+- Jika `AKTIF` / `AKAN_HABIS`: tampil warning alert + disable tombol Simpan
+- Jika `EXPIRED`: tampil info alert bahwa histori akan otomatis tersambung + tombol Simpan aktif
+- Jika belum punya kontrak: form normal tanpa alert
 
 ### Dokumen Kontrak Otomatis
 Modul kontrak menggunakan **generator PDF native** (pdfkit):
@@ -114,6 +161,8 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Preview kontrak menampilkan PDF langsung via PDF.js (render ke canvas, bukan iframe)
 - Generate dokumen menghasilkan PDF dari kode
 - Endpoint `download-pdf` selalu regenerate (tidak serve cache basi)
+- Sample legal di `docs/sample-legal-doc/pdf` dipakai sebagai **referensi visual**, bukan template runtime
+- Runtime dokumen kontrak **tidak bergantung** pada DOC, DOCX, Microsoft Word, atau LibreOffice headless
 
 **Layout PDF PKWT (Kesepakatan Kerja Waktu Tertentu):**
 - 2 kolom paralel bilingual (Indonesia kiri, English kanan) dengan border
@@ -130,6 +179,11 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Border luar (kotak) mengelilingi kedua kolom + garis pembatas vertikal tengah
 - Heading PASAL tidak pernah terpisah dari paragraf pertamanya (break-inside: avoid)
 - Signature 2 pilar (PIHAK PERTAMA / PIHAK KEDUA) di **paling bawah di luar garis border**
+
+### Pengaturan Umum
+- Nama Ketua Koperasi disimpan di tabel `AppSetting` dengan key `cooperativeChairmanName`
+- Dikelola dari halaman `Pengaturan > Umum`
+- Nilai ini dipakai saat render dokumen kontrak PKWT / MITRA, terutama pada blok identitas legal dan signature
 
 ### Eskalasi Surat Peringatan
 Rule eskalasi aktif:
@@ -175,7 +229,9 @@ app/
     dokumen/
       surat-peringatan/
         index.vue          # Manajemen Surat Peringatan (preview PDF)
+    settings/index.vue      # Pengaturan umum (Ketua Koperasi)
     settings/master-data.vue  # Master data
+    settings/contract-templates.vue # Master template kontrak
     settings/users.vue        # Master user
     login.vue              # Login
   components/
@@ -187,8 +243,9 @@ app/
         SummaryCards.vue   # Ringkasan data (Data Pekerjaan + Data Pribadi)
         ProfileHeader.vue  # Header profil karyawan
     kontrak/
-      AddContractModal.vue   # Tambah kontrak
+      AddContractModal.vue   # Tambah kontrak + status awareness (warning/info)
       EditContractModal.vue  # Edit kontrak + upload dokumen scan PDF
+      RenewContractModal.vue # Perpanjang kontrak dari parent (renewal flow)
     warning-letters/
       AddModal.vue           # Form SP + eskalasi rule
   composables/
@@ -209,18 +266,26 @@ server/
     contracts/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
+      summary.get.ts        # GET summary 1 row per karyawan
+      history/[employeeId].get.ts  # GET riwayat kontrak per karyawan
       [id]/download-pdf.get.ts    # Stream PDF kontrak (selalu regenerate)
       [id]/document-preview.get.ts # Preview metadata kontrak
       [id]/document.post.ts       # Upload dokumen scan PDF
       [id]/generate-document.post.ts # Generate dokumen kontrak
+      [id]/renew.post.ts   # POST perpanjang kontrak (renewal flow)
     warning-letters/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
       [id]/generate.get.ts  # GET generate PDF (download)
       [id]/preview.get.ts   # GET preview PDF (inline)
       escalation/[employeeId].get.ts # GET status eskalasi SP per karyawan
+    settings/
+      general.get.ts        # GET pengaturan umum
+      general.put.ts        # PUT pengaturan umum
     users/
       pengurus.get.ts       # GET list pengurus (no admin guard)
+    contract-templates.ts   # GET/POST master template kontrak
+    contract-templates/[id].ts # PUT/DELETE master template kontrak
     lookups/
       [resource].ts         # GET list + POST
       [resource]/[id].ts    # PUT + DELETE
@@ -232,10 +297,12 @@ server/
 backend/
   src/
     employees/              # CRUD + upload foto + offboarding
-    contracts/              # CRUD kontrak + upload scan + generate PDF
+    contracts/              # CRUD kontrak + upload scan + generate PDF + renewal + summary
       contract-document.service.ts    # Generator PDF native (PKWT + MITRA)
       contract-document-definitions.ts # Definisi pasal legal per template (15 pasal MITRA, 11 pasal PKWT)
+    contract-cron/            # Cron job harian 00:01 WIB untuk sync status kontrak
     contract-templates/     # CRUD master template kontrak
+    settings/               # Pengaturan umum aplikasi (AppSetting)
     warning-letters/        # CRUD SP + PDF generator + eskalasi rule
     lookups/                # Work locations, job roles, levels, tax status, contract types
     users/                  # CRUD master user internal + pengurus endpoint
@@ -289,7 +356,7 @@ backend/
 | `templateId` | Int? | FK ke ContractTemplate |
 | `startDate` | Date | Tanggal mulai |
 | `endDate` | Date | Tanggal selesai |
-| `status` | Enum | Computed (AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
+| `status` | Enum | Computed (DRAFT / AKTIF / AKAN_HABIS / EXPIRED / SELESAI / DIBATALKAN) |
 | `signedDate` | Date? | Tanggal penandatanganan |
 | `positionLabel` | String? | Label posisi di dokumen PDF |
 | `workLocationLabel` | String? | Label lokasi kerja di dokumen PDF |
@@ -297,6 +364,7 @@ backend/
 | `documentUrl` | String? | Path file PDF scan kontrak yang sudah ditandatangani |
 | `generatedPdfUrl` | String? | Path hasil generate PDF |
 | `generatedAt` | DateTime? | Tanggal generate PDF |
+| `parentContractId` | Int? | FK ke Contract (self-reference untuk renewal chain) |
 
 ### WarningLetter
 | Field | Type | Keterangan |
@@ -319,6 +387,12 @@ backend/
 | `templateKey` | String | Kunci generator (PKWT_DRIVER, MITRA_KOMART, dll) |
 | `isActive` | Boolean | Status template aktif |
 
+### AppSetting
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `key` | String | Unique key setting, saat ini dipakai untuk `cooperativeChairmanName` |
+| `value` | String | Nilai setting |
+
 ---
 
 ## API Endpoints
@@ -334,14 +408,21 @@ backend/
 | POST | `/api/employees/:id/offboarding` | Proses offboarding |
 | DELETE | `/api/employees/:id` | Hapus karyawan |
 | POST | `/api/employees/:id/photo` | Upload foto |
-| GET | `/api/contracts` | List kontrak |
-| POST | `/api/contracts` | Tambah kontrak |
-| PUT | `/api/contracts/:id` | Edit kontrak |
+| GET | `/api/contracts` | List kontrak (legacy, semua kontrak) |
+| GET | `/api/contracts/summary` | Summary 1 kontrak representatif per karyawan |
+| GET | `/api/contracts/history/:employeeId` | Riwayat semua kontrak per karyawan |
+| POST | `/api/contracts` | Tambah kontrak (anti-overlap + SP3 check + auto-link parent) |
+| POST | `/api/contracts/:id/renew` | Perpanjang kontrak (renewal flow, parent harus AKAN_HABIS/EXPIRED) |
+| PUT | `/api/contracts/:id` | Edit kontrak (state lock jika documentUrl terisi) |
 | DELETE | `/api/contracts/:id` | Hapus kontrak |
 | GET | `/api/contracts/:id/download-pdf` | Download/generate PDF kontrak |
 | GET | `/api/contracts/:id/document-preview` | Preview metadata dokumen kontrak |
 | POST | `/api/contracts/:id/generate-document` | Generate ulang PDF kontrak |
 | POST | `/api/contracts/:id/document` | Upload dokumen scan PDF (multipart) |
+| GET | `/api/contract-templates` | List master template kontrak |
+| POST | `/api/contract-templates` | Tambah master template kontrak |
+| PUT | `/api/contract-templates/:id` | Edit master template kontrak |
+| DELETE | `/api/contract-templates/:id` | Hapus master template kontrak |
 | GET | `/api/warning-letters` | List surat peringatan |
 | POST | `/api/warning-letters` | Tambah surat peringatan |
 | GET | `/api/warning-letters/:id` | Detail surat peringatan |
@@ -355,6 +436,8 @@ backend/
 | POST | `/api/users` | Tambah user internal |
 | PUT | `/api/users/:id` | Edit user internal |
 | DELETE | `/api/users/:id` | Hapus user internal |
+| GET | `/api/settings/general` | Ambil pengaturan umum |
+| PUT | `/api/settings/general` | Simpan pengaturan umum |
 | GET | `/api/lookups/*` | CRUD lookup data |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 | GET | `/uploads/contracts/**` | Serve PDF kontrak statis |
@@ -387,3 +470,11 @@ backend/
 | `PrismaService` property tidak ditemukan | Tambah getter baru di PrismaService |
 | TypeScript compile OOM | Gunakan `NODE_OPTIONS="--max-old-space-size=4096"` |
 | SP tidak bisa dibuat padahal tidak ada SP aktif | Cek endpoint escalation, pastikan `validUntil` SP lama sudah lewat |
+| Template kontrak `MITRA` tidak muncul | Cek data `contract_types`, jalankan sync/seed template, dan pastikan relasi `ContractTemplate` ke `MITRA` sudah terbentuk |
+| Nama Ketua Koperasi di PDF kontrak masih lama | Cek `Pengaturan > Umum`, pastikan `cooperativeChairmanName` sudah tersimpan di `AppSetting` |
+| Kontrak gagal dibuat dengan error 409 | Karyawan masih punya kontrak `AKTIF` atau `AKAN_HABIS`. Gunakan flow Perpanjang dari kontrak yang `AKAN_HABIS`/`EXPIRED` |
+| Kontrak gagal dibuat dengan error 403 SP3 | Karyawan punya SP3 aktif (`warningLevel: 3`, `validUntil >= hari ini`). Tunggu sampai SP3 selesai |
+| Kontrak gagal diperpanjang (startDate invalid) | `startDate` kontrak baru harus `>= parent.endDate`. Lihat info di modal Perpanjang |
+| Edit kontrak gagal dengan error 400 | Kontrak sudah ditandatangani (`documentUrl` terisi). Field `baseCompensation`, `startDate`, `endDate`, `employeeId` dikunci |
+| Tabel kontrak tampil duplikat nama karyawan | Pastikan pakai endpoint `/api/contracts/summary` (1 row per karyawan), bukan `/api/contracts` |
+| Toast error tidak muncul saat simpan kontrak gagal | Pastikan proxy Nitro pakai `$fetch.raw` + `createError` (bukan `ignoreResponseError` tanpa check) |

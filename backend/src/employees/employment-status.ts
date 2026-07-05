@@ -29,6 +29,7 @@ export function resolveContractStatus(
 ): ContractStatus {
   if (contract.status === 'DIBATALKAN') return 'DIBATALKAN'
   if (contract.status === 'SELESAI') return 'SELESAI'
+  if (contract.status === 'DRAFT') return 'DRAFT'
   if (isTerminatedStatus(employmentStatus)) return 'SELESAI'
 
   const today = startOfDay(now).getTime()
@@ -49,7 +50,7 @@ export function resolveEmploymentStatus(
   if (offboarding?.terminationType === 'PHK') return 'PHK'
 
   const latestContract = [...contracts]
-    .filter(contract => contract.status !== 'DIBATALKAN')
+    .filter(contract => contract.status !== 'DIBATALKAN' && contract.status !== 'DRAFT')
     .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())[0]
 
   if (!latestContract) return 'KONTRAK_EXPIRED'

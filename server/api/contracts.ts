@@ -15,12 +15,20 @@ export default eventHandler(async (event) => {
 
   const qs = params.toString() ? `?${params.toString()}` : ''
 
-  const res = await $fetch(`${BACKEND}/contracts${qs}`, {
+  const res = await $fetch.raw(`${BACKEND}/contracts${qs}`, {
     method: method as any,
     headers: authHeader,
     body: method !== 'GET' ? await readBody(event) : undefined,
     ignoreResponseError: true,
   })
 
-  return res
+  if (res.status >= 400) {
+    throw createError({
+      statusCode: res.status,
+      statusMessage: res.statusText,
+      data: res._data,
+    })
+  }
+
+  return res._data
 })

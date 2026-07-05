@@ -36,6 +36,9 @@ const editTarget = ref<Employee | null>(null)
 const offboardingModal = ref(false)
 const offboardingTarget = ref<Employee | null>(null)
 
+// Import state
+const importModal = ref(false)
+
 // History state
 const historyModal = ref(false)
 const historyLoading = ref(false)
@@ -426,6 +429,13 @@ watch([statusFilter, searchQuery], () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UButton
+            label="Import"
+            icon="i-lucide-upload"
+            color="neutral"
+            variant="subtle"
+            @click="importModal = true"
+          />
           <UDropdownMenu
             :items="[
               [
@@ -596,4 +606,10 @@ watch([statusFilter, searchQuery], () => {
       </div>
     </template>
   </UModal>
+
+  <!-- Import Modal -->
+  <KaryawanImportModal
+    v-model:open="importModal"
+    @imported="refresh()"
+  />
 </template>

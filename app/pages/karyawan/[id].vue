@@ -103,10 +103,15 @@ useHead({
             </div>
 
             <!-- Right column -->
-            <div class="lg:col-span-1">
+            <div class="lg:col-span-1 space-y-6">
               <!-- D. Riwayat Kontrak -->
               <KaryawanDetailContractTimeline
                 :contracts="employee.contracts ?? []"
+              />
+
+              <!-- F. Riwayat Surat Peringatan -->
+              <KaryawanDetailWarningLetterList
+                :letters="employee.warningLetters ?? []"
               />
             </div>
           </div>

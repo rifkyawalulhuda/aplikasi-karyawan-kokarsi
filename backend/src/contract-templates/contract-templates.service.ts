@@ -38,22 +38,18 @@ export class ContractTemplatesService {
   }
 
   private async ensureDefaultTemplates() {
-    const existingTemplates = await this.prisma.contractTemplate.findMany({
-      select: { code: true },
-    })
-
-    const existingCodes = new Set(existingTemplates.map(template => template.code))
-    const missingSeeds = this.defaultTemplateSeeds.filter(seed => !existingCodes.has(seed.code))
-
-    if (!missingSeeds.length) return
+    await Promise.all([
+      this.prisma.contractType.upsert({ where: { name: 'MITRA' }, update: {}, create: { name: 'MITRA' } }),
+      this.prisma.contractType.upsert({ where: { name: 'PKWT' }, update: {}, create: { name: 'PKWT' } }),
+    ])
 
     const [contractTypes, jobRoles] = await Promise.all([
       this.prisma.contractType.findMany({
-        where: { name: { in: [...new Set(missingSeeds.map(seed => seed.contractTypeName))] } },
+        where: { name: { in: [...new Set(this.defaultTemplateSeeds.map(seed => seed.contractTypeName))] } },
         select: { id: true, name: true },
       }),
       this.prisma.jobRole.findMany({
-        where: { name: { in: [...new Set(missingSeeds.map(seed => seed.jobRoleName))] } },
+        where: { name: { in: [...new Set(this.defaultTemplateSeeds.map(seed => seed.jobRoleName))] } },
         select: { id: true, name: true },
       }),
     ])
@@ -61,7 +57,7 @@ export class ContractTemplatesService {
     const contractTypeMap = new Map(contractTypes.map(item => [item.name, item.id]))
     const jobRoleMap = new Map(jobRoles.map(item => [item.name, item.id]))
 
-    for (const seed of missingSeeds) {
+    for (const seed of this.defaultTemplateSeeds) {
       const definition = CONTRACT_DOCUMENT_DEFINITIONS[seed.templateKey]
 
       await this.prisma.contractTemplate.upsert({

@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { join, extname } from 'path'
-import { ContractsService, CreateContractDto, UpdateContractDto } from './contracts.service'
+import { ContractsService, CreateContractDto, UpdateContractDto, RenewContractDto } from './contracts.service'
 import { ContractDocumentService } from './contract-document.service'
 
 @UseGuards(AuthGuard('jwt'))
@@ -27,6 +27,16 @@ export class ContractsController {
       status,
       employeeId: employeeId ? +employeeId : undefined,
     })
+  }
+
+  @Get('summary')
+  findSummary() {
+    return this.service.findSummary()
+  }
+
+  @Get('history/:employeeId')
+  findHistoryByEmployee(@Param('employeeId', ParseIntPipe) employeeId: number) {
+    return this.service.findHistoryByEmployee(employeeId)
   }
 
   @Get('expiring')
@@ -54,8 +64,6 @@ export class ContractsController {
     const { join } = require('path')
     const { readFileSync, existsSync } = require('fs')
 
-    // Selalu regenerate agar preview/unduhan selalu mencerminkan template terbaru
-    // (mencegah PDF basi yang ter-cache dari versi kode lama)
     const result = await this.contractDocumentService.generate(id)
     const target = result.generatedPdfUrl
     if (!target) {
@@ -74,6 +82,11 @@ export class ContractsController {
   @Post()
   create(@Body() dto: CreateContractDto) {
     return this.service.create(dto)
+  }
+
+  @Post(':id/renew')
+  renew(@Param('id', ParseIntPipe) id: number, @Body() dto: RenewContractDto) {
+    return this.service.renew(id, dto)
   }
 
   @Put(':id')

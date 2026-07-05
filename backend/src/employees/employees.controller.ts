@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException, Request } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException, Request, Res } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
@@ -32,6 +32,14 @@ export class EmployeesController {
     return this.service.getDashboardStats()
   }
 
+  @Get('import-template')
+  async getImportTemplate(@Res() res: any) {
+    const buffer = await this.service.generateImportTemplate()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="template-import-karyawan.xlsx"')
+    res.send(buffer)
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)
@@ -40,6 +48,11 @@ export class EmployeesController {
   @Post()
   create(@Body() dto: CreateEmployeeDto) {
     return this.service.create(dto)
+  }
+
+  @Post('bulk-import')
+  bulkCreate(@Body() body: { employees: CreateEmployeeDto[] }) {
+    return this.service.bulkCreate(body.employees)
   }
 
   @Put(':id')
