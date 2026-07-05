@@ -400,8 +400,14 @@ export class ContractsService {
       const lockedFields = ['baseCompensation', 'startDate', 'endDate', 'employeeId'] as const
       for (const field of lockedFields) {
         const newValue = dto[field]
-        const oldValue = existing[field]
-        if (newValue !== undefined && newValue !== oldValue) {
+        if (newValue === undefined) continue
+
+        const oldRaw = existing[field]
+        const oldValue = oldRaw instanceof Date
+          ? oldRaw.toISOString().split('T')[0]
+          : oldRaw
+
+        if (newValue !== oldValue) {
           throw new BadRequestException(
             'Kontrak yang sudah ditandatangani tidak dapat diubah pada field baseCompensation, startDate, endDate, dan employeeId.',
           )

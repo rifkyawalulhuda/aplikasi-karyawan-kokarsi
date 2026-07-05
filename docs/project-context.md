@@ -1,8 +1,8 @@
 # Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-04 (v8) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-05 (v9) | Stack: Nuxt 3 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, dan modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, dan perbaikan bug timezone date import.
 
 ---
 
@@ -95,6 +95,14 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 42 | Contract History API: endpoint `GET /api/contracts/history/:employeeId` untuk ambil semua kontrak karyawan, modal riwayat fetch per employee (bukan filter lokal) | `backend/src/contracts/contracts.service.ts`, `server/api/contracts/history/[employeeId].get.ts`, `app/pages/kontrak.vue` |
 | 43 | Add Contract Modal — Contract Status Awareness: saat employee dipilih, form cek kontrak terakhir, tampil warning untuk `AKTIF`/`AKAN_HABIS` (disable simpan), info untuk `EXPIRED` (boleh simpan) | `app/components/kontrak/AddContractModal.vue` |
 | 44 | Nitro Proxy Error Handling: semua proxy contracts pakai `$fetch.raw` + `createError` untuk forward error backend (409/403/400) ke frontend sebagai toast | `server/api/contracts.ts`, `server/api/contracts/[id].ts`, `server/api/contracts/summary.get.ts`, `server/api/contracts/history/[employeeId].get.ts`, `server/api/contracts/[id]/renew.post.ts` |
+| 45 | Riwayat Surat Peringatan di halaman Detail Karyawan: timeline SP per karyawan (badge level, jenis pelanggaran, masa berlaku, dokumen), scrollable max-h-[600px] | `app/components/karyawan/detail/WarningLetterList.vue`, `app/pages/karyawan/[id].vue` |
+| 46 | Scrollable timeline di detail karyawan: ContractTimeline + WarningLetterList, max-h-[400px] mobile/max-h-[600px] desktop, gradient fade indicator dark-mode-aware | `app/components/karyawan/detail/ContractTimeline.vue`, `app/components/karyawan/detail/WarningLetterList.vue` |
+| 47 | Import Data Karyawan Bulk via Excel Template: template dengan dropdown validasi data master (ExcelJS backend), parse/validate di frontend (xlsx), bulk create all-or-nothing transaction backend | `app/composables/useImportTemplate.ts`, `app/components/karyawan/ImportModal.vue`, `backend/src/employees/employees.service.ts`, `server/api/employees/bulk-import.post.ts`, `server/api/employees/import-template.get.ts` |
+| 48 | Fix: Edit Kontrak Bad Request — State Lock normalisasi Date vs String perbandingan (Date.toISOString vs DTO string) | `backend/src/contracts/contracts.service.ts` |
+| 49 | Fix: Kontrak PHK/RESIGN tidak bisa buat kontrak baru — guard `checkTerminationLockout()` di create/renew, status summary override ke SELESAI untuk karyawan offboarded | `backend/src/contracts/contracts.service.ts` |
+| 50 | Fix: Import tanggal off-by-one (timezone) — eliminasi `toISOString()` dari `parseDateString()`, pakai local date components, `raw: false` di xlsx untuk avoid Date objects | `app/composables/useImportTemplate.ts` |
+| 51 | Ganti Logo & Nama Organisasi: upload logo (JPG/PNG/WEBP/SVG, max 512x512px, 2MB), field Nama Organisasi di Pengaturan > Umum (Admin only), tampil dinamis di sidebar TeamsMenu | `backend/src/settings/`, `app/composables/useAppSettings.ts`, `app/components/TeamsMenu.vue`, `app/pages/settings/index.vue`, `server/api/settings/logo.post.ts` |
+| 52 | Profil Akun di Pengaturan: menampilkan data aktual user login (fullName, employeeNo, email untuk user_account, role). Email di JWT payload, master_admin tidak punya email | `backend/src/auth/auth.service.ts`, `app/stores/auth.ts`, `app/pages/settings/index.vue` |
 
 ---
 
@@ -182,8 +190,12 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 
 ### Pengaturan Umum
 - Nama Ketua Koperasi disimpan di tabel `AppSetting` dengan key `cooperativeChairmanName`
-- Dikelola dari halaman `Pengaturan > Umum`
-- Nilai ini dipakai saat render dokumen kontrak PKWT / MITRA, terutama pada blok identitas legal dan signature
+- Nama Organisasi disimpan di tabel `AppSetting` dengan key `organizationName` (tampil di sidebar)
+- Logo Organisasi disimpan di tabel `AppSetting` dengan key `appLogoUrl` (tampil di sidebar)
+- Dikelola dari halaman `Pengaturan > Umum` — hanya Admin yang bisa ubah
+- Logo: upload JPG/PNG/WEBP/SVG, max 512x512px, max 2MB. Validasi dimensi di frontend sebelum upload
+- Composable `useAppSettings.ts` menyediakan `logoUrl`, `organizationName`, `cooperativeChairmanName` secara reaktif untuk sidebar (`TeamsMenu.vue`)
+- Fallback: jika logo kosong → tampilkan huruf pertama nama organisasi; jika nama kosong → "Kokarsi PT. Sankyu"
 
 ### Eskalasi Surat Peringatan
 Rule eskalasi aktif:
@@ -229,7 +241,7 @@ app/
     dokumen/
       surat-peringatan/
         index.vue          # Manajemen Surat Peringatan (preview PDF)
-    settings/index.vue      # Pengaturan umum (Ketua Koperasi)
+    settings/index.vue      # Pengaturan umum (Ketua Koperasi, Nama Organisasi, Logo)
     settings/master-data.vue  # Master data
     settings/contract-templates.vue # Master template kontrak
     settings/users.vue        # Master user
@@ -390,8 +402,13 @@ backend/
 ### AppSetting
 | Field | Type | Keterangan |
 |-------|------|-----------|
-| `key` | String | Unique key setting, saat ini dipakai untuk `cooperativeChairmanName` |
+| `key` | String | Unique key setting |
 | `value` | String | Nilai setting |
+
+**Keys yang dipakai:**
+- `cooperativeChairmanName` — Nama Ketua Koperasi (dipakai di dokumen kontrak)
+- `organizationName` — Nama Organisasi (tampil di sidebar header, default: "Kokarsi PT. Sankyu")
+- `appLogoUrl` — Path logo organisasi (tampil di sidebar header, kosong = fallback huruf pertama)
 
 ---
 
@@ -436,11 +453,15 @@ backend/
 | POST | `/api/users` | Tambah user internal |
 | PUT | `/api/users/:id` | Edit user internal |
 | DELETE | `/api/users/:id` | Hapus user internal |
-| GET | `/api/settings/general` | Ambil pengaturan umum |
-| PUT | `/api/settings/general` | Simpan pengaturan umum |
+| GET | `/api/settings/general` | Ambil pengaturan umum (semua role) |
+| PUT | `/api/settings/general` | Simpan pengaturan umum (Admin only) |
+| POST | `/api/settings/logo` | Upload logo organisasi (Admin only, max 512x512px 2MB, JPG/PNG/WEBP/SVG) |
+| GET | `/api/employees/import-template` | Download template Excel import karyawan (dengan dropdown validasi data master) |
+| POST | `/api/employees/bulk-import` | Import karyawan bulk (all-or-nothing transaction, auto-reject duplikat) |
 | GET | `/api/lookups/*` | CRUD lookup data |
 | GET | `/uploads/photos/:filename` | Serve foto statis |
 | GET | `/uploads/contracts/**` | Serve PDF kontrak statis |
+| GET | `/uploads/settings/:filename` | Serve logo organisasi statis |
 
 ---
 
@@ -478,3 +499,11 @@ backend/
 | Edit kontrak gagal dengan error 400 | Kontrak sudah ditandatangani (`documentUrl` terisi). Field `baseCompensation`, `startDate`, `endDate`, `employeeId` dikunci |
 | Tabel kontrak tampil duplikat nama karyawan | Pastikan pakai endpoint `/api/contracts/summary` (1 row per karyawan), bukan `/api/contracts` |
 | Toast error tidak muncul saat simpan kontrak gagal | Pastikan proxy Nitro pakai `$fetch.raw` + `createError` (bukan `ignoreResponseError` tanpa check) |
+| Import karyawan Bad Request | Pastikan field `rowNumber` di-strip dari payload sebelum kirim ke backend (`map(({ rowNumber, ...emp }) => emp)`) |
+| Tanggal import karyawan beda 1 hari (timezone) | Jangan pakai `toISOString()` untuk parse tanggal dari xlsx. Pakai local date components atau `raw: false` di `sheet_to_json` |
+| Template Excel dropdown tidak muncul | Template dihasilkan oleh backend (Node.js), bukan frontend — generate ulang via backend endpoint `/api/employees/import-template` |
+| Logo sidebar tidak tampil | Pastikan prefix `http://localhost:3001` saat load logo dari `appLogoUrl`, bukan path relatif |
+| Email profil akun kosong | `MasterAdmin` tidak punya field email. Hanya `user_account` (Pengelola) yang punya email. Perlu logout + login ulang setelah update auth.service.ts |
+| Kontrak PHK/RESIGN masih bisa buat kontrak baru | Guard `checkTerminationLockout()` di `contracts.service.ts`, frontend juga fetch `employmentStatus` di AddContractModal |
+| Edit kontrak dengan scan dokumen selalu error 400 | State Lock compare string vs Date object — sekarang sudah difix dengan normalisasi ke ISO string sebelum compare |
+| Unduh dokumen kontrak scan 404 | Gunakan `http://localhost:3001${documentUrl}` untuk buka file, bukan path relatif (Vue Router intercept) |

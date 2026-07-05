@@ -269,6 +269,16 @@ export interface UserAccount {
 
 export interface GeneralSettings {
   cooperativeChairmanName: string
+  organizationName: string
+  appLogoUrl: string
+  loginLeftBgColor?: string
+  loginRightBgColor?: string
+  loginLeftImageUrl?: string
+  loginRightImageUrl?: string
+  loginLeftOverlayOpacity?: string
+  loginRightOverlayOpacity?: string
+  loginLeftTextColor?: string
+  loginRightTextColor?: string
 }
 
 // --- Misc ---
