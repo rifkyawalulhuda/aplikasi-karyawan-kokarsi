@@ -48,6 +48,13 @@ async function handleLogin() {
 
 const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
 
+// Color mode toggle
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+function toggleColorMode() {
+  colorMode.preference = isDark.value ? 'light' : 'dark'
+}
+
 const loginLeftPanelStyle = computed(() => {
   const style: Record<string, string> = {}
   if (loginLeftBgColor.value) style.backgroundColor = loginLeftBgColor.value
@@ -160,6 +167,18 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
         class="pointer-events-none absolute inset-0"
         :style="{ backgroundColor: `rgba(0,0,0,${loginRightOverlayOpacity / 100})` }"
       />
+
+      <!-- Theme toggle — top-right corner -->
+      <div class="absolute top-4 right-4 z-20">
+        <UButton
+          :icon="isDark ? 'i-lucide-sun' : 'i-lucide-moon'"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :aria-label="isDark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'"
+          @click="toggleColorMode"
+        />
+      </div>
 
       <!-- Mobile logo (visible only on small screens) -->
       <div class="mb-10 flex items-center gap-3 self-start w-full md:hidden">

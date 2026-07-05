@@ -4,6 +4,11 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 const route = useRoute()
 const open = ref(false)
 const auth = useAuthStore()
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+function toggleColorMode() {
+  colorMode.preference = isDark.value ? 'light' : 'dark'
+}
 
 const links = computed<NavigationMenuItem[]>(() => [
   {
@@ -114,7 +119,18 @@ const groups = computed<any[]>(() => [{
       </template>
 
       <template #footer="{ collapsed }">
-        <UserMenu :collapsed="collapsed" />
+        <div class="flex items-center gap-1" :class="collapsed ? 'flex-col' : 'flex-row'">
+          <UButton
+            :icon="isDark ? 'i-lucide-sun' : 'i-lucide-moon'"
+            color="neutral"
+            variant="ghost"
+            square
+            :aria-label="isDark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'"
+            :tooltip="collapsed ? (isDark ? 'Tema Terang' : 'Tema Gelap') : undefined"
+            @click="toggleColorMode"
+          />
+          <UserMenu :collapsed="collapsed" class="flex-1 min-w-0" />
+        </div>
       </template>
     </UDashboardSidebar>
 
