@@ -106,7 +106,10 @@ function parseDateString(val: unknown): string | null {
 
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return null
-    return val.toISOString().split('T')[0]!
+    const year = val.getFullYear()
+    const month = String(val.getMonth() + 1).padStart(2, '0')
+    const day = String(val.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   const str = String(val).trim()
@@ -115,21 +118,20 @@ function parseDateString(val: unknown): string | null {
   const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
   if (ddmmyyyy) {
     const [, day, month, year] = ddmmyyyy
-    const d = new Date(`${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`)
-    if (isNaN(d.getTime())) return null
-    return d.toISOString().split('T')[0]!
+    return `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}`
   }
 
   const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (isoMatch) {
-    const d = new Date(str)
-    if (isNaN(d.getTime())) return null
-    return d.toISOString().split('T')[0]!
+    return str.substring(0, 10)
   }
 
   const d = new Date(str)
   if (isNaN(d.getTime())) return null
-  return d.toISOString().split('T')[0]!
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getCellValue(val: unknown): string {
@@ -162,7 +164,7 @@ export function useImportTemplate() {
     const lookupMaps = buildLookupMaps(lookups)
 
     const buffer = await file.arrayBuffer()
-    const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
+    const workbook = XLSX.read(buffer, { type: 'array' })
 
     const sheetName = workbook.SheetNames[0]
     if (!sheetName) {
@@ -170,7 +172,7 @@ export function useImportTemplate() {
     }
 
     const sheet = workbook.Sheets[sheetName]!
-    const jsonData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '' })
+    const jsonData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
 
     if (jsonData.length < 2) {
       return { validRows: [], invalidRows: [], totalRows: 0 }

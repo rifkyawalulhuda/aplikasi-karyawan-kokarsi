@@ -518,6 +518,9 @@ export class EmployeesService {
           right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
         }
       }
+      // Set dd/mm/yyyy number format for date columns (F=6 birthDate, H=8 joinDate)
+      sheet.getCell(i, 6).numFmt = 'dd/mm/yyyy'
+      sheet.getCell(i, 8).numFmt = 'dd/mm/yyyy'
     }
 
     const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18]
