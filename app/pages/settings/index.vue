@@ -313,6 +313,23 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
     savingGeneral.value = false
   }
 }
+
+type SettingsTab = 'general' | 'profile' | 'login-appearance' | 'contract-templates' | 'master-user'
+const activeTab = ref<SettingsTab>('general')
+
+const tabs = computed(() => [
+  { key: 'general' as SettingsTab, label: 'Umum', icon: 'i-lucide-building-2' },
+  { key: 'profile' as SettingsTab, label: 'Profil Akun', icon: 'i-lucide-user-cog' },
+  { key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' },
+  ...(auth.canManageMasterData ? [
+    { key: 'contract-templates' as SettingsTab, label: 'Template Kontrak', icon: 'i-lucide-file-text' },
+    { key: 'master-user' as SettingsTab, label: 'Master User', icon: 'i-lucide-users' },
+  ] : []),
+])
+
+function onTabChange(key: SettingsTab) {
+  activeTab.value = key
+}
 </script>
 
 <template>
@@ -326,14 +343,36 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
     </template>
 
     <template #body>
-      <div class="max-w-2xl space-y-6">
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-building-2" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Pengaturan Umum</span>
-            </div>
-          </template>
+      <div class="p-4 sm:p-6 lg:p-8">
+        <!-- Tab navigation -->
+        <div class="mb-6 border-b border-default">
+          <div class="flex flex-wrap gap-1 -mb-px">
+            <button
+              v-for="tab in tabs"
+              :key="tab.key"
+              class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer"
+              :class="activeTab === tab.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted hover:text-highlighted hover:bg-elevated/50'"
+              @click="onTabChange(tab.key)"
+            >
+              <UIcon :name="tab.icon" class="size-4" />
+              <span>{{ tab.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab content -->
+        <div class="max-w-2xl">
+          <!-- Tab: Umum -->
+          <div v-if="activeTab === 'general'">
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-building-2" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Pengaturan Umum</span>
+              </div>
+            </template>
           <div class="space-y-5">
             <dl class="space-y-3 text-sm">
               <div class="flex justify-between">
@@ -439,34 +478,40 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
               </UForm>
             </div>
           </div>
-        </UCard>
-
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-user-cog" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Profil Akun</span>
-            </div>
-          </template>
-          <div class="space-y-4">
-            <UFormField label="Nama Lengkap">
-              <UInput :model-value="auth.admin?.fullName ?? '-'" class="w-full" disabled />
-            </UFormField>
-            <UFormField label="No. Induk / Username">
-              <UInput :model-value="auth.admin?.employeeNo ?? '-'" class="w-full" disabled />
-            </UFormField>
-            <UFormField v-if="auth.admin?.accountType === 'user_account'" label="Email">
-              <UInput :model-value="auth.admin?.email || '-'" class="w-full" disabled />
-            </UFormField>
-            <UFormField label="Role">
-              <UInput :model-value="auth.admin?.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi'" class="w-full" disabled />
-            </UFormField>
-            <p class="text-xs text-muted">Hubungi administrator sistem untuk mengubah data profil.</p>
+          </UCard>
           </div>
-        </UCard>
 
-        <!-- Login Page Appearance Card -->
-        <UCard v-if="auth.canManageMasterData">
+          <!-- Tab: Profil Akun -->
+          <div v-else-if="activeTab === 'profile'">
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-user-cog" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Profil Akun</span>
+              </div>
+            </template>
+            <div class="space-y-4">
+              <UFormField label="Nama Lengkap">
+                <UInput :model-value="auth.admin?.fullName ?? '-'" class="w-full" disabled />
+              </UFormField>
+              <UFormField label="No. Induk / Username">
+                <UInput :model-value="auth.admin?.employeeNo ?? '-'" class="w-full" disabled />
+              </UFormField>
+              <UFormField v-if="auth.admin?.accountType === 'user_account'" label="Email">
+                <UInput :model-value="auth.admin?.email || '-'" class="w-full" disabled />
+              </UFormField>
+              <UFormField label="Role">
+                <UInput :model-value="auth.admin?.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi'" class="w-full" disabled />
+              </UFormField>
+              <p class="text-xs text-muted">Hubungi administrator sistem untuk mengubah data profil.</p>
+            </div>
+          </UCard>
+          </div>
+
+          <!-- Tab: Tampilan Login -->
+          <div v-else-if="activeTab === 'login-appearance'">
+          <!-- Login Page Appearance Card -->
+          <UCard>
           <template #header>
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-monitor" class="size-4 text-muted" />
@@ -687,49 +732,57 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
               />
             </div>
           </div>
-        </UCard>
-
-        <UCard v-if="auth.canManageMasterData">
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-file-text" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Template Kontrak</span>
-            </div>
-          </template>
-          <div class="space-y-4">
-            <p class="text-sm text-muted">
-              Kelola template dokumen PKWT dan Mitra yang dipakai saat generate kontrak kerja otomatis.
-            </p>
-            <UButton
-              to="/settings/contract-templates"
-              label="Buka Template Kontrak"
-              icon="i-lucide-arrow-right"
-              color="primary"
-              variant="soft"
-            />
+          </UCard>
           </div>
-        </UCard>
 
-        <UCard v-if="auth.canManageMasterData">
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-users" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Master User</span>
+          <!-- Tab: Template Kontrak (admin only) -->
+          <div v-else-if="activeTab === 'contract-templates' && auth.canManageMasterData">
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-file-text" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Template Kontrak</span>
+              </div>
+            </template>
+            <div class="space-y-4">
+              <p class="text-sm text-muted">
+                Kelola template dokumen PKWT dan Mitra yang dipakai saat generate kontrak kerja otomatis.
+              </p>
+              <UButton
+                to="/settings/contract-templates"
+                label="Buka Template Kontrak"
+                icon="i-lucide-arrow-right"
+                color="primary"
+                variant="soft"
+              />
             </div>
-          </template>
-          <div class="space-y-4">
-            <p class="text-sm text-muted">
-              Kelola akun internal untuk Admin dan Pengelola Koperasi dari satu tempat.
-            </p>
-            <UButton
-              to="/settings/users"
-              label="Buka Master User"
-              icon="i-lucide-arrow-right"
-              color="primary"
-              variant="soft"
-            />
+          </UCard>
           </div>
-        </UCard>
+
+          <!-- Tab: Master User (admin only) -->
+          <div v-else-if="activeTab === 'master-user' && auth.canManageMasterData">
+          <UCard>
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-users" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Master User</span>
+              </div>
+            </template>
+            <div class="space-y-4">
+              <p class="text-sm text-muted">
+                Kelola akun internal untuk Admin dan Pengelola Koperasi dari satu tempat.
+              </p>
+              <UButton
+                to="/settings/users"
+                label="Buka Master User"
+                icon="i-lucide-arrow-right"
+                color="primary"
+                variant="soft"
+              />
+            </div>
+          </UCard>
+          </div>
+        </div>
       </div>
     </template>
   </UDashboardPanel>
