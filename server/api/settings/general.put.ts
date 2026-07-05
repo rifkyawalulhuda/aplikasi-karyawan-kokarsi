@@ -6,10 +6,20 @@ export default defineEventHandler(async (event) => {
   const token = getCookie(event, 'auth_token') ?? ''
   const body = await readBody(event)
 
-  return $fetch(`${BACKEND}/settings/general`, {
+  const res = await $fetch.raw(`${BACKEND}/settings/general`, {
     method: 'PUT',
     body,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     ignoreResponseError: true,
   })
+
+  if (res.status >= 400) {
+    throw createError({
+      statusCode: res.status,
+      statusMessage: res.statusText,
+      data: res._data,
+    })
+  }
+
+  return res._data
 })

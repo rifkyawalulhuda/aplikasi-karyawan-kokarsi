@@ -8,6 +8,11 @@ const toast = useToast()
 const savingGeneral = ref(false)
 const uploadingLogo = ref(false)
 const logoFileInput = ref<HTMLInputElement | null>(null)
+const uploadingLoginImage = ref<'left' | 'right' | null>(null)
+const loginLeftImageInput = ref<HTMLInputElement | null>(null)
+const loginRightImageInput = ref<HTMLInputElement | null>(null)
+const savingLoginAppearance = ref(false)
+const { refresh: refreshAppSettings } = useAppSettings()
 
 const generalSchema = z.object({
   cooperativeChairmanName: z.string().min(3, 'Nama Ketua Koperasi wajib diisi'),
@@ -32,6 +37,171 @@ const currentLogoUrl = computed(() => {
   if (!generalSettings.value?.appLogoUrl) return ''
   return `http://localhost:3001${generalSettings.value.appLogoUrl}`
 })
+
+// --- Login Appearance ---
+const loginForm = reactive({
+  loginLeftBgColor: '',
+  loginRightBgColor: '',
+  loginLeftImageUrl: '',
+  loginRightImageUrl: '',
+  loginLeftOverlayOpacity: 7,
+  loginRightOverlayOpacity: 0,
+  loginLeftTextColor: '',
+  loginRightTextColor: '',
+})
+
+watchEffect(() => {
+  loginForm.loginLeftBgColor = generalSettings.value?.loginLeftBgColor ?? ''
+  loginForm.loginRightBgColor = generalSettings.value?.loginRightBgColor ?? ''
+  loginForm.loginLeftImageUrl = generalSettings.value?.loginLeftImageUrl ?? ''
+  loginForm.loginRightImageUrl = generalSettings.value?.loginRightImageUrl ?? ''
+  loginForm.loginLeftOverlayOpacity = Number(generalSettings.value?.loginLeftOverlayOpacity ?? '7')
+  loginForm.loginRightOverlayOpacity = Number(generalSettings.value?.loginRightOverlayOpacity ?? '0')
+  loginForm.loginLeftTextColor = generalSettings.value?.loginLeftTextColor ?? ''
+  loginForm.loginRightTextColor = generalSettings.value?.loginRightTextColor ?? ''
+})
+
+const currentLoginLeftImageUrl = computed(() => {
+  if (!loginForm.loginLeftImageUrl) return ''
+  return `http://localhost:3001${loginForm.loginLeftImageUrl}`
+})
+
+const currentLoginRightImageUrl = computed(() => {
+  if (!loginForm.loginRightImageUrl) return ''
+  return `http://localhost:3001${loginForm.loginRightImageUrl}`
+})
+
+const previewLeftStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (loginForm.loginLeftBgColor) style.backgroundColor = loginForm.loginLeftBgColor
+  if (loginForm.loginLeftImageUrl) {
+    style.backgroundImage = `url('http://localhost:3001${loginForm.loginLeftImageUrl}')`
+    style.backgroundSize = 'cover'
+    style.backgroundPosition = 'center'
+  }
+  if (loginForm.loginLeftTextColor) style.color = loginForm.loginLeftTextColor
+  return style
+})
+
+const previewRightStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (loginForm.loginRightBgColor) style.backgroundColor = loginForm.loginRightBgColor
+  if (loginForm.loginRightImageUrl) {
+    style.backgroundImage = `url('http://localhost:3001${loginForm.loginRightImageUrl}')`
+    style.backgroundSize = 'cover'
+    style.backgroundPosition = 'center'
+  }
+  if (loginForm.loginRightTextColor) style.color = loginForm.loginRightTextColor
+  return style
+})
+
+async function onLoginImageSelected(e: Event, side: 'left' | 'right') {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !auth.canManageMasterData) return
+
+  if (!file.type.match(/\/(jpg|jpeg|png|webp)$/)) {
+    toast.add({ title: 'Format tidak didukung', description: 'Gunakan JPG, PNG, atau WEBP', color: 'error' })
+    return
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    toast.add({ title: 'File terlalu besar', description: 'Maksimal 5MB', color: 'error' })
+    return
+  }
+
+  uploadingLoginImage.value = side
+  try {
+    const formData = new FormData()
+    formData.append('image', file)
+    const result = await $fetch<GeneralSettings>(`/api/settings/login-image/${side}`, {
+      method: 'POST',
+      body: formData,
+    })
+    // Update loginForm immediately from result
+    if (side === 'left') loginForm.loginLeftImageUrl = result.loginLeftImageUrl ?? ''
+    else loginForm.loginRightImageUrl = result.loginRightImageUrl ?? ''
+    await refreshGeneralSettings()
+    await refreshAppSettings()
+    toast.add({ title: `Gambar panel ${side === 'left' ? 'kiri' : 'kanan'} berhasil diupload`, color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal upload gambar', description: err?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadingLoginImage.value = null
+    if (side === 'left' && loginLeftImageInput.value) loginLeftImageInput.value.value = ''
+    if (side === 'right' && loginRightImageInput.value) loginRightImageInput.value.value = ''
+  }
+}
+
+async function removeLoginImage(side: 'left' | 'right') {
+  if (!auth.canManageMasterData) return
+  uploadingLoginImage.value = side
+  try {
+    const key = side === 'left' ? 'loginLeftImageUrl' : 'loginRightImageUrl'
+    await $fetch('/api/settings/general', { method: 'PUT', body: { [key]: '' } })
+    if (side === 'left') loginForm.loginLeftImageUrl = ''
+    else loginForm.loginRightImageUrl = ''
+    await refreshGeneralSettings()
+    await refreshAppSettings()
+    toast.add({ title: 'Gambar dihapus', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal menghapus gambar', description: err?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    uploadingLoginImage.value = null
+  }
+}
+
+async function saveLoginAppearance() {
+  if (!auth.canManageMasterData) return
+  savingLoginAppearance.value = true
+  try {
+    await $fetch('/api/settings/general', {
+      method: 'PUT',
+      body: {
+        loginLeftBgColor: loginForm.loginLeftBgColor,
+        loginRightBgColor: loginForm.loginRightBgColor,
+        loginLeftOverlayOpacity: String(loginForm.loginLeftOverlayOpacity),
+        loginRightOverlayOpacity: String(loginForm.loginRightOverlayOpacity),
+        loginLeftTextColor: loginForm.loginLeftTextColor,
+        loginRightTextColor: loginForm.loginRightTextColor,
+      },
+    })
+    await refreshGeneralSettings()
+    await refreshAppSettings()
+    toast.add({ title: 'Tampilan halaman login berhasil disimpan', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menyimpan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    savingLoginAppearance.value = false
+  }
+}
+
+async function resetLoginAppearance() {
+  if (!auth.canManageMasterData) return
+  savingLoginAppearance.value = true
+  try {
+    await $fetch('/api/settings/general', {
+      method: 'PUT',
+      body: {
+        loginLeftBgColor: '',
+        loginRightBgColor: '',
+        loginLeftImageUrl: '',
+        loginRightImageUrl: '',
+        loginLeftOverlayOpacity: '7',
+        loginRightOverlayOpacity: '0',
+        loginLeftTextColor: '',
+        loginRightTextColor: '',
+      },
+    })
+    await refreshGeneralSettings()
+    await refreshAppSettings()
+    toast.add({ title: 'Tampilan login direset ke default', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Gagal mereset', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    savingLoginAppearance.value = false
+  }
+}
 
 async function validateLogoDimensions(file: File): Promise<boolean> {
   return new Promise((resolve) => {
@@ -292,6 +462,230 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
               <UInput :model-value="auth.admin?.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi'" class="w-full" disabled />
             </UFormField>
             <p class="text-xs text-muted">Hubungi administrator sistem untuk mengubah data profil.</p>
+          </div>
+        </UCard>
+
+        <!-- Login Page Appearance Card -->
+        <UCard v-if="auth.canManageMasterData">
+          <template #header>
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-monitor" class="size-4 text-muted" />
+              <span class="font-semibold text-sm">Tampilan Halaman Login</span>
+            </div>
+          </template>
+          <div class="space-y-6">
+
+            <!-- Live Preview -->
+            <div>
+              <p class="text-sm font-medium text-highlighted mb-2">Preview</p>
+              <div class="rounded-xl overflow-hidden border border-default flex h-32 text-xs">
+                <!-- Left mini panel -->
+                <div
+                  class="w-2/5 p-3 flex flex-col justify-between relative overflow-hidden"
+                  :class="{ 'bg-primary': !loginForm.loginLeftBgColor }"
+                  :style="previewLeftStyle"
+                >
+                  <div class="relative z-10">
+                    <div class="w-4 h-4 rounded bg-white/20 mb-1" />
+                    <div class="w-16 h-1.5 rounded bg-white/60" />
+                  </div>
+                  <div class="relative z-10">
+                    <div class="w-12 h-2 rounded mb-1" :style="{ backgroundColor: loginForm.loginLeftTextColor || 'rgba(255,255,255,0.9)' }" />
+                    <div class="w-20 h-1 rounded" :style="{ backgroundColor: loginForm.loginLeftTextColor || 'rgba(255,255,255,0.5)' }" />
+                  </div>
+                  <div
+                    class="absolute inset-0"
+                    :style="{ opacity: (loginForm.loginLeftOverlayOpacity ?? 7) / 100, backgroundImage: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 60%)' }"
+                  />
+                </div>
+                <!-- Right mini panel -->
+                <div
+                  class="w-3/5 p-3 flex flex-col justify-center gap-1.5 relative overflow-hidden"
+                  :class="{ 'bg-background': !loginForm.loginRightBgColor }"
+                  :style="previewRightStyle"
+                >
+                  <div class="w-16 h-2 rounded bg-muted" />
+                  <div class="w-full h-5 rounded border border-default bg-elevated" />
+                  <div class="w-full h-5 rounded border border-default bg-elevated" />
+                  <div class="w-full h-5 rounded bg-primary" />
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <!-- Panel Kiri -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-highlighted">Panel Kiri</h3>
+
+                <!-- Left BG Color -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Warna Background</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      :value="loginForm.loginLeftBgColor || '#2563eb'"
+                      class="w-8 h-8 rounded cursor-pointer border border-default shrink-0"
+                      @input="loginForm.loginLeftBgColor = ($event.target as HTMLInputElement).value"
+                    />
+                    <UInput v-model="loginForm.loginLeftBgColor" placeholder="#2563eb" class="flex-1" size="sm" />
+                    <UButton v-if="loginForm.loginLeftBgColor" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="loginForm.loginLeftBgColor = ''" />
+                  </div>
+                </div>
+
+                <!-- Left Image -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Background Image</label>
+                  <div v-if="currentLoginLeftImageUrl" class="flex items-center gap-2 mb-2">
+                    <img :src="currentLoginLeftImageUrl" alt="Left BG" class="w-12 h-8 object-cover rounded border border-default" />
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      size="xs"
+                      color="error"
+                      variant="ghost"
+                      label="Hapus"
+                      :loading="uploadingLoginImage === 'left'"
+                      @click="removeLoginImage('left')"
+                    />
+                  </div>
+                  <input
+                    ref="loginLeftImageInput"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    class="block w-full text-xs text-muted file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    :disabled="uploadingLoginImage === 'left'"
+                    @change="onLoginImageSelected($event, 'left')"
+                  />
+                  <div v-if="uploadingLoginImage === 'left'" class="flex items-center gap-1 text-xs text-muted">
+                    <UIcon name="i-lucide-loader-circle" class="w-3 h-3 animate-spin" />
+                    Mengupload...
+                  </div>
+                </div>
+
+                <!-- Left Overlay Opacity -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Overlay Opacity: {{ loginForm.loginLeftOverlayOpacity }}%</label>
+                  <input
+                    v-model.number="loginForm.loginLeftOverlayOpacity"
+                    type="range"
+                    min="0"
+                    max="100"
+                    class="w-full accent-primary"
+                  />
+                </div>
+
+                <!-- Left Text Color -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Warna Teks</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      :value="loginForm.loginLeftTextColor || '#ffffff'"
+                      class="w-8 h-8 rounded cursor-pointer border border-default shrink-0"
+                      @input="loginForm.loginLeftTextColor = ($event.target as HTMLInputElement).value"
+                    />
+                    <UInput v-model="loginForm.loginLeftTextColor" placeholder="#ffffff" class="flex-1" size="sm" />
+                    <UButton v-if="loginForm.loginLeftTextColor" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="loginForm.loginLeftTextColor = ''" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Panel Kanan -->
+              <div class="space-y-4">
+                <h3 class="text-sm font-semibold text-highlighted">Panel Kanan</h3>
+
+                <!-- Right BG Color -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Warna Background</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      :value="loginForm.loginRightBgColor || '#ffffff'"
+                      class="w-8 h-8 rounded cursor-pointer border border-default shrink-0"
+                      @input="loginForm.loginRightBgColor = ($event.target as HTMLInputElement).value"
+                    />
+                    <UInput v-model="loginForm.loginRightBgColor" placeholder="#ffffff" class="flex-1" size="sm" />
+                    <UButton v-if="loginForm.loginRightBgColor" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="loginForm.loginRightBgColor = ''" />
+                  </div>
+                </div>
+
+                <!-- Right Image -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Background Image</label>
+                  <div v-if="currentLoginRightImageUrl" class="flex items-center gap-2 mb-2">
+                    <img :src="currentLoginRightImageUrl" alt="Right BG" class="w-12 h-8 object-cover rounded border border-default" />
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      size="xs"
+                      color="error"
+                      variant="ghost"
+                      label="Hapus"
+                      :loading="uploadingLoginImage === 'right'"
+                      @click="removeLoginImage('right')"
+                    />
+                  </div>
+                  <input
+                    ref="loginRightImageInput"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    class="block w-full text-xs text-muted file:mr-2 file:rounded file:border-0 file:bg-primary/10 file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                    :disabled="uploadingLoginImage === 'right'"
+                    @change="onLoginImageSelected($event, 'right')"
+                  />
+                  <div v-if="uploadingLoginImage === 'right'" class="flex items-center gap-1 text-xs text-muted">
+                    <UIcon name="i-lucide-loader-circle" class="w-3 h-3 animate-spin" />
+                    Mengupload...
+                  </div>
+                </div>
+
+                <!-- Right Overlay Opacity -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Overlay Opacity: {{ loginForm.loginRightOverlayOpacity }}%</label>
+                  <input
+                    v-model.number="loginForm.loginRightOverlayOpacity"
+                    type="range"
+                    min="0"
+                    max="100"
+                    class="w-full accent-primary"
+                  />
+                </div>
+
+                <!-- Right Text Color -->
+                <div class="space-y-1">
+                  <label class="text-xs font-medium text-muted">Warna Teks</label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="color"
+                      :value="loginForm.loginRightTextColor || '#000000'"
+                      class="w-8 h-8 rounded cursor-pointer border border-default shrink-0"
+                      @input="loginForm.loginRightTextColor = ($event.target as HTMLInputElement).value"
+                    />
+                    <UInput v-model="loginForm.loginRightTextColor" placeholder="#000000" class="flex-1" size="sm" />
+                    <UButton v-if="loginForm.loginRightTextColor" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" @click="loginForm.loginRightTextColor = ''" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center justify-between gap-3 pt-2 border-t border-default">
+              <UButton
+                label="Reset ke Default"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                icon="i-lucide-rotate-ccw"
+                :loading="savingLoginAppearance"
+                @click="resetLoginAppearance"
+              />
+              <UButton
+                label="Simpan Perubahan"
+                color="primary"
+                size="sm"
+                icon="i-lucide-save"
+                :loading="savingLoginAppearance"
+                @click="saveLoginAppearance"
+              />
+            </div>
           </div>
         </UCard>
 

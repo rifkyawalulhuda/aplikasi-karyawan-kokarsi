@@ -3,7 +3,22 @@ definePageMeta({ layout: false })
 
 const auth = useAuthStore()
 const toast = useToast()
-const { logoUrl, organizationName } = useAppSettings()
+const {
+  logoUrl,
+  organizationName,
+  loginLeftBgColor,
+  loginRightBgColor,
+  loginLeftImageUrl,
+  loginRightImageUrl,
+  loginLeftOverlayOpacity,
+  loginRightOverlayOpacity,
+  loginLeftTextColor,
+  loginRightTextColor,
+  refresh: refreshSettings,
+} = useAppSettings()
+
+// Fetch fresh settings on every login page load (before render)
+await refreshSettings()
 
 const form = reactive({
   employeeNo: '',
@@ -32,18 +47,48 @@ async function handleLogin() {
 }
 
 const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
+
+const loginLeftPanelStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (loginLeftBgColor.value) style.backgroundColor = loginLeftBgColor.value
+  if (loginLeftImageUrl.value) {
+    style.backgroundImage = `url('${loginLeftImageUrl.value}')`
+    style.backgroundSize = 'cover'
+    style.backgroundPosition = 'center'
+  }
+  return style
+})
+
+const loginRightPanelStyle = computed(() => {
+  const style: Record<string, string> = {}
+  if (loginRightBgColor.value) style.backgroundColor = loginRightBgColor.value
+  if (loginRightImageUrl.value) {
+    style.backgroundImage = `url('${loginRightImageUrl.value}')`
+    style.backgroundSize = 'cover'
+    style.backgroundPosition = 'center'
+  }
+  return style
+})
+
+// Text color styles — applied directly to text elements to override Tailwind text-white
+const leftText = computed(() => loginLeftTextColor.value ? { color: loginLeftTextColor.value } : {})
+const rightText = computed(() => loginRightTextColor.value ? { color: loginRightTextColor.value } : {})
 </script>
 
 <template>
   <div class="min-h-dvh flex flex-col md:flex-row">
 
     <!-- Left Panel: Branding (hidden on mobile) -->
-    <div class="relative hidden md:flex md:w-1/2 flex-col justify-between bg-primary p-16 overflow-hidden">
+    <div
+      class="relative hidden md:flex md:w-1/2 flex-col justify-between p-16 overflow-hidden"
+      :class="{ 'bg-primary': !loginLeftBgColor }"
+      :style="loginLeftPanelStyle"
+    >
 
       <!-- Radial gradient depth -->
       <div
-        class="pointer-events-none absolute inset-0 opacity-20"
-        style="background: radial-gradient(circle at 110% 110%, rgba(255,255,255,0.15) 0%, transparent 65%);"
+        class="pointer-events-none absolute inset-0"
+        :style="{ opacity: loginLeftOverlayOpacity / 100, background: 'radial-gradient(circle at 110% 110%, rgba(255,255,255,0.15) 0%, transparent 65%)' }"
       />
       <!-- Subtle grid pattern -->
       <div
@@ -58,10 +103,10 @@ const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
           <UIcon v-else name="i-lucide-users" class="size-6 text-primary" />
         </div>
         <div class="leading-tight">
-          <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-white/70">
+          <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-white/70" :style="leftText">
             Koperasi Karyawan
           </p>
-          <p class="text-sm font-bold text-white">
+          <p class="text-sm font-bold text-white" :style="leftText">
             {{ organizationName }}
           </p>
         </div>
@@ -69,10 +114,10 @@ const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
 
       <!-- Main value proposition -->
       <div class="relative z-10 max-w-md">
-        <h1 class="text-5xl font-bold leading-tight tracking-tight text-white mb-6">
+        <h1 class="text-5xl font-bold leading-tight tracking-tight text-white mb-6" :style="leftText">
           Sistem Manajemen Karyawan
         </h1>
-        <p class="text-base leading-7 text-white/80 mb-12">
+        <p class="text-base leading-7 text-white/80 mb-12" :style="leftText">
           Platform internal untuk pengelolaan data karyawan, kontrak kerja, dan laporan operasional {{ organizationName }}.
         </p>
 
@@ -81,31 +126,41 @@ const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
             <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
               <UIcon name="i-lucide-users" class="size-5 text-white/90" />
             </div>
-            <span class="text-base font-medium text-white">Manajemen Data Karyawan</span>
+            <span class="text-base font-medium text-white" :style="leftText">Manajemen Data Karyawan</span>
           </li>
           <li class="flex items-center gap-4 group">
             <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
               <UIcon name="i-lucide-file-text" class="size-5 text-white/90" />
             </div>
-            <span class="text-base font-medium text-white">Administrasi Kontrak Kerja</span>
+            <span class="text-base font-medium text-white" :style="leftText">Administrasi Kontrak Kerja</span>
           </li>
           <li class="flex items-center gap-4 group">
             <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
               <UIcon name="i-lucide-bar-chart-3" class="size-5 text-white/90" />
             </div>
-            <span class="text-base font-medium text-white">Laporan &amp; Ekspor Data</span>
+            <span class="text-base font-medium text-white" :style="leftText">Laporan &amp; Ekspor Data</span>
           </li>
         </ul>
       </div>
 
       <!-- Copyright -->
-      <div class="relative z-10 text-xs text-white/50">
+      <div class="relative z-10 text-xs text-white/50" :style="leftText">
         &copy; {{ new Date().getFullYear() }} {{ organizationName }}. Hak cipta dilindungi.
       </div>
     </div>
 
     <!-- Right Panel: Login Form -->
-    <div class="flex-1 md:w-1/2 bg-background flex flex-col items-center justify-center px-6 py-12 sm:px-12 lg:px-16">
+    <div
+      class="relative flex-1 md:w-1/2 flex flex-col items-center justify-center px-6 py-12 sm:px-12 lg:px-16 overflow-hidden"
+      :class="{ 'bg-background': !loginRightBgColor }"
+      :style="loginRightPanelStyle"
+    >
+      <!-- Right image overlay -->
+      <div
+        v-if="loginRightImageUrl"
+        class="pointer-events-none absolute inset-0"
+        :style="{ opacity: loginRightOverlayOpacity / 100, backgroundColor: 'rgba(0,0,0,0.3)' }"
+      />
 
       <!-- Mobile logo (visible only on small screens) -->
       <div class="mb-10 flex items-center gap-3 self-start w-full md:hidden">
@@ -126,10 +181,10 @@ const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
       <div class="w-full max-w-[400px]">
         <!-- Heading -->
         <div class="mb-8">
-          <h2 class="text-3xl font-bold tracking-tight text-highlighted mb-2">
+          <h2 class="text-3xl font-bold tracking-tight text-highlighted mb-2" :style="rightText">
             Selamat Datang
           </h2>
-          <p class="text-sm text-muted">
+          <p class="text-sm text-muted" :style="rightText">
             Masuk ke akun Anda untuk mengakses dashboard.
           </p>
         </div>
