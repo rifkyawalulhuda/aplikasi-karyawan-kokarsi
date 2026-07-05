@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "engram": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package",
+        "@the-long-ride/engram",
+        "engram-mcp"
+      ]
+    }
+  }
+}

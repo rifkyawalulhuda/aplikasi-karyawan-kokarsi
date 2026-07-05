@@ -1,0 +1,8 @@
+# Engram ignores private or generated AI context.
+.env
+.env.*
+dist/
+coverage/
+node_modules/
+*.secret
+private/**
