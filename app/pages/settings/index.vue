@@ -314,17 +314,13 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
   }
 }
 
-type SettingsTab = 'general' | 'profile' | 'login-appearance' | 'contract-templates' | 'master-user'
+type SettingsTab = 'general' | 'profile' | 'login-appearance'
 const activeTab = ref<SettingsTab>('general')
 
 const tabs = computed(() => [
   { key: 'general' as SettingsTab, label: 'Umum', icon: 'i-lucide-building-2' },
   { key: 'profile' as SettingsTab, label: 'Profil Akun', icon: 'i-lucide-user-cog' },
   { key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' },
-  ...(auth.canManageMasterData ? [
-    { key: 'contract-templates' as SettingsTab, label: 'Template Kontrak', icon: 'i-lucide-file-text' },
-    { key: 'master-user' as SettingsTab, label: 'Master User', icon: 'i-lucide-users' },
-  ] : []),
 ])
 
 function onTabChange(key: SettingsTab) {
@@ -732,54 +728,6 @@ function onTabChange(key: SettingsTab) {
               />
             </div>
           </div>
-          </UCard>
-          </div>
-
-          <!-- Tab: Template Kontrak (admin only) -->
-          <div v-else-if="activeTab === 'contract-templates' && auth.canManageMasterData">
-          <UCard>
-            <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-lucide-file-text" class="size-4 text-muted" />
-                <span class="font-semibold text-sm">Template Kontrak</span>
-              </div>
-            </template>
-            <div class="space-y-4">
-              <p class="text-sm text-muted">
-                Kelola template dokumen PKWT dan Mitra yang dipakai saat generate kontrak kerja otomatis.
-              </p>
-              <UButton
-                to="/settings/contract-templates"
-                label="Buka Template Kontrak"
-                icon="i-lucide-arrow-right"
-                color="primary"
-                variant="soft"
-              />
-            </div>
-          </UCard>
-          </div>
-
-          <!-- Tab: Master User (admin only) -->
-          <div v-else-if="activeTab === 'master-user' && auth.canManageMasterData">
-          <UCard>
-            <template #header>
-              <div class="flex items-center gap-2">
-                <UIcon name="i-lucide-users" class="size-4 text-muted" />
-                <span class="font-semibold text-sm">Master User</span>
-              </div>
-            </template>
-            <div class="space-y-4">
-              <p class="text-sm text-muted">
-                Kelola akun internal untuk Admin dan Pengelola Koperasi dari satu tempat.
-              </p>
-              <UButton
-                to="/settings/users"
-                label="Buka Master User"
-                icon="i-lucide-arrow-right"
-                color="primary"
-                variant="soft"
-              />
-            </div>
           </UCard>
           </div>
         </div>
