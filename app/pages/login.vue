@@ -177,7 +177,7 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
         </div>
       </div>
 
-      <div class="w-full max-w-[400px]">
+      <div class="w-full max-w-[480px]">
         <!-- Heading -->
         <div class="mb-8">
           <h2 class="text-3xl font-bold tracking-tight text-highlighted mb-2" :style="rightText">
@@ -196,25 +196,21 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
             <label for="employeeNo" class="block text-sm font-semibold text-highlighted">
               No. Induk / NIK / Username
             </label>
-            <div class="relative group">
-              <div class="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center">
-                <UIcon
-                  name="i-lucide-user"
-                  class="size-4 text-muted group-focus-within:text-primary transition-colors"
-                />
-              </div>
-              <UInput
-                id="employeeNo"
-                v-model="form.employeeNo"
-                type="text"
-                placeholder="Masukkan ID Anda"
-                required
-                autocomplete="username"
-                :disabled="loading"
-                class="w-full"
-                :ui="{ base: 'pl-10' }"
-              />
-            </div>
+            <UInput
+              id="employeeNo"
+              v-model="form.employeeNo"
+              type="text"
+              placeholder="Masukkan ID Anda"
+              required
+              autocomplete="username"
+              :disabled="loading"
+              class="w-full"
+              size="lg"
+            >
+              <template #leading>
+                <UIcon name="i-lucide-user" class="size-4 text-muted" />
+              </template>
+            </UInput>
           </div>
 
           <!-- Password -->
@@ -222,36 +218,31 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
             <label for="password" class="block text-sm font-semibold text-highlighted">
               Password
             </label>
-            <div class="relative group">
-              <div class="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center z-10">
-                <UIcon
-                  name="i-lucide-lock"
-                  class="size-4 text-muted group-focus-within:text-primary transition-colors"
-                />
-              </div>
-              <UInput
-                id="password"
-                v-model="form.password"
-                :type="showPassword ? 'text' : 'password'"
-                placeholder="••••••••"
-                required
-                autocomplete="current-password"
-                :disabled="loading"
-                class="w-full"
-                :ui="{ base: 'pl-10 pr-10' }"
-              >
-                <template #trailing>
-                  <button
-                    type="button"
-                    class="text-muted transition hover:text-highlighted focus:outline-none"
-                    :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
-                    @click="showPassword = !showPassword"
-                  >
-                    <UIcon :name="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="size-4" />
-                  </button>
-                </template>
-              </UInput>
-            </div>
+            <UInput
+              id="password"
+              v-model="form.password"
+              :type="showPassword ? 'text' : 'password'"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password"
+              :disabled="loading"
+              class="w-full"
+              size="lg"
+            >
+              <template #leading>
+                <UIcon name="i-lucide-lock" class="size-4 text-muted" />
+              </template>
+              <template #trailing>
+                <button
+                  type="button"
+                  class="text-muted transition hover:text-highlighted focus:outline-none"
+                  :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
+                  @click="showPassword = !showPassword"
+                >
+                  <UIcon :name="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="size-4" />
+                </button>
+              </template>
+            </UInput>
           </div>
 
           <!-- Submit -->
