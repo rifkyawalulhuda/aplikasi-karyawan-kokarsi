@@ -85,12 +85,12 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
       :style="loginLeftPanelStyle"
     >
 
-      <!-- Radial gradient depth -->
+      <!-- Dark scrim overlay — opacity controlled by settings (0=none, 100=full black) -->
       <div
         class="pointer-events-none absolute inset-0"
-        :style="{ opacity: loginLeftOverlayOpacity / 100, background: 'radial-gradient(circle at 110% 110%, rgba(255,255,255,0.15) 0%, transparent 65%)' }"
+        :style="{ backgroundColor: `rgba(0,0,0,${loginLeftOverlayOpacity / 100})` }"
       />
-      <!-- Subtle grid pattern -->
+      <!-- Subtle grid pattern (fixed low opacity decorative) -->
       <div
         class="pointer-events-none absolute inset-0 opacity-[0.06]"
         style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><path d=%22M0 0h60v60H0z%22 fill=%22none%22/><path d=%22M0 0l60 60M60 0L0 60%22 stroke=%22white%22 stroke-width=%221%22/></svg>'); background-size: 60px 60px;"
@@ -155,11 +155,10 @@ const rightText = computed(() => loginRightTextColor.value ? { color: loginRight
       :class="{ 'bg-background': !loginRightBgColor }"
       :style="loginRightPanelStyle"
     >
-      <!-- Right image overlay -->
+      <!-- Right dark scrim overlay — always present, opacity controlled by settings -->
       <div
-        v-if="loginRightImageUrl"
         class="pointer-events-none absolute inset-0"
-        :style="{ opacity: loginRightOverlayOpacity / 100, backgroundColor: 'rgba(0,0,0,0.3)' }"
+        :style="{ backgroundColor: `rgba(0,0,0,${loginRightOverlayOpacity / 100})` }"
       />
 
       <!-- Mobile logo (visible only on small screens) -->
