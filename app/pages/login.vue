@@ -35,157 +35,187 @@ const orgFirstLetter = computed(() => (organizationName.value || 'K')[0])
 </script>
 
 <template>
-  <div class="min-h-dvh grid lg:grid-cols-2">
-    <!-- Left: Corporate Branding -->
-    <div class="relative hidden lg:flex flex-col justify-between bg-primary p-10 text-white overflow-hidden">
-      <!-- Subtle pattern -->
-      <div class="pointer-events-none absolute inset-0 opacity-[0.07]" style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><path d=%22M0 0h60v60H0z%22 fill=%22none%22/><path d=%22M0 0l60 60M60 0L0 60%22 stroke=%22white%22 stroke-width=%221%22/></svg>'); background-size: 60px 60px;" />
+  <div class="min-h-dvh flex flex-col md:flex-row">
 
-      <!-- Gradient overlay -->
-      <div class="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary via-primary to-primary/80" />
+    <!-- Left Panel: Branding (hidden on mobile) -->
+    <div class="relative hidden md:flex md:w-1/2 flex-col justify-between bg-primary p-16 overflow-hidden">
 
-      <div class="relative z-10">
-        <div class="flex items-center gap-3">
-          <div class="flex size-11 items-center justify-center rounded-lg bg-white/15 backdrop-blur ring-1 ring-white/20 overflow-hidden">
-            <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
-            <span v-else class="text-lg font-bold tracking-tight">{{ orgFirstLetter }}</span>
-          </div>
-          <div class="leading-tight">
-            <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-white/70">
-              Koperasi Karyawan
-            </p>
-            <p class="mt-0.5 text-sm font-semibold">
-              {{ organizationName }}
-            </p>
-          </div>
+      <!-- Radial gradient depth -->
+      <div
+        class="pointer-events-none absolute inset-0 opacity-20"
+        style="background: radial-gradient(circle at 110% 110%, rgba(255,255,255,0.15) 0%, transparent 65%);"
+      />
+      <!-- Subtle grid pattern -->
+      <div
+        class="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style="background-image: url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><path d=%22M0 0h60v60H0z%22 fill=%22none%22/><path d=%22M0 0l60 60M60 0L0 60%22 stroke=%22white%22 stroke-width=%221%22/></svg>'); background-size: 60px 60px;"
+      />
+
+      <!-- Logo / Org header -->
+      <div class="relative z-10 flex items-center gap-4">
+        <div class="size-12 rounded-lg bg-white shadow flex items-center justify-center overflow-hidden shrink-0">
+          <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
+          <UIcon v-else name="i-lucide-users" class="size-6 text-primary" />
+        </div>
+        <div class="leading-tight">
+          <p class="text-[11px] font-medium uppercase tracking-[0.25em] text-white/70">
+            Koperasi Karyawan
+          </p>
+          <p class="text-sm font-bold text-white">
+            {{ organizationName }}
+          </p>
         </div>
       </div>
 
+      <!-- Main value proposition -->
       <div class="relative z-10 max-w-md">
-        <h1 class="text-3xl font-semibold leading-tight tracking-tight xl:text-4xl">
+        <h1 class="text-5xl font-bold leading-tight tracking-tight text-white mb-6">
           Sistem Manajemen Karyawan
         </h1>
-        <p class="mt-4 text-sm leading-7 text-white/75">
+        <p class="text-base leading-7 text-white/80 mb-12">
           Platform internal untuk pengelolaan data karyawan, kontrak kerja, dan laporan operasional {{ organizationName }}.
         </p>
 
-        <div class="mt-8 space-y-4">
-          <div class="flex items-center gap-3">
-            <div class="flex size-8 items-center justify-center rounded-lg bg-white/10">
-              <UIcon name="i-lucide-users" class="size-4 text-white/80" />
+        <ul class="space-y-4">
+          <li class="flex items-center gap-4 group">
+            <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
+              <UIcon name="i-lucide-users" class="size-5 text-white/90" />
             </div>
-            <span class="text-sm text-white/80">Manajemen Data Karyawan</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="flex size-8 items-center justify-center rounded-lg bg-white/10">
-              <UIcon name="i-lucide-file-text" class="size-4 text-white/80" />
+            <span class="text-base font-medium text-white">Manajemen Data Karyawan</span>
+          </li>
+          <li class="flex items-center gap-4 group">
+            <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
+              <UIcon name="i-lucide-file-text" class="size-5 text-white/90" />
             </div>
-            <span class="text-sm text-white/80">Administrasi Kontrak Kerja</span>
-          </div>
-          <div class="flex items-center gap-3">
-            <div class="flex size-8 items-center justify-center rounded-lg bg-white/10">
-              <UIcon name="i-lucide-bar-chart-3" class="size-4 text-white/80" />
+            <span class="text-base font-medium text-white">Administrasi Kontrak Kerja</span>
+          </li>
+          <li class="flex items-center gap-4 group">
+            <div class="size-10 rounded-lg bg-white/10 border border-white/5 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-colors">
+              <UIcon name="i-lucide-bar-chart-3" class="size-5 text-white/90" />
             </div>
-            <span class="text-sm text-white/80">Laporan & Ekspor Data</span>
-          </div>
-        </div>
+            <span class="text-base font-medium text-white">Laporan &amp; Ekspor Data</span>
+          </li>
+        </ul>
       </div>
 
+      <!-- Copyright -->
       <div class="relative z-10 text-xs text-white/50">
         &copy; {{ new Date().getFullYear() }} {{ organizationName }}. Hak cipta dilindungi.
       </div>
     </div>
 
-    <!-- Right: Login Form -->
-    <div class="flex flex-col items-center justify-center px-6 py-12 sm:px-12 lg:px-16 xl:px-20">
-      <div class="w-full max-w-sm">
-        <!-- Mobile logo -->
-        <div class="mb-10 flex items-center gap-3 lg:hidden">
-          <div class="flex size-10 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white overflow-hidden">
-            <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
-            <span v-else>{{ orgFirstLetter }}</span>
-          </div>
-          <div class="leading-tight">
-            <p class="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">
-              {{ organizationName }}
-            </p>
-            <p class="text-sm font-semibold text-highlighted">
-              Portal Internal
-            </p>
-          </div>
-        </div>
+    <!-- Right Panel: Login Form -->
+    <div class="flex-1 md:w-1/2 bg-background flex flex-col items-center justify-center px-6 py-12 sm:px-12 lg:px-16">
 
-        <!-- Header -->
+      <!-- Mobile logo (visible only on small screens) -->
+      <div class="mb-10 flex items-center gap-3 self-start w-full md:hidden">
+        <div class="size-10 rounded-lg bg-primary flex items-center justify-center overflow-hidden shrink-0">
+          <img v-if="logoUrl" :src="logoUrl" :alt="organizationName" class="w-full h-full object-contain" />
+          <span v-else class="text-sm font-bold text-white">{{ orgFirstLetter }}</span>
+        </div>
+        <div class="leading-tight">
+          <p class="text-[10px] font-medium uppercase tracking-[0.2em] text-muted">
+            Koperasi Karyawan
+          </p>
+          <p class="text-sm font-semibold text-highlighted">
+            {{ organizationName }}
+          </p>
+        </div>
+      </div>
+
+      <div class="w-full max-w-[400px]">
+        <!-- Heading -->
         <div class="mb-8">
-          <h2 class="text-2xl font-semibold tracking-tight text-highlighted">
+          <h2 class="text-3xl font-bold tracking-tight text-highlighted mb-2">
             Selamat Datang
           </h2>
-          <p class="mt-2 text-sm text-muted">
+          <p class="text-sm text-muted">
             Masuk ke akun Anda untuk mengakses dashboard.
           </p>
         </div>
 
         <!-- Form -->
         <form class="space-y-5" @submit.prevent="handleLogin">
+
+          <!-- Employee No / Username -->
           <div class="space-y-1.5">
-            <label for="employeeNo" class="text-sm font-medium text-highlighted">
+            <label for="employeeNo" class="block text-sm font-semibold text-highlighted">
               No. Induk / NIK / Username
             </label>
-            <UInput
-              id="employeeNo"
-              v-model="form.employeeNo"
-              type="text"
-              autocomplete="username"
-              placeholder="EMP001 atau pengelola1"
-              icon="i-lucide-user"
-              size="lg"
-              class="w-full"
-              :ui="{ base: 'rounded-lg' }"
-            />
+            <div class="relative group">
+              <div class="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center">
+                <UIcon
+                  name="i-lucide-user"
+                  class="size-4 text-muted group-focus-within:text-primary transition-colors"
+                />
+              </div>
+              <UInput
+                id="employeeNo"
+                v-model="form.employeeNo"
+                type="text"
+                placeholder="Masukkan ID Anda"
+                required
+                autocomplete="username"
+                :disabled="loading"
+                class="w-full"
+                :ui="{ base: 'pl-10' }"
+              />
+            </div>
           </div>
 
+          <!-- Password -->
           <div class="space-y-1.5">
-            <label for="password" class="text-sm font-medium text-highlighted">
+            <label for="password" class="block text-sm font-semibold text-highlighted">
               Password
             </label>
-            <UInput
-              id="password"
-              v-model="form.password"
-              :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              placeholder="Masukkan password"
-              :icon="showPassword ? 'i-lucide-eye-off' : 'i-lucide-lock'"
-              size="lg"
-              class="w-full"
-              :ui="{ base: 'rounded-lg' }"
-              @click:trailing="showPassword = !showPassword"
-            >
-              <template #trailing>
-                <button
-                  type="button"
-                  class="rounded-md p-1 text-muted transition hover:text-highlighted"
-                  :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
-                  @click="showPassword = !showPassword"
-                >
-                  <UIcon :name="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="size-4" />
-                </button>
-              </template>
-            </UInput>
+            <div class="relative group">
+              <div class="pointer-events-none absolute inset-y-0 left-0 pl-3.5 flex items-center z-10">
+                <UIcon
+                  name="i-lucide-lock"
+                  class="size-4 text-muted group-focus-within:text-primary transition-colors"
+                />
+              </div>
+              <UInput
+                id="password"
+                v-model="form.password"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="••••••••"
+                required
+                autocomplete="current-password"
+                :disabled="loading"
+                class="w-full"
+                :ui="{ base: 'pl-10 pr-10' }"
+              >
+                <template #trailing>
+                  <button
+                    type="button"
+                    class="text-muted transition hover:text-highlighted focus:outline-none"
+                    :aria-label="showPassword ? 'Sembunyikan password' : 'Tampilkan password'"
+                    @click="showPassword = !showPassword"
+                  >
+                    <UIcon :name="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="size-4" />
+                  </button>
+                </template>
+              </UInput>
+            </div>
           </div>
 
-          <UButton
-            type="submit"
-            block
-            size="lg"
-            :loading="loading"
-            color="primary"
-            class="rounded-lg"
-            label="Masuk"
-          />
+          <!-- Submit -->
+          <div class="pt-2">
+            <UButton
+              type="submit"
+              block
+              size="lg"
+              :loading="loading"
+              color="primary"
+              class="rounded-lg font-semibold"
+              label="Masuk"
+            />
+          </div>
         </form>
 
-        <!-- Footer -->
-        <div class="mt-8 flex items-center justify-center gap-2 text-xs text-muted">
+        <!-- Security footer -->
+        <div class="mt-8 flex items-center justify-center gap-2 text-xs text-muted opacity-70">
           <UIcon name="i-lucide-shield-check" class="size-3.5" />
           <span>Akses aman untuk administrator internal</span>
         </div>
