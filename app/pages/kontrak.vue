@@ -166,7 +166,8 @@ function handleRenewSaved() {
 }
 
 function openDocument(url: string) {
-  window.open(url, '_blank', 'noopener,noreferrer')
+  const fullUrl = url.startsWith('/') ? `http://localhost:3001${url}` : url
+  window.open(fullUrl, '_blank', 'noopener,noreferrer')
 }
 
 async function openPreview(contractId: number, contractObj?: Contract) {
