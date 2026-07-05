@@ -275,18 +275,21 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
           <template #header>
             <div class="flex items-center gap-2">
               <UIcon name="i-lucide-user-cog" class="size-4 text-muted" />
-              <span class="font-semibold text-sm">Profil Master Admin</span>
+              <span class="font-semibold text-sm">Profil Akun</span>
             </div>
           </template>
           <div class="space-y-4">
             <UFormField label="Nama Lengkap">
-              <UInput model-value="Master Admin" class="w-full" disabled />
+              <UInput :model-value="auth.admin?.fullName ?? '-'" class="w-full" disabled />
             </UFormField>
-            <UFormField label="Email">
-              <UInput model-value="admin@kokarsi-sankyu.co.id" type="email" class="w-full" disabled />
+            <UFormField label="No. Induk / Username">
+              <UInput :model-value="auth.admin?.employeeNo ?? '-'" class="w-full" disabled />
             </UFormField>
-            <UFormField label="No. Induk Karyawan">
-              <UInput model-value="SKY-ADM-001" class="w-full" disabled />
+            <UFormField v-if="auth.admin?.accountType === 'user_account'" label="Email">
+              <UInput :model-value="auth.admin?.email || '-'" class="w-full" disabled />
+            </UFormField>
+            <UFormField label="Role">
+              <UInput :model-value="auth.admin?.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi'" class="w-full" disabled />
             </UFormField>
             <p class="text-xs text-muted">Hubungi administrator sistem untuk mengubah data profil.</p>
           </div>

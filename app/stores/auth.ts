@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = useCookie('auth_token', { maxAge: 60 * 60 * 8 })
-  const admin = useCookie<{ id: number; employeeNo: string; fullName: string; role?: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account' } | null>('auth_admin', { maxAge: 60 * 60 * 8 })
+  const admin = useCookie<{ id: number; employeeNo: string; fullName: string; email?: string; role?: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account' } | null>('auth_admin', { maxAge: 60 * 60 * 8 })
 
   const isLoggedIn = computed(() => !!token.value)
   const canManageMasterData = computed(() => (admin.value?.role ?? 'ADMIN') === 'ADMIN')

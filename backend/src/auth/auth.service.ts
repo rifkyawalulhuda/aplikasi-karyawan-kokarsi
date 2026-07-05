@@ -23,7 +23,7 @@ export class AuthService {
     })
     if (admin) {
       await this.compareOrThrow(password, admin.password)
-      return { ...admin, accountType: 'master_admin' as const }
+      return { ...admin, accountType: 'master_admin' as const, email: '' }
     }
 
     const user = await this.prisma.userAccount.findFirst({
@@ -33,7 +33,7 @@ export class AuthService {
     })
     if (user) {
       await this.compareOrThrow(password, user.password)
-      return { ...user, accountType: 'user_account' as const }
+      return { ...user, accountType: 'user_account' as const, email: user.email }
     }
 
     throw new UnauthorizedException('Kredensial tidak valid')
@@ -41,10 +41,11 @@ export class AuthService {
 
   async login(admin: any) {
     const identifier = admin.employeeNo ?? admin.nik ?? admin.username
-    const payload = { sub: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType }
+    const email = admin.email ?? ''
+    const payload = { sub: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email }
     return {
       access_token: this.jwt.sign(payload),
-      admin: { id: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType },
+      admin: { id: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email },
     }
   }
 
