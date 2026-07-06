@@ -1,6 +1,6 @@
-# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
+﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-05 (v9) | Stack: Nuxt 3 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-06 (v10) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
 > Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, dan perbaikan bug timezone date import.
 
@@ -11,7 +11,7 @@
 Aplikasi manajemen karyawan internal untuk **Kokarsi PT. Sankyu**. Role internal: Master Admin dan Pengelola Koperasi. UI Bahasa Indonesia.
 
 - **Repo**: `E:\Github\aplikasi-karyawan-kokarsi`
-- **Frontend**: Nuxt 3 + Nuxt UI v4 + TypeScript + Tailwind -> `http://localhost:3000`
+- **Frontend**: Nuxt 4 + Nuxt UI v4 + TypeScript + Tailwind -> `http://localhost:3000`
 - **Backend**: NestJS + Prisma + PostgreSQL -> `http://localhost:3001/api`
 - **Database**: PostgreSQL lokal project ini via `backend/.env` (`DATABASE_URL`), Docker `kokarsi-postgres`, port `5435`, DB `kokarsi_karyawan`
 - **Login Admin**: `employeeNo=EMP001` / `password=admin123`
@@ -38,6 +38,21 @@ node dist/main.js
 cd E:\Github\aplikasi-karyawan-kokarsi
 pnpm dev
 ```
+
+### Production (Cloudflare Tunnel)
+```powershell
+# Build frontend (dari root project)
+pnpm build
+
+# Start semua service (PostgreSQL + Backend + Frontend + Tunnel)
+.\deploy\start.ps1
+
+# Stop semua service
+.\deploy\start.ps1 -Stop
+```
+
+**Public URL**: https://kokarsi-sankyu.web.id
+**Cloudflare Tunnel**: ~/.cloudflared/config.yml (Tunnel ID: 483d9bfc-f094-4d30-a344-9c3019120a13)
 
 ### Compile Backend (setelah ada perubahan kode)
 ```bash
@@ -104,12 +119,15 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 51 | Ganti Logo & Nama Organisasi: upload logo (JPG/PNG/WEBP/SVG, max 512x512px, 2MB), field Nama Organisasi di Pengaturan > Umum (Admin only), tampil dinamis di sidebar TeamsMenu | `backend/src/settings/`, `app/composables/useAppSettings.ts`, `app/components/TeamsMenu.vue`, `app/pages/settings/index.vue`, `server/api/settings/logo.post.ts` |
 | 52 | Profil Akun di Pengaturan: menampilkan data aktual user login (fullName, employeeNo, email untuk user_account, role). Email di JWT payload, master_admin tidak punya email | `backend/src/auth/auth.service.ts`, `app/stores/auth.ts`, `app/pages/settings/index.vue` |
 
+| 53 | Deployment production via Cloudflare Tunnel | `deploy/start.ps1`, `~/.cloudflared/config.yml` |
+| 54 | Foto/dokumen via relative path (proxy Nuxt /uploads/**) | `nuxt.config.ts`, `app/composables/useAppSettings.ts`, `app/components/karyawan/detail/ProfileHeader.vue`, `ContractTimeline.vue`, `WarningLetterList.vue`, `app/pages/settings/index.vue`, `app/composables/useExport.ts` |
+| 55 | Title browser & SEO meta diupdate | `app/app.vue` |
 ---
 
 ## Arsitektur
 
 ```
-Frontend (Nuxt 3)          Nitro Server           Backend (NestJS)
+Frontend (Nuxt 4)          Nitro Server           Backend (NestJS)
 app/pages/            ->    server/api/        ->   src/
 app/components/            server/middleware/      Prisma -> PostgreSQL
 app/composables/
@@ -473,6 +491,47 @@ backend/
 
 ---
 
+
+---
+
+## Deployment Production
+
+**Target**: https://kokarsi-sankyu.web.id
+**Stack tambahan**: Cloudflare Tunnel (cloudflared)
+
+### Arsitektur
+```
+Internet → Cloudflare → Tunnel → Windows Machine
+                                      |
+  kokarsi-sankyu.web.id               |
+  ├─ /uploads/* → :3001 (backend)     | Static files (foto, dokumen)
+  └─ /*         → :3000               | Nuxt SSR
+                   └─ /api/* → :3001  | Server-side proxy (Nitro)
+                   └─ /uploads/* → :3001 | Proxy Nuxt (routeRules)
+```
+
+### File Deployment
+| File | Keterangan |
+|------|-----------|
+| deploy/start.ps1 | Startup script — jalankan 4 service sekaligus |
+| ~/.cloudflared/config.yml | Tunnel config (Tunnel ID: 483d9bfc-f094-4d30-a344-9c3019120a13) |
+| ~/.cloudflared/cert.pem | Certificate Cloudflare |
+| ~/.cloudflared/483d9bfc-...json | Tunnel credentials |
+| docker-compose.db.yml | PostgreSQL container |
+
+### Konfigurasi nuxt.config.ts
+`	s
+routeRules: {
+  '/api/**': { cors: true },
+  '/uploads/**': { proxy: 'http://localhost:3001/uploads/**' }
+}
+```
+
+### Email Notifikasi (Maileroo)
+Cron job berjalan setiap hari **jam 00:01 WIB** — update status kontrak + kirim email ke semua user.
+- Service: ackend/src/contract-cron/contract-cron.service.ts
+- Config: MAILEROO_API_KEY, MAILEROO_FROM_EMAIL, MAILEROO_FROM_NAME di ackend/.env
+- Email dikirim ke semua UserAccount yang terdaftar di sistem
 ## Troubleshooting
 
 | Masalah | Solusi |
@@ -502,8 +561,9 @@ backend/
 | Import karyawan Bad Request | Pastikan field `rowNumber` di-strip dari payload sebelum kirim ke backend (`map(({ rowNumber, ...emp }) => emp)`) |
 | Tanggal import karyawan beda 1 hari (timezone) | Jangan pakai `toISOString()` untuk parse tanggal dari xlsx. Pakai local date components atau `raw: false` di `sheet_to_json` |
 | Template Excel dropdown tidak muncul | Template dihasilkan oleh backend (Node.js), bukan frontend — generate ulang via backend endpoint `/api/employees/import-template` |
-| Logo sidebar tidak tampil | Pastikan prefix `http://localhost:3001` saat load logo dari `appLogoUrl`, bukan path relatif |
+| Logo sidebar tidak tampil | Logo menggunakan **relative path** (bukan prefix localhost:3001). Pastikan proxy /uploads/** di 
+uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Email profil akun kosong | `MasterAdmin` tidak punya field email. Hanya `user_account` (Pengelola) yang punya email. Perlu logout + login ulang setelah update auth.service.ts |
 | Kontrak PHK/RESIGN masih bisa buat kontrak baru | Guard `checkTerminationLockout()` di `contracts.service.ts`, frontend juga fetch `employmentStatus` di AddContractModal |
 | Edit kontrak dengan scan dokumen selalu error 400 | State Lock compare string vs Date object — sekarang sudah difix dengan normalisasi ke ISO string sebelum compare |
-| Unduh dokumen kontrak scan 404 | Gunakan `http://localhost:3001${documentUrl}` untuk buka file, bukan path relatif (Vue Router intercept) |
+| Unduh dokumen kontrak scan 404 | Gunakan path relatif `documentUrl` — sudah di-proxy Nuxt via /uploads/** → http://localhost:3001/uploads/**. Jangan pakai prefix http://localhost:3001 di frontend |

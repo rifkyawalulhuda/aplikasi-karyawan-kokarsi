@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { Employee, EmploymentStatus } from '~/types'
 
 const props = defineProps<{
@@ -9,8 +9,6 @@ const emit = defineEmits<{
   edit: []
   offboard: []
 }>()
-
-const BACKEND = 'http://localhost:3001'
 
 const statusColorMap: Record<EmploymentStatus, string> = {
   AKTIF: 'success',
@@ -41,7 +39,7 @@ const initials = computed(() =>
     <div class="w-20 h-20 rounded-full overflow-hidden bg-elevated flex items-center justify-center shrink-0 ring-2 ring-primary/20">
       <img
         v-if="employee.fotoKaryawan"
-        :src="`${BACKEND}${employee.fotoKaryawan}`"
+        :src="employee.fotoKaryawan"
         :alt="employee.fullName"
         class="w-full h-full object-cover"
       />

@@ -27,3 +27,6 @@ logs
 .history
 
 .pnpm-store/
+
+#cloudflared
+.cloudflared

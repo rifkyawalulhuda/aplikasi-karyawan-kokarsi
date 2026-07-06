@@ -356,7 +356,13 @@ export class EmployeesService {
     const now = new Date()
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-    const [total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels] = await Promise.all([
+    const currentYear = new Date().getFullYear()
+
+    const [
+      total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
+      spGroups, genderGroups, educationGroups, deptData, contractFamilyGroups,
+      recruitTrend, offboardTrend,
+    ] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { employmentStatus: 'AKTIF' } }),
       this.prisma.employee.count({ where: { employmentStatus: 'KONTRAK_EXPIRED' } }),
@@ -380,6 +386,30 @@ export class EmployeesService {
           _count: { select: { employees: true } }
         }
       }),
+      // SP breakdown
+      this.prisma.warningLetter.groupBy({ by: ['warningLevel'], _count: true }),
+      // Gender breakdown
+      this.prisma.employee.groupBy({ by: ['gender'], _count: true }),
+      // Education breakdown
+      this.prisma.employee.groupBy({ by: ['educationLevel'], _count: true }),
+      // Department breakdown
+      this.prisma.department.findMany({
+        select: { name: true, _count: { select: { employees: true } } }
+      }),
+      // Contract family breakdown
+      this.prisma.contract.findMany({
+        where: { template: { isNot: null }, status: { notIn: ['DIBATALKAN', 'SELESAI'] } },
+        select: { template: { select: { family: true } } }
+      }),
+      // Recruitment trend (last 5 years) — fetch joinDate, group in JS
+      this.prisma.employee.findMany({
+        where: { joinDate: { gte: new Date(`${currentYear - 4}-01-01`) } },
+        select: { joinDate: true },
+      }),
+      // Offboarding trend — fetch all, group in JS
+      this.prisma.employeeOffboarding.findMany({
+        select: { terminationDate: true, terminationType: true },
+      }),
     ])
 
     const byLocation = locations
@@ -390,7 +420,60 @@ export class EmployeesService {
       .map(l => ({ name: l.name, count: l._count.employees }))
       .filter(l => l.count > 0)
 
-    return { total, aktif, kontrakExpired, resign, phk, expiringContracts, byLocation, byLevel }
+    // SP breakdown
+    const sp1 = spGroups.find(s => s.warningLevel === 1)?._count ?? 0
+    const sp2 = spGroups.find(s => s.warningLevel === 2)?._count ?? 0
+    const sp3 = spGroups.find(s => s.warningLevel === 3)?._count ?? 0
+
+    // Gender breakdown
+    const male = genderGroups.find(g => g.gender === 'MALE')?._count ?? 0
+    const female = genderGroups.find(g => g.gender === 'FEMALE')?._count ?? 0
+
+    // Education breakdown
+    const sma = educationGroups.find(e => e.educationLevel === 'SMA')?._count ?? 0
+    const d3 = educationGroups.find(e => e.educationLevel === 'D3')?._count ?? 0
+    const s1 = educationGroups.find(e => e.educationLevel === 'S1')?._count ?? 0
+    const s2 = educationGroups.find(e => e.educationLevel === 'S2')?._count ?? 0
+
+    // Contract family breakdown
+    const mitra = contractFamilyGroups.filter(c => c.template?.family === 'MITRA').length
+    const pkwt = contractFamilyGroups.filter(c => c.template?.family === 'PKWT').length
+
+    // Recruitment trend — group joinDate by year in JS
+    const recruitMap = new Map<number, number>()
+    for (const emp of recruitTrend) {
+      const year = new Date(emp.joinDate).getFullYear()
+      recruitMap.set(year, (recruitMap.get(year) ?? 0) + 1)
+    }
+    const recruitmentTrend = Array.from(recruitMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, count]) => ({ year, count }))
+
+    // Offboarding trend — group terminationDate+type by year in JS
+    const offboardMap = new Map<number, { resign: number; phk: number }>()
+    for (const ob of offboardTrend) {
+      const year = new Date(ob.terminationDate).getFullYear()
+      if (!offboardMap.has(year)) offboardMap.set(year, { resign: 0, phk: 0 })
+      const entry = offboardMap.get(year)!
+      if (ob.terminationType === 'RESIGN') entry.resign++
+      else if (ob.terminationType === 'PHK') entry.phk++
+    }
+    const offboardingTrend = Array.from(offboardMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, vals]) => ({ year, ...vals }))
+
+    return {
+      total, aktif, kontrakExpired, resign, phk, expiringContracts, byLocation, byLevel,
+      bySp: { sp1, sp2, sp3 },
+      byContractFamily: { mitra, pkwt },
+      byGender: { male, female },
+      byEducation: { sma, d3, s1, s2 },
+      byDepartment: deptData
+        .filter(d => d._count.employees > 0)
+        .map(d => ({ name: d.name, count: d._count.employees })),
+      recruitmentTrend,
+      offboardingTrend,
+    }
   }
 
   async generateImportTemplate(): Promise<Buffer> {

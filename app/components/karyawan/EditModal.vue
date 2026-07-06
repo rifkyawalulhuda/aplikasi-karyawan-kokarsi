@@ -202,7 +202,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         <div class="w-16 h-16 rounded-full overflow-hidden bg-elevated flex items-center justify-center shrink-0">
           <img
             v-if="photoPreview || props.employee?.fotoKaryawan"
-            :src="photoPreview || `http://localhost:3001${props.employee?.fotoKaryawan}`"
+            :src="photoPreview || props.employee?.fotoKaryawan"
             class="w-full h-full object-cover"
             alt="Foto karyawan"
           />

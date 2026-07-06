@@ -20,7 +20,7 @@ export function useAppSettings() {
 
   const logoUrl = computed(() => {
     if (!settings.value?.appLogoUrl) return ''
-    return `http://localhost:3001${settings.value.appLogoUrl}`
+    return settings.value.appLogoUrl || ''
   })
 
   const organizationName = computed(() => {
@@ -36,12 +36,12 @@ export function useAppSettings() {
 
   const loginLeftImageUrl = computed(() => {
     if (!settings.value?.loginLeftImageUrl) return ''
-    return `http://localhost:3001${settings.value.loginLeftImageUrl}`
+    return settings.value.loginLeftImageUrl
   })
 
   const loginRightImageUrl = computed(() => {
     if (!settings.value?.loginRightImageUrl) return ''
-    return `http://localhost:3001${settings.value.loginRightImageUrl}`
+    return settings.value.loginRightImageUrl
   })
 
   const loginLeftOverlayOpacity = computed(() => Number(settings.value?.loginLeftOverlayOpacity ?? '7'))

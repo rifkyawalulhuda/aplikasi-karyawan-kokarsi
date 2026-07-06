@@ -1,4 +1,4 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
+﻿// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
@@ -11,11 +11,20 @@ export default defineNuxtConfig({
     enabled: true
   },
 
+  app: {
+    head: {
+      title: 'Kokarsi PT. Sankyu'
+    }
+  },
+
   css: ['~/assets/css/main.css'],
 
   routeRules: {
     '/api/**': {
       cors: true
+    },
+    '/uploads/**': {
+      proxy: 'http://localhost:3001/uploads/**'
     }
   },
 

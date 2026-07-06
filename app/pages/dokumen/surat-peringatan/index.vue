@@ -12,6 +12,7 @@ const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { exportWarningLettersExcel } = useExport()
 const table = useTemplateRef('table')
 
 const searchQuery = ref('')
@@ -297,6 +298,15 @@ const columns: TableColumn<WarningLetter>[] = [
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UDropdownMenu
+            :items="[
+              [
+                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => exportWarningLettersExcel(letters) }
+              ]
+            ]"
+          >
+            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" />
+          </UDropdownMenu>
           <UButton label="Tambah Surat" icon="i-lucide-plus" color="primary" @click="addModal = true" />
         </template>
       </UDashboardNavbar>

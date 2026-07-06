@@ -1,7 +1,7 @@
-import * as XLSX from 'xlsx'
+﻿import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import type { Employee } from '~/types'
+import type { Employee, WarningLetter } from '~/types'
 
 export function useExport() {
   function employmentStatusLabel(status: string) {
@@ -86,7 +86,7 @@ export function useExport() {
       'Tgl. Mulai Kontrak': fmt(resolveActiveContract(e)?.startDate),
       'Tgl. Selesai Kontrak': fmt(resolveActiveContract(e)?.endDate),
       'Status Kontrak': statusLabel(resolveContractStatus(resolveActiveContract(e)) ?? ''),
-      'Foto': e.fotoKaryawan ? `http://localhost:3001${e.fotoKaryawan}` : '-',
+      'Foto': e.fotoKaryawan || '-',
       'Dibuat': fmt(e.createdAt),
       'Diperbarui': fmt(e.updatedAt),
     }))
@@ -142,5 +142,35 @@ export function useExport() {
     doc.save(`${filename}.pdf`)
   }
 
-  return { exportExcel, exportPDF }
+  function toWarningLetterRows(letters: WarningLetter[]) {
+    return letters.map((l, i) => ({
+      'No': i + 1,
+      'Nomor Surat': l.letterNumber ?? '-',
+      'Nama Karyawan': l.employee?.fullName ?? '-',
+      'No. Induk Karyawan': l.employee?.employeeNo ?? '-',
+      'Jabatan': l.employee?.jobRole?.name ?? '-',
+      'Level SP': `SP ${l.warningLevel}`,
+      'Jenis Pelanggaran': Array.isArray(l.violationType) ? l.violationType.join(', ') : '-',
+      'Tanggal Surat': fmt(l.letterDate),
+      'Berlaku Sampai': fmt(l.validUntil),
+      'Pengurus Koperasi': l.processedByName ?? '-',
+      'Dibuat': fmt(l.createdAt),
+    }))
+  }
+
+  function exportWarningLettersExcel(letters: WarningLetter[], filename = 'surat-peringatan') {
+    if (!letters.length) return
+    const rows = toWarningLetterRows(letters)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const colWidths = [
+      { wch: 5 }, { wch: 24 }, { wch: 28 }, { wch: 18 }, { wch: 22 },
+      { wch: 8 }, { wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 16 },
+    ]
+    ws['!cols'] = colWidths
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Surat Peringatan')
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+  }
+
+  return { exportExcel, exportPDF, exportWarningLettersExcel }
 }
