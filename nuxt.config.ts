@@ -21,7 +21,11 @@ export default defineNuxtConfig({
 
   routeRules: {
     '/api/**': {
-      cors: true
+      cors: {
+        origin: process.env.NUXT_ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+        credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      }
     },
     '/uploads/**': {
       proxy: 'http://localhost:3001/uploads/**'

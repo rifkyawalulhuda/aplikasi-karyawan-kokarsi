@@ -1,6 +1,5 @@
 import { defineEventHandler, getCookie, getRouterParam, readBody } from 'h3'
 
-const BACKEND = 'http://localhost:3001/api'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')

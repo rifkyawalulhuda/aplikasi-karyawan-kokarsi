@@ -1,6 +1,5 @@
 import { defineEventHandler, getCookie, getQuery } from 'h3'
 
-const BACKEND = 'http://localhost:3001/api'
 
 export default defineEventHandler(async (event) => {
   const token = getCookie(event, 'auth_token') ?? ''
@@ -19,32 +18,32 @@ export default defineEventHandler(async (event) => {
   const [employeesRes, contractsRes, warningLettersRes] = await Promise.allSettled([
     $fetch(`${BACKEND}/employees?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
-      ignoreResponseError: true,
     }) as Promise<{ data: any[] }>,
-    $fetch(`${BACKEND}/contracts?limit=${limitParam}`, {
+    $fetch(`${BACKEND}/contracts?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
-      ignoreResponseError: true,
     }) as Promise<{ data: any[] }>,
     $fetch(`${BACKEND}/warning-letters?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
-      ignoreResponseError: true,
     }) as Promise<{ data: any[] }>,
   ])
+
+  if (employeesRes.status === 'rejected') {
+    console.error('[search] Gagal fetch employees:', employeesRes.reason)
+  }
+  if (contractsRes.status === 'rejected') {
+    console.error('[search] Gagal fetch contracts:', contractsRes.reason)
+  }
+  if (warningLettersRes.status === 'rejected') {
+    console.error('[search] Gagal fetch warning-letters:', warningLettersRes.reason)
+  }
 
   const employees = employeesRes.status === 'fulfilled'
     ? (employeesRes.value?.data ?? [])
     : []
 
-  // Filter contracts by query (contractNo or employee name)
-  const allContracts = contractsRes.status === 'fulfilled'
+  const contracts = contractsRes.status === 'fulfilled'
     ? (contractsRes.value?.data ?? [])
     : []
-  const qLower = String(q).toLowerCase()
-  const contracts = allContracts.filter((c: any) =>
-    c.contractNo?.toLowerCase().includes(qLower) ||
-    c.employee?.fullName?.toLowerCase().includes(qLower) ||
-    c.employee?.employeeNo?.toLowerCase().includes(qLower),
-  ).slice(0, Number(limitParam))
 
   const warningLetters = warningLettersRes.status === 'fulfilled'
     ? (warningLettersRes.value?.data ?? [])

@@ -1,4 +1,5 @@
 import { ContractStatus, EmploymentStatus, TerminationType } from '@prisma/client'
+import { DAY_MS, startOfDay } from '../shared/date-utils'
 
 type ContractLike = {
   startDate: Date
@@ -8,14 +9,6 @@ type ContractLike = {
 
 type OffboardingLike = {
   terminationType: TerminationType
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function startOfDay(date: Date) {
-  const value = new Date(date)
-  value.setHours(0, 0, 0, 0)
-  return value
 }
 
 export function isTerminatedStatus(status?: EmploymentStatus | null) {

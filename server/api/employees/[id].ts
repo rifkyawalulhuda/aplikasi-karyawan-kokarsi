@@ -1,4 +1,3 @@
-const BACKEND = 'http://localhost:3001/api'
 
 export default eventHandler(async (event) => {
   const id = getRouterParam(event, 'id')

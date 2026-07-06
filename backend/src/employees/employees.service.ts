@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import ExcelJS from 'exceljs'
 
 export class CreateEmployeeDto {
@@ -35,7 +36,10 @@ export class OffboardingDto {
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dashboardCache: DashboardCacheService,
+  ) {}
 
   private include = {
     workLocation: true,
@@ -170,6 +174,7 @@ export class EmployeesService {
       },
       include: this.include,
     })
+    this.dashboardCache.invalidate()
     return this.findOne(employee.id)
   }
 
@@ -264,6 +269,7 @@ export class EmployeesService {
       include: this.include,
     })
     await this.recomputeEmployeeStatus(id)
+    this.dashboardCache.invalidate()
     return this.findOne(employee.id)
   }
 
@@ -295,7 +301,14 @@ export class EmployeesService {
       )
     }
 
-    return this.prisma.employee.delete({ where: { id } })
+    // Hapus related records yang tidak punya cascade delete sebelum hapus employee
+    const result = await this.prisma.$transaction(async (tx) => {
+      await tx.employeeStatusHistory.deleteMany({ where: { employeeId: id } })
+      await tx.employeeOffboarding.deleteMany({ where: { employeeId: id } })
+      return tx.employee.delete({ where: { id } })
+    })
+    this.dashboardCache.invalidate()
+    return result
   }
 
   async offboard(id: number, dto: OffboardingDto, actor: { sub: number; fullName?: string; role?: string; kind?: string }) {
@@ -369,6 +382,9 @@ export class EmployeesService {
   }
 
   async getDashboardStats() {
+    const cached = this.dashboardCache.get()
+    if (cached) return cached
+
     const now = new Date()
     const in30Days = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
@@ -478,7 +494,7 @@ export class EmployeesService {
       .sort((a, b) => a[0] - b[0])
       .map(([year, vals]) => ({ year, ...vals }))
 
-    return {
+    const stats = {
       total, aktif, kontrakExpired, resign, phk, expiringContracts, byLocation, byLevel,
       bySp: { sp1, sp2, sp3 },
       byContractFamily: { mitra, pkwt },
@@ -490,6 +506,9 @@ export class EmployeesService {
       recruitmentTrend,
       offboardingTrend,
     }
+
+    this.dashboardCache.set(stats)
+    return stats
   }
 
   async generateImportTemplate(): Promise<Buffer> {
