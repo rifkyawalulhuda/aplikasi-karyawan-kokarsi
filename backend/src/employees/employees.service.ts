@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+﻿import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
@@ -279,6 +279,22 @@ export class EmployeesService {
 
   async remove(id: number) {
     await this.findOne(id)
+
+    const [warningLetterCount, contractCount] = await Promise.all([
+      this.prisma.warningLetter.count({ where: { employeeId: id } }),
+      this.prisma.contract.count({ where: { employeeId: id } }),
+    ])
+
+    const parts: string[] = []
+    if (warningLetterCount > 0) parts.push(`${warningLetterCount} surat peringatan`)
+    if (contractCount > 0) parts.push(`${contractCount} kontrak`)
+
+    if (parts.length > 0) {
+      throw new BadRequestException(
+        `Karyawan tidak dapat dihapus karena masih memiliki ${parts.join(' dan ')}. Hapus data terkait terlebih dahulu.`
+      )
+    }
+
     return this.prisma.employee.delete({ where: { id } })
   }
 

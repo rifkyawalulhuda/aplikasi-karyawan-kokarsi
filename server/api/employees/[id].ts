@@ -15,7 +15,6 @@ export default eventHandler(async (event) => {
       method: method as any,
       headers: authHeader,
       body: method !== 'GET' ? await readBody(event) : undefined,
-      ignoreResponseError: true,
     })
   } catch (error: any) {
     throw createError({
