@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { Contract } from '~/types'
 
 const props = defineProps<{
@@ -82,7 +82,7 @@ const sorted = computed(() =>
                 </span>
                 <a
                   v-if="contract.documentUrl"
-                  :href="`http://localhost:3001${contract.documentUrl}`"
+                  :href="contract.documentUrl"
                   target="_blank"
                   class="flex items-center gap-1 text-primary hover:underline"
                 >

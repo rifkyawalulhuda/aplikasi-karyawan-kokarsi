@@ -1,0 +1,35 @@
+Deploy ke Mesin Baru
+
+1. Install Dependencies
+
+winget install --id Cloudflare.cloudflared
+# Docker Desktop: https://www.docker.com/products/docker-desktop
+# Node.js 24: https://nodejs.org
+# pnpm: npm install -g pnpm
+
+2. Copy Files dari Mesin Lama
+
+E:\Github\aplikasi-karyawan-kokarsi\
+  ├── .output/                  # Frontend build
+  ├── backend/dist/             # Backend compiled
+  ├── backend/.env              # Env vars (DB, Maileroo, JWT)
+  ├── backend/node_modules/
+  ├── backend/prisma/
+  ├── node_modules/
+  ├── docker-compose.db.yml
+  └── deploy/start.ps1
+
+C:\Users\Admin\.cloudflared\   # Tunnel credentials
+  ├── cert.pem
+  ├── config.yml
+  └── 483d9bfc-...json
+  
+3. Sesuaikan Path di config.yml
+
+File ~/.cloudflared/config.yml di mesin baru, pastikan credentials-file mengarah ke path yang benar:
+
+credentials-file: C:\Users\<USERNAME>\.cloudflared\483d9bfc-...json
+
+4. Jalankan
+cd E:\Github\aplikasi-karyawan-kokarsi
+.\deploy\start.ps1

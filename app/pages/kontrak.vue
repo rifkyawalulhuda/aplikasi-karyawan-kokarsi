@@ -166,8 +166,7 @@ function handleRenewSaved() {
 }
 
 function openDocument(url: string) {
-  const fullUrl = url.startsWith('/') ? `http://localhost:3001${url}` : url
-  window.open(fullUrl, '_blank', 'noopener,noreferrer')
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 async function openPreview(contractId: number, contractObj?: Contract) {
@@ -613,7 +612,7 @@ watch([statusFilter, searchQuery], () => {
           <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
             <img
               v-if="historyEmployee.fotoKaryawan"
-              :src="`http://localhost:3001${historyEmployee.fotoKaryawan}`"
+              :src="historyEmployee.fotoKaryawan"
               :alt="historyEmployee.fullName"
               class="w-full h-full object-cover rounded-full"
             />

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { WarningLetter } from '~/types'
 
 const props = defineProps<{
@@ -101,7 +101,7 @@ const sorted = computed(() =>
 
               <a
                 v-if="letter.documentUrl"
-                :href="`http://localhost:3001${letter.documentUrl}`"
+                :href="letter.documentUrl"
                 target="_blank"
                 class="flex items-center gap-1 text-primary hover:underline text-sm"
               >

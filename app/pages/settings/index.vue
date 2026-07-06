@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as z from 'zod'
 import type { GeneralSettings } from '~/types'
@@ -35,7 +35,7 @@ watchEffect(() => {
 
 const currentLogoUrl = computed(() => {
   if (!generalSettings.value?.appLogoUrl) return ''
-  return `http://localhost:3001${generalSettings.value.appLogoUrl}`
+  return generalSettings.value.appLogoUrl
 })
 
 // --- Login Appearance ---
@@ -63,19 +63,19 @@ watchEffect(() => {
 
 const currentLoginLeftImageUrl = computed(() => {
   if (!loginForm.loginLeftImageUrl) return ''
-  return `http://localhost:3001${loginForm.loginLeftImageUrl}`
+  return loginForm.loginLeftImageUrl
 })
 
 const currentLoginRightImageUrl = computed(() => {
   if (!loginForm.loginRightImageUrl) return ''
-  return `http://localhost:3001${loginForm.loginRightImageUrl}`
+  return loginForm.loginRightImageUrl
 })
 
 const previewLeftStyle = computed(() => {
   const style: Record<string, string> = {}
   if (loginForm.loginLeftBgColor) style.backgroundColor = loginForm.loginLeftBgColor
   if (loginForm.loginLeftImageUrl) {
-    style.backgroundImage = `url('http://localhost:3001${loginForm.loginLeftImageUrl}')`
+    style.backgroundImage = `url('${loginForm.loginLeftImageUrl}')`
     style.backgroundSize = 'cover'
     style.backgroundPosition = 'center'
   }
@@ -87,7 +87,7 @@ const previewRightStyle = computed(() => {
   const style: Record<string, string> = {}
   if (loginForm.loginRightBgColor) style.backgroundColor = loginForm.loginRightBgColor
   if (loginForm.loginRightImageUrl) {
-    style.backgroundImage = `url('http://localhost:3001${loginForm.loginRightImageUrl}')`
+    style.backgroundImage = `url('${loginForm.loginRightImageUrl}')`
     style.backgroundSize = 'cover'
     style.backgroundPosition = 'center'
   }

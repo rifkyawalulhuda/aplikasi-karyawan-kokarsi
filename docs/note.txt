@@ -6,10 +6,16 @@ cd E:\Github\aplikasi-karyawan-kokarsi
 pnpm dev
 
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
-pnpm prisma:migrate
-pnpm prisma:generate
+npx prisma migrate deploy
+npx prisma generate
 pnpm build
-pnpm start:dev
+node dist/main.js
 
 
 **Login**: `employeeNo=EMP001` / `password=admin123`
+
+
+
+start deploy
+cd E:\Github\aplikasi-karyawan-kokarsi
+.\deploy\start.ps1

@@ -314,7 +314,7 @@ const columns: TableColumn<Employee>[] = [
       h('div', { class: 'flex items-center gap-3' }, [
         row.original.fotoKaryawan
           ? h('img', {
-              src: `http://localhost:3001${row.original.fotoKaryawan}`,
+              src: row.original.fotoKaryawan,
               alt: row.original.fullName,
               class: 'size-8 rounded-full object-cover ring ring-primary/25 shrink-0'
             })

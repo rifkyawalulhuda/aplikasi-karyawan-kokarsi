@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+﻿import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { Employee, WarningLetter } from '~/types'
@@ -86,7 +86,7 @@ export function useExport() {
       'Tgl. Mulai Kontrak': fmt(resolveActiveContract(e)?.startDate),
       'Tgl. Selesai Kontrak': fmt(resolveActiveContract(e)?.endDate),
       'Status Kontrak': statusLabel(resolveContractStatus(resolveActiveContract(e)) ?? ''),
-      'Foto': e.fotoKaryawan ? `http://localhost:3001${e.fotoKaryawan}` : '-',
+      'Foto': e.fotoKaryawan || '-',
       'Dibuat': fmt(e.createdAt),
       'Diperbarui': fmt(e.updatedAt),
     }))
