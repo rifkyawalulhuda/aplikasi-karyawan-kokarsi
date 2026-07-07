@@ -30,8 +30,8 @@ if ($Stop) {
 
   # Stop Docker PostgreSQL (hanya jika mode docker)
   if ($Mode -eq "docker") {
-    docker compose -f (Join-Path $Root "docker-compose.db.yml") down
-    Write-Host "  [ok] PostgreSQL container stopped"
+    docker compose -f (Join-Path $Root "docker-compose.db.yml") stop
+    Write-Host "  [ok] PostgreSQL container stopped (data aman)"
   } else {
     Write-Host "  [skip] PostgreSQL native - stop manually jika diperlukan"
   }
