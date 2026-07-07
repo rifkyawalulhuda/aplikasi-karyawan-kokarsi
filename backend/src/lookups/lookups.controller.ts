@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
-import { LookupsService } from './lookups.service'
+import { LookupsService, CreateDocumentTypeDto } from './lookups.service'
 import { IsNotEmpty, IsString } from 'class-validator'
 
 class CreateLookupDto {
@@ -149,5 +149,28 @@ export class LookupsController {
   deleteContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.deleteContractType(id)
+  }
+
+  @Get('document-types')
+  getDocumentTypes() {
+    return this.service.getDocumentTypes()
+  }
+
+  @Post('document-types')
+  createDocumentType(@Request() req: any, @Body() dto: CreateDocumentTypeDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createDocumentType(dto)
+  }
+
+  @Put('document-types/:id')
+  updateDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateDocumentTypeDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.updateDocumentType(id, dto)
+  }
+
+  @Delete('document-types/:id')
+  deleteDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteDocumentType(id)
   }
 }

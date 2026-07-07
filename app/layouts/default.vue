@@ -139,6 +139,11 @@ const links = computed<NavigationMenuItem[]>(() => [
         to: '/dokumen/surat-peringatan',
         onSelect: () => { open.value = false },
       },
+      {
+        label: 'Sertifikasi & Ijin',
+        to: '/dokumen/sertifikasi-ijin',
+        onSelect: () => { open.value = false },
+      },
     ],
   },
   {

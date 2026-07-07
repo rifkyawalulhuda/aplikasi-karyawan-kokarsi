@@ -1,5 +1,12 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+import { IsNotEmpty, IsString } from 'class-validator'
+
+export class CreateDocumentTypeDto {
+  @IsString() @IsNotEmpty() name: string
+  @IsString() @IsNotEmpty() documentType: string
+  @IsString() @IsNotEmpty() issuer: string
+}
 
 @Injectable()
 export class LookupsService {
@@ -54,7 +61,7 @@ export class LookupsService {
       throw error
     })
 
-    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments] = await Promise.all([
+    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes] = await Promise.all([
       this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }),
@@ -67,8 +74,9 @@ export class LookupsService {
         if (this.isMissingDepartmentsTable(error)) return []
         throw error
       }),
+      this.prisma.documentType.findMany({ orderBy: { name: 'asc' } }).catch(() => []),
     ])
-    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments }
+    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes }
   }
 
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
@@ -173,5 +181,25 @@ export class LookupsService {
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departemen')
       throw error
     })
+  }
+
+  async getDocumentTypes() {
+    return this.prisma.documentType.findMany({ orderBy: { name: 'asc' } })
+  }
+
+  async createDocumentType(dto: CreateDocumentTypeDto) {
+    return this.prisma.documentType.create({ data: dto })
+  }
+
+  async updateDocumentType(id: number, dto: CreateDocumentTypeDto) {
+    const existing = await this.prisma.documentType.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
+    return this.prisma.documentType.update({ where: { id }, data: dto })
+  }
+
+  async deleteDocumentType(id: number) {
+    const existing = await this.prisma.documentType.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
+    return this.prisma.documentType.delete({ where: { id } })
   }
 }

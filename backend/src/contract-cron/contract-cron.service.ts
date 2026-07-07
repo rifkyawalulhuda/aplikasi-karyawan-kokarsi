@@ -38,38 +38,32 @@ export class ContractCronService {
       },
     })
 
-    if (contracts.length === 0) {
-      this.logger.log('No active contracts to evaluate.')
-      return
-    }
-
     const updates: { id: number; newStatus: ContractStatus; employeeId: number; contractNo: string; employeeName: string; endDate: Date }[] = []
 
-    for (const contract of contracts) {
-      const end = startOfDay(contract.endDate).getTime()
+    if (contracts.length === 0) {
+      this.logger.log('No active contracts to evaluate.')
+    } else {
+      for (const contract of contracts) {
+        const end = startOfDay(contract.endDate).getTime()
 
-      if (end < today) {
-        updates.push({
-          id: contract.id, newStatus: 'EXPIRED', employeeId: contract.employeeId,
-          contractNo: contract.contractNo, employeeName: contract.employee.fullName, endDate: contract.endDate,
-        })
-      } else {
-        const daysLeft = Math.ceil((end - today) / DAY_MS)
-        const newStatus: ContractStatus = daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
-
-        // Hanya update jika status berubah
-        if (newStatus !== contract.status) {
+        if (end < today) {
           updates.push({
-            id: contract.id, newStatus, employeeId: contract.employeeId,
+            id: contract.id, newStatus: 'EXPIRED', employeeId: contract.employeeId,
             contractNo: contract.contractNo, employeeName: contract.employee.fullName, endDate: contract.endDate,
           })
+        } else {
+          const daysLeft = Math.ceil((end - today) / DAY_MS)
+          const newStatus: ContractStatus = daysLeft <= 30 ? 'AKAN_HABIS' : 'AKTIF'
+
+          // Hanya update jika status berubah
+          if (newStatus !== contract.status) {
+            updates.push({
+              id: contract.id, newStatus, employeeId: contract.employeeId,
+              contractNo: contract.contractNo, employeeName: contract.employee.fullName, endDate: contract.endDate,
+            })
+          }
         }
       }
-    }
-
-    if (updates.length === 0) {
-      this.logger.log('All contract statuses are up to date.')
-      return
     }
 
     // Jalankan semua update dalam satu transaksi atomik
@@ -134,5 +128,75 @@ export class ContractCronService {
         .sendContractStatusNotification(notifyChanges)
         .catch(err => this.logger.error(`Email notification failed: ${err?.message}`))
     }
+
+    // ── EmployeeDocument status sync ─────────────────────────────────────────
+
+    this.logger.log('Starting employee document status synchronization...')
+
+    const in30Days = new Date(now.getTime() + 30 * DAY_MS)
+
+    // 1. Dokumen yang akan expired dalam 30 hari (belum berstatus AKAN_EXPIRED)
+    const expiringSoon = await this.prisma.employeeDocument.findMany({
+      where: {
+        expiryDate: { gte: now, lte: in30Days },
+        status: { not: 'AKAN_EXPIRED' },
+      },
+      include: {
+        employee: { select: { employeeNo: true, fullName: true } },
+        documentType: { select: { name: true } },
+      },
+    })
+
+    if (expiringSoon.length > 0) {
+      await this.prisma.employeeDocument.updateMany({
+        where: { id: { in: expiringSoon.map(d => d.id) } },
+        data: { status: 'AKAN_EXPIRED' },
+      })
+      this.logger.log(`${expiringSoon.length} document(s) marked as AKAN_EXPIRED.`)
+
+      const docNotifyAkan = expiringSoon.map(d => ({
+        documentName: d.documentType?.name ?? 'Dokumen',
+        employeeName: d.employee.fullName,
+        expiryDate: d.expiryDate,
+        newStatus: 'AKAN_EXPIRED' as const,
+      }))
+
+      await this.maileroo
+        .sendDocumentStatusNotification(docNotifyAkan)
+        .catch(err => this.logger.error(`Document email notification failed: ${err?.message}`))
+    }
+
+    // 2. Dokumen yang sudah expired (belum berstatus EXPIRED)
+    const expiredDocs = await this.prisma.employeeDocument.findMany({
+      where: {
+        expiryDate: { lt: now },
+        status: { not: 'EXPIRED' },
+      },
+      include: {
+        employee: { select: { employeeNo: true, fullName: true } },
+        documentType: { select: { name: true } },
+      },
+    })
+
+    if (expiredDocs.length > 0) {
+      await this.prisma.employeeDocument.updateMany({
+        where: { id: { in: expiredDocs.map(d => d.id) } },
+        data: { status: 'EXPIRED' },
+      })
+      this.logger.log(`${expiredDocs.length} document(s) marked as EXPIRED.`)
+
+      const docNotifyExpired = expiredDocs.map(d => ({
+        documentName: d.documentType?.name ?? 'Dokumen',
+        employeeName: d.employee.fullName,
+        expiryDate: d.expiryDate,
+        newStatus: 'EXPIRED' as const,
+      }))
+
+      await this.maileroo
+        .sendDocumentStatusNotification(docNotifyExpired)
+        .catch(err => this.logger.error(`Document email notification failed: ${err?.message}`))
+    }
+
+    this.logger.log('Employee document status sync complete.')
   }
 }

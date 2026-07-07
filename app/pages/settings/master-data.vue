@@ -1,6 +1,13 @@
 <script setup lang="ts">
 interface LookupItem { id: number; name: string }
 
+interface DocumentTypeItem {
+  id: number
+  name: string
+  documentType: string
+  issuer: string
+}
+
 interface LookupsResponse {
   workLocations: LookupItem[]
   jobRoles: LookupItem[]
@@ -16,12 +23,13 @@ const jobLevels = ref<LookupItem[]>([])
 const taxStatuses = ref<LookupItem[]>([])
 const contractTypes = ref<LookupItem[]>([])
 const departments = ref<LookupItem[]>([])
+const documentTypes = ref<DocumentTypeItem[]>([])
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 
 // ── Generic CRUD state ──────────────────────────────────────────────
-type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments'
+type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments' | 'document-types'
 
 interface EditState {
   open: boolean
@@ -45,6 +53,7 @@ const resourceLabelMap: Record<ResourceKey, string> = {
   'tax-status': 'Status Pajak',
   'contract-types': 'Tipe Kontrak',
   departments: 'Departement',
+  'document-types': 'Dokumen',
 }
 
 const resourceIconMap: Record<ResourceKey, string> = {
@@ -54,6 +63,7 @@ const resourceIconMap: Record<ResourceKey, string> = {
   'tax-status': 'i-lucide-receipt',
   'contract-types': 'i-lucide-file-text',
   departments: 'i-lucide-building-2',
+  'document-types': 'i-lucide-file-text',
 }
 
 const resourceDescMap: Record<ResourceKey, string> = {
@@ -63,6 +73,7 @@ const resourceDescMap: Record<ResourceKey, string> = {
   'tax-status': 'Daftar status pajak karyawan',
   'contract-types': 'Daftar tipe kontrak kerja',
   departments: 'Daftar departement kerja',
+  'document-types': 'Kelola master tipe dokumen',
 }
 
 const tabs = computed(() => [
@@ -72,6 +83,7 @@ const tabs = computed(() => [
   { key: 'tax-status' as ResourceKey, label: 'Status Pajak', icon: 'i-lucide-receipt', count: taxStatuses.value.length },
   { key: 'contract-types' as ResourceKey, label: 'Tipe Kontrak', icon: 'i-lucide-file-text', count: contractTypes.value.length },
   { key: 'departments' as ResourceKey, label: 'Departement', icon: 'i-lucide-building-2', count: departments.value.length },
+  { key: 'document-types' as ResourceKey, label: 'Dokumen', icon: 'i-lucide-file-text', count: documentTypes.value.length },
 ])
 
 const currentItems = computed<LookupItem[]>(() => {
@@ -82,23 +94,34 @@ const currentItems = computed<LookupItem[]>(() => {
   else if (activeTab.value === 'tax-status') items = taxStatuses.value
   else if (activeTab.value === 'contract-types') items = contractTypes.value
   else if (activeTab.value === 'departments') items = departments.value
+  else if (activeTab.value === 'document-types') items = documentTypes.value as unknown as LookupItem[]
 
   if (!searchQuery.value) return items
   return items.filter(i => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
 })
 
+const currentDocumentTypes = computed<DocumentTypeItem[]>(() => {
+  if (activeTab.value !== 'document-types') return []
+  if (!searchQuery.value) return documentTypes.value
+  return documentTypes.value.filter(i => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
+})
+
 const totalCount = computed(() =>
-  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length
+  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length + documentTypes.value.length
 )
 
 async function loadAllLookups() {
-  const data = await $fetch<LookupsResponse>('/api/lookups')
+  const [data, docTypes] = await Promise.all([
+    $fetch<LookupsResponse>('/api/lookups'),
+    $fetch<DocumentTypeItem[]>('/api/lookups/document-types').catch(() => []),
+  ])
   workLocations.value = data.workLocations ?? []
   jobRoles.value = data.jobRoles ?? []
   jobLevels.value = data.jobLevels ?? []
   taxStatuses.value = data.taxStatus ?? []
   contractTypes.value = data.contractTypes ?? []
   departments.value = data.departments ?? []
+  documentTypes.value = docTypes
 }
 
 async function loadResource(resource: ResourceKey) {
@@ -108,6 +131,7 @@ async function loadResource(resource: ResourceKey) {
   else if (resource === 'tax-status') taxStatuses.value = await $fetch<LookupItem[]>('/api/lookups/tax-status')
   else if (resource === 'contract-types') contractTypes.value = await $fetch<LookupItem[]>('/api/lookups/contract-types')
   else if (resource === 'departments') departments.value = await $fetch<LookupItem[]>('/api/lookups/departments')
+  else if (resource === 'document-types') documentTypes.value = await $fetch<DocumentTypeItem[]>('/api/lookups/document-types')
 }
 
 onMounted(async () => {
@@ -187,6 +211,80 @@ function onTabChange(key: ResourceKey) {
   activeTab.value = key
   searchQuery.value = ''
   addOpen.value = false
+}
+
+// ── Document Types CRUD state ────────────────────────────────────────
+const newDocName = ref('')
+const newDocType = ref('')
+const newDocIssuer = ref('')
+const addDocLoading = ref(false)
+
+const editDocState = reactive({
+  documentType: '',
+  issuer: '',
+})
+
+const documentTypeOptions = [
+  { label: 'Sertifikat', value: 'SERTIFIKAT' },
+  { label: 'Lisensi', value: 'LISENSI' },
+  { label: 'Izin', value: 'IZIN' },
+  { label: 'Rahasia', value: 'RAHASIA' },
+  { label: 'Lainnya', value: 'LAINNYA' },
+]
+
+const documentTypeBadgeColor: Record<string, string> = {
+  SERTIFIKAT: 'blue',
+  LISENSI: 'green',
+  IZIN: 'yellow',
+  RAHASIA: 'red',
+  LAINNYA: 'neutral',
+}
+
+function openEditDoc(item: DocumentTypeItem) {
+  editState.id = item.id
+  editState.name = item.name
+  editDocState.documentType = item.documentType
+  editDocState.issuer = item.issuer
+  editState.open = true
+}
+
+async function doAddDoc() {
+  if (!newDocName.value.trim() || !newDocType.value) return
+  addDocLoading.value = true
+  try {
+    await $fetch('/api/lookups/document-types', {
+      method: 'POST',
+      body: { name: newDocName.value.trim(), documentType: newDocType.value, issuer: newDocIssuer.value.trim() },
+    })
+    toast.add({ title: 'Berhasil ditambahkan', color: 'success' })
+    newDocName.value = ''
+    newDocType.value = ''
+    newDocIssuer.value = ''
+    addOpen.value = false
+    await loadResource('document-types')
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menambahkan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    addDocLoading.value = false
+  }
+}
+
+async function saveEditDoc() {
+  if (!editState.id) return
+  editState.loading = true
+  try {
+    await $fetch(`/api/lookups/document-types/${editState.id}`, {
+      method: 'PUT',
+      body: { name: editState.name, documentType: editDocState.documentType, issuer: editDocState.issuer },
+    })
+    toast.add({ title: 'Berhasil diperbarui', color: 'success' })
+    editState.open = false
+    await loadResource('document-types')
+  } catch (e: any) {
+    toast.add({ title: 'Gagal memperbarui', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    editState.loading = false
+  }
 }
 </script>
 
@@ -298,7 +396,8 @@ function onTabChange(key: ResourceKey) {
                   Tambah {{ resourceLabelMap[activeTab] }}
                 </span>
               </div>
-              <div class="flex gap-2">
+              <!-- Form: regular resources -->
+              <div v-if="activeTab !== 'document-types'" class="flex gap-2">
                 <UInput
                   v-model="addName"
                   :placeholder="`Nama ${resourceLabelMap[activeTab]}...`"
@@ -321,6 +420,47 @@ function onTabChange(key: ResourceKey) {
                   @click="addOpen = false; addName = ''"
                 />
               </div>
+
+              <!-- Form: document-types (3 fields) -->
+              <div v-else class="flex flex-col gap-2">
+                <div class="flex gap-2">
+                  <UInput
+                    v-model="newDocName"
+                    placeholder="Nama Dokumen"
+                    size="sm"
+                    class="flex-1"
+                  />
+                  <USelect
+                    v-model="newDocType"
+                    :items="documentTypeOptions"
+                    placeholder="Tipe Dokumen"
+                    size="sm"
+                    class="flex-1"
+                  />
+                </div>
+                <div class="flex gap-2">
+                  <UInput
+                    v-model="newDocIssuer"
+                    placeholder="Penerbit"
+                    size="sm"
+                    class="flex-1"
+                  />
+                  <UButton
+                    label="Simpan"
+                    size="sm"
+                    color="primary"
+                    :loading="addDocLoading"
+                    @click="doAddDoc()"
+                  />
+                  <UButton
+                    icon="i-lucide-x"
+                    size="sm"
+                    color="neutral"
+                    variant="ghost"
+                    @click="addOpen = false; newDocName = ''; newDocType = ''; newDocIssuer = ''"
+                  />
+                </div>
+              </div>
             </div>
           </Transition>
 
@@ -338,7 +478,7 @@ function onTabChange(key: ResourceKey) {
 
             <!-- Empty state -->
             <div
-              v-if="currentItems.length === 0"
+              v-if="activeTab !== 'document-types' ? currentItems.length === 0 : currentDocumentTypes.length === 0"
               class="flex flex-col items-center justify-center py-12 px-4 text-center"
             >
               <div class="flex size-12 items-center justify-center rounded-full bg-elevated mb-3">
@@ -362,8 +502,8 @@ function onTabChange(key: ResourceKey) {
               />
             </div>
 
-            <!-- Items list -->
-            <ul v-else class="divide-y divide-default">
+            <!-- Items list: regular resources -->
+            <ul v-else-if="activeTab !== 'document-types'" class="divide-y divide-default">
               <li
                 v-for="(item, index) in currentItems"
                 :key="item.id"
@@ -394,6 +534,50 @@ function onTabChange(key: ResourceKey) {
                 </div>
               </li>
             </ul>
+
+            <!-- Items list: document-types -->
+            <ul v-else class="divide-y divide-default">
+              <li
+                v-for="(item, index) in currentDocumentTypes"
+                :key="item.id"
+                class="flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-elevated/40 group"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <span class="text-xs font-medium text-dimmed tabular-nums w-6 shrink-0">
+                    {{ String(index + 1).padStart(2, '0') }}
+                  </span>
+                  <div class="flex flex-col min-w-0">
+                    <span class="text-sm font-medium text-highlighted truncate">{{ item.name }}</span>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <UBadge
+                        :label="item.documentType"
+                        :color="(documentTypeBadgeColor[item.documentType] as any) ?? 'neutral'"
+                        variant="subtle"
+                        size="xs"
+                      />
+                      <span v-if="item.issuer" class="text-xs text-muted truncate">{{ item.issuer }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <UButton
+                    icon="i-lucide-pencil"
+                    size="xs"
+                    variant="ghost"
+                    color="neutral"
+                    @click="openEditDoc(item)"
+                  />
+                  <UButton
+                    icon="i-lucide-trash"
+                    size="xs"
+                    variant="ghost"
+                    color="error"
+                    :loading="deleteLoading === item.id"
+                    @click="doDelete(item.id)"
+                  />
+                </div>
+              </li>
+            </ul>
           </UCard>
         </div>
       </div>
@@ -403,19 +587,54 @@ function onTabChange(key: ResourceKey) {
   <!-- Modal Edit -->
   <UModal v-model:open="editState.open" title="Edit Data" :description="`Perbarui ${resourceLabelMap[activeTab]}`">
     <template #body>
-      <UFormField label="Nama" required>
-        <UInput
-          v-model="editState.name"
-          class="w-full"
-          autofocus
-          @keyup.enter="saveEdit"
-        />
-      </UFormField>
+      <!-- Regular resources: single name field -->
+      <template v-if="activeTab !== 'document-types'">
+        <UFormField label="Nama" required>
+          <UInput
+            v-model="editState.name"
+            class="w-full"
+            autofocus
+            @keyup.enter="saveEdit"
+          />
+        </UFormField>
+      </template>
+
+      <!-- Document types: three fields -->
+      <template v-else>
+        <div class="flex flex-col gap-3">
+          <UFormField label="Nama Dokumen" required>
+            <UInput
+              v-model="editState.name"
+              class="w-full"
+              autofocus
+            />
+          </UFormField>
+          <UFormField label="Tipe Dokumen" required>
+            <USelect
+              v-model="editDocState.documentType"
+              :items="documentTypeOptions"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="Penerbit">
+            <UInput
+              v-model="editDocState.issuer"
+              class="w-full"
+              placeholder="Penerbit"
+            />
+          </UFormField>
+        </div>
+      </template>
     </template>
     <template #footer>
       <div class="flex justify-end gap-2">
         <UButton label="Batal" color="neutral" variant="subtle" @click="editState.open = false" />
-        <UButton label="Simpan" color="primary" :loading="editState.loading" @click="saveEdit" />
+        <UButton
+          label="Simpan"
+          color="primary"
+          :loading="editState.loading"
+          @click="activeTab !== 'document-types' ? saveEdit() : saveEditDoc()"
+        />
       </div>
     </template>
   </UModal>
