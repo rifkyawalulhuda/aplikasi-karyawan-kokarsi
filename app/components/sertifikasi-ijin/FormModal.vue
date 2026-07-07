@@ -37,7 +37,7 @@ interface DocumentTypeOption {
 
 const props = defineProps<{
   open: boolean
-  mode: 'add' | 'edit'
+  mode: 'add' | 'edit' | 'renew'
   initialData?: EmployeeDocument | null
 }>()
 
@@ -108,7 +108,7 @@ watch(
   () => props.open,
   (isOpen) => {
     if (!isOpen) return
-    if (props.mode === 'edit' && props.initialData) {
+    if (props.mode === 'edit' || props.mode === 'renew') {
       const d = props.initialData
       state.employeeId = d.employeeId
       state.documentTypeId = d.documentTypeId
@@ -236,7 +236,12 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   }
 }
 
-const title = computed(() => props.mode === 'add' ? 'Tambah Dokumen' : 'Edit Dokumen')
+const title = computed(() => {
+  if (props.mode === 'add') return 'Tambah Dokumen'
+  if (props.mode === 'renew') return 'Perpanjang Dokumen'
+  return 'Edit Dokumen'
+})
+const isRenewMode = computed(() => props.mode === 'renew')
 const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
 </script>
 
@@ -256,8 +261,10 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
             :items="employeeOptions"
             placeholder="Pilih karyawan..."
             class="w-full"
+            :class="isRenewMode ? 'opacity-60' : ''"
             searchable
             searchable-placeholder="Cari karyawan..."
+            :disabled="isRenewMode"
           />
         </UFormField>
 
@@ -268,8 +275,10 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
             :items="documentTypeOptions"
             placeholder="Pilih dokumen..."
             class="w-full"
+            :class="isRenewMode ? 'opacity-60' : ''"
             searchable
             searchable-placeholder="Cari dokumen..."
+            :disabled="isRenewMode"
             @update:model-value="onDocumentTypeSelect"
           />
         </UFormField>
@@ -323,7 +332,7 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
         </UFormField>
 
         <!-- File Upload -->
-        <UFormField label="File Dokumen">
+        <UFormField :label="isRenewMode ? 'File Dokumen (Ganti File lama dengan yang terupdate)' : 'File Dokumen'">
           <div class="space-y-2">
             <!-- Existing file info (edit mode) -->
             <div v-if="hasExistingFile && !replaceFile" class="flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm">

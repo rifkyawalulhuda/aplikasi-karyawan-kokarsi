@@ -190,6 +190,9 @@ function getRowItems(row: Row<EmployeeDocument>): DropdownMenuItem[][] {
   const group1: DropdownMenuItem[] = [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(doc) },
   ]
+  if (doc.status !== 'AKTIF') {
+    group1.push({ label: 'Perpanjang', icon: 'i-lucide-refresh-cw', onSelect: () => openRenew(doc) })
+  }
   if (doc.fileUrl) {
     group1.push({ label: 'Unduh File', icon: 'i-lucide-download', onSelect: () => window.open(doc.fileUrl, '_blank') })
   }
@@ -301,6 +304,15 @@ function confirmDelete(doc: EmployeeDocument) {
 function openEdit(doc: EmployeeDocument) {
   editTarget.value = doc
   editModal.value = true
+}
+
+// --- Renew ---
+const renewModal = ref(false)
+const renewTarget = ref<EmployeeDocument | null>(null)
+
+function openRenew(doc: EmployeeDocument) {
+  renewTarget.value = doc
+  renewModal.value = true
 }
 
 watch([searchQuery, statusFilter], () => {
@@ -420,5 +432,15 @@ watch([searchQuery, statusFilter], () => {
     :initial-data="editTarget"
     @saved="refresh()"
     @update:open="(v: boolean) => { editModal = v; if (!v) editTarget = null }"
+  />
+
+  <!-- Modal Perpanjang -->
+  <SertifikasiIjinFormModal
+    v-if="renewTarget"
+    v-model:open="renewModal"
+    mode="renew"
+    :initial-data="renewTarget"
+    @saved="refresh()"
+    @update:open="(v: boolean) => { renewModal = v; if (!v) renewTarget = null }"
   />
 </template>
