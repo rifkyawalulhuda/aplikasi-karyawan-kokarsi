@@ -4,6 +4,7 @@ import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { extname, join } from 'path'
 import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto, OffboardingDto } from './employees.service'
+import { validateImageBuffer } from '../shared/file-validation.util'
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('employees')
@@ -52,6 +53,15 @@ export class EmployeesController {
 
   @Post('bulk-import')
   bulkCreate(@Body() body: { employees: CreateEmployeeDto[] }) {
+    if (!Array.isArray(body?.employees)) {
+      throw new BadRequestException('Field "employees" harus berupa array')
+    }
+    if (body.employees.length === 0) {
+      throw new BadRequestException('Array employees tidak boleh kosong')
+    }
+    if (body.employees.length > 500) {
+      throw new BadRequestException('Maksimal 500 karyawan per import')
+    }
     return this.service.bulkCreate(body.employees)
   }
 
@@ -87,11 +97,23 @@ export class EmployeesController {
     },
     limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
   }))
-  uploadPhoto(
+  async uploadPhoto(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('File tidak ditemukan')
+
+    // diskStorage tidak isi file.buffer — baca dari disk untuk validasi magic bytes
+    const { readFileSync, unlinkSync } = require('fs')
+    const fileBuffer = readFileSync(file.path)
+    try {
+      await validateImageBuffer(fileBuffer)
+    } catch (err) {
+      // Hapus file yang tidak valid dari disk
+      unlinkSync(file.path)
+      throw err
+    }
+
     const fotoKaryawan = `/uploads/photos/${file.filename}`
     return this.service.updatePhoto(id, fotoKaryawan)
   }

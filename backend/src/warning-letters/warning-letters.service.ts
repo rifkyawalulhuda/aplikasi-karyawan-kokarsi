@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsArray, IsDateString, IsNotEmpty } from 'class-validator'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 
 export class CreateWarningLetterDto {
   @IsString()
@@ -60,7 +61,10 @@ export class UpdateWarningLetterDto {
 
 @Injectable()
 export class WarningLettersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dashboardCache: DashboardCacheService,
+  ) {}
 
   private include = {
     employee: {
@@ -147,7 +151,7 @@ export class WarningLettersService {
       )
     }
 
-    return this.prisma.warningLetter.create({
+    const result = await this.prisma.warningLetter.create({
       data: {
         letterNumber: dto.letterNumber,
         employeeId: dto.employeeId,
@@ -160,6 +164,8 @@ export class WarningLettersService {
       },
       include: this.include,
     })
+    this.dashboardCache.invalidate()
+    return result
   }
 
   async findAll(page = 1, limit = 10, search?: string) {
@@ -205,7 +211,7 @@ export class WarningLettersService {
   async update(id: number, dto: UpdateWarningLetterDto) {
     await this.findOne(id)
 
-    return this.prisma.warningLetter.update({
+    const result = await this.prisma.warningLetter.update({
       where: { id },
       data: {
         letterNumber: dto.letterNumber,
@@ -219,10 +225,14 @@ export class WarningLettersService {
       },
       include: this.include,
     })
+    this.dashboardCache.invalidate()
+    return result
   }
 
   async remove(id: number) {
     await this.findOne(id)
-    return this.prisma.warningLetter.delete({ where: { id } })
+    const result = await this.prisma.warningLetter.delete({ where: { id } })
+    this.dashboardCache.invalidate()
+    return result
   }
 }

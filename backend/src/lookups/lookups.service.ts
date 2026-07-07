@@ -39,10 +39,12 @@ export class LookupsService {
 
     const existingNames = new Set(existing.map(item => item.name))
 
-    for (const name of this.defaultContractTypes) {
-      if (!existingNames.has(name)) {
-        await this.prisma.contractType.create({ data: { name } })
-      }
+    const missing = this.defaultContractTypes.filter(name => !existingNames.has(name))
+    if (missing.length > 0) {
+      await this.prisma.contractType.createMany({
+        data: missing.map(name => ({ name })),
+        skipDuplicates: true,
+      })
     }
   }
 
@@ -168,7 +170,7 @@ export class LookupsService {
   deleteDepartment(id: number) {
     return this.prisma.department.delete({ where: { id } }).catch((error) => {
       if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
-      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departement')
+      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departemen')
       throw error
     })
   }

@@ -5,6 +5,7 @@ import { diskStorage } from 'multer'
 import { IsString, MinLength, IsOptional } from 'class-validator'
 import { extname, join } from 'path'
 import { SettingsService } from './settings.service'
+import { validateImageOrSvgBuffer, validateImageBuffer } from '../shared/file-validation.util'
 
 class UpdateGeneralSettingsDto {
   @IsOptional()
@@ -83,8 +84,16 @@ export class SettingsController {
     },
     limits: { fileSize: 2 * 1024 * 1024 },
   }))
-  uploadLogo(@Request() req: any, @UploadedFile() file: Express.Multer.File) {
+  async uploadLogo(@Request() req: any, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('File tidak ditemukan')
+    const { readFileSync, unlinkSync } = require('fs')
+    const fileBuffer = readFileSync(file.path)
+    try {
+      await validateImageOrSvgBuffer(fileBuffer)
+    } catch (err) {
+      unlinkSync(file.path)
+      throw err
+    }
     const logoUrl = `/uploads/settings/${file.filename}`
     return this.settingsService.updateLogo(logoUrl, req.user?.role)
   }
@@ -108,12 +117,20 @@ export class SettingsController {
     },
     limits: { fileSize: 5 * 1024 * 1024 },
   }))
-  uploadLoginImage(
+  async uploadLoginImage(
     @Request() req: any,
     @Param('side') side: 'left' | 'right',
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('File tidak ditemukan')
+    const { readFileSync, unlinkSync } = require('fs')
+    const fileBuffer = readFileSync(file.path)
+    try {
+      await validateImageBuffer(fileBuffer)
+    } catch (err) {
+      unlinkSync(file.path)
+      throw err
+    }
     return this.settingsService.updateLoginImage(side, '/uploads/settings/' + file.filename, req.user?.role)
   }
 }

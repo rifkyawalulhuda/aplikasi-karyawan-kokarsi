@@ -3,14 +3,7 @@ import { Cron } from '@nestjs/schedule'
 import { ContractStatus } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { MailerooService } from '../maileroo/maileroo.service'
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function startOfDay(date: Date) {
-  const value = new Date(date)
-  value.setHours(0, 0, 0, 0)
-  return value
-}
+import { DAY_MS, startOfDay } from '../shared/date-utils'
 
 @Injectable()
 export class ContractCronService {

@@ -5,7 +5,10 @@ import * as fs from 'fs'
 
 @Injectable()
 export class PdfGeneratorService {
-  private readonly fontDir = 'C:/Windows/Fonts'
+  private readonly fontDir = process.env.FONT_DIR
+    ?? (process.platform === 'win32'
+      ? 'C:/Windows/Fonts'
+      : '/usr/share/fonts/truetype')
   private readonly logoPath = path.join(__dirname, '../../assets/logo-sp.png')
 
   private formatDate(date: Date | string): string {
@@ -134,7 +137,7 @@ export class PdfGeneratorService {
       // === TANDA TANGAN ===
       y += 53
       doc.text('Penerima SP', 108, y)
-      doc.text('Pengurus Koprasi', 397, y)
+      doc.text('Pengurus Koperasi', 397, y)
 
       y += 67
       doc.text(`( ${employee.fullName} )`, 72, y)

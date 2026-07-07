@@ -82,10 +82,15 @@ export function useExport() {
       'Level Jabatan': e.jobLevel?.name ?? '-',
       ...(includeDepartment ? { 'Departement': e.department?.name ?? '-' } : {}),
       'Status Pajak': e.taxStatus?.name ?? '-',
-      'No. Kontrak Aktif': resolveActiveContract(e)?.contractNo ?? '-',
-      'Tgl. Mulai Kontrak': fmt(resolveActiveContract(e)?.startDate),
-      'Tgl. Selesai Kontrak': fmt(resolveActiveContract(e)?.endDate),
-      'Status Kontrak': statusLabel(resolveContractStatus(resolveActiveContract(e)) ?? ''),
+      ...(() => {
+        const c = resolveActiveContract(e)
+        return {
+          'No. Kontrak Aktif': c?.contractNo ?? '-',
+          'Tgl. Mulai Kontrak': fmt(c?.startDate),
+          'Tgl. Selesai Kontrak': fmt(c?.endDate),
+          'Status Kontrak': statusLabel(resolveContractStatus(c) ?? ''),
+        }
+      })(),
       'Foto': e.fotoKaryawan || '-',
       'Dibuat': fmt(e.createdAt),
       'Diperbarui': fmt(e.updatedAt),

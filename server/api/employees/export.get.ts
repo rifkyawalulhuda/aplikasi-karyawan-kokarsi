@@ -1,14 +1,18 @@
 import { defineEventHandler, getCookie, getQuery } from 'h3'
 
-const BACKEND = 'http://localhost:3001/api'
 
 export default defineEventHandler(async (event) => {
   const token = getCookie(event, 'auth_token') ?? ''
-  const query = getQuery(event)
 
-  // Fetch semua data tanpa pagination limit
+  if (!token) {
+    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+
+  const query = getQuery(event)
+  const MAX_EXPORT = 5000
+
   const params = new URLSearchParams({
-    limit: '9999',
+    limit: String(MAX_EXPORT),
     page: '1',
     includeContracts: 'true',
     ...(query.search ? { search: String(query.search) } : {}),
@@ -16,8 +20,13 @@ export default defineEventHandler(async (event) => {
   })
 
   const res = await fetch(`${BACKEND}/employees?${params}`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
   })
+
+  if (!res.ok) {
+    throw createError({ statusCode: res.status, statusMessage: 'Gagal mengambil data export' })
+  }
 
   return res.json()
 })

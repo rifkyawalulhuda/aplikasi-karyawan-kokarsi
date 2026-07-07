@@ -5,6 +5,18 @@ import { PrismaService } from '../prisma/prisma.service'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bcrypt = require('bcrypt')
 
+interface AuthenticatedUser {
+  id: number
+  employeeNo?: string
+  nik?: string
+  username?: string
+  fullName?: string
+  name?: string
+  role: 'ADMIN' | 'PENGELOLA_KOPERASI'
+  accountType: 'master_admin' | 'user_account'
+  email?: string
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -39,7 +51,7 @@ export class AuthService {
     throw new UnauthorizedException('Kredensial tidak valid')
   }
 
-  async login(admin: any) {
+  async login(admin: AuthenticatedUser) {
     const identifier = admin.employeeNo ?? admin.nik ?? admin.username
     const email = admin.email ?? ''
     const payload = { sub: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email }

@@ -1,6 +1,5 @@
 import { defineEventHandler, getCookie, proxyRequest } from 'h3'
 
-const BACKEND = 'http://localhost:3001'
 
 export default defineEventHandler(async (event) => {
   const side = event.context.params?.side ?? ''
@@ -9,5 +8,5 @@ export default defineEventHandler(async (event) => {
   if (token) {
     headers.Authorization = 'Bearer ' + token
   }
-  return proxyRequest(event, BACKEND + '/api/settings/login-image/' + side, { headers })
+  return proxyRequest(event, BACKEND + '/settings/login-image/' + side, { headers })
 })

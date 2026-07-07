@@ -1,4 +1,3 @@
-const BACKEND = 'http://localhost:3001/api'
 
 export default eventHandler(async (event) => {
   const body = await readBody(event)
@@ -11,8 +10,9 @@ export default eventHandler(async (event) => {
 
     if (res?.access_token) {
       setCookie(event, 'auth_token', res.access_token, {
-        httpOnly: false,
-        sameSite: 'lax',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
         maxAge: 60 * 60 * 8,
         path: '/',
       })

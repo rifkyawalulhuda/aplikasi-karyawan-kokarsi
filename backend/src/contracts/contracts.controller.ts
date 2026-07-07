@@ -1,8 +1,8 @@
-import { BadRequestException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res, UseInterceptors, UploadedFile } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res, UseInterceptors, UploadedFile } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
-import { join, extname } from 'path'
+import { join, extname, resolve, normalize, sep } from 'path'
 import { ContractsService, CreateContractDto, UpdateContractDto, RenewContractDto } from './contracts.service'
 import { ContractDocumentService } from './contract-document.service'
 
@@ -20,12 +20,14 @@ export class ContractsController {
     @Query('limit') limit?: string,
     @Query('status') status?: string,
     @Query('employeeId') employeeId?: string,
+    @Query('search') search?: string,
   ) {
     return this.service.findAll({
       page: page ? +page : 1,
       limit: limit ? +limit : 10,
       status,
       employeeId: employeeId ? +employeeId : undefined,
+      search,
     })
   }
 
@@ -61,19 +63,44 @@ export class ContractsController {
 
   @Get(':id/download-pdf')
   async downloadPdf(@Param('id', ParseIntPipe) id: number, @Res() res: any) {
-    const { join } = require('path')
     const { readFileSync, existsSync } = require('fs')
 
-    const result = await this.contractDocumentService.generate(id)
-    const target = result.generatedPdfUrl
+    // Cek apakah PDF sudah pernah di-generate
+    const contract = await this.service.findOne(id)
+    let target = contract?.generatedPdfUrl ?? null
+
+    // Jika belum ada, generate baru
+    if (!target) {
+      const result = await this.contractDocumentService.generate(id)
+      target = result.generatedPdfUrl
+    }
+
     if (!target) {
       throw new BadRequestException('PDF belum tersedia. Coba generate ulang dokumen kontrak.')
     }
-    const filePath = join(process.cwd(), target)
-    if (!existsSync(filePath)) {
-      throw new BadRequestException('File PDF tidak ditemukan di server.')
+
+    // target dari DB: '/uploads/contracts/35/file.pdf'
+    // Resolve dari process.cwd() (backend/) bukan dari uploadRoot agar tidak duplikat
+    const uploadRoot = resolve(process.cwd(), 'uploads')
+    const safePath = resolve(process.cwd(), normalize(target).replace(/^[/\\]+/, ''))
+    if (!safePath.startsWith(uploadRoot + sep)) {
+      throw new ForbiddenException('Akses file tidak diizinkan')
     }
-    const pdfBuffer = readFileSync(filePath)
+
+    if (!existsSync(safePath)) {
+      // File hilang dari disk — generate ulang
+      const result = await this.contractDocumentService.generate(id)
+      const newTarget = result.generatedPdfUrl
+      if (!newTarget) throw new BadRequestException('Gagal generate PDF.')
+      const newSafe = resolve(process.cwd(), normalize(newTarget).replace(/^[/\\]+/, ''))
+      if (!existsSync(newSafe)) throw new BadRequestException('File PDF tidak ditemukan di server.')
+      const pdfBuffer = readFileSync(newSafe)
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', 'inline; filename="contract.pdf"')
+      return res.send(pdfBuffer)
+    }
+
+    const pdfBuffer = readFileSync(safePath)
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'inline; filename="contract.pdf"')
     res.send(pdfBuffer)

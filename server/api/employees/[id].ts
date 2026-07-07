@@ -1,4 +1,3 @@
-const BACKEND = 'http://localhost:3001/api'
 
 export default eventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -15,7 +14,6 @@ export default eventHandler(async (event) => {
       method: method as any,
       headers: authHeader,
       body: method !== 'GET' ? await readBody(event) : undefined,
-      ignoreResponseError: true,
     })
   } catch (error: any) {
     throw createError({

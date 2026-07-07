@@ -1,6 +1,5 @@
 import { defineEventHandler, getRouterParam, getCookie, proxyRequest } from 'h3'
 
-const BACKEND = 'http://localhost:3001'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -11,7 +10,7 @@ export default defineEventHandler(async (event) => {
     headers.Authorization = 'Bearer ' + token
   }
 
-  return proxyRequest(event, `${BACKEND}/api/contracts/${id}/document`, {
+  return proxyRequest(event, `${BACKEND}/contracts/${id}/document`, {
     headers,
   })
 })

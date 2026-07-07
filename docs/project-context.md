@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-06 (v10) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-07 (v12) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, dan perbaikan bug timezone date import.
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening** (JWT fail-fast, httpOnly cookie, CORS spesifik, rate limiting login, path traversal sanitasi, file validation magic bytes), **centralisasi BACKEND_URL** di `server/utils/backend.ts` (Nitro auto-import), **SharedModule + DashboardCacheService** (cache invalidasi berbasis event bukan TTL buta), **Unit Test Jest** untuk AuthService, berbagai perbaikan bug (FK violation hapus karyawan, duplicate `/api` di proxy routes, path duplikat uploads, dashboard chart SP), dan **PM2 process manager** untuk auto-restart frontend/backend production.
 
 ---
 
@@ -30,13 +30,15 @@ docker compose -f docker-compose.db.yml up -d
 #    user: kokarsi
 #    password: kokarsi2026
 
-# 2. Start Backend
-cd E:\Github\aplikasi-karyawan-kokarsi\backend
-node dist/main.js
-
-# 3. Start Frontend
+# 2. Start Backend + Frontend via PM2
 cd E:\Github\aplikasi-karyawan-kokarsi
-pnpm dev
+.\deploy\start.ps1
+
+# 3. Monitor proses
+pm2 list
+pm2 monit
+pm2 logs kokarsi-frontend
+pm2 logs kokarsi-backend
 ```
 
 ### Production (Cloudflare Tunnel)
@@ -58,6 +60,18 @@ pnpm build
 ```bash
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
 NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
+```
+
+### Manajemen PM2 (production)
+```powershell
+pm2 list                          # status semua proses
+pm2 monit                         # monitor realtime
+pm2 logs kokarsi-frontend         # logs frontend
+pm2 logs kokarsi-backend          # logs backend
+pm2 restart kokarsi-frontend      # restart setelah pnpm build
+pm2 restart kokarsi-backend       # restart setelah compile backend
+pm2 startup                       # auto-start saat Windows boot (jalankan sebagai Admin sekali)
+pm2 save                          # simpan daftar proses aktif
 ```
 
 ---
@@ -122,6 +136,29 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 53 | Deployment production via Cloudflare Tunnel | `deploy/start.ps1`, `~/.cloudflared/config.yml` |
 | 54 | Foto/dokumen via relative path (proxy Nuxt /uploads/**) | `nuxt.config.ts`, `app/composables/useAppSettings.ts`, `app/components/karyawan/detail/ProfileHeader.vue`, `ContractTimeline.vue`, `WarningLetterList.vue`, `app/pages/settings/index.vue`, `app/composables/useExport.ts` |
 | 55 | Title browser & SEO meta diupdate | `app/app.vue` |
+| 56 | Security: JWT_SECRET fail-fast (hapus fallback hardcoded), httpOnly cookie, CORS origin whitelist via env | `backend/src/auth/jwt.strategy.ts`, `backend/src/auth/auth.module.ts`, `server/api/auth/login.post.ts`, `nuxt.config.ts` |
+| 57 | Security: Rate limiting login 5 req/menit via @nestjs/throttler | `backend/src/auth/auth.controller.ts`, `backend/src/app.module.ts` |
+| 58 | Security: File upload magic bytes validation (file-type@16) — bukan hanya MIME header | `backend/src/shared/file-validation.util.ts`, `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
+| 59 | Security: Path traversal sanitasi pada download/serve PDF — resolve dari cwd, bukan uploadRoot | `backend/src/contracts/contracts.controller.ts:downloadPdf` |
+| 60 | Security: Fix auth store & middleware default role `?? 'ADMIN'` → null-safe | `app/stores/auth.ts`, `app/middleware/auth.global.ts` |
+| 61 | Centralisasi BACKEND_URL di `server/utils/backend.ts` — Nitro auto-import, hapus 36 definisi duplikat | `server/utils/backend.ts` |
+| 62 | Ekstrak `backend/src/shared/date-utils.ts` — hapus duplikasi startOfDay & DAY_MS | `backend/src/shared/date-utils.ts` |
+| 63 | SharedModule + DashboardCacheService: cache invalidasi berbasis event (bukan TTL buta) | `backend/src/shared/shared.module.ts`, `backend/src/shared/dashboard-cache.service.ts` |
+| 64 | Unit Test Jest: 9 test AuthService (validateAdmin, login, changePassword) | `backend/src/auth/auth.service.spec.ts`, `backend/jest.config.js`, `backend/tsconfig.test.json` |
+| 65 | N+1 fix: ensureDefaultContractTypes loop create → createMany skipDuplicates | `backend/src/lookups/lookups.service.ts` |
+| 66 | Search API: filter kontrak di database (bukan JS), tambah param search ke contracts.findAll | `server/api/search.get.ts`, `backend/src/contracts/contracts.service.ts` |
+| 67 | Export karyawan: auth check 401, batas 5000 record, timeout 30 detik, error handling | `server/api/employees/export.get.ts` |
+| 68 | Fix resolveActiveContract dipanggil 4x per row export → 1x via spread IIFE | `app/composables/useExport.ts` |
+| 69 | Fix download PDF kontrak: serve cached jika ada, generate hanya jika belum ada atau file hilang | `backend/src/contracts/contracts.controller.ts:downloadPdf` |
+| 70 | Fix double `/api` di 7 Nitro proxy routes (warning-letters, employees, contracts, settings) | `server/api/warning-letters/[id]/preview.get.ts`, `server/api/employees/[id]/photo.post.ts`, `server/api/employees/import-template.get.ts`, dll |
+| 71 | Fix file.buffer undefined dengan diskStorage — baca file dari disk via readFileSync setelah upload | `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
+| 72 | Fix FK violation hapus karyawan — hapus employeeStatusHistory & employeeOffboarding dalam transaksi | `backend/src/employees/employees.service.ts:remove` |
+| 73 | Fix UniqueConstraintViolation create kontrak — tangkap P2002, pesan ramah user | `backend/src/contracts/contracts.service.ts:create` |
+| 74 | Tambah .env.example root + backend/.env.example dengan semua variabel termasuk FONT_DIR, NUXT_ALLOWED_ORIGINS | `.env.example`, `backend/.env.example` |
+| 75 | Fix typo 'Koprasi' → 'Koperasi', 'departement' → 'departemen' | `backend/src/warning-letters/pdf-generator.service.ts`, `backend/src/lookups/lookups.service.ts` |
+| 76 | Fix font path hardcoded Windows — cross-platform via FONT_DIR env, fallback per OS | `backend/src/warning-letters/pdf-generator.service.ts` |
+| 77 | Fix AuthenticatedUser + JwtPayload interface — ganti type `any` di auth files | `backend/src/auth/auth.service.ts`, `backend/src/auth/jwt.strategy.ts` |
+| 78 | PM2 process manager — auto-restart frontend/backend, env injection, logging | `ecosystem.config.cjs`, `deploy/start.ps1`, `.env` (root) |
 ---
 
 ## Arsitektur
@@ -130,8 +167,18 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 Frontend (Nuxt 4)          Nitro Server           Backend (NestJS)
 app/pages/            ->    server/api/        ->   src/
 app/components/            server/middleware/      Prisma -> PostgreSQL
-app/composables/
+app/composables/           server/utils/
 ```
+
+### Nitro BACKEND_URL Pattern
+Semua file `server/api/**/*.ts` menggunakan variabel `BACKEND` yang di-auto-import oleh Nitro dari `server/utils/backend.ts`:
+```typescript
+// server/utils/backend.ts — Nitro auto-import, tidak perlu import eksplisit
+export const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3001/api'
+export const BACKEND_ROOT = process.env.BACKEND_ROOT ?? 'http://localhost:3001'
+export const BACKEND = BACKEND_URL  // alias untuk semua server/api files
+```
+**JANGAN** tambahkan `import { BACKEND } from '~/server/utils/backend'` — ini akan break karena alias `~` di Nitro menunjuk ke `app/` bukan root.
 
 ### Nitro Auth Pattern
 Semua Nitro handler baca `auth_token` cookie -> forward `Authorization: Bearer <token>` ke NestJS.
@@ -298,7 +345,7 @@ server/
       [id].ts               # GET + PUT + DELETE
       summary.get.ts        # GET summary 1 row per karyawan
       history/[employeeId].get.ts  # GET riwayat kontrak per karyawan
-      [id]/download-pdf.get.ts    # Stream PDF kontrak (selalu regenerate)
+      [id]/download-pdf.get.ts    # Stream PDF kontrak (serve cached, generate jika belum ada)
       [id]/document-preview.get.ts # Preview metadata kontrak
       [id]/document.post.ts       # Upload dokumen scan PDF
       [id]/generate-document.post.ts # Generate dokumen kontrak
@@ -321,6 +368,10 @@ server/
       [resource]/[id].ts    # PUT + DELETE
     users.ts                # CRUD master user list/create
     users/[id].ts           # CRUD master user detail
+    dashboard-stats.ts      # GET dashboard stats (proxy ke backend)
+    search.get.ts           # GET global search (karyawan, kontrak, SP) — filter di DB
+  utils/
+    backend.ts              # BACKEND, BACKEND_URL, BACKEND_ROOT — Nitro auto-import
   middleware/
     auth.ts                 # JWT guard
 
@@ -335,6 +386,15 @@ backend/
     settings/               # Pengaturan umum aplikasi (AppSetting)
     warning-letters/        # CRUD SP + PDF generator + eskalasi rule
     lookups/                # Work locations, job roles, levels, tax status, contract types
+    users/                  # Master user (MasterAdmin + UserAccount)
+    auth/                   # Login, JWT strategy, local strategy
+    prisma/                 # PrismaService (singleton pool)
+    shared/
+      date-utils.ts         # startOfDay, endOfDay, DAY_MS — dipakai contracts & cron
+      file-validation.util.ts  # validateImageBuffer, validatePdfBuffer via magic bytes (file-type@16)
+      simple-cache.util.ts  # SimpleCache<T> utility (TTL-based, tidak dipakai dashboard)
+      dashboard-cache.service.ts  # DashboardCacheService — cache invalidasi berbasis event
+      shared.module.ts      # SharedModule — export DashboardCacheService ke semua modul
     users/                  # CRUD master user internal + pengurus endpoint
     auth/                   # JWT strategy
     main.ts                 # Static assets /uploads + dotenv/config
@@ -450,7 +510,7 @@ backend/
 | POST | `/api/contracts/:id/renew` | Perpanjang kontrak (renewal flow, parent harus AKAN_HABIS/EXPIRED) |
 | PUT | `/api/contracts/:id` | Edit kontrak (state lock jika documentUrl terisi) |
 | DELETE | `/api/contracts/:id` | Hapus kontrak |
-| GET | `/api/contracts/:id/download-pdf` | Download/generate PDF kontrak |
+| GET | `/api/contracts/:id/download-pdf` | Serve cached PDF kontrak, generate hanya jika belum ada |
 | GET | `/api/contracts/:id/document-preview` | Preview metadata dokumen kontrak |
 | POST | `/api/contracts/:id/generate-document` | Generate ulang PDF kontrak |
 | POST | `/api/contracts/:id/document` | Upload dokumen scan PDF (multipart) |
@@ -474,6 +534,9 @@ backend/
 | GET | `/api/settings/general` | Ambil pengaturan umum (semua role) |
 | PUT | `/api/settings/general` | Simpan pengaturan umum (Admin only) |
 | POST | `/api/settings/logo` | Upload logo organisasi (Admin only, max 512x512px 2MB, JPG/PNG/WEBP/SVG) |
+| POST | `/api/settings/login-image/:side` | Upload gambar login (left/right, Admin only, max 5MB, JPG/PNG/WEBP) |
+| GET | `/api/employees/dashboard-stats` | Dashboard stats (cache invalidasi berbasis event, TTL 5 menit fallback) |
+| GET | `/api/search?q=...` | Global search karyawan + kontrak + SP (filter di database) |
 | GET | `/api/employees/import-template` | Download template Excel import karyawan (dengan dropdown validasi data master) |
 | POST | `/api/employees/bulk-import` | Import karyawan bulk (all-or-nothing transaction, auto-reject duplikat) |
 | GET | `/api/lookups/*` | CRUD lookup data |
@@ -520,11 +583,32 @@ Internet → Cloudflare → Tunnel → Windows Machine
 | docker-compose.db.yml | PostgreSQL container |
 
 ### Konfigurasi nuxt.config.ts
-`	s
+```
 routeRules: {
-  '/api/**': { cors: true },
+  '/api/**': {
+    cors: {
+      origin: process.env.NUXT_ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    }
+  },
   '/uploads/**': { proxy: 'http://localhost:3001/uploads/**' }
 }
+```
+CORS tidak lagi wildcard — gunakan env `NUXT_ALLOWED_ORIGINS` untuk production (contoh: `https://kokarsi-sankyu.web.id`).
+
+### PM2 Process Manager
+Backend dan frontend production dijalankan via PM2 (bukan `Start-Process` langsung):
+- Config: `ecosystem.config.cjs` di root project
+- Env frontend di-inject dari `.env` root via `env_file`
+- Auto-restart jika crash (max 10 restarts, delay 3s)
+- Log: `logs/frontend-out.log`, `logs/backend-err.log`, dll
+
+```powershell
+pm2 list                    # status proses
+pm2 logs kokarsi-frontend   # logs frontend
+pm2 restart kokarsi-backend # restart backend setelah compile
+pm2 startup && pm2 save     # auto-start saat Windows boot
 ```
 
 ### Email Notifikasi (Maileroo)
@@ -567,3 +651,11 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Kontrak PHK/RESIGN masih bisa buat kontrak baru | Guard `checkTerminationLockout()` di `contracts.service.ts`, frontend juga fetch `employmentStatus` di AddContractModal |
 | Edit kontrak dengan scan dokumen selalu error 400 | State Lock compare string vs Date object — sekarang sudah difix dengan normalisasi ke ISO string sebelum compare |
 | Unduh dokumen kontrak scan 404 | Gunakan path relatif `documentUrl` — sudah di-proxy Nuxt via /uploads/** → http://localhost:3001/uploads/**. Jangan pakai prefix http://localhost:3001 di frontend |
+| Download/preview PDF kontrak error 400 "File PDF tidak ditemukan" | Bug: path `uploads/uploads/...` duplikat karena `resolve(uploadRoot, target)` padahal target sudah `/uploads/...`. Fix: gunakan `resolve(process.cwd(), target)` di `contracts.controller.ts:downloadPdf` |
+| Upload foto karyawan error 500 "Expected Uint8Array or Buffer" | Bug: `file.buffer` undefined karena diskStorage. Fix: baca file dari disk via `readFileSync(file.path)` sebelum validasi magic bytes |
+| Upload foto/logo error "Cannot POST /api/api/employees/.../photo" | Bug: double `/api` di Nitro proxy routes. Cek `server/api/employees/[id]/photo.post.ts` — path tidak boleh duplikat BACKEND yang sudah berisi `/api` |
+| Frontend error "ENOENT: no such file .../app/server/utils/backend" | Jangan `import { BACKEND } from '~/server/utils/backend'` di Nitro routes — alias `~` menunjuk ke `app/`. Nitro auto-import semua exports dari `server/utils/backend.ts` tanpa perlu import eksplisit |
+| Hapus karyawan error 500 FK violation `employee_status_history_employeeId_fkey` | Bug: `remove()` tidak hapus `employeeStatusHistory` + `employeeOffboarding` sebelum delete. Fix: gunakan transaksi `deleteMany` keduanya dulu |
+| Buat kontrak error 500 "UniqueConstraintViolation on contractNo" | Nomor kontrak sudah ada di database. Gunakan nomor kontrak yang berbeda. Backend sudah mengembalikan pesan ramah P2002 |
+| Dashboard chart SP tidak update setelah tambah SP baru | Cache dashboard TTL 5 menit. Cache di-invalidate otomatis saat mutasi data (create/update/delete SP/kontrak/karyawan). Jika masih stale, tunggu 5 menit atau restart backend |
+| Backend start error "JWT_SECRET environment variable is required" | `backend/.env` tidak ada atau `JWT_SECRET` tidak diset. Copy dari `backend/.env.example` dan isi nilai yang diperlukan |

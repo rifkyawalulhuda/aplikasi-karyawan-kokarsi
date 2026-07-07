@@ -3,14 +3,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber } from 'class-validator'
 import { ContractStatus, Prisma } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-function startOfDay(date: Date) {
-  const value = new Date(date)
-  value.setHours(0, 0, 0, 0)
-  return value
-}
+import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -68,7 +62,10 @@ export interface ContractSummaryRow {
 
 @Injectable()
 export class ContractsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dashboardCache: DashboardCacheService,
+  ) {}
 
   private include = {
     employee: {
@@ -203,10 +200,17 @@ export class ContractsService {
     )[0]
   }
 
-  async findAll(params: { page?: number; limit?: number; status?: string; employeeId?: number }) {
-    const { page = 1, limit = 10, status, employeeId } = params
+  async findAll(params: { page?: number; limit?: number; status?: string; employeeId?: number; search?: string }) {
+    const { page = 1, limit = 10, status, employeeId, search } = params
     const where: any = {}
     if (employeeId) where.employeeId = employeeId
+    if (search) {
+      where.OR = [
+        { contractNo: { contains: search, mode: 'insensitive' } },
+        { employee: { fullName: { contains: search, mode: 'insensitive' } } },
+        { employee: { employeeNo: { contains: search, mode: 'insensitive' } } },
+      ]
+    }
 
     const data = this.withComputedStatuses(await this.prisma.contract.findMany({
       where,
@@ -321,18 +325,26 @@ export class ContractsService {
       }
     }
 
-    const contract = await this.prisma.contract.create({
-      data: {
-        ...dto,
-        parentContractId: autoParentId,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
-      },
-      include: this.include,
-    })
-    await this.syncEmployeeStatus(dto.employeeId)
-    return this.withComputedStatus(contract)
+    try {
+      const contract = await this.prisma.contract.create({
+        data: {
+          ...dto,
+          parentContractId: autoParentId,
+          startDate: new Date(dto.startDate),
+          endDate: new Date(dto.endDate),
+          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+        },
+        include: this.include,
+      })
+      await this.syncEmployeeStatus(dto.employeeId)
+      this.dashboardCache.invalidate()
+      return this.withComputedStatus(contract)
+    } catch (error: any) {
+      if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
+        throw new ConflictException(`Nomor kontrak "${dto.contractNo}" sudah digunakan. Gunakan nomor kontrak yang berbeda.`)
+      }
+      throw error
+    }
   }
 
   async renew(parentId: number, dto: RenewContractDto) {
@@ -390,6 +402,7 @@ export class ContractsService {
       include: this.include,
     })
     await this.syncEmployeeStatus(parent.employeeId)
+    this.dashboardCache.invalidate()
     return this.withComputedStatus(contract)
   }
 
@@ -429,6 +442,7 @@ export class ContractsService {
     if (dto.employeeId !== existing.employeeId) {
       await this.syncEmployeeStatus(dto.employeeId)
     }
+    this.dashboardCache.invalidate()
     return this.withComputedStatus(contract)
   }
 
@@ -436,6 +450,7 @@ export class ContractsService {
     const contract = await this.findOne(id)
     const removed = await this.prisma.contract.delete({ where: { id } })
     await this.syncEmployeeStatus(contract.employeeId)
+    this.dashboardCache.invalidate()
     return removed
   }
 

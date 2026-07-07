@@ -30,3 +30,19 @@ logs
 
 #cloudflared
 .cloudflared
+
+# File sensitif yang tidak boleh ter-commit
+cookie.txt
+auth_token=*
+tmp/
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# PM2 logs
+logs/
+
+# Production env (buat sendiri dari .env.example)
+.env
+.env.*
+!.env.example

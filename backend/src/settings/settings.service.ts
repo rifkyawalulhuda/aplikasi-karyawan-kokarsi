@@ -111,12 +111,16 @@ export class SettingsService {
       updates.push({ key: 'loginRightTextColor', value: payload.loginRightTextColor })
     }
 
-    for (const { key, value } of updates) {
-      await this.prisma.appSetting.upsert({
-        where: { key },
-        update: { value },
-        create: { key, value },
-      })
+    if (updates.length > 0) {
+      await Promise.all(
+        updates.map(({ key, value }) =>
+          this.prisma.appSetting.upsert({
+            where: { key },
+            update: { value },
+            create: { key, value },
+          })
+        )
+      )
     }
 
     return this.getGeneralSettings()

@@ -1,6 +1,5 @@
 import { defineEventHandler, getCookie, proxyRequest } from 'h3'
 
-const BACKEND = 'http://localhost:3001'
 
 export default defineEventHandler(async (event) => {
   const token = getCookie(event, 'auth_token') ?? ''
@@ -8,7 +7,7 @@ export default defineEventHandler(async (event) => {
   if (token) {
     headers.Authorization = 'Bearer ' + token
   }
-  return proxyRequest(event, BACKEND + '/api/employees/import-template', {
+  return proxyRequest(event, BACKEND + '/employees/import-template', {
     headers,
   })
 })

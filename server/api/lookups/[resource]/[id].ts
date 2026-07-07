@@ -1,6 +1,5 @@
 import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } from 'h3'
 
-const BACKEND = 'http://localhost:3001/api'
 
 const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types', 'departments']
 

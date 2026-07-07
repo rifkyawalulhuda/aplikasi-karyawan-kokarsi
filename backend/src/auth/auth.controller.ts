@@ -1,6 +1,7 @@
 import { Controller, Post, Body, UseGuards, Request, Put } from '@nestjs/common'
 import { AuthService } from './auth.service'
 import { AuthGuard } from '@nestjs/passport'
+import { Throttle, SkipThrottle } from '@nestjs/throttler'
 import { IsString, MinLength } from 'class-validator'
 
 class LoginDto {
@@ -13,10 +14,12 @@ class ChangePasswordDto {
   @IsString() @MinLength(6) newPassword: string
 }
 
+@SkipThrottle()
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   async login(@Body() dto: LoginDto) {
     const admin = await this.auth.validateAdmin(dto.employeeNo, dto.password)
