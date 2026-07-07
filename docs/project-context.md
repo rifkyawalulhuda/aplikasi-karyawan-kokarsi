@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-07 (v11) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-07 (v12) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening** (JWT fail-fast, httpOnly cookie, CORS spesifik, rate limiting login, path traversal sanitasi, file validation magic bytes), **centralisasi BACKEND_URL** di `server/utils/backend.ts` (Nitro auto-import), **SharedModule + DashboardCacheService** (cache invalidasi berbasis event bukan TTL buta), **Unit Test Jest** untuk AuthService, dan berbagai perbaikan bug (FK violation hapus karyawan, duplicate `/api` di proxy routes, path duplikat uploads, dashboard chart SP).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening** (JWT fail-fast, httpOnly cookie, CORS spesifik, rate limiting login, path traversal sanitasi, file validation magic bytes), **centralisasi BACKEND_URL** di `server/utils/backend.ts` (Nitro auto-import), **SharedModule + DashboardCacheService** (cache invalidasi berbasis event bukan TTL buta), **Unit Test Jest** untuk AuthService, berbagai perbaikan bug (FK violation hapus karyawan, duplicate `/api` di proxy routes, path duplikat uploads, dashboard chart SP), dan **PM2 process manager** untuk auto-restart frontend/backend production.
 
 ---
 
@@ -30,13 +30,15 @@ docker compose -f docker-compose.db.yml up -d
 #    user: kokarsi
 #    password: kokarsi2026
 
-# 2. Start Backend
-cd E:\Github\aplikasi-karyawan-kokarsi\backend
-node dist/main.js
-
-# 3. Start Frontend
+# 2. Start Backend + Frontend via PM2
 cd E:\Github\aplikasi-karyawan-kokarsi
-pnpm dev
+.\deploy\start.ps1
+
+# 3. Monitor proses
+pm2 list
+pm2 monit
+pm2 logs kokarsi-frontend
+pm2 logs kokarsi-backend
 ```
 
 ### Production (Cloudflare Tunnel)
@@ -58,6 +60,18 @@ pnpm build
 ```bash
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
 NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
+```
+
+### Manajemen PM2 (production)
+```powershell
+pm2 list                          # status semua proses
+pm2 monit                         # monitor realtime
+pm2 logs kokarsi-frontend         # logs frontend
+pm2 logs kokarsi-backend          # logs backend
+pm2 restart kokarsi-frontend      # restart setelah pnpm build
+pm2 restart kokarsi-backend       # restart setelah compile backend
+pm2 startup                       # auto-start saat Windows boot (jalankan sebagai Admin sekali)
+pm2 save                          # simpan daftar proses aktif
 ```
 
 ---
@@ -144,6 +158,7 @@ NODE_OPTIONS="--max-old-space-size=4096" npx tsc -p tsconfig.json
 | 75 | Fix typo 'Koprasi' → 'Koperasi', 'departement' → 'departemen' | `backend/src/warning-letters/pdf-generator.service.ts`, `backend/src/lookups/lookups.service.ts` |
 | 76 | Fix font path hardcoded Windows — cross-platform via FONT_DIR env, fallback per OS | `backend/src/warning-letters/pdf-generator.service.ts` |
 | 77 | Fix AuthenticatedUser + JwtPayload interface — ganti type `any` di auth files | `backend/src/auth/auth.service.ts`, `backend/src/auth/jwt.strategy.ts` |
+| 78 | PM2 process manager — auto-restart frontend/backend, env injection, logging | `ecosystem.config.cjs`, `deploy/start.ps1`, `.env` (root) |
 ---
 
 ## Arsitektur
@@ -581,6 +596,20 @@ routeRules: {
 }
 ```
 CORS tidak lagi wildcard — gunakan env `NUXT_ALLOWED_ORIGINS` untuk production (contoh: `https://kokarsi-sankyu.web.id`).
+
+### PM2 Process Manager
+Backend dan frontend production dijalankan via PM2 (bukan `Start-Process` langsung):
+- Config: `ecosystem.config.cjs` di root project
+- Env frontend di-inject dari `.env` root via `env_file`
+- Auto-restart jika crash (max 10 restarts, delay 3s)
+- Log: `logs/frontend-out.log`, `logs/backend-err.log`, dll
+
+```powershell
+pm2 list                    # status proses
+pm2 logs kokarsi-frontend   # logs frontend
+pm2 restart kokarsi-backend # restart backend setelah compile
+pm2 startup && pm2 save     # auto-start saat Windows boot
+```
 
 ### Email Notifikasi (Maileroo)
 Cron job berjalan setiap hari **jam 00:01 WIB** — update status kontrak + kirim email ke semua user.

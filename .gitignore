@@ -38,3 +38,11 @@ tmp/
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# PM2 logs
+logs/
+
+# Production env (buat sendiri dari .env.example)
+.env
+.env.*
+!.env.example

@@ -23,17 +23,10 @@ if ($Stop) {
   Get-Process -Name "cloudflared" -ErrorAction SilentlyContinue | Stop-Process -Force
   Write-Host "  [ok] cloudflared stopped"
 
-  # Stop frontend (node .output/server/index.mjs)
-  Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandLine -match "\.output"
-  } | Stop-Process -Force -ErrorAction SilentlyContinue
-
-  # Stop backend node process
-  Get-Process -Name "node" -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandLine -match "dist[/\\]main"
-  } | Stop-Process -Force -ErrorAction SilentlyContinue
-
-  Write-Host "  [ok] node processes stopped"
+  # Stop frontend + backend via PM2
+  pm2 stop kokarsi-frontend kokarsi-backend 2>$null
+  pm2 delete kokarsi-frontend kokarsi-backend 2>$null
+  Write-Host "  [ok] node processes stopped (PM2)"
 
   # Stop Docker PostgreSQL (hanya jika mode docker)
   if ($Mode -eq "docker") {
@@ -103,13 +96,16 @@ if ($Mode -eq "docker") {
 Write-Host "[2/4] Starting Backend (NestJS)..." -ForegroundColor Yellow
 $backendDist = Join-Path $Backend "dist\main.js"
 if (-not (Test-Path $backendDist)) {
-  Write-Host "ERROR: $backendDist not found. Run 'npm run build' in backend/ first." -ForegroundColor Red
+  Write-Host "ERROR: $backendDist not found. Run 'npx tsc -p tsconfig.json' in backend/ first." -ForegroundColor Red
   exit 1
 }
-Start-Process -FilePath "node" -ArgumentList $backendDist `
-  -WorkingDirectory $Backend `
-  -WindowStyle Minimized
-Write-Host "      Backend started on :3001" -ForegroundColor Green
+$ecosystemConfig = Join-Path $Root "ecosystem.config.cjs"
+pm2 start $ecosystemConfig --only kokarsi-backend
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "ERROR: Failed to start backend via PM2." -ForegroundColor Red
+  exit 1
+}
+Write-Host "      Backend started on :3001 (PM2)" -ForegroundColor Green
 
 # Give the backend a moment to bind its port
 Start-Sleep -Seconds 3
@@ -121,10 +117,12 @@ if (-not (Test-Path $frontendEntry)) {
   Write-Host "ERROR: $frontendEntry not found. Run 'pnpm build' first." -ForegroundColor Red
   exit 1
 }
-Start-Process -FilePath "node" -ArgumentList $frontendEntry `
-  -WorkingDirectory $Root `
-  -WindowStyle Minimized
-Write-Host "      Frontend started on :3000" -ForegroundColor Green
+pm2 start $ecosystemConfig --only kokarsi-frontend
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "ERROR: Failed to start frontend via PM2." -ForegroundColor Red
+  exit 1
+}
+Write-Host "      Frontend started on :3000 (PM2)" -ForegroundColor Green
 
 # 4. Cloudflare Tunnel
 Write-Host "[4/4] Starting Cloudflare Tunnel..." -ForegroundColor Yellow

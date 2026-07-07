@@ -12,6 +12,7 @@ Install software berikut di mesin baru:
 |----------|-------|---------|
 | Node.js | 24.x | https://nodejs.org |
 | pnpm | terbaru | `npm install -g pnpm` |
+| PM2 | terbaru | `npm install -g pm2` |
 | Cloudflared | terbaru | `winget install --id Cloudflare.cloudflared` |
 | Docker Desktop | terbaru | https://www.docker.com/products/docker-desktop (jika mode docker) |
 | PostgreSQL | 16.x | https://www.postgresql.org/download/windows/ (jika mode native) |
@@ -30,8 +31,10 @@ E:\Github\aplikasi-karyawan-kokarsi\
   │   ├── uploads\              # Foto karyawan & dokumen kontrak
   │   ├── prisma\               # Schema database
   │   ├── node_modules\
-  │   └── .env                  # Konfigurasi environment
+  │   └── .env                  # Konfigurasi environment backend
   ├── node_modules\
+  ├── .env                      # Konfigurasi environment frontend (production)
+  ├── ecosystem.config.cjs      # PM2 process config
   ├── docker-compose.db.yml     # Hanya jika mode Docker
   └── deploy\                   # Script deployment
 ```
@@ -54,16 +57,35 @@ C:\Users\<USERNAME>\.cloudflared\
 **Mode Docker** (port 5435):
 ```env
 DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan"
+JWT_SECRET="isi-dengan-random-string-minimal-32-karakter"
+PORT=3001
+MAILEROO_API_KEY=your-api-key
+FONT_DIR=C:/Windows/Fonts
 ```
 
 **Mode Native** (port 5432 default PostgreSQL):
 ```env
 DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5432/kokarsi_karyawan"
+JWT_SECRET="isi-dengan-random-string-minimal-32-karakter"
+PORT=3001
 ```
 
 Jika port PostgreSQL di mesin baru berbeda, sesuaikan angka port-nya.
 
-### 2. Sesuaikan `~\.cloudflared\config.yml`
+### 2. Sesuaikan `.env` di root (Frontend production)
+
+Buat file `.env` di root project (copy dari `.env.example`):
+```env
+NODE_ENV=production
+BACKEND_URL=http://localhost:3001/api
+BACKEND_ROOT=http://localhost:3001
+NUXT_ALLOWED_ORIGINS=https://kokarsi-sankyu.web.id,http://localhost:3000
+NUXT_PUBLIC_SITE_URL=https://kokarsi-sankyu.web.id
+```
+
+> **Penting:** File `.env` root ini **wajib ada** agar frontend tidak crash saat startup. PM2 akan inject env ini otomatis ke proses frontend via `ecosystem.config.cjs`.
+
+### 3. Sesuaikan `~\.cloudflared\config.yml`
 
 Buka file `C:\Users\<USERNAME>\.cloudflared\config.yml` dan update path `credentials-file` sesuai username Windows di mesin baru:
 
@@ -174,13 +196,12 @@ psql -U kokarsi -d kokarsi_karyawan -h localhost -f "E:\Backup\kokarsi\backup_TA
 
 ## Jalankan Aplikasi
 
+Backend dan frontend sekarang dijalankan via **PM2** (process manager) yang memberikan auto-restart, logging, dan monitoring.
+
 ### Mode Docker
 
 ```powershell
 cd E:\Github\aplikasi-karyawan-kokarsi
-.\deploy\START.bat
-
-# Atau langsung via PowerShell
 .\deploy\start.ps1
 ```
 
@@ -195,11 +216,55 @@ cd E:\Github\aplikasi-karyawan-kokarsi
 
 ```powershell
 # Mode Docker
-.\deploy\STOP.bat
+.\deploy\start.ps1 -Stop
 
 # Mode Native
 .\deploy\start.ps1 -Stop -Mode native
 ```
+
+---
+
+## Manajemen PM2
+
+Setelah aplikasi berjalan via `start.ps1`, Anda bisa menggunakan perintah PM2 langsung:
+
+```powershell
+# Lihat status semua proses
+pm2 list
+
+# Monitor realtime (CPU, memory, logs)
+pm2 monit
+
+# Lihat logs frontend
+pm2 logs kokarsi-frontend
+
+# Lihat logs backend
+pm2 logs kokarsi-backend
+
+# Restart frontend saja (misal setelah pnpm build)
+pm2 restart kokarsi-frontend
+
+# Restart backend saja (misal setelah compile)
+pm2 restart kokarsi-backend
+
+# Restart semua
+pm2 restart ecosystem.config.cjs
+```
+
+### Auto-start saat Windows Boot (Opsional)
+
+Jalankan sekali sebagai **Administrator** untuk mendaftarkan PM2 ke Windows Task Scheduler:
+
+```powershell
+# Install pm2-windows-startup
+npm install -g pm2-windows-startup
+pm2-startup install
+
+# Save daftar proses yang sedang berjalan
+pm2 save
+```
+
+Setelah ini, PM2 akan otomatis start saat Windows boot dan menjalankan semua proses yang tersimpan.
 
 ---
 
@@ -286,6 +351,11 @@ Jika ingin setup Task Scheduler tanpa script, buka **Task Scheduler** Windows:
 | Foto karyawan tidak tampil | Pastikan folder `backend\uploads\` sudah di-copy dari mesin lama |
 | Task Scheduler tidak jalan | Jalankan `setup-backup-schedule.ps1` sebagai Administrator |
 | Port conflict | Cek port yang digunakan: `netstat -ano | findstr :3000` atau `:3001` |
+| Frontend close sendiri / crash | Pastikan `.env` di root ada dan terisi. Cek `pm2 logs kokarsi-frontend` untuk detail error |
+| PM2 proses tidak muncul di `pm2 list` | Jalankan `.\deploy\start.ps1` dari folder root project |
+| Frontend tidak restart otomatis saat boot | Jalankan `pm2 startup` dan `pm2 save` sebagai Administrator |
+| `start.ps1 stuck di [1/4] Starting PostgreSQL` | Docker Desktop belum fully running. Tunggu icon Docker Desktop di system tray hijau/normal, lalu jalankan ulang |
+| Backend error "JWT_SECRET environment variable is required" | `backend\.env` tidak ada atau kosong. Copy dari `backend\.env.example` dan isi nilai JWT_SECRET |
 
 ---
 
@@ -293,13 +363,16 @@ Jika ingin setup Task Scheduler tanpa script, buka **Task Scheduler** Windows:
 
 - [ ] Node.js 24 terinstall
 - [ ] pnpm terinstall (`npm install -g pnpm`)
+- [ ] PM2 terinstall (`npm install -g pm2`)
 - [ ] Cloudflared terinstall (`winget install --id Cloudflare.cloudflared`)
 - [ ] Docker Desktop atau PostgreSQL native terinstall
-- [ ] Folder project sudah di-copy
+- [ ] Folder project sudah di-copy (termasuk `ecosystem.config.cjs`)
 - [ ] Folder `~\.cloudflared\` sudah di-copy
 - [ ] `config.yml` sudah diupdate dengan username Windows baru
-- [ ] `backend\.env` sudah diupdate dengan port yang benar
+- [ ] `backend\.env` sudah diupdate dengan port yang benar dan `JWT_SECRET` terisi
+- [ ] `.env` di root project sudah dibuat (copy dari `.env.example`, isi `NUXT_ALLOWED_ORIGINS` dengan domain production)
 - [ ] Database sudah dibuat (mode native)
 - [ ] Aplikasi bisa diakses di `http://localhost:3000`
 - [ ] `https://kokarsi-sankyu.web.id` bisa diakses dari luar
 - [ ] Backup otomatis sudah di-setup
+- [ ] PM2 auto-start sudah dikonfigurasi (`pm2 startup` + `pm2 save`)
