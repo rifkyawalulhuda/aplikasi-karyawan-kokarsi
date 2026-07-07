@@ -301,10 +301,11 @@ export class EmployeesService {
       )
     }
 
-    // Hapus related records yang tidak punya cascade delete sebelum hapus employee
+    // Hapus SEMUA related records dalam transaksi agar data bersih
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.employeeStatusHistory.deleteMany({ where: { employeeId: id } })
       await tx.employeeOffboarding.deleteMany({ where: { employeeId: id } })
+      await tx.employeeDocument.deleteMany({ where: { employeeId: id } })
       return tx.employee.delete({ where: { id } })
     })
     this.dashboardCache.invalidate()

@@ -16,6 +16,16 @@ const { data: employee, status, refresh, error } = await useFetch<Employee>(
   }
 )
 
+// Fetch dokumen karyawan (sertifikasi & ijin)
+const { data: docsRes } = await useFetch<{ data: any[]; total: number }>(
+  () => `/api/employee-documents?employeeId=${employeeId.value}&limit=999`,
+  {
+    credentials: 'include',
+    watch: [employeeId],
+  }
+)
+const employeeDocs = computed(() => docsRes.value?.data ?? [])
+
 const fetchError = computed(() => error.value as any)
 
 // Edit modal
@@ -112,6 +122,11 @@ useHead({
               <!-- F. Riwayat Surat Peringatan -->
               <KaryawanDetailWarningLetterList
                 :letters="employee.warningLetters ?? []"
+              />
+
+              <!-- G. Sertifikasi & Ijin -->
+              <KaryawanDetailEmployeeDocumentList
+                :documents="employeeDocs"
               />
             </div>
           </div>

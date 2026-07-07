@@ -57,13 +57,19 @@ export class EmployeeDocumentsService {
     limit = 10,
     search,
     status,
+    employeeId,
   }: {
     page?: number
     limit?: number
     search?: string
     status?: string
+    employeeId?: number
   }) {
     const where: any = {}
+
+    if (employeeId) {
+      where.employeeId = employeeId
+    }
 
     if (search) {
       where.OR = [
