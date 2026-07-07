@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
+import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 import { h } from 'vue'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
+const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -183,6 +184,23 @@ function sortableHeader(label: string, key: string) {
   ])
 }
 
+// --- Row Actions ---
+function getRowItems(row: Row<EmployeeDocument>): DropdownMenuItem[][] {
+  const doc = row.original
+  const group1: DropdownMenuItem[] = [
+    { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(doc) },
+  ]
+  if (doc.fileUrl) {
+    group1.push({ label: 'Unduh File', icon: 'i-lucide-download', onSelect: () => window.open(doc.fileUrl, '_blank') })
+  }
+  return [
+    group1,
+    [
+      { label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => confirmDelete(doc) },
+    ],
+  ]
+}
+
 // --- Table Columns ---
 const columns: TableColumn<EmployeeDocument>[] = [
   {
@@ -249,45 +267,11 @@ const columns: TableColumn<EmployeeDocument>[] = [
   {
     id: 'actions',
     header: 'Aksi',
-    cell: ({ row }: { row: Row<EmployeeDocument> }) => {
-      const doc = row.original
-      const buttons = [
-        h(UButton, {
-          icon: 'i-lucide-pencil',
-          size: 'xs',
-          color: 'neutral',
-          variant: 'ghost',
-          title: 'Edit',
-          onClick: () => openEdit(doc),
-        }),
-      ]
-
-      if (doc.fileUrl) {
-        buttons.push(
-          h(UButton, {
-            icon: 'i-lucide-download',
-            size: 'xs',
-            color: 'neutral',
-            variant: 'ghost',
-            title: 'Unduh File',
-            onClick: () => window.open(doc.fileUrl, '_blank'),
-          }),
-        )
-      }
-
-      buttons.push(
-        h(UButton, {
-          icon: 'i-lucide-trash-2',
-          size: 'xs',
-          color: 'error',
-          variant: 'ghost',
-          title: 'Hapus',
-          onClick: () => confirmDelete(doc),
-        }),
-      )
-
-      return h('div', { class: 'flex items-center gap-1 justify-end' }, buttons)
-    },
+    cell: ({ row }: { row: Row<EmployeeDocument> }) => h('div', { class: 'flex justify-end' }, [
+      h(UDropdownMenu, {
+        items: getRowItems(row),
+      }, () => h(UButton, { icon: 'i-lucide-ellipsis', variant: 'ghost', color: 'neutral' })),
+    ]),
   },
 ]
 
