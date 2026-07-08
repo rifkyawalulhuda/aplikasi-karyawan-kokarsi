@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-07 (v13) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-08 (v14) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent).
 
 ---
 
@@ -168,6 +168,12 @@ pm2 save                          # simpan daftar proses aktif
 | 85 | Fix hapus karyawan bersih — tambah employeeDocument.deleteMany di transaksi hapus | `backend/src/employees/employees.service.ts:remove` |
 | 86 | Fix P2002 duplikat contractNo di renew — tangkap error dengan pesan ramah user | `backend/src/contracts/contracts.service.ts:renew` |
 | 87 | Fix Nitro proxy tidak teruskan employeeId filter — tambah query param di server/api/employee-documents/index.ts | `server/api/employee-documents/index.ts` |
+| 88 | Auto-generate nomor kontrak — format `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`, reset per tahun, ikut `startDate` | `backend/src/shared/document-number.util.ts`, `backend/src/contracts/contracts.service.ts:generateContractNo` |
+| 89 | Auto-generate nomor SP — format `{seq}/SP/KUKP/SII/{bulan_romawi}/{tahun}`, ikut `letterDate` | `backend/src/warning-letters/warning-letters.service.ts:generateLetterNumber` |
+| 90 | Preview nomor dinamis — fetch `/preview-number?startDate=` atau `?letterDate=`, refetch otomatis saat tanggal berubah | `server/api/contracts/preview-number.get.ts`, `server/api/warning-letters/preview-number.get.ts` |
+| 91 | Upload file di Surat Peringatan — endpoint `POST :id/file`, diskStorage ke `uploads/warning-letters/`, magic bytes validation, max 10MB | `backend/src/warning-letters/warning-letters.controller.ts`, `server/api/warning-letters/[id]/file.post.ts` |
+| 92 | Tombol "Unduh Dokumen" kondisional di tabel aksi SP — hanya muncul jika `documentUrl` ada | `app/pages/dokumen/surat-peringatan/index.vue:getRowItems` |
+| 93 | CodeGraph integration — pre-indexed knowledge graph 171 files, 1.957 nodes, 4.425 edges, auto-sync on file change | `.codegraph/` (generated), `codegraph` CLI global |
 ---
 
 ## Arsitektur
@@ -359,11 +365,13 @@ server/
       [id]/document.post.ts       # Upload dokumen scan PDF
       [id]/generate-document.post.ts # Generate dokumen kontrak
       [id]/renew.post.ts   # POST perpanjang kontrak (renewal flow)
+      preview-number.get.ts  # GET preview nomor kontrak (?startDate=)
     warning-letters/
       index.ts              # GET list + POST
       [id].ts               # GET + PUT + DELETE
       [id]/generate.get.ts  # GET generate PDF (download)
       [id]/preview.get.ts   # GET preview PDF (inline)
+      [id]/file.post.ts     # POST upload file dokumen SP
       escalation/[employeeId].get.ts # GET status eskalasi SP per karyawan
     settings/
       general.get.ts        # GET pengaturan umum
@@ -405,6 +413,7 @@ backend/
       simple-cache.util.ts  # SimpleCache<T> utility (TTL-based, tidak dipakai dashboard)
       dashboard-cache.service.ts  # DashboardCacheService — cache invalidasi berbasis event
       shared.module.ts      # SharedModule — export DashboardCacheService ke semua modul
+      document-number.util.ts  # buildDocumentNumber — auto-generate nomor {seq}/KK|SP/KUKP/SII/{romawi}/{tahun}
     main.ts                 # Static assets /uploads + dotenv/config
   prisma/
     schema.prisma           # Employee, Contract, WarningLetter, MasterAdmin, UserAccount, DocumentType, EmployeeDocument, dll
@@ -412,11 +421,12 @@ backend/
     logo-sp.png             # Logo PT Sankyu untuk PDF surat peringatan
     contract-logo-pkwt.jpg  # Logo kop surat PKWT
     contract-logo-mitra.jpg # Logo kop surat MITRA
-  uploads/
-    photos/                 # Foto karyawan
-    contracts/              # Hasil generate dokumen kontrak PDF
-    contracts/scanned/      # Dokumen kontrak scan (upload manual)
-    employee-docs/          # File dokumen sertifikasi & ijin karyawan
+    uploads/
+      photos/                 # Foto karyawan
+      contracts/              # Hasil generate dokumen kontrak PDF
+      contracts/scanned/      # Dokumen kontrak scan (upload manual)
+      employee-docs/          # File dokumen sertifikasi & ijin karyawan
+      warning-letters/        # File dokumen SP yang diupload (PDF/gambar)
 ```
 
 ---
@@ -533,6 +543,9 @@ backend/
 | DELETE | `/api/warning-letters/:id` | Hapus surat peringatan |
 | GET | `/api/warning-letters/:id/generate` | Generate PDF SP (download) |
 | GET | `/api/warning-letters/:id/preview` | Preview PDF SP (inline) |
+| POST | `/api/warning-letters/:id/file` | Upload file dokumen SP (PDF/JPG/PNG/WEBP, max 10MB) |
+| GET | `/api/contracts/preview-number?startDate=` | Preview nomor kontrak berdasarkan tanggal mulai |
+| GET | `/api/warning-letters/preview-number?letterDate=` | Preview nomor SP berdasarkan tanggal surat |
 | GET | `/api/warning-letters/escalation/:employeeId` | Status eskalasi SP per karyawan |
 | GET | `/api/users` | List master user (admin only) |
 | GET | `/api/users/pengurus` | List pengurus (semua role) |

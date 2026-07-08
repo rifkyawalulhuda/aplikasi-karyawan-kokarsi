@@ -1,8 +1,8 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.2 (Revisi)  
-**Tanggal**: 3 Juli 2026  
+**Versi Dokumen**: 1.3 (Revisi)  
+**Tanggal**: 8 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
 
@@ -77,6 +77,13 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - **PKWT**: 2 kolom paralel bilingual (ID/EN), 11 pasal, font Times New Roman, terminologi Perusahaan/Karyawan, data dinamis (tanggal mulai/akhir, nominal upah), signature table box dengan border
 - **MITRA**: single column full-width, preambule detail (akta pendirian, identitas mitra), signature di halaman terpisah
 - Multi-page layout: title block hanya di halaman 1, border kolom menyesuaikan tinggi konten (no blank gap)
+- **Auto-generate nomor kontrak**: format `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`, running number 3 digit reset per tahun, bulan/tahun mengikuti Tanggal Mulai kontrak. Tidak ada input manual nomor kontrak.
+- **Contract State Machine**: status DRAFT (belum final) → AKTIF → AKAN_HABIS (≤30 hari) → EXPIRED. Cron job harian 00:01 WIB untuk auto-shift status.
+- **Contract Renewal Flow**: perpanjangan via endpoint renew terpisah, parent harus AKAN_HABIS atau EXPIRED
+- **Contract Guards**: Anti-Overlap (blokir jika ada kontrak aktif berjalan), SP3 Lockout (blokir jika SP3 aktif), State Lock (blokir edit field kunci jika sudah ditandatangani)
+- **Contract History Chain**: field parentContractId untuk audit trail renewal
+- **Contract Summary Mode**: halaman kontrak tampil 1 baris per karyawan (kontrak representatif)
+- **Preview nomor kontrak**: form menampilkan nomor yang akan digenerate (readonly), update saat tanggal mulai berubah
 
 ### 4.3 Status & Validitas
 - Filter & search karyawan berdasarkan status (`AKTIF` / `KONTRAK_EXPIRED` / `RESIGN` / `PHK`)
@@ -90,12 +97,39 @@ Menjadi sistem manajemen data karyawan internal yang andal dan mudah digunakan *
 - Pengelolaan master data lookup (work location, job role, departement, dll) hanya untuk **Master Admin**
 - Audit log sederhana (siapa yang mengubah data kapan)
 - Konfirmasi hapus data menggunakan toast bawaan UI sebelum aksi delete dijalankan
+- Pengaturan Umum: Nama Ketua Koperasi, Nama Organisasi, Logo Organisasi (upload JPG/PNG/WEBP/SVG, max 2MB)
+- Import Data Karyawan Bulk via Excel template (dengan dropdown validasi data master, all-or-nothing transaction)
+- Login Image: upload gambar latar halaman login (kiri/kanan)
 
 ### 4.5 Dashboard (Internal)
 - Total karyawan aktif
 - Jumlah karyawan `AKTIF`, `KONTRAK_EXPIRED`, `RESIGN`, dan `PHK`
 - Kontrak yang akan habis dalam 30 hari
 - Grafik distribusi job level & lokasi kerja
+
+### 4.6 Surat Peringatan (SP)
+- CRUD Surat Peringatan dengan eskalasi SP1 → SP2 → SP3
+- Rule eskalasi: SP1 aktif → default SP2, SP2 aktif → hanya SP3, SP3 aktif → blokir pembuatan SP baru sampai masa berlaku habis
+- Generate PDF surat peringatan otomatis (pdfkit, kop surat + logo PT. Sankyu)
+- Upload file dokumen SP (scan/dokumen fisik, PDF/gambar, max 10MB)
+- **Auto-generate nomor surat**: format `{seq}/SP/KUKP/SII/{bulan_romawi}/{tahun}`, running number 3 digit reset per tahun, bulan/tahun mengikuti Tanggal Surat
+- Preview nomor surat otomatis di form (read-only, update saat tanggal surat berubah)
+- Field: Nomor Surat (auto), Karyawan, Jenis Pelanggaran (array), Level SP (1/2/3), Tanggal Surat, Berlaku Sampai (auto +6 bulan), Pengurus Koperasi
+
+### 4.7 Master Dokumen
+- Master data tipe dokumen sebagai referensi untuk Sertifikasi & Ijin
+- CRUD Master Dokumen di halaman Master Data (tab baru, Admin only)
+- Field: Nama Dokumen, Jenis Dokumen (dropdown: Sertifikat/Lisensi/Izin/Rahasia/Lainnya), Penerbit
+- Menjadi sumber dropdown di form Sertifikasi & Ijin
+
+### 4.8 Sertifikasi & Ijin Karyawan
+- CRUD dokumen karyawan berdasarkan Master Dokumen
+- Status otomatis: AKTIF (masa berlaku > 30 hari), AKAN_EXPIRED (≤30 hari), EXPIRED (sudah lewat)
+- Upload file dokumen terkait (PDF/gambar, max 10MB)
+- Tombol Perpanjang untuk dokumen yang AKAN_EXPIRED atau EXPIRED
+- Notifikasi email otomatis saat status berubah ke AKAN_EXPIRED atau EXPIRED (cron harian 00:01 WIB)
+- Section read-only di halaman Detail Karyawan (timeline scrollable + link Lihat Semua)
+- Field: Karyawan, Nama Dokumen (dari Master Dokumen), Nomor Dokumen, Jenis (autofill), Penerbit (autofill), Masa Berlaku (datepicker), Catatan, File Upload, Status (otomatis)
 
 ---
 
@@ -200,6 +234,47 @@ CREATE TABLE employee_offboarding (
 );
 ```
 
+#### Tabel Baru (Implementasi Lanjutan)
+
+**document_types** — Master tipe dokumen
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| id | INT | Primary key |
+| name | VARCHAR(255) | Nama dokumen |
+| documentType | VARCHAR(50) | Jenis: SERTIFIKAT/LISENSI/IZIN/RAHASIA/LAINNYA |
+| issuer | VARCHAR(255) | Nama penerbit |
+
+**employee_documents** — Sertifikasi & Ijin karyawan
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| id | INT | Primary key |
+| employeeId | INT | FK ke employees |
+| documentTypeId | INT | FK ke document_types |
+| documentNumber | VARCHAR(100) | Nomor dokumen |
+| expiryDate | DATE | Masa berlaku |
+| notes | TEXT | Catatan (opsional) |
+| fileUrl | VARCHAR(500) | Path file upload (opsional) |
+| status | ENUM | AKTIF / AKAN_EXPIRED / EXPIRED |
+| createdAt | DATETIME | Waktu dibuat |
+| updatedAt | DATETIME | Waktu diupdate |
+
+**warning_letters** — Surat Peringatan (field tambahan dari implementasi)
+| Kolom baru | Tipe | Keterangan |
+|------------|------|-----------|
+| documentUrl | VARCHAR | Path file dokumen SP yang diupload (opsional) |
+
+Juga update tabel **contracts** — field tambahan:
+| Field baru | Tipe | Keterangan |
+|------------|------|-----------|
+| signedDate | DATE | Tanggal penandatanganan (opsional) |
+| positionLabel | VARCHAR | Label posisi di dokumen PDF |
+| workLocationLabel | VARCHAR | Label lokasi kerja di dokumen PDF |
+| baseCompensation | INT | Nominal kompensasi/upah |
+| templateId | INT | FK ke contract_templates |
+| generatedPdfUrl | VARCHAR | Path hasil generate PDF |
+| generatedAt | DATETIME | Tanggal generate PDF |
+| parentContractId | INT | FK self-reference untuk renewal chain |
+
 ---
 
 ## 7. Technical Architecture
@@ -207,7 +282,7 @@ CREATE TABLE employee_offboarding (
 ### Tech Stack (sesuai diagram revisi)
 
 **Frontend**
-- Nuxt 3 (Vue 3)
+- Nuxt 4 (Vue 3)
 - Nuxt UI + Nuxt Dashboard Template
 - Tanstack Table v8
 - Vite
@@ -251,6 +326,9 @@ CREATE TABLE employee_offboarding (
 | FR-16 | Layout PDF MITRA: preambule detail, single column full-width | P1        |
 | FR-17 | Signature block dengan table box border, nama uppercase+bold+underline | P1        |
 | FR-18 | Multi-page layout fix: no blank gap di halaman 2+ | P1        |
+| FR-19 | CRUD Surat Peringatan dengan eskalasi SP1→SP2→SP3, nomor auto-generate, generate PDF pdfkit, upload file dokumen SP | P1 |
+| FR-20 | Master data tipe dokumen + CRUD Sertifikasi & Ijin karyawan, status otomatis, notifikasi email AKAN_EXPIRED/EXPIRED | P1 |
+| FR-21 | Auto-generate nomor kontrak & SP dengan format running number 3 digit reset per tahun, preview di form sebelum submit | P1 |
 
 ---
 
@@ -319,7 +397,7 @@ CREATE TABLE employee_offboarding (
 ---
 
 **Catatan Akhir**:
-Dokumen ini adalah **versi 1.1** (revisi sesuai permintaan).  
+Dokumen ini adalah **versi 1.3** (revisi sesuai permintaan).  
 Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
 
 ---
