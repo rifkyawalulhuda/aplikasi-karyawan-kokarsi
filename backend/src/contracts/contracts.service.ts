@@ -5,6 +5,7 @@ import { ContractStatus, Prisma } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { buildDocumentNumber } from '../shared/document-number.util'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -14,7 +15,6 @@ function calculateDaysRemaining(endDate: Date): number {
 
 export class CreateContractDto {
   @IsInt() employeeId: number
-  @IsString() contractNo: string
   @IsDateString() startDate: string
   @IsDateString() endDate: string
   @IsOptional() @IsInt() contractTypeId?: number
@@ -32,7 +32,6 @@ export class CreateContractDto {
 export class UpdateContractDto extends CreateContractDto {}
 
 export class RenewContractDto {
-  @IsString() contractNo: string
   @IsDateString() startDate: string
   @IsDateString() endDate: string
   @IsOptional() @IsInt() contractTypeId?: number
@@ -97,6 +96,15 @@ export class ContractsService {
         status: true,
       },
     },
+  }
+
+  async generateContractNo(refDate: Date = new Date()): Promise<string> {
+    const year = refDate.getFullYear()
+    const existing = await this.prisma.contract.findMany({
+      where: { contractNo: { endsWith: `/${year}` } },
+      select: { contractNo: true },
+    })
+    return buildDocumentNumber(existing.map(c => c.contractNo), 'KK', refDate)
   }
 
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
@@ -337,9 +345,11 @@ export class ContractsService {
     }
 
     try {
+      const contractNo = await this.generateContractNo(new Date(dto.startDate))
       const contract = await this.prisma.contract.create({
         data: {
           ...dto,
+          contractNo,
           parentContractId: autoParentId,
           startDate: new Date(dto.startDate),
           endDate: new Date(dto.endDate),
@@ -352,7 +362,7 @@ export class ContractsService {
       return this.withComputedStatus(contract)
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
-        throw new ConflictException(`Nomor kontrak "${dto.contractNo}" sudah digunakan. Gunakan nomor kontrak yang berbeda.`)
+        throw new ConflictException(`Nomor kontrak sudah digunakan. Silakan coba lagi.`)
       }
       throw error
     }
@@ -395,10 +405,11 @@ export class ContractsService {
     }
 
     try {
+      const contractNo = await this.generateContractNo(new Date(dto.startDate))
       const contract = await this.prisma.contract.create({
         data: {
           employeeId: parent.employeeId,
-          contractNo: dto.contractNo,
+          contractNo,
           startDate: new Date(dto.startDate),
           endDate: new Date(dto.endDate),
           contractTypeId: dto.contractTypeId,
@@ -418,7 +429,7 @@ export class ContractsService {
       return this.withComputedStatus(contract)
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
-        throw new ConflictException(`Nomor kontrak "${dto.contractNo}" sudah digunakan. Gunakan nomor kontrak yang berbeda.`)
+        throw new ConflictException(`Nomor kontrak sudah digunakan. Silakan coba lagi.`)
       }
       throw error
     }

@@ -46,6 +46,12 @@ export class ContractsController {
     return this.service.getExpiring(days ? +days : 30)
   }
 
+  @Get('preview-number')
+  async previewContractNumber(@Query('startDate') startDate?: string) {
+    const ref = startDate ? new Date(startDate) : new Date()
+    return { contractNo: await this.service.generateContractNo(ref) }
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)

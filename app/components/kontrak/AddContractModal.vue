@@ -15,6 +15,22 @@ const emit = defineEmits<{
 const toast = useToast()
 const loading = ref(false)
 
+const previewContractNo = ref('')
+const loadingPreview = ref(false)
+
+async function fetchPreviewContractNo() {
+  loadingPreview.value = true
+  try {
+    const qs = state.startDate ? `?startDate=${state.startDate}` : ''
+    const res = await $fetch<{ contractNo: string }>(`/api/contracts/preview-number${qs}`, { credentials: 'include' })
+    previewContractNo.value = res.contractNo
+  } catch {
+    previewContractNo.value = '-'
+  } finally {
+    loadingPreview.value = false
+  }
+}
+
 const { data: employeesRes } = await useFetch<{ data: { id: number; fullName: string; employeeNo: string }[] }>('/api/employees', {
   query: { limit: 999 },
   lazy: true
@@ -48,7 +64,6 @@ const contractTemplateOptions = computed<LookupOption[]>(() =>
 
 const schema = z.object({
   employeeId: z.number({ error: 'Karyawan wajib dipilih' }),
-  contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
@@ -63,7 +78,6 @@ type Schema = z.output<typeof schema>
 
 const state = reactive<Partial<Schema>>({
   employeeId: undefined,
-  contractNo: '',
   startDate: '',
   endDate: '',
   contractTypeId: undefined,
@@ -141,7 +155,12 @@ const statusColorMap: Record<string, string> = {
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     resetForm()
+    fetchPreviewContractNo()
   }
+})
+
+watch(() => state.startDate, (val) => {
+  if (val) fetchPreviewContractNo()
 })
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
@@ -164,7 +183,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
 function resetForm() {
   state.employeeId = undefined
-  state.contractNo = ''
   state.startDate = ''
   state.endDate = ''
   state.contractTypeId = undefined
@@ -255,8 +273,13 @@ function resetForm() {
           </div>
         </div>
 
-        <UFormField label="No. Kontrak" name="contractNo" required>
-          <UInput v-model="state.contractNo" placeholder="PKWT/2026/001" class="w-full" />
+        <UFormField label="No. Kontrak (otomatis)">
+          <UInput
+            :model-value="loadingPreview ? 'Memuat...' : previewContractNo"
+            readonly
+            class="w-full opacity-70 font-mono"
+            placeholder="Memuat nomor..."
+          />
         </UFormField>
 
         <div class="grid grid-cols-2 gap-3">

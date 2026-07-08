@@ -15,6 +15,11 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const loading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const selectedFile = ref<File | null>(null)
+const replaceFile = ref(false)
+
+const hasExistingFile = computed(() => !!props.warningLetter?.documentUrl)
 
 const { data: employeesRes } = useFetch<{ data: Employee[] }>('/api/employees', {
   query: { limit: 1000 },
@@ -89,6 +94,11 @@ function populateForm(letter: WarningLetter) {
 
   // Set selectedEmployee untuk info card
   selectedEmployee.value = employees.value.find(e => e.id === letter.employeeId) ?? null
+
+  // Reset file state
+  selectedFile.value = null
+  replaceFile.value = false
+  if (fileInput.value) fileInput.value.value = ''
 }
 
 // Auto-calculate Berlaku Sampai = Tanggal Surat + 6 bulan
@@ -122,6 +132,41 @@ function onUserChange(id: number | undefined) {
   state.processedByName = user?.name ?? ''
 }
 
+function onFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+  if (!allowed.includes(file.type)) {
+    toast.add({ title: 'Format tidak didukung', description: 'Gunakan file PDF, JPG, PNG, atau WEBP.', color: 'error' })
+    target.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({ title: 'File terlalu besar', description: 'Maksimal 10 MB.', color: 'error' })
+    target.value = ''
+    return
+  }
+  selectedFile.value = file
+}
+
+function clearFile() {
+  selectedFile.value = null
+  replaceFile.value = false
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+async function uploadFile(spId: number) {
+  if (!selectedFile.value) return
+  const formData = new FormData()
+  formData.append('file', selectedFile.value)
+  await $fetch(`/api/warning-letters/${spId}/file`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  })
+}
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   if (!props.warningLetter?.id) return
   loading.value = true
@@ -134,6 +179,16 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       },
       credentials: 'include',
     })
+    if (selectedFile.value) {
+      try {
+        await uploadFile(props.warningLetter.id)
+      } catch {
+        toast.add({ title: 'SP berhasil diperbarui', description: 'Namun gagal mengupload file.', color: 'warning' })
+        emit('saved')
+        emit('update:open', false)
+        return
+      }
+    }
     toast.add({ title: 'Surat peringatan berhasil diperbarui', color: 'success' })
     emit('saved')
     emit('update:open', false)
@@ -237,6 +292,39 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
             class="w-full"
             @update:model-value="onUserChange"
           />
+        </UFormField>
+
+        <!-- File Dokumen SP -->
+        <UFormField label="File Dokumen (opsional)">
+          <div class="space-y-2">
+            <!-- File existing -->
+            <div v-if="hasExistingFile && !replaceFile" class="flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm">
+              <UIcon name="i-lucide-paperclip" class="size-4 shrink-0 text-muted" />
+              <span class="min-w-0 flex-1 truncate text-muted">File sudah ada</span>
+              <a :href="props.warningLetter!.documentUrl!" target="_blank" class="shrink-0 text-primary hover:underline">Unduh</a>
+              <UButton label="Ganti" size="xs" color="neutral" variant="subtle" @click="replaceFile = true" />
+            </div>
+            <!-- File input -->
+            <div v-if="!hasExistingFile || replaceFile">
+              <input
+                ref="fileInput"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                class="hidden"
+                @change="onFileChange"
+              />
+              <div
+                class="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-default px-3 py-3 text-sm text-muted transition hover:border-primary hover:text-primary"
+                @click="fileInput?.click()"
+              >
+                <UIcon name="i-lucide-upload" class="size-4 shrink-0" />
+                <span v-if="!selectedFile">Klik untuk pilih file (PDF, JPG, PNG, WEBP · maks. 10 MB)</span>
+                <span v-else class="truncate text-highlighted">{{ selectedFile.name }}</span>
+                <UButton v-if="selectedFile" icon="i-lucide-x" size="xs" color="neutral" variant="ghost" class="ml-auto shrink-0" @click.stop="clearFile()" />
+              </div>
+              <p v-if="replaceFile" class="mt-1 text-xs text-muted">File baru akan menggantikan file lama setelah disimpan.</p>
+            </div>
+          </div>
         </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">
