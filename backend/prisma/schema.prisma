@@ -330,3 +330,13 @@ enum DocStatus {
   AKAN_EXPIRED
   EXPIRED
 }
+
+model Company {
+  id      Int     @id @default(autoincrement())
+  name    String  @db.VarChar(255)
+  address String? @db.Text
+  email   String? @db.VarChar(255)
+  phone   String? @db.VarChar(50)
+
+  @@map("companies")
+}
