@@ -147,6 +147,19 @@ const links = computed<NavigationMenuItem[]>(() => [
     ],
   },
   {
+    label: 'Dokumen Legal',
+    icon: 'i-lucide-file-signature',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [
+      {
+        label: 'Kontrak Customer/Vendor',
+        to: '/dokumen-legal/kontrak-vendor',
+        onSelect: () => { open.value = false },
+      },
+    ],
+  },
+  {
     label: 'Pengaturan',
     to: '/settings',
     icon: 'i-lucide-settings',

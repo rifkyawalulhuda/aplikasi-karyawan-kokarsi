@@ -338,5 +338,53 @@ model Company {
   email   String? @db.VarChar(255)
   phone   String? @db.VarChar(50)
 
+  vendorContracts    VendorContract[]
+
   @@map("companies")
+}
+
+enum VendorContractCategory {
+  CUSTOMER
+  VENDOR
+}
+
+enum VendorContractStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+enum VendorDocType {
+  DOKUMEN_KONTRAK
+  DOKUMEN_PERJANJIAN
+  SURAT_PENAWARAN
+  ADDENDUM
+  AMENDMENT
+  SURAT
+}
+
+model VendorContract {
+  id                Int                     @id @default(autoincrement())
+  category          VendorContractCategory
+  companyId         Int
+  documentName      String                  @db.VarChar(255)
+  documentNumber    String                  @db.VarChar(100)
+  documentType      VendorDocType
+  createdDate       DateTime                @db.Date
+  needsRenewal      Boolean                 @default(false)
+  startDate         DateTime?               @db.Date
+  endDate           DateTime?               @db.Date
+  status            VendorContractStatus    @default(TIDAK_AKTIF)
+  motherAgreementId Int?
+  location          String?                 @db.VarChar(255)
+  notes             String?                 @db.Text
+  fileUrl           String?                 @db.VarChar(500)
+  company           Company                 @relation(fields: [companyId], references: [id])
+  motherAgreement   VendorContract?         @relation("VendorContractRenewal", fields: [motherAgreementId], references: [id])
+  renewals          VendorContract[]        @relation("VendorContractRenewal")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@map("vendor_contracts")
 }

@@ -4,6 +4,7 @@ import { ContractStatus } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { MailerooService } from '../maileroo/maileroo.service'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { VendorContractsService } from '../vendor-contracts/vendor-contracts.service'
 
 @Injectable()
 export class ContractCronService {
@@ -12,6 +13,7 @@ export class ContractCronService {
   constructor(
     private prisma: PrismaService,
     private maileroo: MailerooService,
+    private vendorContractsService: VendorContractsService,
   ) {}
 
   // Setiap hari jam 00:01 WIB (Asia/Jakarta)
@@ -198,5 +200,31 @@ export class ContractCronService {
     }
 
     this.logger.log('Employee document status sync complete.')
+
+    // ── VendorContract status sync ──────────────────────────────────────
+    this.logger.log('Syncing vendor contract statuses...')
+    const { akanBerakhir: vcAkan, expired: vcExpired } = await this.vendorContractsService.syncExpiredStatuses()
+
+    const vcChanges = [
+      ...vcAkan.map((vc: any) => ({
+        documentName: vc.documentName,
+        documentNumber: vc.documentNumber,
+        companyName: vc.company?.name ?? '-',
+        endDate: vc.endDate!,
+        newStatus: 'AKAN_BERAKHIR' as const,
+      })),
+      ...vcExpired.map((vc: any) => ({
+        documentName: vc.documentName,
+        documentNumber: vc.documentNumber,
+        companyName: vc.company?.name ?? '-',
+        endDate: vc.endDate!,
+        newStatus: 'EXPIRED' as const,
+      })),
+    ]
+
+    if (vcChanges.length > 0) {
+      await this.maileroo.sendVendorContractNotification(vcChanges)
+        .catch(err => this.logger.error(`Vendor contract notification failed: ${err?.message}`))
+    }
   }
 }
