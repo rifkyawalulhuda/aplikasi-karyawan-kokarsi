@@ -5,6 +5,7 @@ import { ContractStatus, Prisma } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { buildDocumentNumber } from '../shared/document-number.util'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -14,7 +15,6 @@ function calculateDaysRemaining(endDate: Date): number {
 
 export class CreateContractDto {
   @IsInt() employeeId: number
-  @IsString() contractNo: string
   @IsDateString() startDate: string
   @IsDateString() endDate: string
   @IsOptional() @IsInt() contractTypeId?: number
@@ -32,7 +32,6 @@ export class CreateContractDto {
 export class UpdateContractDto extends CreateContractDto {}
 
 export class RenewContractDto {
-  @IsString() contractNo: string
   @IsDateString() startDate: string
   @IsDateString() endDate: string
   @IsOptional() @IsInt() contractTypeId?: number
@@ -99,6 +98,15 @@ export class ContractsService {
     },
   }
 
+  async generateContractNo(refDate: Date = new Date()): Promise<string> {
+    const year = refDate.getFullYear()
+    const existing = await this.prisma.contract.findMany({
+      where: { contractNo: { endsWith: `/${year}` } },
+      select: { contractNo: true },
+    })
+    return buildDocumentNumber(existing.map(c => c.contractNo), 'KK', refDate)
+  }
+
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
     const employeeStatus = (contract as any).employee?.employmentStatus
     return {
@@ -152,11 +160,22 @@ export class ContractsService {
   private async checkTerminationLockout(employeeId: number) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { employmentStatus: true },
+      select: {
+        employmentStatus: true,
+        offboarding: true,
+      },
     })
     if (!employee) throw new NotFoundException('Karyawan tidak ditemukan')
 
     if (employee.employmentStatus === 'RESIGN' || employee.employmentStatus === 'PHK') {
+      // Jika tidak ada offboarding record, status stale — reset otomatis dan izinkan
+      if (!employee.offboarding) {
+        await this.prisma.employee.update({
+          where: { id: employeeId },
+          data: { employmentStatus: 'KONTRAK_EXPIRED' },
+        })
+        return
+      }
       throw new ForbiddenException(
         'Pembuatan atau perpanjangan kontrak diblokir karena karyawan sudah tidak aktif (RESIGN/PHK).',
       )
@@ -326,9 +345,11 @@ export class ContractsService {
     }
 
     try {
+      const contractNo = await this.generateContractNo(new Date(dto.startDate))
       const contract = await this.prisma.contract.create({
         data: {
           ...dto,
+          contractNo,
           parentContractId: autoParentId,
           startDate: new Date(dto.startDate),
           endDate: new Date(dto.endDate),
@@ -341,7 +362,7 @@ export class ContractsService {
       return this.withComputedStatus(contract)
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
-        throw new ConflictException(`Nomor kontrak "${dto.contractNo}" sudah digunakan. Gunakan nomor kontrak yang berbeda.`)
+        throw new ConflictException(`Nomor kontrak sudah digunakan. Silakan coba lagi.`)
       }
       throw error
     }
@@ -383,27 +404,35 @@ export class ContractsService {
       throw new ConflictException('Karyawan masih memiliki kontrak aktif lain yang berjalan.')
     }
 
-    const contract = await this.prisma.contract.create({
-      data: {
-        employeeId: parent.employeeId,
-        contractNo: dto.contractNo,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        contractTypeId: dto.contractTypeId,
-        templateId: dto.templateId,
-        signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
-        positionLabel: dto.positionLabel,
-        workLocationLabel: dto.workLocationLabel,
-        baseCompensation: dto.baseCompensation,
-        templateData: dto.templateData as any,
-        documentUrl: dto.documentUrl,
-        parentContractId: parentId,
-      },
-      include: this.include,
-    })
-    await this.syncEmployeeStatus(parent.employeeId)
-    this.dashboardCache.invalidate()
-    return this.withComputedStatus(contract)
+    try {
+      const contractNo = await this.generateContractNo(new Date(dto.startDate))
+      const contract = await this.prisma.contract.create({
+        data: {
+          employeeId: parent.employeeId,
+          contractNo,
+          startDate: new Date(dto.startDate),
+          endDate: new Date(dto.endDate),
+          contractTypeId: dto.contractTypeId,
+          templateId: dto.templateId,
+          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+          positionLabel: dto.positionLabel,
+          workLocationLabel: dto.workLocationLabel,
+          baseCompensation: dto.baseCompensation,
+          templateData: dto.templateData as any,
+          documentUrl: dto.documentUrl,
+          parentContractId: parentId,
+        },
+        include: this.include,
+      })
+      await this.syncEmployeeStatus(parent.employeeId)
+      this.dashboardCache.invalidate()
+      return this.withComputedStatus(contract)
+    } catch (error: any) {
+      if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
+        throw new ConflictException(`Nomor kontrak sudah digunakan. Silakan coba lagi.`)
+      }
+      throw error
+    }
   }
 
   async update(id: number, dto: UpdateContractDto) {

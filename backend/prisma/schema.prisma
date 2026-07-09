@@ -113,6 +113,7 @@ model Employee {
   offboarding           EmployeeOffboarding?
   masterAdmin           MasterAdmin?
   warningLetters        WarningLetter[]
+  employeeDocuments     EmployeeDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -294,4 +295,172 @@ enum TerminationType {
 enum AdminRole {
   ADMIN
   PENGELOLA_KOPERASI
+}
+
+model DocumentType {
+  id           Int    @id @default(autoincrement())
+  name         String @db.VarChar(255)
+  documentType String @db.VarChar(50)
+  issuer       String @db.VarChar(255)
+
+  employeeDocuments EmployeeDocument[]
+
+  @@map("document_types")
+}
+
+model EmployeeDocument {
+  id             Int          @id @default(autoincrement())
+  employeeId     Int
+  documentTypeId Int
+  documentNumber String       @db.VarChar(100)
+  expiryDate     DateTime     @db.Date
+  notes          String?      @db.Text
+  fileUrl        String?      @db.VarChar(500)
+  status         DocStatus    @default(AKTIF)
+  employee       Employee     @relation(fields: [employeeId], references: [id])
+  documentType   DocumentType @relation(fields: [documentTypeId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("employee_documents")
+}
+
+enum DocStatus {
+  AKTIF
+  AKAN_EXPIRED
+  EXPIRED
+}
+
+model Company {
+  id      Int     @id @default(autoincrement())
+  name    String  @db.VarChar(255)
+  address String? @db.Text
+  email   String? @db.VarChar(255)
+  phone   String? @db.VarChar(50)
+
+  vendorContracts    VendorContract[]
+
+  @@map("companies")
+}
+
+enum VendorContractCategory {
+  CUSTOMER
+  VENDOR
+}
+
+enum VendorContractStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+enum VendorDocType {
+  DOKUMEN_KONTRAK
+  DOKUMEN_PERJANJIAN
+  SURAT_PENAWARAN
+  ADDENDUM
+  AMENDMENT
+  SURAT
+}
+
+model VendorContract {
+  id                Int                     @id @default(autoincrement())
+  category          VendorContractCategory
+  companyId         Int
+  documentName      String                  @db.VarChar(255)
+  documentNumber    String                  @db.VarChar(100)
+  documentType      VendorDocType
+  createdDate       DateTime                @db.Date
+  needsRenewal      Boolean                 @default(false)
+  startDate         DateTime?               @db.Date
+  endDate           DateTime?               @db.Date
+  status            VendorContractStatus    @default(TIDAK_AKTIF)
+  motherAgreementId Int?
+  renewedFromId     Int?                    @unique
+  location          String?                 @db.VarChar(255)
+  notes             String?                 @db.Text
+  fileUrl           String?                 @db.VarChar(500)
+  company           Company                 @relation(fields: [companyId], references: [id])
+  motherAgreement   VendorContract?         @relation("VendorContractRenewal", fields: [motherAgreementId], references: [id])
+  renewals          VendorContract[]        @relation("VendorContractRenewal")
+  renewedFrom       VendorContract?         @relation("ContractSuccession", fields: [renewedFromId], references: [id])
+  renewedTo         VendorContract?         @relation("ContractSuccession")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@map("vendor_contracts")
+}
+
+enum LegalKoperasiCategory {
+  IZIN
+  SERTIFIKAT
+  KEBIJAKAN
+  DOKUMEN_INTERNAL
+  DOKUMEN_B3
+  LAIN_LAIN
+}
+
+enum LegalKoperasiStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+model LegalKoperasi {
+  id              Int                     @id @default(autoincrement())
+  category        LegalKoperasiCategory
+  documentName    String                  @db.VarChar(255)
+  documentNumber  String                  @db.VarChar(100)
+  publisher       String                  @db.VarChar(255)
+  documentDate    DateTime                @db.Date
+  needsRenewal    Boolean                 @default(false)
+  startDate       DateTime?               @db.Date
+  endDate         DateTime?               @db.Date
+  status          LegalKoperasiStatus     @default(TIDAK_AKTIF)
+  location        String?                 @db.VarChar(255)
+  notes           String?                 @db.Text
+  fileUrl         String?                 @db.VarChar(500)
+  renewedFromId   Int?                    @unique
+  renewedFrom     LegalKoperasi?          @relation("LegalSuccession", fields: [renewedFromId], references: [id])
+  renewedTo       LegalKoperasi?          @relation("LegalSuccession")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@map("legal_koperasi")
+}
+
+enum NotificationCategory {
+  KONTRAK_KARYAWAN
+  SERTIFIKASI_IJIN
+  KONTRAK_VENDOR
+  LEGAL_KOPERASI
+}
+
+enum NotificationSeverity {
+  WARNING
+  CRITICAL
+}
+
+model Notification {
+  id          Int                    @id @default(autoincrement())
+  category    NotificationCategory
+  severity    NotificationSeverity
+  title       String                 @db.VarChar(255)
+  message     String                 @db.VarChar(500)
+  sourceType  String                 @db.VarChar(50)
+  sourceId    Int
+  triggerDay  Int
+  deeplink    String                 @db.VarChar(255)
+  isRead      Boolean                @default(false)
+  readAt      DateTime?
+  resolvedAt  DateTime?
+  expiryDate  DateTime               @db.Date
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([sourceType, sourceId, triggerDay])
+  @@index([isRead, resolvedAt])
+  @@map("notifications")
 }

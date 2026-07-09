@@ -1,7 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException, UploadedFile, UseInterceptors, BadRequestException, Res } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
-import { LookupsService } from './lookups.service'
+import { FileInterceptor } from '@nestjs/platform-express'
+import { LookupsService, CreateDocumentTypeDto, CreateCompanyDto } from './lookups.service'
 import { IsNotEmpty, IsString } from 'class-validator'
+import * as XLSX from 'xlsx'
 
 class CreateLookupDto {
   @IsString()
@@ -149,5 +151,83 @@ export class LookupsController {
   deleteContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.deleteContractType(id)
+  }
+
+  @Get('document-types')
+  getDocumentTypes() {
+    return this.service.getDocumentTypes()
+  }
+
+  @Post('document-types')
+  createDocumentType(@Request() req: any, @Body() dto: CreateDocumentTypeDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createDocumentType(dto)
+  }
+
+  @Put('document-types/:id')
+  updateDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateDocumentTypeDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.updateDocumentType(id, dto)
+  }
+
+  @Delete('document-types/:id')
+  deleteDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteDocumentType(id)
+  }
+
+  // ── Company endpoints ────────────────────────────────────────────────
+  @Get('companies')
+  getCompanies() {
+    return this.service.getCompanies()
+  }
+
+  @Get('companies/import-template')
+  async importCompanyTemplate(@Res() res: any) {
+    const buffer = await this.service.generateCompanyImportTemplate()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="template-import-perusahaan.xlsx"')
+    res.send(buffer)
+  }
+
+  @Post('companies/bulk-import')
+  @UseInterceptors(FileInterceptor('file'))
+  async bulkImportCompanies(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('File tidak ditemukan')
+
+    const workbook = XLSX.read(file.buffer, { type: 'buffer' })
+    const sheet = workbook.Sheets[workbook.SheetNames[0]]
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet, { raw: false, defval: '' })
+
+    const companies: CreateCompanyDto[] = rows.map((row: any) => ({
+      name: String(row['Nama Perusahaan'] ?? '').trim(),
+      address: String(row['Alamat'] ?? '').trim() || undefined,
+      email: String(row['Email'] ?? '').trim() || undefined,
+      phone: String(row['No. Kontak'] ?? '').trim() || undefined,
+    })).filter(c => c.name)
+
+    if (companies.length === 0) {
+      throw new BadRequestException('Tidak ada data valid di file. Pastikan kolom "Nama Perusahaan" terisi.')
+    }
+
+    return this.service.bulkCreateCompanies(companies)
+  }
+
+  @Post('companies')
+  createCompany(@Request() req: any, @Body() dto: CreateCompanyDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createCompany(dto)
+  }
+
+  @Put('companies/:id')
+  updateCompany(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateCompanyDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.updateCompany(id, dto)
+  }
+
+  @Delete('companies/:id')
+  deleteCompany(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteCompany(id)
   }
 }

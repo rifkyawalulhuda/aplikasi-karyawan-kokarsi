@@ -1,5 +1,20 @@
-import { BadRequestException, ConflictException, Injectable } from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+import { IsNotEmpty, IsOptional, IsString, IsEmail } from 'class-validator'
+import * as XLSX from 'xlsx'
+
+export class CreateDocumentTypeDto {
+  @IsString() @IsNotEmpty() name: string
+  @IsString() @IsNotEmpty() documentType: string
+  @IsString() @IsNotEmpty() issuer: string
+}
+
+export class CreateCompanyDto {
+  @IsString() @IsNotEmpty() name: string
+  @IsString() @IsOptional() address?: string
+  @IsEmail() @IsOptional() email?: string
+  @IsString() @IsOptional() phone?: string
+}
 
 @Injectable()
 export class LookupsService {
@@ -21,6 +36,14 @@ export class LookupsService {
 
   private departmentsMigrationError() {
     return new BadRequestException('Tabel departments belum tersedia. Jalankan migrasi database terlebih dahulu.')
+  }
+
+  private isMissingCompaniesTable(error: any) {
+    return error?.code === 'P2021' || error?.meta?.modelName === 'Company'
+  }
+
+  private companiesMigrationError() {
+    return new BadRequestException('Tabel companies belum tersedia. Jalankan migrasi database terlebih dahulu.')
   }
 
   private isForeignKeyViolation(error: any) {
@@ -54,7 +77,7 @@ export class LookupsService {
       throw error
     })
 
-    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments] = await Promise.all([
+    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies] = await Promise.all([
       this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }),
@@ -67,8 +90,13 @@ export class LookupsService {
         if (this.isMissingDepartmentsTable(error)) return []
         throw error
       }),
+      this.prisma.documentType.findMany({ orderBy: { name: 'asc' } }).catch(() => []),
+      this.prisma.company.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+        if (this.isMissingCompaniesTable(error)) return []
+        throw error
+      }),
     ])
-    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments }
+    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies }
   }
 
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
@@ -173,5 +201,90 @@ export class LookupsService {
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departemen')
       throw error
     })
+  }
+
+  async getDocumentTypes() {
+    return this.prisma.documentType.findMany({ orderBy: { name: 'asc' } })
+  }
+
+  async createDocumentType(dto: CreateDocumentTypeDto) {
+    return this.prisma.documentType.create({ data: dto })
+  }
+
+  async updateDocumentType(id: number, dto: CreateDocumentTypeDto) {
+    const existing = await this.prisma.documentType.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
+    return this.prisma.documentType.update({ where: { id }, data: dto })
+  }
+
+  async deleteDocumentType(id: number) {
+    const existing = await this.prisma.documentType.findUnique({ where: { id } })
+    if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
+    return this.prisma.documentType.delete({ where: { id } })
+  }
+
+  getCompanies() {
+    return this.prisma.company.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+      if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
+      throw error
+    })
+  }
+
+  createCompany(dto: CreateCompanyDto) {
+    return this.prisma.company.create({ data: dto }).catch((error) => {
+      if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
+      throw error
+    })
+  }
+
+  updateCompany(id: number, dto: CreateCompanyDto) {
+    return this.prisma.company.update({ where: { id }, data: dto }).catch((error) => {
+      if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
+      throw error
+    })
+  }
+
+  deleteCompany(id: number) {
+    return this.prisma.company.delete({ where: { id } }).catch((error) => {
+      if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
+      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('perusahaan')
+      throw error
+    })
+  }
+
+  async generateCompanyImportTemplate(): Promise<Buffer> {
+    const data = [
+      { 'Nama Perusahaan': 'PT Contoh Sejahtera', 'Alamat': 'Jl. Merdeka No. 1, Jakarta', 'Email': 'info@contoh.co.id', 'No. Kontak': '021-1234567' },
+      { 'Nama Perusahaan': 'CV Mitra Jaya', 'Alamat': 'Jl. Sudirman No. 2, Bandung', 'Email': 'admin@mitrajaya.com', 'No. Kontak': '022-7654321' },
+    ]
+    const worksheet = XLSX.utils.json_to_sheet(data)
+    worksheet['!cols'] = [{ wch: 30 }, { wch: 40 }, { wch: 30 }, { wch: 20 }]
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Perusahaan')
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+  }
+
+  async bulkCreateCompanies(companies: CreateCompanyDto[]) {
+    const created: any[] = []
+    const errors: { row: number; name: string; error: string }[] = []
+    for (let i = 0; i < companies.length; i++) {
+      const c = companies[i]
+      try {
+        const result = await this.prisma.company.create({ data: c })
+        created.push(result)
+      } catch (error: any) {
+        const msg = error?.code === 'P2002'
+          ? `Nama perusahaan "${c.name}" sudah ada`
+          : (error?.message ?? 'Gagal membuat perusahaan')
+        errors.push({ row: i + 2, name: c.name, error: msg })
+      }
+    }
+    return {
+      total: companies.length,
+      created: created.length,
+      failed: errors.length,
+      errors,
+      data: created,
+    }
   }
 }

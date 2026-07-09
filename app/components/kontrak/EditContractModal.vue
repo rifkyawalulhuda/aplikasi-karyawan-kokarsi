@@ -160,8 +160,12 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       </div>
 
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
-        <UFormField label="No. Kontrak" name="contractNo" required>
-          <UInput v-model="state.contractNo" class="w-full" />
+        <UFormField label="No. Kontrak">
+          <UInput
+            :model-value="state.contractNo"
+            readonly
+            class="w-full opacity-60 font-mono"
+          />
         </UFormField>
 
         <div class="grid grid-cols-2 gap-3">

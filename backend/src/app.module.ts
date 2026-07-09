@@ -13,6 +13,10 @@ import { WarningLettersModule } from './warning-letters/warning-letters.module'
 import { ContractTemplatesModule } from './contract-templates/contract-templates.module'
 import { SettingsModule } from './settings/settings.module'
 import { ContractCronModule } from './contract-cron/contract-cron.module'
+import { EmployeeDocumentsModule } from './employee-documents/employee-documents.module'
+import { VendorContractsModule } from './vendor-contracts/vendor-contracts.module'
+import { LegalKoperasiModule } from './legal-koperasi/legal-koperasi.module'
+import { NotificationsModule } from './notifications/notifications.module'
 
 @Module({
   imports: [
@@ -29,6 +33,10 @@ import { ContractCronModule } from './contract-cron/contract-cron.module'
     ContractTemplatesModule,
     SettingsModule,
     ContractCronModule,
+    EmployeeDocumentsModule,
+    VendorContractsModule,
+    LegalKoperasiModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

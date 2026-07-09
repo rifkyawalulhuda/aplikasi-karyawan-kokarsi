@@ -139,6 +139,29 @@ const links = computed<NavigationMenuItem[]>(() => [
         to: '/dokumen/surat-peringatan',
         onSelect: () => { open.value = false },
       },
+      {
+        label: 'Sertifikasi & Ijin',
+        to: '/dokumen/sertifikasi-ijin',
+        onSelect: () => { open.value = false },
+      },
+    ],
+  },
+  {
+    label: 'Dokumen Legal',
+    icon: 'i-lucide-file-signature',
+    defaultOpen: true,
+    type: 'trigger',
+    children: [
+      {
+        label: 'Kontrak Customer/Vendor',
+        to: '/dokumen-legal/kontrak-vendor',
+        onSelect: () => { open.value = false },
+      },
+      {
+        label: 'Legal Koperasi',
+        to: '/dokumen-legal/legal-koperasi',
+        onSelect: () => { open.value = false },
+      },
     ],
   },
   {
@@ -197,6 +220,7 @@ const links = computed<NavigationMenuItem[]>(() => [
     >
       <template #header="{ collapsed }">
         <TeamsMenu :collapsed="collapsed" />
+        <NotificationBell :collapsed="collapsed" />
       </template>
 
       <template #default="{ collapsed }">

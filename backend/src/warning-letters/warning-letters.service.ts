@@ -1,13 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsArray, IsDateString, IsNotEmpty } from 'class-validator'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { buildDocumentNumber } from '../shared/document-number.util'
 
 export class CreateWarningLetterDto {
-  @IsString()
-  @IsNotEmpty()
-  letterNumber: string
-
   @IsInt()
   employeeId: number
 
@@ -138,6 +135,15 @@ export class WarningLettersService {
     }
   }
 
+  async generateLetterNumber(refDate: Date = new Date()): Promise<string> {
+    const year = refDate.getFullYear()
+    const existing = await this.prisma.warningLetter.findMany({
+      where: { letterNumber: { endsWith: `/${year}` } },
+      select: { letterNumber: true },
+    })
+    return buildDocumentNumber(existing.map(l => l.letterNumber), 'SP', refDate)
+  }
+
   async create(dto: CreateWarningLetterDto) {
     // Enforce escalation rules server-side (source of truth)
     const status = await this.getEscalationStatus(dto.employeeId)
@@ -151,21 +157,30 @@ export class WarningLettersService {
       )
     }
 
-    const result = await this.prisma.warningLetter.create({
-      data: {
-        letterNumber: dto.letterNumber,
-        employeeId: dto.employeeId,
-        violationType: dto.violationType,
-        warningLevel: dto.warningLevel,
-        letterDate: new Date(dto.letterDate),
-        validUntil: new Date(dto.validUntil),
-        processedById: dto.processedById,
-        processedByName: dto.processedByName,
-      },
-      include: this.include,
-    })
-    this.dashboardCache.invalidate()
-    return result
+    const letterNumber = await this.generateLetterNumber(new Date(dto.letterDate))
+
+    try {
+      const result = await this.prisma.warningLetter.create({
+        data: {
+          letterNumber,
+          employeeId: dto.employeeId,
+          violationType: dto.violationType,
+          warningLevel: dto.warningLevel,
+          letterDate: new Date(dto.letterDate),
+          validUntil: new Date(dto.validUntil),
+          processedById: dto.processedById,
+          processedByName: dto.processedByName,
+        },
+        include: this.include,
+      })
+      this.dashboardCache.invalidate()
+      return result
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException(`Nomor surat "${letterNumber}" sudah digunakan. Silakan coba lagi.`)
+      }
+      throw error
+    }
   }
 
   async findAll(page = 1, limit = 10, search?: string) {
@@ -234,5 +249,14 @@ export class WarningLettersService {
     const result = await this.prisma.warningLetter.delete({ where: { id } })
     this.dashboardCache.invalidate()
     return result
+  }
+
+  async updateFileUrl(id: number, documentUrl: string) {
+    await this.findOne(id)
+    return this.prisma.warningLetter.update({
+      where: { id },
+      data: { documentUrl },
+      include: this.include,
+    })
   }
 }

@@ -224,15 +224,23 @@ async function handleGeneratePDF(letter: WarningLetter) {
 }
 
 function getRowItems(row: Row<WarningLetter>): DropdownMenuItem[][] {
+  const group1: DropdownMenuItem[] = [
+    { label: 'Lihat Dokumen', icon: 'i-lucide-eye', onSelect: () => openPreview(row.original) },
+    { label: 'Unduh PDF', icon: 'i-lucide-download', onSelect: () => handleGeneratePDF(row.original) },
+    { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) },
+  ]
+
+  if (row.original.documentUrl) {
+    group1.push({
+      label: 'Unduh Dokumen',
+      icon: 'i-lucide-file-down',
+      onSelect: () => window.open(row.original.documentUrl!, '_blank'),
+    })
+  }
+
   return [
-    [
-      { label: 'Lihat Dokumen', icon: 'i-lucide-eye', onSelect: () => openPreview(row.original) },
-      { label: 'Unduh PDF', icon: 'i-lucide-download', onSelect: () => handleGeneratePDF(row.original) },
-      { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) },
-    ],
-    [
-      { label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => handleDelete(row.original.id) },
-    ],
+    group1,
+    [{ label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => handleDelete(row.original.id) }],
   ]
 }
 

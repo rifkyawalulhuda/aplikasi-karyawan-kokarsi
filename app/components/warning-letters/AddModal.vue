@@ -11,6 +11,24 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const loading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const selectedFile = ref<File | null>(null)
+
+const previewLetterNumber = ref('')
+const loadingLetterPreview = ref(false)
+
+async function fetchPreviewLetterNumber() {
+  loadingLetterPreview.value = true
+  try {
+    const qs = state.letterDate ? `?letterDate=${state.letterDate}` : ''
+    const res = await $fetch<{ letterNumber: string }>(`/api/warning-letters/preview-number${qs}`, { credentials: 'include' })
+    previewLetterNumber.value = res.letterNumber
+  } catch {
+    previewLetterNumber.value = '-'
+  } finally {
+    loadingLetterPreview.value = false
+  }
+}
 
 const { data: employeesRes } = useFetch<{ data: Employee[] }>('/api/employees', {
   query: { limit: 1000 },
@@ -84,7 +102,6 @@ async function loadEscalation(employeeId: number) {
 }
 
 const schema = z.object({
-  letterNumber: z.string().min(1, 'Nomor surat wajib diisi'),
   employeeId: z.number({ error: 'Karyawan wajib dipilih' }),
   violationType: z.array(z.string().min(1, 'Deskripsi pelanggaran wajib diisi')).min(1, 'Minimal 1 pelanggaran'),
   warningLevel: z.number({ error: 'Level peringatan wajib dipilih' }),
@@ -97,7 +114,6 @@ const schema = z.object({
 type Schema = z.output<typeof schema>
 
 const state = reactive<Partial<Schema>>({
-  letterNumber: '',
   employeeId: undefined,
   violationType: [''],
   warningLevel: undefined,
@@ -121,6 +137,7 @@ watch(() => props.open, (open) => {
       // Use admin data directly even if not in pengurus list
       state.processedByName = auth.admin?.fullName ?? ''
     }
+    fetchPreviewLetterNumber()
   }
 })
 
@@ -133,6 +150,10 @@ watch(() => state.letterDate, (date) => {
   } else {
     state.validUntil = ''
   }
+})
+
+watch(() => state.letterDate, (val) => {
+  if (val) fetchPreviewLetterNumber()
 })
 
 function onEmployeeChange(id: number | undefined) {
@@ -160,18 +181,66 @@ function onUserChange(id: number | undefined) {
   state.processedByName = user?.name ?? ''
 }
 
+function onFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (!file) return
+  const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
+  if (!allowed.includes(file.type)) {
+    toast.add({ title: 'Format tidak didukung', description: 'Gunakan file PDF, JPG, PNG, atau WEBP.', color: 'error' })
+    target.value = ''
+    return
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    toast.add({ title: 'File terlalu besar', description: 'Maksimal 10 MB.', color: 'error' })
+    target.value = ''
+    return
+  }
+  selectedFile.value = file
+}
+
+function clearFile() {
+  selectedFile.value = null
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+async function uploadFile(spId: number) {
+  if (!selectedFile.value) return
+  const formData = new FormData()
+  formData.append('file', selectedFile.value)
+  await $fetch(`/api/warning-letters/${spId}/file`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  })
+}
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
-    await $fetch('/api/warning-letters', {
+    const filtered = event.data.violationType.filter(v => v.trim())
+    const created = await $fetch<{ id: number }>('/api/warning-letters', {
       method: 'POST',
       body: {
         ...event.data,
-        violationType: event.data.violationType.filter(v => v.trim()),
+        violationType: filtered,
       },
       credentials: 'include',
     })
-    toast.add({ title: 'Surat peringatan berhasil dibuat', color: 'success' })
+
+    if (selectedFile.value) {
+      try {
+        await uploadFile(created.id)
+      } catch {
+        toast.add({ title: 'SP berhasil ditambahkan', description: 'Namun gagal mengupload file.', color: 'warning' })
+        emit('saved')
+        emit('update:open', false)
+        resetForm()
+        return
+      }
+    }
+
+    toast.add({ title: 'Surat peringatan berhasil ditambahkan', color: 'success' })
     emit('saved')
     emit('update:open', false)
     resetForm()
@@ -183,7 +252,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 }
 
 function resetForm() {
-  state.letterNumber = ''
   state.employeeId = undefined
   state.violationType = ['']
   state.warningLevel = undefined
@@ -193,6 +261,8 @@ function resetForm() {
   state.processedByName = ''
   selectedEmployee.value = null
   escalation.value = null
+  selectedFile.value = null
+  if (fileInput.value) fileInput.value.value = ''
 }
 </script>
 
@@ -200,8 +270,13 @@ function resetForm() {
   <UModal :open="props.open" title="Tambah Surat Peringatan" @update:open="emit('update:open', $event)">
     <template #body>
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
-        <UFormField label="Nomor Surat" name="letterNumber" required>
-          <UInput v-model="state.letterNumber" placeholder="Contoh: 195 /KUKP-SII/VIII/2025" class="w-full" />
+        <UFormField label="Nomor Surat (otomatis)">
+          <UInput
+            :model-value="loadingLetterPreview ? 'Memuat...' : previewLetterNumber"
+            readonly
+            class="w-full opacity-70 font-mono"
+            placeholder="Memuat nomor..."
+          />
         </UFormField>
 
         <UFormField label="Karyawan" name="employeeId" required>
@@ -303,6 +378,36 @@ function resetForm() {
             class="w-full"
             @update:model-value="onUserChange"
           />
+        </UFormField>
+
+        <!-- File Dokumen SP -->
+        <UFormField label="File Dokumen (opsional)">
+          <div class="space-y-2">
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              class="hidden"
+              @change="onFileChange"
+            />
+            <div
+              class="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-default px-3 py-3 text-sm text-muted transition hover:border-primary hover:text-primary"
+              @click="fileInput?.click()"
+            >
+              <UIcon name="i-lucide-upload" class="size-4 shrink-0" />
+              <span v-if="!selectedFile">Klik untuk pilih file (PDF, JPG, PNG, WEBP · maks. 10 MB)</span>
+              <span v-else class="truncate text-highlighted">{{ selectedFile.name }}</span>
+              <UButton
+                v-if="selectedFile"
+                icon="i-lucide-x"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                class="ml-auto shrink-0"
+                @click.stop="clearFile()"
+              />
+            </div>
+          </div>
         </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">
