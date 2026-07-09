@@ -70,9 +70,10 @@ export class MailerooService {
   async sendDocumentStatusNotification(changes: DocumentStatusChange[]): Promise<boolean> {
     if (!changes.length) return false
 
-    const users = await this.prisma.userAccount.findMany({
+    const allUsers = await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
     })
+    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping notification')
@@ -175,9 +176,10 @@ export class MailerooService {
   }[]): Promise<boolean> {
     if (!changes.length) return false
 
-    const users = await this.prisma.userAccount.findMany({
+    const allUsers = await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
     })
+    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping legal notification')
@@ -247,9 +249,10 @@ export class MailerooService {
   }[]): Promise<boolean> {
     if (!changes.length) return false
 
-    const users = await this.prisma.userAccount.findMany({
+    const allUsers = await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
     })
+    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping vendor contract notification')
@@ -325,9 +328,10 @@ export class MailerooService {
   async sendContractStatusNotification(changes: ContractStatusChange[]): Promise<boolean> {
     if (!changes.length) return false
 
-    const users = await this.prisma.userAccount.findMany({
+    const allUsers = await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
     })
+    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping notification')

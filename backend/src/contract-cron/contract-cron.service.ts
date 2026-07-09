@@ -137,12 +137,13 @@ export class ContractCronService {
 
     this.logger.log('Starting employee document status synchronization...')
 
-    const in30Days = new Date(now.getTime() + 30 * DAY_MS)
+    const todayStart = startOfDay(now)
+    const in30Days = new Date(todayStart.getTime() + 30 * DAY_MS)
 
     // 1. Dokumen yang akan expired dalam 30 hari (belum berstatus AKAN_EXPIRED)
     const expiringSoon = await this.prisma.employeeDocument.findMany({
       where: {
-        expiryDate: { gte: now, lte: in30Days },
+        expiryDate: { gte: todayStart, lte: in30Days },
         status: { not: 'AKAN_EXPIRED' },
       },
       include: {

@@ -1,8 +1,8 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.3 (Revisi)  
-**Tanggal**: 8 Juli 2026  
+**Versi Dokumen**: 1.4 (Revisi)  
+**Tanggal**: 9 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
 
@@ -329,6 +329,8 @@ Juga update tabel **contracts** — field tambahan:
 | FR-19 | CRUD Surat Peringatan dengan eskalasi SP1→SP2→SP3, nomor auto-generate, generate PDF pdfkit, upload file dokumen SP | P1 |
 | FR-20 | Master data tipe dokumen + CRUD Sertifikasi & Ijin karyawan, status otomatis, notifikasi email AKAN_EXPIRED/EXPIRED | P1 |
 | FR-21 | Auto-generate nomor kontrak & SP dengan format running number 3 digit reset per tahun, preview di form sebelum submit | P1 |
+| FR-22 | Form Perpanjang Legal Koperasi — field Nama Dokumen read-only (tidak dapat diubah saat perpanjang) | P1 |
+| FR-23 | Cron email notifikasi Legal Koperasi & Kontrak Customer/Vendor: date boundary konsisten (`startOfDay`), filter user email null, konfigurasi `MAILEROO_FROM_EMAIL`/`MAILEROO_FROM_NAME` via env | P1 |
 
 ---
 
@@ -397,8 +399,12 @@ Juga update tabel **contracts** — field tambahan:
 ---
 
 **Catatan Akhir**:
-Dokumen ini adalah **versi 1.3** (revisi sesuai permintaan).  
+Dokumen ini adalah **versi 1.4** (revisi sesuai permintaan).  
 Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
+
+**Perubahan v1.4 (9 Juli 2026)**:
+- FR-22: Form Perpanjang Legal Koperasi — field Nama Dokumen read-only saat mode renew
+- FR-23: Bug fix cron email notifikasi — date boundary `startOfDay`, filter email null UserAccount, env vars `MAILEROO_FROM_EMAIL`/`MAILEROO_FROM_NAME`
 
 ---
 
