@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common'
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   IsString, IsInt, IsOptional, IsNotEmpty, IsBoolean, IsDateString, IsEnum,
@@ -29,6 +29,12 @@ export class VendorContractsService {
     company: { select: { id: true, name: true } },
     motherAgreement: {
       select: { id: true, documentName: true, documentNumber: true },
+    },
+    renewedFrom: {
+      select: { id: true, documentName: true, documentNumber: true, fileUrl: true, createdDate: true },
+    },
+    renewedTo: {
+      select: { id: true, documentName: true, documentNumber: true, status: true, createdDate: true },
     },
   }
 
@@ -68,7 +74,12 @@ export class VendorContractsService {
     const [data, total] = await Promise.all([
       this.prisma.vendorContract.findMany({
         where,
-        include: this.include,
+        include: {
+          ...this.include,
+          renewals: {
+            select: { id: true, documentName: true, documentNumber: true, status: true, fileUrl: true, endDate: true },
+          },
+        },
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -84,7 +95,7 @@ export class VendorContractsService {
       include: {
         ...this.include,
         renewals: {
-          select: { id: true, documentName: true, documentNumber: true, status: true },
+          select: { id: true, documentName: true, documentNumber: true, status: true, fileUrl: true, endDate: true },
         },
       },
     })
@@ -215,5 +226,39 @@ export class VendorContractsService {
     }
 
     return { akanBerakhir, expired }
+  }
+
+  async renewContract(id: number, dto: CreateVendorContractDto) {
+    const existing = await this.findOne(id)
+
+    // Check if already renewed (renewedTo means someone already renewed this contract)
+    if ((existing as any).renewedTo) {
+      throw new ConflictException('Kontrak ini sudah pernah diperpanjang')
+    }
+
+    const status = this.computeStatus(
+      dto.needsRenewal,
+      dto.endDate ? new Date(dto.endDate) : null,
+    )
+
+    return this.prisma.vendorContract.create({
+      data: {
+        category: dto.category,
+        companyId: dto.companyId,
+        documentName: dto.documentName,
+        documentNumber: dto.documentNumber,
+        documentType: dto.documentType,
+        createdDate: new Date(dto.createdDate),
+        needsRenewal: dto.needsRenewal,
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        motherAgreementId: dto.motherAgreementId ?? undefined,
+        renewedFromId: id,
+        location: dto.location,
+        notes: dto.notes,
+        status,
+      },
+      include: this.include,
+    })
   }
 }

@@ -32,7 +32,9 @@ interface VendorContract {
   fileUrl?: string | null
   company: { id: number; name: string }
   motherAgreement?: { id: number; documentName: string; documentNumber: string } | null
-  renewals?: { id: number; documentName: string; documentNumber: string; status: string }[]
+  renewals?: { id: number; documentName: string; documentNumber: string; status: string; fileUrl?: string | null; endDate?: string | null }[]
+  renewedFrom?: { id: number; documentName: string; documentNumber: string; fileUrl?: string | null; createdDate: string } | null
+  renewedTo?: { id: number; documentName: string; documentNumber: string; status: string; createdDate: string } | null
   createdAt: string
   updatedAt: string
 }
@@ -109,6 +111,7 @@ const statusColor: Record<string, string> = {
   AKAN_BERAKHIR: 'warning',
   EXPIRED: 'error',
   TIDAK_AKTIF: 'neutral',
+  SUDAH_DIPERPANJANG: 'info',
 }
 
 const statusLabel: Record<string, string> = {
@@ -116,6 +119,13 @@ const statusLabel: Record<string, string> = {
   AKAN_BERAKHIR: 'Akan Berakhir',
   EXPIRED: 'Expired',
   TIDAK_AKTIF: 'Tidak Aktif',
+  SUDAH_DIPERPANJANG: 'Sudah Diperpanjang',
+}
+
+// Computed display status — if contract has been renewed, show "Sudah Diperpanjang"
+function getDisplayStatus(doc: VendorContract): string {
+  if (doc.renewedTo) return 'SUDAH_DIPERPANJANG'
+  return doc.status
 }
 
 const docTypeLabel: Record<string, string> = {
@@ -175,7 +185,7 @@ function getRowItems(row: Row<VendorContract>): DropdownMenuItem[][] {
     { label: 'Lihat Detail', icon: 'i-lucide-eye', onSelect: () => openDetail(doc) },
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(doc) },
   ]
-  if (doc.needsRenewal && (doc.status === 'AKAN_BERAKHIR' || doc.status === 'EXPIRED')) {
+  if (doc.needsRenewal && (doc.status === 'AKAN_BERAKHIR' || doc.status === 'EXPIRED') && !doc.renewedTo) {
     group1.push({ label: 'Perpanjang', icon: 'i-lucide-refresh-cw', onSelect: () => openRenew(doc) })
   }
 
@@ -234,9 +244,18 @@ const columns: TableColumn<VendorContract>[] = [
   },
   {
     accessorKey: 'createdDate',
-    header: () => sortableHeader('Dibuat', 'createdDate'),
+    header: () => sortableHeader('Tanggal Dibuat', 'createdDate'),
     cell: ({ row }: { row: Row<VendorContract> }) =>
       h('span', { class: 'text-sm text-muted whitespace-nowrap' }, formatDate(row.original.createdDate)),
+  },
+  {
+    accessorKey: 'endDate',
+    header: () => sortableHeader('Tanggal Berakhir', 'endDate'),
+    cell: ({ row }: { row: Row<VendorContract> }) => {
+      const doc = row.original
+      if (!doc.needsRenewal || !doc.endDate) return h('span', { class: 'text-sm text-muted' }, '-')
+      return h('span', { class: 'text-sm text-muted whitespace-nowrap' }, formatDate(doc.endDate))
+    },
   },
   {
     accessorKey: 'status',
@@ -244,7 +263,7 @@ const columns: TableColumn<VendorContract>[] = [
     cell: ({ row }: { row: Row<VendorContract> }) => {
       const doc = row.original
       if (!doc.needsRenewal) return h('span', { class: 'text-sm text-muted' }, '-')
-      const s = doc.status
+      const s = getDisplayStatus(doc)
       return h(UBadge, {
         label: statusLabel[s] ?? s,
         color: statusColor[s] ?? 'neutral',
@@ -302,6 +321,20 @@ function openRenew(doc: VendorContract) {
 function openDetail(doc: VendorContract) {
   detailTarget.value = doc
   detailDrawer.value = true
+}
+
+// --- Open contract by ID (for renewedTo link in drawer) ---
+async function openContractById(id: number) {
+  try {
+    const contract = await $fetch<VendorContract>(`/api/vendor-contracts/${id}`, {
+      credentials: 'include',
+    })
+    detailTarget.value = contract
+    detailDrawer.value = true
+  }
+  catch {
+    toast.add({ title: 'Gagal memuat detail kontrak', color: 'error' })
+  }
 }
 </script>
 
@@ -447,5 +480,6 @@ function openDetail(doc: VendorContract) {
     :contract="detailTarget"
     @update:open="(v: boolean) => { detailDrawer = v; if (!v) detailTarget = null }"
     @edit="(doc) => { detailDrawer = false; openEdit(doc) }"
+    @open-contract="openContractById"
   />
 </template>

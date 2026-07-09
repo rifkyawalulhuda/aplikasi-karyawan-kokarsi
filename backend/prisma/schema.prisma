@@ -377,12 +377,15 @@ model VendorContract {
   endDate           DateTime?               @db.Date
   status            VendorContractStatus    @default(TIDAK_AKTIF)
   motherAgreementId Int?
+  renewedFromId     Int?                    @unique
   location          String?                 @db.VarChar(255)
   notes             String?                 @db.Text
   fileUrl           String?                 @db.VarChar(500)
   company           Company                 @relation(fields: [companyId], references: [id])
   motherAgreement   VendorContract?         @relation("VendorContractRenewal", fields: [motherAgreementId], references: [id])
   renewals          VendorContract[]        @relation("VendorContractRenewal")
+  renewedFrom       VendorContract?         @relation("ContractSuccession", fields: [renewedFromId], references: [id])
+  renewedTo         VendorContract?         @relation("ContractSuccession")
   createdAt         DateTime                @default(now())
   updatedAt         DateTime                @updatedAt
 

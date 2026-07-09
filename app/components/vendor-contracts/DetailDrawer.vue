@@ -17,7 +17,9 @@ interface VendorContract {
   fileUrl?: string | null
   company: { id: number; name: string }
   motherAgreement?: { id: number; documentName: string; documentNumber: string } | null
-  renewals?: { id: number; documentName: string; documentNumber: string; status: string }[]
+  renewals?: { id: number; documentName: string; documentNumber: string; status: string; fileUrl?: string | null; endDate?: string | null }[]
+  renewedFrom?: { id: number; documentName: string; documentNumber: string; fileUrl?: string | null; createdDate: string } | null
+  renewedTo?: { id: number; documentName: string; documentNumber: string; status: string; createdDate: string } | null
   createdAt: string
   updatedAt: string
 }
@@ -30,6 +32,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'edit': [contract: VendorContract]
+  'open-contract': [id: number]
 }>()
 
 // --- Helpers ---
@@ -37,6 +40,17 @@ function formatDate(date: string | null | undefined) {
   if (!date) return '-'
   return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+
+function isPdf(url: string): boolean {
+  return url.toLowerCase().includes('.pdf')
+}
+
+const previewOpen = ref(false)
+
+// Reset preview when contract changes
+watch(() => props.contract?.id, () => {
+  previewOpen.value = false
+})
 
 const statusColor: Record<string, string> = {
   AKTIF: 'success',
@@ -98,7 +112,14 @@ const renewalStatusColor: Record<string, string> = {
               size="sm"
             />
             <UBadge
-              v-if="contract?.needsRenewal && contract?.status"
+              v-if="contract?.renewedTo"
+              label="Sudah Diperpanjang"
+              color="info"
+              variant="subtle"
+              size="sm"
+            />
+            <UBadge
+              v-else-if="contract?.needsRenewal && contract?.status"
               :label="statusLabel[contract.status] ?? contract.status"
               :color="statusColor[contract.status] ?? 'neutral'"
               variant="subtle"
@@ -160,7 +181,14 @@ const renewalStatusColor: Record<string, string> = {
 
             <div>
               <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Status</p>
-              <template v-if="contract.needsRenewal">
+              <template v-if="contract.renewedTo">
+                <UBadge
+                  label="Sudah Diperpanjang"
+                  color="info"
+                  variant="subtle"
+                />
+              </template>
+              <template v-else-if="contract.needsRenewal">
                 <UBadge
                   :label="statusLabel[contract.status] ?? contract.status"
                   :color="statusColor[contract.status] ?? 'neutral'"
@@ -194,29 +222,40 @@ const renewalStatusColor: Record<string, string> = {
           </div>
         </div>
 
-        <!-- Renewal chain -->
-        <div v-if="contract.renewals && contract.renewals.length > 0">
-          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">
-            Perpanjangan ({{ contract.renewals.length }})
-          </p>
-          <div class="space-y-2">
-            <div
-              v-for="renewal in contract.renewals"
-              :key="renewal.id"
-              class="rounded-lg border border-default bg-elevated/40 px-3 py-2.5 flex items-start justify-between gap-2"
+        <!-- Perpanjangan dari (this contract is a renewal of an older one) -->
+        <div v-if="contract.renewedFrom">
+          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">Perpanjangan Dari</p>
+          <div class="rounded-lg border border-default bg-elevated/40 px-3 py-2.5">
+            <p class="text-sm font-medium text-highlighted">{{ contract.renewedFrom.documentName }}</p>
+            <p class="text-xs font-mono text-muted mt-0.5">{{ contract.renewedFrom.documentNumber }}</p>
+            <p class="text-xs text-muted mt-0.5">Dibuat: {{ formatDate(contract.renewedFrom.createdDate) }}</p>
+            <a
+              v-if="contract.renewedFrom.fileUrl"
+              :href="contract.renewedFrom.fileUrl"
+              target="_blank"
+              class="flex items-center gap-1 text-primary hover:underline text-xs mt-1"
             >
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-highlighted truncate">{{ renewal.documentName }}</p>
-                <p class="text-xs font-mono text-muted mt-0.5">{{ renewal.documentNumber }}</p>
-              </div>
-              <UBadge
-                :label="renewalStatusLabel[renewal.status] ?? renewal.status"
-                :color="renewalStatusColor[renewal.status] ?? 'neutral'"
-                variant="subtle"
-                size="sm"
-                class="shrink-0 mt-0.5"
-              />
-            </div>
+              <UIcon name="i-lucide-paperclip" class="size-3" />
+              Dokumen Lama
+            </a>
+          </div>
+        </div>
+
+        <!-- Sudah diperpanjang ke (this contract has been renewed) -->
+        <div v-if="contract.renewedTo">
+          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">Diperpanjang Ke</p>
+          <div class="rounded-lg border border-info/20 bg-info/5 px-3 py-2.5">
+            <p class="text-sm font-medium text-highlighted">{{ contract.renewedTo.documentName }}</p>
+            <p class="text-xs font-mono text-muted mt-0.5">{{ contract.renewedTo.documentNumber }}</p>
+            <p class="text-xs text-muted mt-0.5">Dibuat: {{ formatDate(contract.renewedTo.createdDate) }}</p>
+            <button
+              type="button"
+              class="flex items-center gap-1 text-primary hover:underline text-xs mt-1 cursor-pointer"
+              @click="emit('open-contract', contract.renewedTo.id)"
+            >
+              <UIcon name="i-lucide-arrow-right" class="size-3" />
+              Lihat Kontrak Baru
+            </button>
           </div>
         </div>
 
@@ -229,15 +268,41 @@ const renewalStatusColor: Record<string, string> = {
         <!-- File dokumen -->
         <div v-if="contract.fileUrl">
           <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">File Dokumen</p>
-          <a
-            :href="contract.fileUrl"
-            target="_blank"
-            class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
-          >
-            <UIcon name="i-lucide-paperclip" class="size-4 shrink-0" />
-            Unduh File Dokumen
-            <UIcon name="i-lucide-external-link" class="size-3.5 shrink-0 text-muted" />
-          </a>
+          <div class="space-y-2">
+            <!-- Download link -->
+            <a
+              :href="contract.fileUrl"
+              target="_blank"
+              class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
+            >
+              <UIcon name="i-lucide-paperclip" class="size-4 shrink-0" />
+              Unduh File Dokumen
+              <UIcon name="i-lucide-external-link" class="size-3.5 shrink-0 text-muted" />
+            </a>
+            <!-- Preview toggle -->
+            <button
+              type="button"
+              class="flex items-center gap-1 text-xs text-muted hover:text-primary transition-colors"
+              @click="previewOpen = !previewOpen"
+            >
+              <UIcon :name="previewOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3.5" />
+              {{ previewOpen ? 'Sembunyikan Preview' : 'Lihat Preview' }}
+            </button>
+            <!-- Preview area -->
+            <div v-if="previewOpen" class="mt-2 rounded-lg border border-default overflow-hidden">
+              <!-- PDF preview using pdfjs-dist (same as SP page) -->
+              <div v-if="isPdf(contract.fileUrl)" class="h-[480px]">
+                <PdfViewer :src="contract.fileUrl" />
+              </div>
+              <!-- Image preview -->
+              <img
+                v-else
+                :src="contract.fileUrl"
+                alt="Preview Dokumen"
+                class="w-full object-contain max-h-96"
+              />
+            </div>
+          </div>
         </div>
 
         <!-- Metadata -->

@@ -50,6 +50,12 @@ export class VendorContractsController {
     )
   }
 
+  // MUST be before :id to avoid route conflict
+  @Post(':id/renew')
+  renewContract(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateVendorContractDto) {
+    return this.service.renewContract(id, dto)
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)

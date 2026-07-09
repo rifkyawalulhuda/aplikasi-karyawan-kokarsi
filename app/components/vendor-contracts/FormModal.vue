@@ -51,6 +51,7 @@ const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const replaceFile = ref(false)
+const renewedFromContractId = ref<number | undefined>(undefined)
 
 // --- Fetch companies ---
 const { data: companiesRes } = useFetch<{ id: number; name: string }[]>('/api/lookups/companies', {
@@ -178,9 +179,9 @@ watch(
       state.needsRenewal = true
       state.startDate = ''
       state.endDate = ''
-      state.motherAgreementId = d.motherAgreementId ?? undefined
       state.location = d.location ?? ''
       state.notes = ''
+      renewedFromContractId.value = d.id
     }
     else {
       // add mode
@@ -196,6 +197,7 @@ watch(
       state.motherAgreementId = undefined
       state.location = ''
       state.notes = ''
+      renewedFromContractId.value = undefined
     }
     selectedFile.value = null
     replaceFile.value = false
@@ -208,7 +210,9 @@ watch(
 
 // --- Watch company/category for mother agreements ---
 watch([() => state.companyId, () => state.category], () => {
-  state.motherAgreementId = undefined
+  if (props.mode !== 'renew') {
+    state.motherAgreementId = undefined
+  }
   fetchMotherAgreements()
 })
 
@@ -265,8 +269,16 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       notes: event.data.notes || undefined,
     }
 
-    if (props.mode === 'add' || props.mode === 'renew') {
+    if (props.mode === 'add') {
       const res = await $fetch<VendorContract>('/api/vendor-contracts', {
+        method: 'POST',
+        body: payload,
+        credentials: 'include',
+      })
+      contractId = res.id
+    }
+    else if (props.mode === 'renew') {
+      const res = await $fetch<VendorContract>(`/api/vendor-contracts/${renewedFromContractId.value}/renew`, {
         method: 'POST',
         body: payload,
         credentials: 'include',
