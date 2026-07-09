@@ -80,16 +80,24 @@ const statusColorMap: Record<ContractStatus, string> = {
   AKAN_HABIS: 'warning',
   EXPIRED: 'error',
   SELESAI: 'info',
-  DIBATALKAN: 'neutral'
-}
+  DIBATALKAN: 'neutral',
+  SUDAH_DIPERPANJANG: 'info',
+} as Record<string, string>
 
-const statusLabelMap: Record<ContractStatus, string> = {
+const statusLabelMap: Record<string, string> = {
   DRAFT: 'Draft',
   AKTIF: 'Aktif',
   AKAN_HABIS: 'Akan Habis',
   EXPIRED: 'Expired',
   SELESAI: 'Selesai',
-  DIBATALKAN: 'Dibatalkan'
+  DIBATALKAN: 'Dibatalkan',
+  SUDAH_DIPERPANJANG: 'Sudah Diperpanjang',
+}
+
+// Tampilkan "Sudah Diperpanjang" jika kontrak ini sudah di-perpanjang di riwayat
+function getDisplayStatus(contract: Contract, allContracts: Contract[]): string {
+  if (hasBeenRenewed(contract, allContracts)) return 'SUDAH_DIPERPANJANG'
+  return contract.status
 }
 
 function openEditFromSummary(row: ContractSummaryRow) {
@@ -665,8 +673,8 @@ watch([statusFilter, searchQuery], () => {
                       {{ new Date(contract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) }}
                     </p>
                   </div>
-                  <UBadge variant="subtle" :color="statusColorMap[contract.status] as any">
-                    {{ statusLabelMap[contract.status] }}
+                  <UBadge variant="subtle" :color="statusColorMap[getDisplayStatus(contract, historyContracts)] as any">
+                    {{ statusLabelMap[getDisplayStatus(contract, historyContracts)] }}
                   </UBadge>
                 </div>
 

@@ -184,6 +184,142 @@ export class NotificationsService {
       }
     }
 
+    // ── Catch-all pass ────────────────────────────────────────────────────────
+    // Dokumen yang sudah AKAN_EXPIRED/AKAN_HABIS/AKAN_BERAKHIR tapi tanggalnya
+    // tidak tepat jatuh di H-90/60/30/7/0 (e.g. sudah lewat trigger point).
+    // Gunakan triggerDay = -1 sebagai sentinel agar tidak konflik @@unique.
+    const CATCHALL_DAY = -1
+
+    // Sertifikasi & Ijin: status AKAN_EXPIRED dan belum punya notifikasi aktif
+    const akanExpiredDocs = await this.prisma.employeeDocument.findMany({
+      where: {
+        status: 'AKAN_EXPIRED',
+        expiryDate: { gte: today }, // belum expired hari ini
+      },
+      include: {
+        employee: { select: { fullName: true } },
+        documentType: { select: { name: true } },
+      },
+    })
+    for (const d of akanExpiredDocs) {
+      const daysLeft = Math.ceil((startOfDay(d.expiryDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+      const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
+      try {
+        await this.prisma.notification.create({
+          data: {
+            category: 'SERTIFIKASI_IJIN',
+            severity: catchallSeverity,
+            title: 'Sertifikasi/Ijin Akan Expired',
+            message: `${d.documentType?.name ?? 'Dokumen'} milik ${d.employee.fullName} berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
+            sourceType: 'employee_document',
+            sourceId: d.id,
+            triggerDay: CATCHALL_DAY,
+            deeplink: '/dokumen/sertifikasi-ijin?status=AKAN_EXPIRED',
+            expiryDate: d.expiryDate!,
+          },
+        })
+        created++
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e // P2002 = sudah ada, skip
+      }
+    }
+
+    // Kontrak karyawan: status AKAN_HABIS dan belum punya notifikasi aktif
+    const akanHabisContracts = await this.prisma.contract.findMany({
+      where: {
+        status: 'AKAN_HABIS',
+        endDate: { gte: today },
+      },
+      include: { employee: { select: { fullName: true } } },
+    })
+    for (const c of akanHabisContracts) {
+      const daysLeft = Math.ceil((startOfDay(c.endDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+      const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
+      try {
+        await this.prisma.notification.create({
+          data: {
+            category: 'KONTRAK_KARYAWAN',
+            severity: catchallSeverity,
+            title: 'Kontrak Karyawan Akan Habis',
+            message: `Kontrak ${c.employee.fullName} (${c.contractNo}) berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
+            sourceType: 'contract',
+            sourceId: c.id,
+            triggerDay: CATCHALL_DAY,
+            deeplink: '/kontrak?status=AKAN_HABIS',
+            expiryDate: c.endDate,
+          },
+        })
+        created++
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e
+      }
+    }
+
+    // Vendor/Customer: status AKAN_BERAKHIR dan belum punya notifikasi aktif
+    const akanBerakhirVendors = await this.prisma.vendorContract.findMany({
+      where: {
+        status: 'AKAN_BERAKHIR',
+        endDate: { gte: today },
+        renewedTo: null,
+      },
+      include: { company: { select: { name: true } } },
+    })
+    for (const v of akanBerakhirVendors) {
+      const daysLeft = Math.ceil((startOfDay(v.endDate!).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+      const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
+      const companyName = v.company?.name ?? 'Vendor'
+      try {
+        await this.prisma.notification.create({
+          data: {
+            category: 'KONTRAK_VENDOR',
+            severity: catchallSeverity,
+            title: 'Kontrak Vendor Akan Berakhir',
+            message: `Kontrak ${companyName} (${v.documentNumber}) berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
+            sourceType: 'vendor_contract',
+            sourceId: v.id,
+            triggerDay: CATCHALL_DAY,
+            deeplink: '/dokumen-legal/kontrak-vendor?status=AKAN_BERAKHIR',
+            expiryDate: v.endDate!,
+          },
+        })
+        created++
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e
+      }
+    }
+
+    // Legal Koperasi: status AKAN_BERAKHIR dan belum punya notifikasi aktif
+    const akanBerakhirLegals = await this.prisma.legalKoperasi.findMany({
+      where: {
+        status: 'AKAN_BERAKHIR',
+        endDate: { gte: today },
+        needsRenewal: true,
+        renewedTo: null,
+      },
+    })
+    for (const lk of akanBerakhirLegals) {
+      const daysLeft = Math.ceil((startOfDay(lk.endDate!).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+      const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
+      try {
+        await this.prisma.notification.create({
+          data: {
+            category: 'LEGAL_KOPERASI',
+            severity: catchallSeverity,
+            title: 'Legal Koperasi Akan Berakhir',
+            message: `${lk.documentName} berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
+            sourceType: 'legal_koperasi',
+            sourceId: lk.id,
+            triggerDay: CATCHALL_DAY,
+            deeplink: '/dokumen-legal/legal-koperasi?status=AKAN_BERAKHIR',
+            expiryDate: lk.endDate!,
+          },
+        })
+        created++
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e
+      }
+    }
+
     // Auto-resolve: contracts that have child contracts or status = SELESAI
     const renewedContracts = await this.prisma.contract.findMany({
       where: { OR: [{ childContracts: { some: {} } }, { status: 'SELESAI' }] },
