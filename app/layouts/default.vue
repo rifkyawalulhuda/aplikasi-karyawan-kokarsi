@@ -220,6 +220,7 @@ const links = computed<NavigationMenuItem[]>(() => [
     >
       <template #header="{ collapsed }">
         <TeamsMenu :collapsed="collapsed" />
+        <NotificationBell :collapsed="collapsed" />
       </template>
 
       <template #default="{ collapsed }">

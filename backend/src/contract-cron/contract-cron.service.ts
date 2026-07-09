@@ -6,6 +6,7 @@ import { MailerooService } from '../maileroo/maileroo.service'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { VendorContractsService } from '../vendor-contracts/vendor-contracts.service'
 import { LegalKoperasiService } from '../legal-koperasi/legal-koperasi.service'
+import { NotificationsService } from '../notifications/notifications.service'
 
 @Injectable()
 export class ContractCronService {
@@ -16,6 +17,7 @@ export class ContractCronService {
     private maileroo: MailerooService,
     private vendorContractsService: VendorContractsService,
     private legalKoperasiService: LegalKoperasiService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Setiap hari jam 00:01 WIB (Asia/Jakarta)
@@ -253,5 +255,14 @@ export class ContractCronService {
       await this.maileroo.sendLegalKoperasiNotification(lkChanges)
         .catch(err => this.logger.error(`Legal koperasi notification failed: ${err?.message}`))
     }
+
+    // ── Generate in-app notifications ──────────────────────────────
+    this.logger.log('Generating expiry reminder notifications...')
+    const notifResult = await this.notificationsService.generateNotifications()
+      .catch(err => {
+        this.logger.error(`Notification generation failed: ${err?.message}`)
+        return { created: 0, resolved: 0 }
+      })
+    this.logger.log(`Notifications: ${notifResult.created} created, ${notifResult.resolved} resolved`)
   }
 }

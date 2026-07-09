@@ -52,6 +52,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get company() { return this.client.company }
   get vendorContract() { return this.client.vendorContract }
   get legalKoperasi() { return this.client.legalKoperasi }
+  get notification() { return this.client.notification }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

@@ -430,3 +430,37 @@ model LegalKoperasi {
 
   @@map("legal_koperasi")
 }
+
+enum NotificationCategory {
+  KONTRAK_KARYAWAN
+  SERTIFIKASI_IJIN
+  KONTRAK_VENDOR
+  LEGAL_KOPERASI
+}
+
+enum NotificationSeverity {
+  WARNING
+  CRITICAL
+}
+
+model Notification {
+  id          Int                    @id @default(autoincrement())
+  category    NotificationCategory
+  severity    NotificationSeverity
+  title       String                 @db.VarChar(255)
+  message     String                 @db.VarChar(500)
+  sourceType  String                 @db.VarChar(50)
+  sourceId    Int
+  triggerDay  Int
+  deeplink    String                 @db.VarChar(255)
+  isRead      Boolean                @default(false)
+  readAt      DateTime?
+  resolvedAt  DateTime?
+  expiryDate  DateTime               @db.Date
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([sourceType, sourceId, triggerDay])
+  @@index([isRead, resolvedAt])
+  @@map("notifications")
+}
