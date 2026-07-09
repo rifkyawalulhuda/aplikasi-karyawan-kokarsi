@@ -219,6 +219,13 @@ const renewalStatusColor: Record<string, string> = {
           <div class="rounded-lg border border-default bg-elevated/40 px-3 py-2.5">
             <p class="text-sm font-medium text-highlighted">{{ contract.motherAgreement.documentName }}</p>
             <p class="text-xs font-mono text-muted mt-0.5">{{ contract.motherAgreement.documentNumber }}</p>
+            <button
+              class="flex items-center gap-1 text-primary hover:underline text-xs mt-1.5 cursor-pointer"
+              @click="emit('open-contract', contract.motherAgreement.id)"
+            >
+              <UIcon name="i-lucide-arrow-right" class="size-3" />
+              Lihat Mother Agreement
+            </button>
           </div>
         </div>
 
