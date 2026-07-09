@@ -157,6 +157,11 @@ const links = computed<NavigationMenuItem[]>(() => [
         to: '/dokumen-legal/kontrak-vendor',
         onSelect: () => { open.value = false },
       },
+      {
+        label: 'Legal Koperasi',
+        to: '/dokumen-legal/legal-koperasi',
+        onSelect: () => { open.value = false },
+      },
     ],
   },
   {

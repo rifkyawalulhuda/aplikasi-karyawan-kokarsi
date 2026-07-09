@@ -391,3 +391,42 @@ model VendorContract {
 
   @@map("vendor_contracts")
 }
+
+enum LegalKoperasiCategory {
+  IZIN
+  SERTIFIKAT
+  KEBIJAKAN
+  DOKUMEN_INTERNAL
+  DOKUMEN_B3
+  LAIN_LAIN
+}
+
+enum LegalKoperasiStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+model LegalKoperasi {
+  id              Int                     @id @default(autoincrement())
+  category        LegalKoperasiCategory
+  documentName    String                  @db.VarChar(255)
+  documentNumber  String                  @db.VarChar(100)
+  publisher       String                  @db.VarChar(255)
+  documentDate    DateTime                @db.Date
+  needsRenewal    Boolean                 @default(false)
+  startDate       DateTime?               @db.Date
+  endDate         DateTime?               @db.Date
+  status          LegalKoperasiStatus     @default(TIDAK_AKTIF)
+  location        String?                 @db.VarChar(255)
+  notes           String?                 @db.Text
+  fileUrl         String?                 @db.VarChar(500)
+  renewedFromId   Int?                    @unique
+  renewedFrom     LegalKoperasi?          @relation("LegalSuccession", fields: [renewedFromId], references: [id])
+  renewedTo       LegalKoperasi?          @relation("LegalSuccession")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@map("legal_koperasi")
+}

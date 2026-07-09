@@ -15,6 +15,7 @@ import { SettingsModule } from './settings/settings.module'
 import { ContractCronModule } from './contract-cron/contract-cron.module'
 import { EmployeeDocumentsModule } from './employee-documents/employee-documents.module'
 import { VendorContractsModule } from './vendor-contracts/vendor-contracts.module'
+import { LegalKoperasiModule } from './legal-koperasi/legal-koperasi.module'
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { VendorContractsModule } from './vendor-contracts/vendor-contracts.modul
     ContractCronModule,
     EmployeeDocumentsModule,
     VendorContractsModule,
+    LegalKoperasiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { MailerooService } from '../maileroo/maileroo.service'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { VendorContractsService } from '../vendor-contracts/vendor-contracts.service'
+import { LegalKoperasiService } from '../legal-koperasi/legal-koperasi.service'
 
 @Injectable()
 export class ContractCronService {
@@ -14,6 +15,7 @@ export class ContractCronService {
     private prisma: PrismaService,
     private maileroo: MailerooService,
     private vendorContractsService: VendorContractsService,
+    private legalKoperasiService: LegalKoperasiService,
   ) {}
 
   // Setiap hari jam 00:01 WIB (Asia/Jakarta)
@@ -225,6 +227,30 @@ export class ContractCronService {
     if (vcChanges.length > 0) {
       await this.maileroo.sendVendorContractNotification(vcChanges)
         .catch(err => this.logger.error(`Vendor contract notification failed: ${err?.message}`))
+    }
+
+    // ── LegalKoperasi status sync ──────────────────────────────────────
+    this.logger.log('Syncing legal koperasi statuses...')
+    const { akanBerakhir: lkAkan, expired: lkExpired } = await this.legalKoperasiService.syncExpiredStatuses()
+
+    const lkChanges = [
+      ...lkAkan.map((lk: any) => ({
+        documentName: lk.documentName,
+        publisher: lk.publisher,
+        endDate: lk.endDate!,
+        newStatus: 'AKAN_BERAKHIR' as const,
+      })),
+      ...lkExpired.map((lk: any) => ({
+        documentName: lk.documentName,
+        publisher: lk.publisher,
+        endDate: lk.endDate!,
+        newStatus: 'EXPIRED' as const,
+      })),
+    ]
+
+    if (lkChanges.length > 0) {
+      await this.maileroo.sendLegalKoperasiNotification(lkChanges)
+        .catch(err => this.logger.error(`Legal koperasi notification failed: ${err?.message}`))
     }
   }
 }
