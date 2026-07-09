@@ -93,6 +93,57 @@ watch([searchQuery, categoryFilter, statusFilter], () => {
 const contracts = computed<VendorContract[]>(() => res.value?.data ?? [])
 const totalContracts = computed(() => res.value?.total ?? 0)
 
+// Client-side sort applied on top of server-fetched page
+const sortedContracts = computed<VendorContract[]>(() => {
+  const sort = sorting.value
+  if (!sort) return contracts.value
+
+  return [...contracts.value].sort((a, b) => {
+    let aVal: any
+    let bVal: any
+
+    switch (sort.key) {
+      case 'company':
+        aVal = a.company?.name ?? ''
+        bVal = b.company?.name ?? ''
+        break
+      case 'documentName':
+        aVal = a.documentName ?? ''
+        bVal = b.documentName ?? ''
+        break
+      case 'documentNumber':
+        aVal = a.documentNumber ?? ''
+        bVal = b.documentNumber ?? ''
+        break
+      case 'createdDate':
+        aVal = a.createdDate ?? ''
+        bVal = b.createdDate ?? ''
+        break
+      case 'endDate':
+        aVal = a.endDate ?? ''
+        bVal = b.endDate ?? ''
+        break
+      case 'status':
+        aVal = getDisplayStatus(a)
+        bVal = getDisplayStatus(b)
+        break
+      default:
+        aVal = (a as any)[sort.key] ?? ''
+        bVal = (b as any)[sort.key] ?? ''
+    }
+
+    const isDate = sort.key === 'createdDate' || sort.key === 'endDate'
+    let compare = 0
+    if (isDate) {
+      compare = new Date(String(aVal || 0)).getTime() - new Date(String(bVal || 0)).getTime()
+    }
+    else {
+      compare = String(aVal).localeCompare(String(bVal), 'id')
+    }
+    return sort.direction === 'asc' ? compare : -compare
+  })
+})
+
 const counts = computed(() => ({
   total: totalContracts.value,
   aktif: contracts.value.filter(d => d.status === 'AKTIF').length,
@@ -411,7 +462,7 @@ async function openContractById(id: number) {
       <UTable
         ref="table"
         class="shrink-0"
-        :data="contracts"
+        :data="sortedContracts"
         :columns="columns"
         :loading="status === 'pending'"
         :ui="{
