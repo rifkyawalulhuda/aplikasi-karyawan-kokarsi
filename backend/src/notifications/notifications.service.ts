@@ -71,7 +71,7 @@ export class NotificationsService {
           endDate: { gte: targetDate, lt: nextDay },
           status: { in: ['AKTIF', 'AKAN_HABIS'] },
         },
-        include: { employee: { select: { fullName: true } } },
+        include: { employee: { select: { id: true, fullName: true } } },
       })
       for (const c of contracts) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
@@ -85,7 +85,7 @@ export class NotificationsService {
               sourceType: 'contract',
               sourceId: c.id,
               triggerDay,
-              deeplink: triggerDay === 0 ? '/kontrak?status=EXPIRED' : '/kontrak?status=AKAN_HABIS',
+              deeplink: `/karyawan/${c.employee.id}`,
               expiryDate: c.endDate,
             },
           })
@@ -250,7 +250,7 @@ export class NotificationsService {
         status: { notIn: ['SELESAI', 'DIBATALKAN'] },
         childContracts: { none: {} }, // exclude yang sudah diperpanjang
       },
-      include: { employee: { select: { fullName: true } } },
+        include: { employee: { select: { id: true, fullName: true } } },
     })
     for (const c of akanHabisContracts) {
       const daysLeft = Math.ceil((startOfDay(c.endDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
@@ -263,7 +263,7 @@ export class NotificationsService {
         sourceType: 'contract',
         sourceId: c.id,
         triggerDay: CATCHALL_DAY,
-        deeplink: '/kontrak?status=AKAN_HABIS',
+        deeplink: `/karyawan/${c.employee.id}`,
         expiryDate: c.endDate,
       }
       // upsert agar pesan selalu up-to-date saat endDate diubah
