@@ -18,7 +18,7 @@ interface DashboardStats {
 }
 
 const auth = useAuthStore()
-const { data: stats } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
+const { data: stats, pending: statsLoading, error: statsError } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
 
 const statCards = computed(() => [
   {
@@ -180,8 +180,37 @@ const offboardingMax = computed(() => {
     <template #body>
       <div class="p-4 sm:p-6 space-y-6">
 
+        <!-- Error state -->
+        <UAlert
+          v-if="statsError"
+          color="error"
+          variant="subtle"
+          icon="i-lucide-alert-circle"
+          title="Gagal memuat data dashboard"
+          description="Pastikan server backend berjalan dan coba refresh halaman."
+        />
+
         <!-- Stat Cards -->
         <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4">
+          <!-- Skeleton loading -->
+          <template v-if="statsLoading">
+            <UCard
+              v-for="i in 6"
+              :key="`skel-${i}`"
+              :ui="{ body: 'p-4 sm:p-5' }"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1 space-y-2">
+                  <div class="h-3 bg-accented rounded w-2/3 animate-pulse" />
+                  <div class="h-8 bg-accented rounded w-1/2 animate-pulse" />
+                  <div class="h-3 bg-accented rounded w-3/4 animate-pulse" />
+                </div>
+                <div class="p-2.5 rounded-xl bg-accented shrink-0 w-10 h-10 animate-pulse" />
+              </div>
+            </UCard>
+          </template>
+          <!-- Actual cards -->
+          <template v-else>
           <UCard
             v-for="(card, i) in statCards"
             :key="i"
@@ -199,6 +228,7 @@ const offboardingMax = computed(() => {
               </div>
             </div>
           </UCard>
+          </template>
         </div>
 
         <!-- Charts Row -->
