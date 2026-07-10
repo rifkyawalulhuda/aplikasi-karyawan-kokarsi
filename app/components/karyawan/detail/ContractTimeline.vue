@@ -16,6 +16,7 @@ const statusColorMap: Record<string, string> = {
   EXPIRED: 'error',
   SELESAI: 'neutral',
   DIBATALKAN: 'neutral',
+  SUDAH_DIPERPANJANG: 'info',
 }
 
 const statusLabelMap: Record<string, string> = {
@@ -24,6 +25,14 @@ const statusLabelMap: Record<string, string> = {
   EXPIRED: 'Expired',
   SELESAI: 'Selesai',
   DIBATALKAN: 'Dibatalkan',
+  SUDAH_DIPERPANJANG: 'Sudah Diperpanjang',
+}
+
+// Tampilkan "Sudah Diperpanjang" jika ada kontrak lain yang parentContract.id === contract.id
+function getDisplayStatus(contract: Contract, allContracts: Contract[]): string {
+  const hasChild = allContracts.some(c => (c as any).parentContract?.id === contract.id || (c as any).parentContractId === contract.id)
+  if (hasChild) return 'SUDAH_DIPERPANJANG'
+  return contract.status
 }
 
 const sorted = computed(() =>
@@ -58,10 +67,11 @@ const sorted = computed(() =>
             <div
               class="absolute left-3 top-4 w-2.5 h-2.5 rounded-full border-2 border-background"
               :class="{
-                'bg-success': contract.status === 'AKTIF',
-                'bg-warning': contract.status === 'AKAN_HABIS',
-                'bg-error': contract.status === 'EXPIRED',
-                'bg-muted': contract.status === 'SELESAI' || contract.status === 'DIBATALKAN',
+                'bg-success': getDisplayStatus(contract, sorted) === 'AKTIF',
+                'bg-warning': getDisplayStatus(contract, sorted) === 'AKAN_HABIS',
+                'bg-error': getDisplayStatus(contract, sorted) === 'EXPIRED',
+                'bg-info': getDisplayStatus(contract, sorted) === 'SUDAH_DIPERPANJANG',
+                'bg-muted': getDisplayStatus(contract, sorted) === 'SELESAI' || getDisplayStatus(contract, sorted) === 'DIBATALKAN',
               }"
             />
 
@@ -71,8 +81,8 @@ const sorted = computed(() =>
                   <p class="font-mono text-sm font-medium text-highlighted">{{ contract.contractNo }}</p>
                   <p class="text-xs text-muted">{{ contract.contractType?.name ?? 'Tipe tidak diketahui' }}</p>
                 </div>
-                <UBadge :color="(statusColorMap[contract.status] as any)" variant="subtle" size="sm">
-                  {{ statusLabelMap[contract.status] }}
+                <UBadge :color="(statusColorMap[getDisplayStatus(contract, sorted)] as any)" variant="subtle" size="sm">
+                  {{ statusLabelMap[getDisplayStatus(contract, sorted)] }}
                 </UBadge>
               </div>
               <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted">

@@ -19,7 +19,8 @@ export interface AppNotification {
 const notifications = ref<AppNotification[]>([])
 const unreadCount = ref(0)
 const isLoading = ref(false)
-let intervalId: ReturnType<typeof setInterval> | null = null
+let intervalId: ReturnType<typeof setInterval> | null = null // kept for reference, unused
+let eventSource: EventSource | null = null
 
 export function useNotifications() {
   async function fetchNotifications(limit = 10) {
@@ -83,25 +84,46 @@ export function useNotifications() {
     }
   }
 
-  // Start polling for unread count every 5 minutes
-  function startPolling() {
-    if (intervalId !== null) return
-    intervalId = setInterval(() => {
-      fetchUnreadCount()
-    }, 5 * 60 * 1000)
-  }
-
-  function stopPolling() {
-    if (intervalId !== null) {
-      clearInterval(intervalId)
-      intervalId = null
+  function connectSSE() {
+    if (eventSource) return // already connected
+    if (typeof window === 'undefined') return // SSR guard
+    eventSource = new EventSource('/api/notifications/stream', {
+      withCredentials: true,
+    })
+    eventSource.onmessage = async (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data) as { count: number }
+        if (typeof payload.count === 'number') {
+          unreadCount.value = payload.count
+          if (payload.count > 0) {
+            await fetchNotifications()
+          }
+        }
+      }
+      catch {
+        // ignore malformed messages
+      }
+    }
+    eventSource.onerror = () => {
+      // EventSource auto-reconnects — no manual intervention needed
     }
   }
 
-  // Auto-start polling and clean up when composable is used inside a component
+  function disconnectSSE() {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+  }
+
+  // Aliases for backward compatibility
+  const startPolling = connectSSE
+  const stopPolling = disconnectSSE
+
+  // Auto-connect SSE and clean up when composable is used inside a component
   if (getCurrentInstance()) {
-    onMounted(() => startPolling())
-    onUnmounted(() => stopPolling())
+    onMounted(() => connectSSE())
+    onUnmounted(() => disconnectSSE())
   }
 
   return {
@@ -112,6 +134,8 @@ export function useNotifications() {
     fetchUnreadCount,
     markAllRead,
     markOneRead,
+    connectSSE,
+    disconnectSSE,
     startPolling,
     stopPolling,
   }

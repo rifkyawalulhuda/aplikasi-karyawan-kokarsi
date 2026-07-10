@@ -4,6 +4,7 @@ import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber } from 'cla
 import { ContractStatus, Prisma } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { NotificationsService } from '../notifications/notifications.service'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 
@@ -64,6 +65,7 @@ export class ContractsService {
   constructor(
     private prisma: PrismaService,
     private dashboardCache: DashboardCacheService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private include = {
@@ -359,6 +361,7 @@ export class ContractsService {
       })
       await this.syncEmployeeStatus(dto.employeeId)
       this.dashboardCache.invalidate()
+      this.notificationsService.generateNotifications().catch(() => {})
       return this.withComputedStatus(contract)
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
@@ -426,6 +429,7 @@ export class ContractsService {
       })
       await this.syncEmployeeStatus(parent.employeeId)
       this.dashboardCache.invalidate()
+      this.notificationsService.generateNotifications().catch(() => {})
       return this.withComputedStatus(contract)
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
@@ -451,7 +455,7 @@ export class ContractsService {
 
         if (newValue !== oldValue) {
           throw new BadRequestException(
-            'Kontrak yang sudah ditandatangani tidak dapat diubah pada field baseCompensation, startDate, endDate, dan employeeId.',
+            'Kontrak ini sudah memiliki dokumen yang ditandatangani. Tanggal, kompensasi, dan data karyawan tidak dapat diubah. Hapus dokumen terlebih dahulu jika perlu melakukan perubahan.',
           )
         }
       }
@@ -472,6 +476,7 @@ export class ContractsService {
       await this.syncEmployeeStatus(dto.employeeId)
     }
     this.dashboardCache.invalidate()
+    this.notificationsService.generateNotifications().catch(() => {})
     return this.withComputedStatus(contract)
   }
 

@@ -18,6 +18,15 @@ onMounted(() => {
   fetchUnreadCount()
 })
 
+// Animasi pulse saat ada notifikasi baru masuk via SSE
+const hasNewNotification = ref(false)
+watch(unreadCount, (newVal, oldVal) => {
+  if (newVal > oldVal) {
+    hasNewNotification.value = true
+    setTimeout(() => { hasNewNotification.value = false }, 2000)
+  }
+})
+
 const badgeColor = computed(() => {
   const unread = notifications.value.filter(n => !n.isRead && !n.resolvedAt)
   if (unread.some(n => n.severity === 'CRITICAL')) return 'error'
@@ -62,7 +71,7 @@ async function handleNotifClick(notif: any) {
       variant="ghost"
       square
       :aria-label="`Notifikasi${unreadCount > 0 ? `, ${unreadCount} belum dibaca` : ''}`"
-      class="relative"
+      :class="['relative', { 'animate-bounce': hasNewNotification }]"
     >
       <template v-if="unreadCount > 0" #trailing>
         <span

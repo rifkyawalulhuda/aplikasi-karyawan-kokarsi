@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Param, Query, ParseIntPipe, UseGuards } from '@nestjs/common'
+import { Controller, Get, Post, Param, Query, ParseIntPipe, UseGuards, Sse, MessageEvent } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
+import { Observable } from 'rxjs'
 import { NotificationsService } from './notifications.service'
 
 @UseGuards(AuthGuard('jwt'))
@@ -25,6 +26,12 @@ export class NotificationsController {
   @Post(':id/read')
   markOneRead(@Param('id', ParseIntPipe) id: number) {
     return this.service.markOneRead(id)
+  }
+
+  @UseGuards(AuthGuard('jwt-cookie'))
+  @Sse('stream')
+  stream(): Observable<MessageEvent> {
+    return this.service.subscribe()
   }
 
   // Endpoint khusus untuk testing manual — trigger generate notifications tanpa menunggu cron

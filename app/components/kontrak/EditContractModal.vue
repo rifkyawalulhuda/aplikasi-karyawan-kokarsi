@@ -144,7 +144,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     emit('saved')
     emit('update:open', false)
   } catch (e: any) {
-    toast.add({ title: 'Gagal memperbarui', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+    toast.add({ title: 'Gagal memperbarui', description: e?.data?.message ?? e?.message ?? 'Terjadi kesalahan', color: 'error' })
   } finally {
     loading.value = false
   }
