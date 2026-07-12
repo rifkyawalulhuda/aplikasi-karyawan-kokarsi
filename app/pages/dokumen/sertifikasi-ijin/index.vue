@@ -12,6 +12,25 @@ const UIcon = resolveComponent('UIcon')
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
+const { exportEmployeeDocumentsExcel } = useExport()
+
+// --- Export ---
+const isExporting = ref(false)
+async function handleExport() {
+  if (!documents.value.length) {
+    toast.add({ title: 'Tidak ada data', description: 'Belum ada data Sertifikasi & Ijin untuk diekspor.', color: 'warning' })
+    return
+  }
+  isExporting.value = true
+  try {
+    exportEmployeeDocumentsExcel(documents.value)
+    toast.add({ title: 'Export berhasil', description: `${documents.value.length} data berhasil diekspor ke Excel.`, color: 'success' })
+  } catch {
+    toast.add({ title: 'Export gagal', color: 'error' })
+  } finally {
+    isExporting.value = false
+  }
+}
 
 // --- Types ---
 interface EmployeeDocument {
@@ -328,6 +347,15 @@ watch([searchQuery, statusFilter], () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UDropdownMenu
+            :items="[
+              [
+                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => handleExport() }
+              ]
+            ]"
+          >
+            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" :loading="isExporting" />
+          </UDropdownMenu>
           <UButton
             label="Tambah Dokumen"
             icon="i-lucide-plus"

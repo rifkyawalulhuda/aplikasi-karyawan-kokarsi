@@ -177,5 +177,35 @@ export function useExport() {
     XLSX.writeFile(wb, `${filename}.xlsx`)
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel }
+  function toEmployeeDocumentRows(docs: any[]) {
+    return docs.map((d, i) => ({
+      'No': i + 1,
+      'Nama Dokumen': d.documentType?.name ?? '-',
+      'Jenis': d.documentType?.documentType ?? '-',
+      'Penerbit': d.documentType?.issuer ?? '-',
+      'No. Dokumen': d.documentNumber ?? '-',
+      'Nama Karyawan': d.employee?.fullName ?? '-',
+      'No. Induk': d.employee?.employeeNo ?? '-',
+      'Tgl. Berlaku Sampai': fmt(d.expiryDate),
+      'Status': d.status === 'AKTIF' ? 'Aktif' : d.status === 'AKAN_EXPIRED' ? 'Akan Expired' : 'Expired',
+      'Catatan': d.notes ?? '-',
+      'Dibuat': fmt(d.createdAt),
+    }))
+  }
+
+  function exportEmployeeDocumentsExcel(docs: any[], filename = 'sertifikasi-ijin') {
+    if (!docs.length) return false
+    const rows = toEmployeeDocumentRows(docs)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 30 }, { wch: 14 }, { wch: 24 }, { wch: 22 },
+      { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 40 }, { wch: 16 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sertifikasi & Ijin')
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
+
+  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel }
 }
