@@ -33,6 +33,9 @@ async function fetchGroups(query: string) {
       employees: any[]
       contracts: any[]
       warningLetters: any[]
+      employeeDocuments: any[]
+      vendorContracts: any[]
+      legalKoperasi: any[]
     }>(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
       credentials: 'include',
     })
@@ -80,6 +83,51 @@ async function fetchGroups(query: string) {
           suffix: `${l.employee?.fullName ?? '-'} · SP ${l.warningLevel}`,
           icon: 'i-lucide-alert-triangle',
           to: '/dokumen/surat-peringatan',
+        })),
+      })
+    }
+
+    if (results.employeeDocuments?.length) {
+      groups.push({
+        id: 'employeeDocuments',
+        label: 'Sertifikasi & Ijin',
+        ignoreFilter: true,
+        items: results.employeeDocuments.map((doc: any) => ({
+          id: `edoc-${doc.id}`,
+          label: `${doc.documentType?.name ?? 'Dokumen'}`,
+          suffix: `${doc.employee?.fullName ?? ''}`,
+          icon: 'i-lucide-file-badge',
+          to: '/dokumen/sertifikasi-ijin',
+        })),
+      })
+    }
+
+    if (results.vendorContracts?.length) {
+      groups.push({
+        id: 'vendorContracts',
+        label: 'Kontrak Vendor',
+        ignoreFilter: true,
+        items: results.vendorContracts.map((vc: any) => ({
+          id: `vc-${vc.id}`,
+          label: `${vc.documentName}`,
+          suffix: `${vc.company?.name ?? ''}`,
+          icon: 'i-lucide-building-2',
+          to: `/dokumen-legal/kontrak-vendor?openId=${vc.id}`,
+        })),
+      })
+    }
+
+    if (results.legalKoperasi?.length) {
+      groups.push({
+        id: 'legalKoperasi',
+        label: 'Legal Koperasi',
+        ignoreFilter: true,
+        items: results.legalKoperasi.map((lk: any) => ({
+          id: `lk-${lk.id}`,
+          label: `${lk.documentName}`,
+          suffix: `${lk.publisher}`,
+          icon: 'i-lucide-file-signature',
+          to: `/dokumen-legal/legal-koperasi?openId=${lk.id}`,
         })),
       })
     }

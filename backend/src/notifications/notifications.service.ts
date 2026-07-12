@@ -1,10 +1,27 @@
 import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { startOfDay } from '../shared/date-utils'
+import { Subject, Observable } from 'rxjs'
+import { finalize } from 'rxjs/operators'
 
 @Injectable()
 export class NotificationsService {
   constructor(private prisma: PrismaService) {}
+
+  private readonly clients = new Set<Subject<MessageEvent>>()
+
+  subscribe(): Observable<MessageEvent> {
+    const subject = new Subject<MessageEvent>()
+    this.clients.add(subject)
+    return subject.asObservable().pipe(
+      finalize(() => this.clients.delete(subject)),
+    )
+  }
+
+  broadcast(count: number): void {
+    const event: MessageEvent = { data: JSON.stringify({ count }) } as MessageEvent
+    this.clients.forEach(s => s.next(event))
+  }
 
   async findAll(limit = 10) {
     return this.prisma.notification.findMany({
@@ -54,7 +71,7 @@ export class NotificationsService {
           endDate: { gte: targetDate, lt: nextDay },
           status: { in: ['AKTIF', 'AKAN_HABIS'] },
         },
-        include: { employee: { select: { fullName: true } } },
+        include: { employee: { select: { id: true, fullName: true } } },
       })
       for (const c of contracts) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
@@ -68,7 +85,7 @@ export class NotificationsService {
               sourceType: 'contract',
               sourceId: c.id,
               triggerDay,
-              deeplink: triggerDay === 0 ? '/kontrak?status=EXPIRED' : '/kontrak?status=AKAN_HABIS',
+              deeplink: `/karyawan/${c.employee.id}`,
               expiryDate: c.endDate,
             },
           })
@@ -224,34 +241,43 @@ export class NotificationsService {
       }
     }
 
-    // Kontrak karyawan: status AKAN_HABIS dan belum punya notifikasi aktif
+    // Kontrak karyawan: endDate dalam 90 hari ke depan (query by date, bukan DB status)
+    // DB status belum tentu up-to-date — computed status dihitung dari endDate
+    const soon90 = new Date(today.getTime() + 90 * 24 * 60 * 60 * 1000)
     const akanHabisContracts = await this.prisma.contract.findMany({
       where: {
-        status: 'AKAN_HABIS',
-        endDate: { gte: today },
+        endDate: { gte: today, lte: soon90 },
+        status: { notIn: ['SELESAI', 'DIBATALKAN'] },
+        childContracts: { none: {} }, // exclude yang sudah diperpanjang
       },
-      include: { employee: { select: { fullName: true } } },
+        include: { employee: { select: { id: true, fullName: true } } },
     })
     for (const c of akanHabisContracts) {
       const daysLeft = Math.ceil((startOfDay(c.endDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
       const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
-      try {
-        await this.prisma.notification.create({
-          data: {
-            category: 'KONTRAK_KARYAWAN',
-            severity: catchallSeverity,
-            title: 'Kontrak Karyawan Akan Habis',
-            message: `Kontrak ${c.employee.fullName} (${c.contractNo}) berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
-            sourceType: 'contract',
-            sourceId: c.id,
-            triggerDay: CATCHALL_DAY,
-            deeplink: '/kontrak?status=AKAN_HABIS',
-            expiryDate: c.endDate,
-          },
+      const notifData = {
+        category: 'KONTRAK_KARYAWAN' as const,
+        severity: catchallSeverity as 'CRITICAL' | 'WARNING',
+        title: 'Kontrak Karyawan Akan Habis',
+        message: `Kontrak ${c.employee.fullName} (${c.contractNo}) berakhir ${daysLeft <= 0 ? 'hari ini' : `${daysLeft} hari lagi`}`,
+        sourceType: 'contract',
+        sourceId: c.id,
+        triggerDay: CATCHALL_DAY,
+        deeplink: `/karyawan/${c.employee.id}`,
+        expiryDate: c.endDate,
+      }
+      // upsert agar pesan selalu up-to-date saat endDate diubah
+      const existing = await this.prisma.notification.findUnique({
+        where: { sourceType_sourceId_triggerDay: { sourceType: 'contract', sourceId: c.id, triggerDay: CATCHALL_DAY } },
+      })
+      if (existing) {
+        await this.prisma.notification.update({
+          where: { id: existing.id },
+          data: { ...notifData, resolvedAt: null, isRead: false, readAt: null },
         })
+      } else {
+        await this.prisma.notification.create({ data: notifData })
         created++
-      } catch (e: any) {
-        if (e.code !== 'P2002') throw e
       }
     }
 
@@ -369,6 +395,14 @@ export class NotificationsService {
         data: { resolvedAt: new Date() },
       })
       resolved += r.count
+    }
+
+    // Broadcast unread count to all connected SSE clients
+    try {
+      const currentCount = await this.getUnreadCount()
+      this.broadcast(currentCount)
+    } catch {
+      // non-fatal — SSE broadcast failure should not affect notification generation
     }
 
     return { created, resolved }

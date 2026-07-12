@@ -320,7 +320,9 @@ const activeTab = ref<SettingsTab>('general')
 const tabs = computed(() => [
   { key: 'general' as SettingsTab, label: 'Umum', icon: 'i-lucide-building-2' },
   { key: 'profile' as SettingsTab, label: 'Profil Akun', icon: 'i-lucide-user-cog' },
-  { key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' },
+  ...(auth.canManageMasterData
+    ? [{ key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' }]
+    : []),
 ])
 
 function onTabChange(key: SettingsTab) {

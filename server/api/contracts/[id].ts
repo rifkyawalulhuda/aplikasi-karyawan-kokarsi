@@ -19,10 +19,11 @@ export default defineEventHandler(async (event) => {
   })
 
   if (res.status >= 400) {
+    const errMessage = (res._data as any)?.message ?? res.statusText ?? 'Terjadi kesalahan'
     throw createError({
       statusCode: res.status,
-      statusMessage: res.statusText,
-      data: res._data,
+      statusMessage: errMessage,
+      data: { message: errMessage },
     })
   }
 

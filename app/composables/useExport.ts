@@ -163,9 +163,12 @@ export function useExport() {
     }))
   }
 
-  function exportWarningLettersExcel(letters: WarningLetter[], filename = 'surat-peringatan') {
-    if (!letters.length) return
-    const rows = toWarningLetterRows(letters)
+  function exportWarningLettersExcel(letters: WarningLetter[], year?: number, filename = 'surat-peringatan') {
+    const filtered = year
+      ? letters.filter(l => new Date(l.letterDate).getFullYear() === year)
+      : letters
+    if (!filtered.length) return false
+    const rows = toWarningLetterRows(filtered)
     const ws = XLSX.utils.json_to_sheet(rows)
     const colWidths = [
       { wch: 5 }, { wch: 24 }, { wch: 28 }, { wch: 18 }, { wch: 22 },
@@ -174,8 +177,40 @@ export function useExport() {
     ws['!cols'] = colWidths
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Surat Peringatan')
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    const suffix = year ? `-${year}` : '-semua'
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
+    return true
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel }
+  function toEmployeeDocumentRows(docs: any[]) {
+    return docs.map((d, i) => ({
+      'No': i + 1,
+      'Nama Dokumen': d.documentType?.name ?? '-',
+      'Jenis': d.documentType?.documentType ?? '-',
+      'Penerbit': d.documentType?.issuer ?? '-',
+      'No. Dokumen': d.documentNumber ?? '-',
+      'Nama Karyawan': d.employee?.fullName ?? '-',
+      'No. Induk': d.employee?.employeeNo ?? '-',
+      'Tgl. Berlaku Sampai': fmt(d.expiryDate),
+      'Status': d.status === 'AKTIF' ? 'Aktif' : d.status === 'AKAN_EXPIRED' ? 'Akan Expired' : 'Expired',
+      'Catatan': d.notes ?? '-',
+      'Dibuat': fmt(d.createdAt),
+    }))
+  }
+
+  function exportEmployeeDocumentsExcel(docs: any[], filename = 'sertifikasi-ijin') {
+    if (!docs.length) return false
+    const rows = toEmployeeDocumentRows(docs)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 30 }, { wch: 14 }, { wch: 24 }, { wch: 22 },
+      { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 40 }, { wch: 16 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sertifikasi & Ijin')
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
+
+  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel }
 }

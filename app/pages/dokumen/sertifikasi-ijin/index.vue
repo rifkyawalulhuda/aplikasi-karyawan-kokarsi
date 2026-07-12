@@ -12,6 +12,25 @@ const UIcon = resolveComponent('UIcon')
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
+const { exportEmployeeDocumentsExcel } = useExport()
+
+// --- Export ---
+const isExporting = ref(false)
+async function handleExport() {
+  if (!documents.value.length) {
+    toast.add({ title: 'Tidak ada data', description: 'Belum ada data Sertifikasi & Ijin untuk diekspor.', color: 'warning' })
+    return
+  }
+  isExporting.value = true
+  try {
+    exportEmployeeDocumentsExcel(documents.value)
+    toast.add({ title: 'Export berhasil', description: `${documents.value.length} data berhasil diekspor ke Excel.`, color: 'success' })
+  } catch {
+    toast.add({ title: 'Export gagal', color: 'error' })
+  } finally {
+    isExporting.value = false
+  }
+}
 
 // --- Types ---
 interface EmployeeDocument {
@@ -38,6 +57,13 @@ const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const addModal = ref(false)
 const editModal = ref(false)
 const editTarget = ref<EmployeeDocument | null>(null)
+const detailDrawer = ref(false)
+const detailTarget = ref<EmployeeDocument | null>(null)
+
+function openDetail(doc: EmployeeDocument) {
+  detailTarget.value = doc
+  detailDrawer.value = true
+}
 
 // --- Fetch Data ---
 const { data: docsRes, status, refresh } = await useFetch<{ data: EmployeeDocument[]; total: number }>('/api/employee-documents', {
@@ -188,6 +214,7 @@ function sortableHeader(label: string, key: string) {
 function getRowItems(row: Row<EmployeeDocument>): DropdownMenuItem[][] {
   const doc = row.original
   const group1: DropdownMenuItem[] = [
+    { label: 'Lihat Detail', icon: 'i-lucide-eye', onSelect: () => openDetail(doc) },
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(doc) },
   ]
   if (doc.status !== 'AKTIF') {
@@ -318,6 +345,16 @@ function openRenew(doc: EmployeeDocument) {
 watch([searchQuery, statusFilter], () => {
   pagination.value.pageIndex = 0
 })
+
+// --- Deep-link: ?openId=<id> dari pencarian global ---
+const route = useRoute()
+onMounted(() => {
+  const openId = route.query.openId
+  if (openId) {
+    const doc = documents.value.find(d => d.id === Number(openId))
+    if (doc) openDetail(doc)
+  }
+})
 </script>
 
 <template>
@@ -328,6 +365,15 @@ watch([searchQuery, statusFilter], () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UDropdownMenu
+            :items="[
+              [
+                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => handleExport() }
+              ]
+            ]"
+          >
+            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" :loading="isExporting" />
+          </UDropdownMenu>
           <UButton
             label="Tambah Dokumen"
             icon="i-lucide-plus"
@@ -416,6 +462,15 @@ watch([searchQuery, statusFilter], () => {
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Detail Drawer -->
+  <SertifikasiIjinDetailDrawer
+    v-model:open="detailDrawer"
+    :document="detailTarget"
+    @update:open="(v: boolean) => { detailDrawer = v; if (!v) detailTarget = null }"
+    @edit="(doc) => { detailDrawer = false; openEdit(doc) }"
+    @renew="(doc) => { detailDrawer = false; openRenew(doc) }"
+  />
 
   <!-- Modal Tambah -->
   <SertifikasiIjinFormModal

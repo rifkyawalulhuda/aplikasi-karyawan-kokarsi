@@ -265,4 +265,12 @@ export class ContractCronService {
       })
     this.logger.log(`Notifications: ${notifResult.created} created, ${notifResult.resolved} resolved`)
   }
+
+  // Setiap 5 menit — refresh notifikasi untuk semua modul (safety net)
+  @Cron('*/5 * * * *', { name: 'notification-refresh', timeZone: 'Asia/Jakarta' })
+  async refreshNotifications() {
+    this.logger.debug('Refreshing expiry notifications (5-min interval)...')
+    await this.notificationsService.generateNotifications()
+      .catch(err => this.logger.error(`Notification refresh failed: ${err?.message}`))
+  }
 }

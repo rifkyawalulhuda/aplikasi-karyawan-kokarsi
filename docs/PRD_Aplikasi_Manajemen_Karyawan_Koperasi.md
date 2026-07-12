@@ -1,8 +1,8 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.4 (Revisi)  
-**Tanggal**: 9 Juli 2026  
+**Versi Dokumen**: 1.6 (Revisi)  
+**Tanggal**: 10 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
 
@@ -399,12 +399,26 @@ Juga update tabel **contracts** — field tambahan:
 ---
 
 **Catatan Akhir**:
-Dokumen ini adalah **versi 1.4** (revisi sesuai permintaan).  
+Dokumen ini adalah **versi 1.6** (revisi sesuai permintaan).  
 Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
 
 **Perubahan v1.4 (9 Juli 2026)**:
 - FR-22: Form Perpanjang Legal Koperasi — field Nama Dokumen read-only saat mode renew
 - FR-23: Bug fix cron email notifikasi — date boundary `startOfDay`, filter email null UserAccount, env vars `MAILEROO_FROM_EMAIL`/`MAILEROO_FROM_NAME`
+
+**Perubahan v1.5 (9 Juli 2026)**:
+- FR-24: Sistem Notifikasi Expiry Reminder — tabel `notifications` (Prisma), endpoint REST `/notifications`, cron `generateNotifications()` dengan catch-all pass untuk status AKAN_EXPIRED/AKAN_HABIS/AKAN_BERAKHIR, bell icon di sidebar dengan UPopover dropdown, halaman `/notifications`
+- FR-25: Status "Sudah Diperpanjang" di Riwayat Kontrak Karyawan — frontend overlay `getDisplayStatus()` menggunakan `hasBeenRenewed()` (konsisten dengan pola Legal Koperasi)
+- FR-26: Mother Agreement di drawer detail Kontrak Vendor menjadi link yang membuka drawer detail dokumen terkait via `emit('open-contract', id)`
+- FR-27: Pencarian global diperluas ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi — deep-link `?openId=` auto-buka drawer detail di halaman tujuan
+
+**Perubahan v1.6 (10 Juli 2026)**:
+- FR-28: SSE Real-time Notifications — `CookieJwtStrategy` untuk auth SSE endpoint, `EventSource` menggantikan polling 5 menit, Nitro proxy stream pipe raw HTTP, animasi bounce pada bell icon saat notifikasi baru masuk
+- FR-29: Hook fire-and-forget di `ContractsService` — `generateNotifications()` dipanggil setelah `create()`, `update()`, `renew()` tanpa blocking response; cron 5 menit sebagai safety net untuk modul lain
+- FR-30: Catch-all pass notifikasi berbasis tanggal (bukan DB status) + upsert agar pesan "X hari lagi" selalu akurat saat tanggal diubah
+- FR-31: Status "Sudah Diperpanjang" di Riwayat Kontrak halaman Detail Karyawan (`ContractTimeline.vue`)
+- FR-32: Error message user-friendly di edit kontrak — Nitro proxy ekstrak pesan dari `res._data.message`, pesan backend diperbarui menjadi bahasa natural
+- FR-33: Deeplink notifikasi KONTRAK_KARYAWAN mengarah ke `/karyawan/{employeeId}` (halaman detail karyawan spesifik)
 
 ---
 

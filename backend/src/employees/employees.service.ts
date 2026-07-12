@@ -247,6 +247,7 @@ export class EmployeesService {
         }
         return created
       })
+      this.dashboardCache.invalidate()
       return { imported: result.length, errors: [] }
     } catch (err: any) {
       if (err instanceof BadRequestException) throw err
@@ -393,7 +394,7 @@ export class EmployeesService {
 
     const [
       total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
-      spGroups, genderGroups, educationGroups, deptData, contractFamilyGroups,
+      spGroups, genderGroups, educationGroups, deptData, mitraCount, pkwtCount,
       recruitTrend, offboardTrend,
     ] = await Promise.all([
       this.prisma.employee.count(),
@@ -429,18 +430,21 @@ export class EmployeesService {
       this.prisma.department.findMany({
         select: { name: true, _count: { select: { employees: true } } }
       }),
-      // Contract family breakdown
-      this.prisma.contract.findMany({
-        where: { template: { isNot: null }, status: { notIn: ['DIBATALKAN', 'SELESAI'] } },
-        select: { template: { select: { family: true } } }
+      // Contract family breakdown — gunakan count() bukan findMany() untuk efisiensi
+      this.prisma.contract.count({
+        where: { template: { family: 'MITRA' }, status: { notIn: ['DIBATALKAN', 'SELESAI'] } },
+      }),
+      this.prisma.contract.count({
+        where: { template: { family: 'PKWT' }, status: { notIn: ['DIBATALKAN', 'SELESAI'] } },
       }),
       // Recruitment trend (last 5 years) — fetch joinDate, group in JS
       this.prisma.employee.findMany({
         where: { joinDate: { gte: new Date(`${currentYear - 4}-01-01`) } },
         select: { joinDate: true },
       }),
-      // Offboarding trend — fetch all, group in JS
+      // Offboarding trend — batasi 5 tahun terakhir agar tidak full table scan
       this.prisma.employeeOffboarding.findMany({
+        where: { terminationDate: { gte: new Date(`${currentYear - 4}-01-01`) } },
         select: { terminationDate: true, terminationType: true },
       }),
     ])
@@ -468,9 +472,9 @@ export class EmployeesService {
     const s1 = educationGroups.find(e => e.educationLevel === 'S1')?._count ?? 0
     const s2 = educationGroups.find(e => e.educationLevel === 'S2')?._count ?? 0
 
-    // Contract family breakdown
-    const mitra = contractFamilyGroups.filter(c => c.template?.family === 'MITRA').length
-    const pkwt = contractFamilyGroups.filter(c => c.template?.family === 'PKWT').length
+    // Contract family breakdown — sudah dihitung langsung dari count()
+    const mitra = mitraCount
+    const pkwt = pkwtCount
 
     // Recruitment trend — group joinDate by year in JS
     const recruitMap = new Map<number, number>()

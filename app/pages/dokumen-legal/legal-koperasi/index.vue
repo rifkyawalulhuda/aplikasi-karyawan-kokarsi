@@ -369,6 +369,15 @@ async function openDocumentById(id: number) {
     toast.add({ title: 'Gagal memuat detail dokumen', color: 'error' })
   }
 }
+
+// --- Deep-link: ?openId=<id> ---
+const route = useRoute()
+onMounted(async () => {
+  const openId = route.query.openId
+  if (openId) {
+    await openDocumentById(Number(openId))
+  }
+})
 </script>
 
 <template>
