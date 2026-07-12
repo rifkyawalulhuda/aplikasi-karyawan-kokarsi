@@ -15,6 +15,32 @@ const { confirmDeleteToast } = useConfirmDeleteToast()
 const { exportWarningLettersExcel } = useExport()
 const table = useTemplateRef('table')
 
+// --- Export ---
+const currentYear = new Date().getFullYear()
+const availableYears = computed(() => {
+  const years = new Set(
+    (letters.value ?? []).map((l: any) => new Date(l.letterDate).getFullYear())
+  )
+  years.add(currentYear)
+  return [...years].sort((a, b) => b - a)
+})
+const exportModal = ref(false)
+const exportYear = ref<number | 'all'>(currentYear)
+const exportYearOptions = computed(() => [
+  { label: 'Semua Tahun', value: 'all' as const },
+  ...availableYears.value.map(y => ({ label: String(y), value: y })),
+])
+function handleExport() {
+  const year = exportYear.value === 'all' ? undefined : exportYear.value
+  const ok = exportWarningLettersExcel(letters.value, year)
+  if (ok) {
+    toast.add({ title: 'Export berhasil', description: `Data surat peringatan${year ? ` tahun ${year}` : ''} berhasil diekspor.`, color: 'success' })
+    exportModal.value = false
+  } else {
+    toast.add({ title: 'Tidak ada data', description: `Tidak ada surat peringatan${year ? ` di tahun ${year}` : ''}.`, color: 'warning' })
+  }
+}
+
 const searchQuery = ref('')
 const levelFilter = ref('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
@@ -306,15 +332,7 @@ const columns: TableColumn<WarningLetter>[] = [
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UDropdownMenu
-            :items="[
-              [
-                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => exportWarningLettersExcel(letters) }
-              ]
-            ]"
-          >
-            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" />
-          </UDropdownMenu>
+          <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" @click="exportModal = true" />
           <UButton label="Tambah Surat" icon="i-lucide-plus" color="primary" @click="addModal = true" />
         </template>
       </UDashboardNavbar>
@@ -391,6 +409,34 @@ const columns: TableColumn<WarningLetter>[] = [
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Modal Export -->
+  <UModal v-model:open="exportModal" title="Export Surat Peringatan" :ui="{ width: 'sm:max-w-sm' }">
+    <template #body>
+      <div class="space-y-4 py-2">
+        <UFormField label="Pilih Tahun">
+          <USelect
+            v-model="exportYear"
+            :items="exportYearOptions"
+            value-key="value"
+            label-key="label"
+            class="w-full"
+          />
+        </UFormField>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <UButton label="Batal" color="neutral" variant="ghost" @click="exportModal = false" />
+        <UButton
+          label="Export Excel"
+          icon="i-lucide-file-spreadsheet"
+          color="primary"
+          @click="handleExport"
+        />
+      </div>
+    </template>
+  </UModal>
 
   <!-- Modal Tambah -->
   <WarningLettersAddModal

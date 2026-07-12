@@ -163,9 +163,12 @@ export function useExport() {
     }))
   }
 
-  function exportWarningLettersExcel(letters: WarningLetter[], filename = 'surat-peringatan') {
-    if (!letters.length) return
-    const rows = toWarningLetterRows(letters)
+  function exportWarningLettersExcel(letters: WarningLetter[], year?: number, filename = 'surat-peringatan') {
+    const filtered = year
+      ? letters.filter(l => new Date(l.letterDate).getFullYear() === year)
+      : letters
+    if (!filtered.length) return false
+    const rows = toWarningLetterRows(filtered)
     const ws = XLSX.utils.json_to_sheet(rows)
     const colWidths = [
       { wch: 5 }, { wch: 24 }, { wch: 28 }, { wch: 18 }, { wch: 22 },
@@ -174,7 +177,9 @@ export function useExport() {
     ws['!cols'] = colWidths
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Surat Peringatan')
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    const suffix = year ? `-${year}` : '-semua'
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
+    return true
   }
 
   function toEmployeeDocumentRows(docs: any[]) {
