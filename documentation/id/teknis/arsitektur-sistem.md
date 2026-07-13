@@ -1,4 +1,4 @@
-# Arsitektur Sistem
+﻿# Arsitektur Sistem
 
 ## Overview
 
@@ -101,7 +101,7 @@ NotificationsService.generateNotifications()
 
 ## Database Schema Overview
 
-Lihat [Database Schema](/id/teknis/database-schema) untuk detail lengkap.
+Lihat [Database Schema](/teknis/database-schema) untuk detail lengkap.
 
 ## Auth Flow
 

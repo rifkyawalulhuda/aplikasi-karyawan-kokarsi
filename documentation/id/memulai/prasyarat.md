@@ -1,4 +1,4 @@
-# Prasyarat
+﻿# Prasyarat
 
 Sebelum melakukan instalasi atau deployment, pastikan semua software berikut sudah terinstal.
 
@@ -54,7 +54,7 @@ Aplikasi ini mendukung dua mode database:
 - **Docker** (rekomendasi) — PostgreSQL berjalan di container Docker
 - **Native** — PostgreSQL terinstal langsung di OS
 
-Lihat [panduan deployment](/id/deployment/arsitektur) untuk perbandingan lebih detail.
+Lihat [panduan deployment](/deployment/arsitektur) untuk perbandingan lebih detail.
 :::
 
 ## Akses Repositori

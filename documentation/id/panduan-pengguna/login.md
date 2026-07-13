@@ -1,4 +1,4 @@
-# Login & Akun
+﻿# Login & Akun
 
 ## Halaman Login
 
@@ -54,4 +54,4 @@ Administrator dapat mengelola akun pengguna melalui **Pengaturan → User**:
 - Reset password
 - Hapus akun
 
-Lihat [Peran & Akses](/id/referensi/peran-akses) untuk detail perbedaan hak akses.
+Lihat [Peran & Akses](/referensi/peran-akses) untuk detail perbedaan hak akses.

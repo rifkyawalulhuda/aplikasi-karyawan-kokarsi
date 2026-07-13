@@ -1,4 +1,4 @@
-# Deployment Docker
+﻿# Deployment Docker
 
 Mode deployment yang **direkomendasikan** untuk production menggunakan Docker untuk database PostgreSQL.
 
@@ -6,7 +6,7 @@ Mode deployment yang **direkomendasikan** untuk production menggunakan Docker un
 
 - Node.js 24.x, pnpm, PM2, Docker Desktop sudah terinstal
 - File aplikasi sudah di-copy ke mesin target
-- Lihat [Prasyarat](/id/memulai/prasyarat) untuk detail
+- Lihat [Prasyarat](/memulai/prasyarat) untuk detail
 
 ## Langkah 1: Setup File Konfigurasi
 

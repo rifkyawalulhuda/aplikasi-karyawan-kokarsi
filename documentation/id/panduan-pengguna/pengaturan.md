@@ -1,4 +1,4 @@
-# Pengaturan
+﻿# Pengaturan
 
 Halaman Pengaturan dapat diakses melalui menu **Pengaturan** di sidebar.
 
@@ -50,4 +50,4 @@ Kustomisasi halaman login:
 - Ubah role (Admin / Pengelola Koperasi)
 - Reset password, hapus akun
 
-Lihat [Peran & Akses](/id/referensi/peran-akses) untuk detail perbedaan hak akses.
+Lihat [Peran & Akses](/referensi/peran-akses) untuk detail perbedaan hak akses.

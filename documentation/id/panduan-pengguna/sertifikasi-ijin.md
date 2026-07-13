@@ -1,4 +1,4 @@
-# Sertifikasi & Ijin
+﻿# Sertifikasi & Ijin
 
 Modul Sertifikasi & Ijin mengelola dokumen sertifikasi profesi dan ijin operasional karyawan.
 
@@ -67,4 +67,4 @@ Sistem otomatis mengirim notifikasi saat dokumen mendekati kadaluarsa:
 - **H-90, H-60, H-30** — Warning (kuning)
 - **H-7, H-0** — Critical (merah)
 
-Notifikasi muncul di bell icon sidebar secara real-time. Lihat [Notifikasi](/id/panduan-pengguna/notifikasi) untuk detail.
+Notifikasi muncul di bell icon sidebar secara real-time. Lihat [Notifikasi](/panduan-pengguna/notifikasi) untuk detail.

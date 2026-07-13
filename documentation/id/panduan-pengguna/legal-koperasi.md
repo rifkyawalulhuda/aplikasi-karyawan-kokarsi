@@ -1,4 +1,4 @@
-# Legal Koperasi
+﻿# Legal Koperasi
 
 Modul Legal Koperasi mengelola dokumen hukum dan ijin operasional koperasi.
 
@@ -68,4 +68,4 @@ Dokumen Legal Koperasi dapat ditemukan via pencarian global. Klik hasil pencaria
 
 ## Notifikasi
 
-Dokumen dengan `Butuh Perpanjangan = Ya` akan memicu notifikasi otomatis saat mendekati kadaluarsa. Lihat [Notifikasi](/id/panduan-pengguna/notifikasi).
+Dokumen dengan `Butuh Perpanjangan = Ya` akan memicu notifikasi otomatis saat mendekati kadaluarsa. Lihat [Notifikasi](/panduan-pengguna/notifikasi).
