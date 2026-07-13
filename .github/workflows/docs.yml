@@ -32,9 +32,13 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Install dependencies
+        working-directory: documentation
+        run: npm install
+
       - name: Build dokumentasi
         working-directory: documentation
-        run: npx --yes vitepress@1.6.4 build
+        run: npm run docs:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
