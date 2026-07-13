@@ -1,8 +1,8 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.6 (Revisi)  
-**Tanggal**: 10 Juli 2026  
+**Versi Dokumen**: 1.7 (Revisi)  
+**Tanggal**: 13 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
 
@@ -419,6 +419,15 @@ Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperas
 - FR-31: Status "Sudah Diperpanjang" di Riwayat Kontrak halaman Detail Karyawan (`ContractTimeline.vue`)
 - FR-32: Error message user-friendly di edit kontrak — Nitro proxy ekstrak pesan dari `res._data.message`, pesan backend diperbarui menjadi bahasa natural
 - FR-33: Deeplink notifikasi KONTRAK_KARYAWAN mengarah ke `/karyawan/{employeeId}` (halaman detail karyawan spesifik)
+
+**Perubahan v1.7 (13 Juli 2026)**:
+- FR-34: Dashboard fixes — `dashboardCache.invalidate()` di `bulkCreate`, skeleton loading state, error alert UX, date filter offboardTrend 5 tahun, ganti `contract.findMany` dengan dua `count()` query untuk contract family
+- FR-35: Halaman Tampilan Login hanya bisa diakses role Admin (`auth.canManageMasterData`)
+- FR-36: Export Excel Sertifikasi & Ijin — semua data, UDropdownMenu pola Surat Peringatan
+- FR-37: Export Excel Surat Peringatan dengan filter tahun via UModal popup (default tahun saat ini, Semua Tahun sebagai opsi)
+- FR-38: Sertifikasi & Ijin DetailDrawer — USlideover, preview PDF/gambar, download link, edit/renew from drawer, deep-link `?openId=`
+- FR-39: Modul Akte Dokumen — tabel `akte_dokumen` (snake_case via `@map()`), backend CRUD + file upload max 10MB, Nitro proxy 3 routes, FormModal add/edit, DetailDrawer preview PDF/gambar, halaman index dengan table + pagination konsisten, sidebar menu di bawah Legal Koperasi
+- FR-40: Bug fix Akte Dokumen `watch { immediate: true }` — form edit tidak populate data karena komponen di-mount dengan `open = true`
 
 ---
 

@@ -1,6 +1,6 @@
-﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
+# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-07-10 (v17) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-07-13 (v18) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
 > Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail.
 
@@ -95,10 +95,10 @@ pm2 save                          # simpan daftar proses aktif
 | 13 | Validasi duplikat Master User yang ramah di UI + 409 conflict backend | `app/pages/settings/users.vue`, `backend/src/users/users.service.ts` |
 | 14 | Tabel Data Karyawan mendukung sorting dari header kolom | `app/pages/karyawan/index.vue` |
 | 15 | Master Data Departement sebagai lookup baru | `backend/prisma/schema.prisma`, `backend/src/lookups/` |
-| 16 | Redesign Login Page — corporate modern minimalis (split screen) | `app/pages/login.vue` |
+| 16 | Redesign Login Page � corporate modern minimalis (split screen) | `app/pages/login.vue` |
 | 17 | Toast konfirmasi logout sebelum sesi diakhiri | `app/composables/useConfirmActionToast.ts` |
 | 18 | Status kepegawaian otomatis + flow offboarding + status kontrak `SELESAI` | `backend/src/employees/`, `backend/src/contracts/` |
-| 19 | Halaman detail data karyawan (`/karyawan/:id`) — NIK, Tempat Lahir, Alamat + layout Data Pekerjaan / Data Pribadi | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/SummaryCards.vue` |
+| 19 | Halaman detail data karyawan (`/karyawan/:id`) � NIK, Tempat Lahir, Alamat + layout Data Pekerjaan / Data Pribadi | `app/pages/karyawan/[id].vue`, `app/components/karyawan/detail/SummaryCards.vue` |
 | 20 | Tabel Manajemen Kontrak mendukung sorting dari header kolom (6 kolom) | `app/pages/kontrak.vue` |
 | 21 | Manajemen Surat Peringatan + generate PDF (pdfkit, template kop surat + logo) | `app/pages/dokumen/surat-peringatan/index.vue`, `backend/src/warning-letters/` |
 | 22 | Auto-calculate "Berlaku Sampai" (6 bulan dari Tanggal Surat) + field read-only | `app/components/warning-letters/AddModal.vue` |
@@ -111,25 +111,25 @@ pm2 save                          # simpan daftar proses aktif
 | 29 | PDF MITRA 1:1 dengan sample: header halaman 1, title full-width, hari/tanggal tanda tangan dinamis | `backend/src/contracts/contract-document.service.ts` |
 | 30 | PDF MITRA signature footer: 2 pilar (PIHAK PERTAMA/KEDUA) di luar garis, full-width, tidak terpisah | `backend/src/contracts/contract-document.service.ts` |
 | 31 | Preview PDF dokumen kontrak dan surat peringatan via PDF.js canvas render (bukan iframe) | `app/components/PdfViewer.client.vue`, `app/pages/kontrak.vue`, `app/pages/dokumen/surat-peringatan/index.vue` |
-| 32 | Eskalasi Surat Peringatan: rule SP1→SP2→SP3, blokir jika SP3 aktif, validasi backend + UI | `backend/src/warning-letters/warning-letters.service.ts`, `app/components/warning-letters/AddModal.vue` |
+| 32 | Eskalasi Surat Peringatan: rule SP1?SP2?SP3, blokir jika SP3 aktif, validasi backend + UI | `backend/src/warning-letters/warning-letters.service.ts`, `app/components/warning-letters/AddModal.vue` |
 | 33 | Upload dokumen kontrak PDF (scan tanda tangan) menggantikan field URL Dokumen | `backend/src/contracts/contracts.controller.ts`, `app/components/kontrak/EditContractModal.vue`, `server/api/contracts/[id]/document.post.ts` |
 | 34 | Pengaturan Umum untuk edit nama Ketua Koperasi (`cooperativeChairmanName`) | `app/pages/settings/index.vue`, `server/api/settings/general.get.ts`, `server/api/settings/general.put.ts`, `backend/src/settings/` |
 | 35 | Master template kontrak aktif untuk keluarga `PKWT` dan `MITRA` | `app/pages/settings/contract-templates.vue`, `backend/src/contract-templates/` |
 | 36 | Self-healing default `ContractType` dan sinkronisasi relasi template `PKWT` / `MITRA` | `backend/src/lookups/lookups.service.ts`, `backend/src/contract-templates/contract-templates.service.ts` |
-| 37 | Contract State Machine: enum `DRAFT` + cron job harian 00:01 WIB (`@nestjs/schedule`) untuk auto-shift `AKTIF`→`AKAN_HABIS`→`EXPIRED` + sync employment status atomik | `backend/prisma/schema.prisma`, `backend/src/contract-cron/`, `backend/src/app.module.ts` |
+| 37 | Contract State Machine: enum `DRAFT` + cron job harian 00:01 WIB (`@nestjs/schedule`) untuk auto-shift `AKTIF`?`AKAN_HABIS`?`EXPIRED` + sync employment status atomik | `backend/prisma/schema.prisma`, `backend/src/contract-cron/`, `backend/src/app.module.ts` |
 | 38 | Contract Guards: Anti-Overlap (409 Conflict), SP3 Lockout (403 Forbidden), State Lock untuk kontrak bertanda tangan (400 BadRequest) | `backend/src/contracts/contracts.service.ts` |
 | 39 | Contract History Chain: field `parentContractId` self-referential untuk audit trail renewal, auto-link ke kontrak expired terakhir saat create biasa | `backend/prisma/schema.prisma`, `backend/src/contracts/contracts.service.ts` |
-| 40 | Contract Summary Mode: halaman kontrak tampil 1 baris per karyawan (bukan semua kontrak), endpoint `GET /api/contracts/summary` dengan prioritas `AKTIF`→`AKAN_HABIS`→`EXPIRED` | `backend/src/contracts/contracts.service.ts`, `app/pages/kontrak.vue`, `server/api/contracts/summary.get.ts` |
+| 40 | Contract Summary Mode: halaman kontrak tampil 1 baris per karyawan (bukan semua kontrak), endpoint `GET /api/contracts/summary` dengan prioritas `AKTIF`?`AKAN_HABIS`?`EXPIRED` | `backend/src/contracts/contracts.service.ts`, `app/pages/kontrak.vue`, `server/api/contracts/summary.get.ts` |
 | 41 | Contract Renewal Flow: endpoint `POST /api/contracts/:id/renew`, modal `RenewContractModal.vue`, validasi `startDate >= parent.endDate`, parent harus `AKAN_HABIS` atau `EXPIRED` | `backend/src/contracts/contracts.service.ts`, `app/components/kontrak/RenewContractModal.vue`, `server/api/contracts/[id]/renew.post.ts` |
 | 42 | Contract History API: endpoint `GET /api/contracts/history/:employeeId` untuk ambil semua kontrak karyawan, modal riwayat fetch per employee (bukan filter lokal) | `backend/src/contracts/contracts.service.ts`, `server/api/contracts/history/[employeeId].get.ts`, `app/pages/kontrak.vue` |
-| 43 | Add Contract Modal — Contract Status Awareness: saat employee dipilih, form cek kontrak terakhir, tampil warning untuk `AKTIF`/`AKAN_HABIS` (disable simpan), info untuk `EXPIRED` (boleh simpan) | `app/components/kontrak/AddContractModal.vue` |
+| 43 | Add Contract Modal � Contract Status Awareness: saat employee dipilih, form cek kontrak terakhir, tampil warning untuk `AKTIF`/`AKAN_HABIS` (disable simpan), info untuk `EXPIRED` (boleh simpan) | `app/components/kontrak/AddContractModal.vue` |
 | 44 | Nitro Proxy Error Handling: semua proxy contracts pakai `$fetch.raw` + `createError` untuk forward error backend (409/403/400) ke frontend sebagai toast | `server/api/contracts.ts`, `server/api/contracts/[id].ts`, `server/api/contracts/summary.get.ts`, `server/api/contracts/history/[employeeId].get.ts`, `server/api/contracts/[id]/renew.post.ts` |
 | 45 | Riwayat Surat Peringatan di halaman Detail Karyawan: timeline SP per karyawan (badge level, jenis pelanggaran, masa berlaku, dokumen), scrollable max-h-[600px] | `app/components/karyawan/detail/WarningLetterList.vue`, `app/pages/karyawan/[id].vue` |
 | 46 | Scrollable timeline di detail karyawan: ContractTimeline + WarningLetterList, max-h-[400px] mobile/max-h-[600px] desktop, gradient fade indicator dark-mode-aware | `app/components/karyawan/detail/ContractTimeline.vue`, `app/components/karyawan/detail/WarningLetterList.vue` |
 | 47 | Import Data Karyawan Bulk via Excel Template: template dengan dropdown validasi data master (ExcelJS backend), parse/validate di frontend (xlsx), bulk create all-or-nothing transaction backend | `app/composables/useImportTemplate.ts`, `app/components/karyawan/ImportModal.vue`, `backend/src/employees/employees.service.ts`, `server/api/employees/bulk-import.post.ts`, `server/api/employees/import-template.get.ts` |
-| 48 | Fix: Edit Kontrak Bad Request — State Lock normalisasi Date vs String perbandingan (Date.toISOString vs DTO string) | `backend/src/contracts/contracts.service.ts` |
-| 49 | Fix: Kontrak PHK/RESIGN tidak bisa buat kontrak baru — guard `checkTerminationLockout()` di create/renew, status summary override ke SELESAI untuk karyawan offboarded | `backend/src/contracts/contracts.service.ts` |
-| 50 | Fix: Import tanggal off-by-one (timezone) — eliminasi `toISOString()` dari `parseDateString()`, pakai local date components, `raw: false` di xlsx untuk avoid Date objects | `app/composables/useImportTemplate.ts` |
+| 48 | Fix: Edit Kontrak Bad Request � State Lock normalisasi Date vs String perbandingan (Date.toISOString vs DTO string) | `backend/src/contracts/contracts.service.ts` |
+| 49 | Fix: Kontrak PHK/RESIGN tidak bisa buat kontrak baru � guard `checkTerminationLockout()` di create/renew, status summary override ke SELESAI untuk karyawan offboarded | `backend/src/contracts/contracts.service.ts` |
+| 50 | Fix: Import tanggal off-by-one (timezone) � eliminasi `toISOString()` dari `parseDateString()`, pakai local date components, `raw: false` di xlsx untuk avoid Date objects | `app/composables/useImportTemplate.ts` |
 | 51 | Ganti Logo & Nama Organisasi: upload logo (JPG/PNG/WEBP/SVG, max 512x512px, 2MB), field Nama Organisasi di Pengaturan > Umum (Admin only), tampil dinamis di sidebar TeamsMenu | `backend/src/settings/`, `app/composables/useAppSettings.ts`, `app/components/TeamsMenu.vue`, `app/pages/settings/index.vue`, `server/api/settings/logo.post.ts` |
 | 52 | Profil Akun di Pengaturan: menampilkan data aktual user login (fullName, employeeNo, email untuk user_account, role). Email di JWT payload, master_admin tidak punya email | `backend/src/auth/auth.service.ts`, `app/stores/auth.ts`, `app/pages/settings/index.vue` |
 
@@ -138,42 +138,42 @@ pm2 save                          # simpan daftar proses aktif
 | 55 | Title browser & SEO meta diupdate | `app/app.vue` |
 | 56 | Security: JWT_SECRET fail-fast (hapus fallback hardcoded), httpOnly cookie, CORS origin whitelist via env | `backend/src/auth/jwt.strategy.ts`, `backend/src/auth/auth.module.ts`, `server/api/auth/login.post.ts`, `nuxt.config.ts` |
 | 57 | Security: Rate limiting login 5 req/menit via @nestjs/throttler | `backend/src/auth/auth.controller.ts`, `backend/src/app.module.ts` |
-| 58 | Security: File upload magic bytes validation (file-type@16) — bukan hanya MIME header | `backend/src/shared/file-validation.util.ts`, `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
-| 59 | Security: Path traversal sanitasi pada download/serve PDF — resolve dari cwd, bukan uploadRoot | `backend/src/contracts/contracts.controller.ts:downloadPdf` |
-| 60 | Security: Fix auth store & middleware default role `?? 'ADMIN'` → null-safe | `app/stores/auth.ts`, `app/middleware/auth.global.ts` |
-| 61 | Centralisasi BACKEND_URL di `server/utils/backend.ts` — Nitro auto-import, hapus 36 definisi duplikat | `server/utils/backend.ts` |
-| 62 | Ekstrak `backend/src/shared/date-utils.ts` — hapus duplikasi startOfDay & DAY_MS | `backend/src/shared/date-utils.ts` |
+| 58 | Security: File upload magic bytes validation (file-type@16) � bukan hanya MIME header | `backend/src/shared/file-validation.util.ts`, `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
+| 59 | Security: Path traversal sanitasi pada download/serve PDF � resolve dari cwd, bukan uploadRoot | `backend/src/contracts/contracts.controller.ts:downloadPdf` |
+| 60 | Security: Fix auth store & middleware default role `?? 'ADMIN'` ? null-safe | `app/stores/auth.ts`, `app/middleware/auth.global.ts` |
+| 61 | Centralisasi BACKEND_URL di `server/utils/backend.ts` � Nitro auto-import, hapus 36 definisi duplikat | `server/utils/backend.ts` |
+| 62 | Ekstrak `backend/src/shared/date-utils.ts` � hapus duplikasi startOfDay & DAY_MS | `backend/src/shared/date-utils.ts` |
 | 63 | SharedModule + DashboardCacheService: cache invalidasi berbasis event (bukan TTL buta) | `backend/src/shared/shared.module.ts`, `backend/src/shared/dashboard-cache.service.ts` |
 | 64 | Unit Test Jest: 9 test AuthService (validateAdmin, login, changePassword) | `backend/src/auth/auth.service.spec.ts`, `backend/jest.config.js`, `backend/tsconfig.test.json` |
-| 65 | N+1 fix: ensureDefaultContractTypes loop create → createMany skipDuplicates | `backend/src/lookups/lookups.service.ts` |
+| 65 | N+1 fix: ensureDefaultContractTypes loop create ? createMany skipDuplicates | `backend/src/lookups/lookups.service.ts` |
 | 66 | Search API: filter kontrak di database (bukan JS), tambah param search ke contracts.findAll | `server/api/search.get.ts`, `backend/src/contracts/contracts.service.ts` |
 | 67 | Export karyawan: auth check 401, batas 5000 record, timeout 30 detik, error handling | `server/api/employees/export.get.ts` |
-| 68 | Fix resolveActiveContract dipanggil 4x per row export → 1x via spread IIFE | `app/composables/useExport.ts` |
+| 68 | Fix resolveActiveContract dipanggil 4x per row export ? 1x via spread IIFE | `app/composables/useExport.ts` |
 | 69 | Fix download PDF kontrak: serve cached jika ada, generate hanya jika belum ada atau file hilang | `backend/src/contracts/contracts.controller.ts:downloadPdf` |
 | 70 | Fix double `/api` di 7 Nitro proxy routes (warning-letters, employees, contracts, settings) | `server/api/warning-letters/[id]/preview.get.ts`, `server/api/employees/[id]/photo.post.ts`, `server/api/employees/import-template.get.ts`, dll |
-| 71 | Fix file.buffer undefined dengan diskStorage — baca file dari disk via readFileSync setelah upload | `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
-| 72 | Fix FK violation hapus karyawan — hapus employeeStatusHistory & employeeOffboarding dalam transaksi | `backend/src/employees/employees.service.ts:remove` |
-| 73 | Fix UniqueConstraintViolation create kontrak — tangkap P2002, pesan ramah user | `backend/src/contracts/contracts.service.ts:create` |
+| 71 | Fix file.buffer undefined dengan diskStorage � baca file dari disk via readFileSync setelah upload | `backend/src/employees/employees.controller.ts`, `backend/src/settings/settings.controller.ts` |
+| 72 | Fix FK violation hapus karyawan � hapus employeeStatusHistory & employeeOffboarding dalam transaksi | `backend/src/employees/employees.service.ts:remove` |
+| 73 | Fix UniqueConstraintViolation create kontrak � tangkap P2002, pesan ramah user | `backend/src/contracts/contracts.service.ts:create` |
 | 74 | Tambah .env.example root + backend/.env.example dengan semua variabel termasuk FONT_DIR, NUXT_ALLOWED_ORIGINS | `.env.example`, `backend/.env.example` |
-| 75 | Fix typo 'Koprasi' → 'Koperasi', 'departement' → 'departemen' | `backend/src/warning-letters/pdf-generator.service.ts`, `backend/src/lookups/lookups.service.ts` |
-| 76 | Fix font path hardcoded Windows — cross-platform via FONT_DIR env, fallback per OS | `backend/src/warning-letters/pdf-generator.service.ts` |
-| 77 | Fix AuthenticatedUser + JwtPayload interface — ganti type `any` di auth files | `backend/src/auth/auth.service.ts`, `backend/src/auth/jwt.strategy.ts` |
-| 78 | PM2 process manager — auto-restart frontend/backend, env injection, logging | `ecosystem.config.cjs`, `deploy/start.ps1`, `.env` (root) |
-| 79 | Master Dokumen — tabel `document_types` (nama, jenis, penerbit), CRUD di Master Data tab baru | `backend/src/lookups/lookups.service.ts`, `backend/prisma/schema.prisma`, `app/pages/settings/master-data.vue` |
-| 80 | Halaman Sertifikasi & Ijin — CRUD dokumen karyawan, status otomatis (AKTIF/AKAN_EXPIRED/EXPIRED), upload file, tombol Perpanjang | `app/pages/dokumen/sertifikasi-ijin/index.vue`, `app/components/sertifikasi-ijin/FormModal.vue` |
-| 81 | Backend Sertifikasi & Ijin — module `employee-documents`, CRUD + upload file + compute status + filter employeeId | `backend/src/employee-documents/` |
-| 82 | Cron email Sertifikasi & Ijin — notifikasi AKAN_EXPIRED & EXPIRED digabung di cron kontrak harian | `backend/src/contract-cron/contract-cron.service.ts`, `backend/src/contract-cron/maileroo.service.ts` |
-| 83 | Section Sertifikasi & Ijin di Detail Karyawan — timeline scrollable read-only + link Lihat Semua | `app/components/karyawan/detail/EmployeeDocumentList.vue`, `app/pages/karyawan/[id].vue` |
-| 84 | Fix 403 Forbidden buat kontrak baru — checkTerminationLockout auto-reset status stale RESIGN/PHK jika tidak ada offboarding record | `backend/src/contracts/contracts.service.ts:checkTerminationLockout` |
-| 85 | Fix hapus karyawan bersih — tambah employeeDocument.deleteMany di transaksi hapus | `backend/src/employees/employees.service.ts:remove` |
-| 86 | Fix P2002 duplikat contractNo di renew — tangkap error dengan pesan ramah user | `backend/src/contracts/contracts.service.ts:renew` |
-| 87 | Fix Nitro proxy tidak teruskan employeeId filter — tambah query param di server/api/employee-documents/index.ts | `server/api/employee-documents/index.ts` |
-| 88 | Auto-generate nomor kontrak — format `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`, reset per tahun, ikut `startDate` | `backend/src/shared/document-number.util.ts`, `backend/src/contracts/contracts.service.ts:generateContractNo` |
-| 89 | Auto-generate nomor SP — format `{seq}/SP/KUKP/SII/{bulan_romawi}/{tahun}`, ikut `letterDate` | `backend/src/warning-letters/warning-letters.service.ts:generateLetterNumber` |
-| 90 | Preview nomor dinamis — fetch `/preview-number?startDate=` atau `?letterDate=`, refetch otomatis saat tanggal berubah | `server/api/contracts/preview-number.get.ts`, `server/api/warning-letters/preview-number.get.ts` |
-| 91 | Upload file di Surat Peringatan — endpoint `POST :id/file`, diskStorage ke `uploads/warning-letters/`, magic bytes validation, max 10MB | `backend/src/warning-letters/warning-letters.controller.ts`, `server/api/warning-letters/[id]/file.post.ts` |
-| 92 | Tombol "Unduh Dokumen" kondisional di tabel aksi SP — hanya muncul jika `documentUrl` ada | `app/pages/dokumen/surat-peringatan/index.vue:getRowItems` |
-| 93 | CodeGraph integration — pre-indexed knowledge graph 171 files, 1.957 nodes, 4.425 edges, auto-sync on file change | `.codegraph/` (generated), `codegraph` CLI global |
+| 75 | Fix typo 'Koprasi' ? 'Koperasi', 'departement' ? 'departemen' | `backend/src/warning-letters/pdf-generator.service.ts`, `backend/src/lookups/lookups.service.ts` |
+| 76 | Fix font path hardcoded Windows � cross-platform via FONT_DIR env, fallback per OS | `backend/src/warning-letters/pdf-generator.service.ts` |
+| 77 | Fix AuthenticatedUser + JwtPayload interface � ganti type `any` di auth files | `backend/src/auth/auth.service.ts`, `backend/src/auth/jwt.strategy.ts` |
+| 78 | PM2 process manager � auto-restart frontend/backend, env injection, logging | `ecosystem.config.cjs`, `deploy/start.ps1`, `.env` (root) |
+| 79 | Master Dokumen � tabel `document_types` (nama, jenis, penerbit), CRUD di Master Data tab baru | `backend/src/lookups/lookups.service.ts`, `backend/prisma/schema.prisma`, `app/pages/settings/master-data.vue` |
+| 80 | Halaman Sertifikasi & Ijin � CRUD dokumen karyawan, status otomatis (AKTIF/AKAN_EXPIRED/EXPIRED), upload file, tombol Perpanjang | `app/pages/dokumen/sertifikasi-ijin/index.vue`, `app/components/sertifikasi-ijin/FormModal.vue` |
+| 81 | Backend Sertifikasi & Ijin � module `employee-documents`, CRUD + upload file + compute status + filter employeeId | `backend/src/employee-documents/` |
+| 82 | Cron email Sertifikasi & Ijin � notifikasi AKAN_EXPIRED & EXPIRED digabung di cron kontrak harian | `backend/src/contract-cron/contract-cron.service.ts`, `backend/src/contract-cron/maileroo.service.ts` |
+| 83 | Section Sertifikasi & Ijin di Detail Karyawan � timeline scrollable read-only + link Lihat Semua | `app/components/karyawan/detail/EmployeeDocumentList.vue`, `app/pages/karyawan/[id].vue` |
+| 84 | Fix 403 Forbidden buat kontrak baru � checkTerminationLockout auto-reset status stale RESIGN/PHK jika tidak ada offboarding record | `backend/src/contracts/contracts.service.ts:checkTerminationLockout` |
+| 85 | Fix hapus karyawan bersih � tambah employeeDocument.deleteMany di transaksi hapus | `backend/src/employees/employees.service.ts:remove` |
+| 86 | Fix P2002 duplikat contractNo di renew � tangkap error dengan pesan ramah user | `backend/src/contracts/contracts.service.ts:renew` |
+| 87 | Fix Nitro proxy tidak teruskan employeeId filter � tambah query param di server/api/employee-documents/index.ts | `server/api/employee-documents/index.ts` |
+| 88 | Auto-generate nomor kontrak � format `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`, reset per tahun, ikut `startDate` | `backend/src/shared/document-number.util.ts`, `backend/src/contracts/contracts.service.ts:generateContractNo` |
+| 89 | Auto-generate nomor SP � format `{seq}/SP/KUKP/SII/{bulan_romawi}/{tahun}`, ikut `letterDate` | `backend/src/warning-letters/warning-letters.service.ts:generateLetterNumber` |
+| 90 | Preview nomor dinamis � fetch `/preview-number?startDate=` atau `?letterDate=`, refetch otomatis saat tanggal berubah | `server/api/contracts/preview-number.get.ts`, `server/api/warning-letters/preview-number.get.ts` |
+| 91 | Upload file di Surat Peringatan � endpoint `POST :id/file`, diskStorage ke `uploads/warning-letters/`, magic bytes validation, max 10MB | `backend/src/warning-letters/warning-letters.controller.ts`, `server/api/warning-letters/[id]/file.post.ts` |
+| 92 | Tombol "Unduh Dokumen" kondisional di tabel aksi SP � hanya muncul jika `documentUrl` ada | `app/pages/dokumen/surat-peringatan/index.vue:getRowItems` |
+| 93 | CodeGraph integration � pre-indexed knowledge graph 171 files, 1.957 nodes, 4.425 edges, auto-sync on file change | `.codegraph/` (generated), `codegraph` CLI global |
 ---
 
 ## Arsitektur
@@ -188,12 +188,12 @@ app/composables/           server/utils/
 ### Nitro BACKEND_URL Pattern
 Semua file `server/api/**/*.ts` menggunakan variabel `BACKEND` yang di-auto-import oleh Nitro dari `server/utils/backend.ts`:
 ```typescript
-// server/utils/backend.ts — Nitro auto-import, tidak perlu import eksplisit
+// server/utils/backend.ts � Nitro auto-import, tidak perlu import eksplisit
 export const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3001/api'
 export const BACKEND_ROOT = process.env.BACKEND_ROOT ?? 'http://localhost:3001'
 export const BACKEND = BACKEND_URL  // alias untuk semua server/api files
 ```
-**JANGAN** tambahkan `import { BACKEND } from '~/server/utils/backend'` — ini akan break karena alias `~` di Nitro menunjuk ke `app/` bukan root.
+**JANGAN** tambahkan `import { BACKEND } from '~/server/utils/backend'` � ini akan break karena alias `~` di Nitro menunjuk ke `app/` bukan root.
 
 ### Nitro Auth Pattern
 Semua Nitro handler baca `auth_token` cookie -> forward `Authorization: Bearer <token>` ke NestJS.
@@ -213,8 +213,8 @@ Status kontrak dihitung dari `endDate` terhadap tanggal hari ini:
 ### Contract State Machine & Cron Job
 Cron job harian jam 00:01 WIB (`@nestjs/schedule`, timezone `Asia/Jakarta`) di `ContractCronService`:
 - Query semua kontrak dengan status `AKTIF` atau `AKAN_HABIS`
-- Shift `AKTIF` → `AKAN_HABIS` jika sisa ≤30 hari
-- Shift `AKTIF` / `AKAN_HABIS` → `EXPIRED` jika `endDate` sudah lewat
+- Shift `AKTIF` ? `AKAN_HABIS` jika sisa =30 hari
+- Shift `AKTIF` / `AKAN_HABIS` ? `EXPIRED` jika `endDate` sudah lewat
 - Skip `SELESAI` dan `DIBATALKAN`
 - Dalam `$transaction` atomik: update contract status + sync `Employee.employmentStatus` ke `KONTRAK_EXPIRED` jika semua kontrak expired
 
@@ -233,11 +233,11 @@ Perpanjangan kontrak dipisah dari create biasa:
 ### Contract Summary Mode
 Halaman Manajemen Kontrak tampil **1 karyawan = 1 baris**, bukan list semua kontrak:
 - Endpoint `GET /api/contracts/summary` mengembalikan 1 kontrak representatif per karyawan
-- Prioritas pemilihan: `AKTIF` → `AKAN_HABIS` → `EXPIRED` → terbaru non-dibatalkan
+- Prioritas pemilihan: `AKTIF` ? `AKAN_HABIS` ? `EXPIRED` ? terbaru non-dibatalkan
 - Field summary: employeeId, employeeNo, fullName, contractId, contractNo, contractType, startDate, endDate, status, daysRemaining, historyCount, canRenew
 - Riwayat lengkap diakses via modal yang fetch `GET /api/contracts/history/:employeeId`
 
-### Add Contract Modal — Contract Status Awareness
+### Add Contract Modal � Contract Status Awareness
 Form tambah kontrak menampilkan status kontrak karyawan saat dipilih:
 - Jika `AKTIF` / `AKAN_HABIS`: tampil warning alert + disable tombol Simpan
 - Jika `EXPIRED`: tampil info alert bahwa histori akan otomatis tersambung + tombol Simpan aktif
@@ -272,17 +272,17 @@ Modul kontrak menggunakan **generator PDF native** (pdfkit):
 - Nama Ketua Koperasi disimpan di tabel `AppSetting` dengan key `cooperativeChairmanName`
 - Nama Organisasi disimpan di tabel `AppSetting` dengan key `organizationName` (tampil di sidebar)
 - Logo Organisasi disimpan di tabel `AppSetting` dengan key `appLogoUrl` (tampil di sidebar)
-- Dikelola dari halaman `Pengaturan > Umum` — hanya Admin yang bisa ubah
+- Dikelola dari halaman `Pengaturan > Umum` � hanya Admin yang bisa ubah
 - Logo: upload JPG/PNG/WEBP/SVG, max 512x512px, max 2MB. Validasi dimensi di frontend sebelum upload
 - Composable `useAppSettings.ts` menyediakan `logoUrl`, `organizationName`, `cooperativeChairmanName` secara reaktif untuk sidebar (`TeamsMenu.vue`)
-- Fallback: jika logo kosong → tampilkan huruf pertama nama organisasi; jika nama kosong → "Kokarsi PT. Sankyu"
+- Fallback: jika logo kosong ? tampilkan huruf pertama nama organisasi; jika nama kosong ? "Kokarsi PT. Sankyu"
 
 ### Eskalasi Surat Peringatan
 Rule eskalasi aktif:
-- Tidak ada SP aktif → admin bebas pilih SP1, SP2, atau SP3
-- SP1 aktif → default SP2, SP1 dinonaktifkan, SP3 tetap boleh
-- SP2 aktif → hanya SP3 diizinkan
-- SP3 aktif → pembuatan SP baru **diblokir** sampai masa SP selesai (`validUntil` < hari ini)
+- Tidak ada SP aktif ? admin bebas pilih SP1, SP2, atau SP3
+- SP1 aktif ? default SP2, SP1 dinonaktifkan, SP3 tetap boleh
+- SP2 aktif ? hanya SP3 diizinkan
+- SP3 aktif ? pembuatan SP baru **diblokir** sampai masa SP selesai (`validUntil` < hari ini)
 
 Endpoint: `GET /api/warning-letters/escalation/:employeeId`
 
@@ -298,7 +298,7 @@ Endpoint: `GET /api/warning-letters/escalation/:employeeId`
 - `KONTRAK_EXPIRED` jika tidak ada kontrak aktif
 
 ### Preview PDF (PDF.js)
-- Komponen `PdfViewer.client.vue` — render PDF ke `<canvas>` via `pdfjs-dist` (v6.1.200)
+- Komponen `PdfViewer.client.vue` � render PDF ke `<canvas>` via `pdfjs-dist` (v6.1.200)
 - Fetch PDF sebagai bytes (dengan credentials cookie), render per-halaman
 - Dipakai di preview dokumen kontrak & surat peringatan
 - Tidak bergantung plugin PDF bawaan browser
@@ -386,9 +386,9 @@ server/
     users.ts                # CRUD master user list/create
     users/[id].ts           # CRUD master user detail
     dashboard-stats.ts      # GET dashboard stats (proxy ke backend)
-    search.get.ts           # GET global search (karyawan, kontrak, SP) — filter di DB
+    search.get.ts           # GET global search (karyawan, kontrak, SP) � filter di DB
   utils/
-    backend.ts              # BACKEND, BACKEND_URL, BACKEND_ROOT — Nitro auto-import
+    backend.ts              # BACKEND, BACKEND_URL, BACKEND_ROOT � Nitro auto-import
   middleware/
     auth.ts                 # JWT guard
 
@@ -408,12 +408,12 @@ backend/
     auth/                   # Login, JWT strategy, local strategy
     prisma/                 # PrismaService (singleton pool)
     shared/
-      date-utils.ts         # startOfDay, endOfDay, DAY_MS — dipakai contracts & cron
+      date-utils.ts         # startOfDay, endOfDay, DAY_MS � dipakai contracts & cron
       file-validation.util.ts  # validateImageBuffer, validatePdfBuffer via magic bytes (file-type@16)
       simple-cache.util.ts  # SimpleCache<T> utility (TTL-based, tidak dipakai dashboard)
-      dashboard-cache.service.ts  # DashboardCacheService — cache invalidasi berbasis event
-      shared.module.ts      # SharedModule — export DashboardCacheService ke semua modul
-      document-number.util.ts  # buildDocumentNumber — auto-generate nomor {seq}/KK|SP/KUKP/SII/{romawi}/{tahun}
+      dashboard-cache.service.ts  # DashboardCacheService � cache invalidasi berbasis event
+      shared.module.ts      # SharedModule � export DashboardCacheService ke semua modul
+      document-number.util.ts  # buildDocumentNumber � auto-generate nomor {seq}/KK|SP/KUKP/SII/{romawi}/{tahun}
     main.ts                 # Static assets /uploads + dotenv/config
   prisma/
     schema.prisma           # Employee, Contract, WarningLetter, MasterAdmin, UserAccount, DocumentType, EmployeeDocument, dll
@@ -502,9 +502,9 @@ backend/
 | `value` | String | Nilai setting |
 
 **Keys yang dipakai:**
-- `cooperativeChairmanName` — Nama Ketua Koperasi (dipakai di dokumen kontrak)
-- `organizationName` — Nama Organisasi (tampil di sidebar header, default: "Kokarsi PT. Sankyu")
-- `appLogoUrl` — Path logo organisasi (tampil di sidebar header, kosong = fallback huruf pertama)
+- `cooperativeChairmanName` � Nama Ketua Koperasi (dipakai di dokumen kontrak)
+- `organizationName` � Nama Organisasi (tampil di sidebar header, default: "Kokarsi PT. Sankyu")
+- `appLogoUrl` � Path logo organisasi (tampil di sidebar header, kosong = fallback huruf pertama)
 
 ---
 
@@ -596,19 +596,19 @@ backend/
 
 ### Arsitektur
 ```
-Internet → Cloudflare → Tunnel → Windows Machine
+Internet ? Cloudflare ? Tunnel ? Windows Machine
                                       |
   kokarsi-sankyu.web.id               |
-  ├─ /uploads/* → :3001 (backend)     | Static files (foto, dokumen)
-  └─ /*         → :3000               | Nuxt SSR
-                   └─ /api/* → :3001  | Server-side proxy (Nitro)
-                   └─ /uploads/* → :3001 | Proxy Nuxt (routeRules)
+  +- /uploads/* ? :3001 (backend)     | Static files (foto, dokumen)
+  +- /*         ? :3000               | Nuxt SSR
+                   +- /api/* ? :3001  | Server-side proxy (Nitro)
+                   +- /uploads/* ? :3001 | Proxy Nuxt (routeRules)
 ```
 
 ### File Deployment
 | File | Keterangan |
 |------|-----------|
-| deploy/start.ps1 | Startup script — jalankan 4 service sekaligus |
+| deploy/start.ps1 | Startup script � jalankan 4 service sekaligus |
 | ~/.cloudflared/config.yml | Tunnel config (Tunnel ID: 483d9bfc-f094-4d30-a344-9c3019120a13) |
 | ~/.cloudflared/cert.pem | Certificate Cloudflare |
 | ~/.cloudflared/483d9bfc-...json | Tunnel credentials |
@@ -627,7 +627,7 @@ routeRules: {
   '/uploads/**': { proxy: 'http://localhost:3001/uploads/**' }
 }
 ```
-CORS tidak lagi wildcard — gunakan env `NUXT_ALLOWED_ORIGINS` untuk production (contoh: `https://kokarsi-sankyu.web.id`).
+CORS tidak lagi wildcard � gunakan env `NUXT_ALLOWED_ORIGINS` untuk production (contoh: `https://kokarsi-sankyu.web.id`).
 
 ### PM2 Process Manager
 Backend dan frontend production dijalankan via PM2 (bukan `Start-Process` langsung):
@@ -644,7 +644,7 @@ pm2 startup && pm2 save     # auto-start saat Windows boot
 ```
 
 ### Email Notifikasi (Maileroo)
-Cron job berjalan setiap hari **jam 00:01 WIB** — update status kontrak + kirim email ke semua user.
+Cron job berjalan setiap hari **jam 00:01 WIB** � update status kontrak + kirim email ke semua user.
 - Service: ackend/src/contract-cron/contract-cron.service.ts
 - Config: MAILEROO_API_KEY, MAILEROO_FROM_EMAIL, MAILEROO_FROM_NAME di ackend/.env
 - Email dikirim ke semua UserAccount yang terdaftar di sistem
@@ -676,33 +676,36 @@ Cron job berjalan setiap hari **jam 00:01 WIB** — update status kontrak + kiri
 | Toast error tidak muncul saat simpan kontrak gagal | Pastikan proxy Nitro pakai `$fetch.raw` + `createError` (bukan `ignoreResponseError` tanpa check) |
 | Import karyawan Bad Request | Pastikan field `rowNumber` di-strip dari payload sebelum kirim ke backend (`map(({ rowNumber, ...emp }) => emp)`) |
 | Tanggal import karyawan beda 1 hari (timezone) | Jangan pakai `toISOString()` untuk parse tanggal dari xlsx. Pakai local date components atau `raw: false` di `sheet_to_json` |
-| Template Excel dropdown tidak muncul | Template dihasilkan oleh backend (Node.js), bukan frontend — generate ulang via backend endpoint `/api/employees/import-template` |
+| Template Excel dropdown tidak muncul | Template dihasilkan oleh backend (Node.js), bukan frontend � generate ulang via backend endpoint `/api/employees/import-template` |
 | Logo sidebar tidak tampil | Logo menggunakan **relative path** (bukan prefix localhost:3001). Pastikan proxy /uploads/** di 
 uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Email profil akun kosong | `MasterAdmin` tidak punya field email. Hanya `user_account` (Pengelola) yang punya email. Perlu logout + login ulang setelah update auth.service.ts |
 | Kontrak PHK/RESIGN masih bisa buat kontrak baru | Guard `checkTerminationLockout()` di `contracts.service.ts`, frontend juga fetch `employmentStatus` di AddContractModal |
-| Edit kontrak dengan scan dokumen selalu error 400 | State Lock compare string vs Date object — sekarang sudah difix dengan normalisasi ke ISO string sebelum compare |
-| Unduh dokumen kontrak scan 404 | Gunakan path relatif `documentUrl` — sudah di-proxy Nuxt via /uploads/** → http://localhost:3001/uploads/**. Jangan pakai prefix http://localhost:3001 di frontend |
+| Edit kontrak dengan scan dokumen selalu error 400 | State Lock compare string vs Date object � sekarang sudah difix dengan normalisasi ke ISO string sebelum compare |
+| Unduh dokumen kontrak scan 404 | Gunakan path relatif `documentUrl` � sudah di-proxy Nuxt via /uploads/** ? http://localhost:3001/uploads/**. Jangan pakai prefix http://localhost:3001 di frontend |
 | Download/preview PDF kontrak error 400 "File PDF tidak ditemukan" | Bug: path `uploads/uploads/...` duplikat karena `resolve(uploadRoot, target)` padahal target sudah `/uploads/...`. Fix: gunakan `resolve(process.cwd(), target)` di `contracts.controller.ts:downloadPdf` |
 | Upload foto karyawan error 500 "Expected Uint8Array or Buffer" | Bug: `file.buffer` undefined karena diskStorage. Fix: baca file dari disk via `readFileSync(file.path)` sebelum validasi magic bytes |
-| Upload foto/logo error "Cannot POST /api/api/employees/.../photo" | Bug: double `/api` di Nitro proxy routes. Cek `server/api/employees/[id]/photo.post.ts` — path tidak boleh duplikat BACKEND yang sudah berisi `/api` |
-| Frontend error "ENOENT: no such file .../app/server/utils/backend" | Jangan `import { BACKEND } from '~/server/utils/backend'` di Nitro routes — alias `~` menunjuk ke `app/`. Nitro auto-import semua exports dari `server/utils/backend.ts` tanpa perlu import eksplisit |
+| Upload foto/logo error "Cannot POST /api/api/employees/.../photo" | Bug: double `/api` di Nitro proxy routes. Cek `server/api/employees/[id]/photo.post.ts` � path tidak boleh duplikat BACKEND yang sudah berisi `/api` |
+| Frontend error "ENOENT: no such file .../app/server/utils/backend" | Jangan `import { BACKEND } from '~/server/utils/backend'` di Nitro routes � alias `~` menunjuk ke `app/`. Nitro auto-import semua exports dari `server/utils/backend.ts` tanpa perlu import eksplisit |
 | Hapus karyawan error 500 FK violation `employee_status_history_employeeId_fkey` | Bug: `remove()` tidak hapus `employeeStatusHistory` + `employeeOffboarding` sebelum delete. Fix: gunakan transaksi `deleteMany` keduanya dulu |
 | Buat kontrak error 500 "UniqueConstraintViolation on contractNo" | Nomor kontrak sudah ada di database. Gunakan nomor kontrak yang berbeda. Backend sudah mengembalikan pesan ramah P2002 |
 | Dashboard chart SP tidak update setelah tambah SP baru | Cache dashboard TTL 5 menit. Cache di-invalidate otomatis saat mutasi data (create/update/delete SP/kontrak/karyawan). Jika masih stale, tunggu 5 menit atau restart backend |
 | Backend start error "JWT_SECRET environment variable is required" | `backend/.env` tidak ada atau `JWT_SECRET` tidak diset. Copy dari `backend/.env.example` dan isi nilai yang diperlukan |
 | Buat kontrak karyawan baru error 403 Forbidden | Status karyawan di DB `RESIGN`/`PHK` tapi tidak ada `EmployeeOffboarding` record (data stale). `checkTerminationLockout()` sekarang auto-reset status ke `KONTRAK_EXPIRED` jika tidak ada offboarding record |
-| Perpanjang kontrak error "UniqueConstraintViolation on contractNo" | Nomor kontrak perpanjangan sama dengan kontrak yang sudah ada. Gunakan nomor kontrak yang berbeda — backend mengembalikan pesan ramah |
+| Perpanjang kontrak error "UniqueConstraintViolation on contractNo" | Nomor kontrak perpanjangan sama dengan kontrak yang sudah ada. Gunakan nomor kontrak yang berbeda � backend mengembalikan pesan ramah |
 | Hapus karyawan error FK violation `employee_documents_employeeId_fkey` | Bug: `remove()` tidak hapus `employeeDocument` sebelum delete. Fix: tambah `tx.employeeDocument.deleteMany()` di transaksi hapus karyawan |
 | Section Sertifikasi & Ijin di detail karyawan tampil data semua karyawan | Bug: Nitro proxy `server/api/employee-documents/index.ts` tidak meneruskan query param `employeeId` ke backend. Fix: tambah `if (query.employeeId) params.set('employeeId', ...)` |
-| Form Perpanjang Legal Koperasi — field Nama Dokumen bisa diubah | Bug: `FormModal.vue` mode `renew` tidak mengunci field `documentName`. Fix: gunakan `v-if="isRenewMode"` untuk render div read-only, `v-else` untuk `UInput` biasa |
+| Form Perpanjang Legal Koperasi � field Nama Dokumen bisa diubah | Bug: `FormModal.vue` mode `renew` tidak mengunci field `documentName`. Fix: gunakan `v-if="isRenewMode"` untuk render div read-only, `v-else` untuk `UInput` biasa |
 | Email notifikasi cron tidak terkirim untuk dokumen yang kadaluarsa hari ini | Bug: query `expiringSoon` menggunakan `now` (termasuk jam/menit) bukan `startOfDay(now)`. Fix: ganti ke `todayStart = startOfDay(now)` di `contract-cron.service.ts` |
 | Email notifikasi gagal batch jika ada UserAccount dengan email null/kosong | Bug: `findMany` tidak filter email null sebelum dikirim ke Maileroo API. Fix: tambah `.filter(u => u.email && u.email.trim() !== '')` di semua 4 fungsi `sendXxxNotification` di `maileroo.service.ts` |
 | Maileroo menolak pengirim `noreply@localhost` (default fallback) | Bug: `MAILEROO_FROM_EMAIL` dan `MAILEROO_FROM_NAME` tidak ada di `.env.example` sehingga developer tidak tahu harus set env var ini. Fix: tambahkan ke `backend/.env.example` dengan nilai contoh |
 | Bell icon notifikasi tidak bisa dibuka (TypeError: notifications.filter is not a function) | Bug: `notifications.service.ts findAll()` mengembalikan `{ notifications, unreadCount }` object tapi composable `useNotifications.ts` mengexpect array `AppNotification[]` langsung. Fix: ubah `findAll()` agar kembalikan array langsung via `this.prisma.notification.findMany(...)` tanpa wrapper object |
 | Dokumen AKAN_EXPIRED tidak muncul di notifikasi bell | Bug: `generateNotifications()` hanya scan dokumen yang `expiryDate` tepat jatuh di H-90/60/30/7/0. Dokumen yang status-nya sudah diubah ke `AKAN_EXPIRED` oleh cron tetapi tanggalnya tidak tepat di trigger point tidak terdeteksi. Fix: tambah catch-all pass yang scan berdasarkan status (`AKAN_EXPIRED`, `AKAN_HABIS`, `AKAN_BERAKHIR`) dengan `triggerDay = -1` sebagai sentinel |
 | Pencarian global tidak menemukan Sertifikasi & Ijin / Kontrak Vendor / Legal Koperasi | Bug: `server/api/search.get.ts` hanya fan-out ke 3 endpoint (employees, contracts, warning-letters). Fix: perluas ke 6 endpoint + tambah 3 group baru di `fetchGroups()` di `default.vue` dengan deep-link `?openId=` untuk auto-buka drawer detail |
-| Notifikasi kontrak tidak muncul setelah edit tanggal (catch-all query by DB status) | Bug: catch-all pass di `generateNotifications()` query `WHERE status = 'AKAN_HABIS'` tapi DB status belum di-update (cron jalan sekali sehari). Fix: ubah query berdasarkan `endDate` dalam 90 hari ke depan — tidak bergantung DB status |
+| Notifikasi kontrak tidak muncul setelah edit tanggal (catch-all query by DB status) | Bug: catch-all pass di `generateNotifications()` query `WHERE status = 'AKAN_HABIS'` tapi DB status belum di-update (cron jalan sekali sehari). Fix: ubah query berdasarkan `endDate` dalam 90 hari ke depan � tidak bergantung DB status |
 | Notifikasi kontrak pesan "X hari lagi" tidak update saat tanggal diubah lagi | Bug: `@@unique([sourceType, sourceId, triggerDay=-1])` menyebabkan P2002 di-skip, notifikasi lama tidak diupdate. Fix: ganti `create` dengan `upsert` di catch-all pass |
 | Edit kontrak error "Bad Request" tanpa detail pesan | Bug: Nitro proxy `server/api/contracts/[id].ts` menggunakan `statusMessage: res.statusText` ("Bad Request") bukan pesan custom dari NestJS body. Fix: ekstrak `(res._data as any)?.message` dan letakkan di `data.message` agar `e?.data?.message` di frontend bisa membaca pesan yang benar |
 | Klik notifikasi KONTRAK_KARYAWAN mengarah ke halaman list kontrak bukan karyawan spesifik | Bug: deeplink disimpan sebagai `/kontrak?status=AKAN_HABIS`. Fix: ubah deeplink ke `/karyawan/${c.employee.id}` dengan tambah `id: true` ke employee select di `generateNotifications()` |
+| Akte Dokumen create error P2022 "column nomorAkte does not exist" | Bug: migration SQL menggunakan camelCase column names tanpa quotes — PostgreSQL lowercased jadi `nomorakte`. Fix: tambah `@map()` di schema (e.g. `nomorAkte @map("nomor_akte")`), drop dan recreate tabel dengan snake_case columns |
+| Edit Akte Dokumen tidak populate data existing | Bug: `watch(() => props.open, ...)` tidak menyertakan `{ immediate: true }` — saat komponen di-mount dengan `open = true` (via `v-if="editTarget"`), watcher tidak trigger. Fix: tambah `{ immediate: true }` ke watch options |
+| Pagination Akte Dokumen mepet dengan table (tidak konsisten dengan halaman lain) | Bug: container pagination menggunakan `mt-4 px-1` tanpa border separator, dan `UTable` tidak memakai `:ui` styling. Fix: ganti ke `border-t border-default pt-4 mt-auto`, tambah `:ui` prop ke `UTable`, pakai `:loading` bawaan UTable, ganti `:page` → `:default-page` di UPagination |
