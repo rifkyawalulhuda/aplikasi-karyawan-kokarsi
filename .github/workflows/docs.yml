@@ -37,7 +37,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: documentation
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --ignore-workspace
 
       - name: Build dokumentasi
         working-directory: documentation
