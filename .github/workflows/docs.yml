@@ -38,7 +38,7 @@ jobs:
 
       - name: Build dokumentasi
         working-directory: documentation
-        run: npx vitepress build
+        run: ./node_modules/.bin/vitepress build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
