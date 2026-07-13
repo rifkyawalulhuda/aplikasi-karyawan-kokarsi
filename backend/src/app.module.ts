@@ -17,6 +17,7 @@ import { EmployeeDocumentsModule } from './employee-documents/employee-documents
 import { VendorContractsModule } from './vendor-contracts/vendor-contracts.module'
 import { LegalKoperasiModule } from './legal-koperasi/legal-koperasi.module'
 import { NotificationsModule } from './notifications/notifications.module'
+import { AkteDokumenModule } from './akte-dokumen/akte-dokumen.module'
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { NotificationsModule } from './notifications/notifications.module'
     VendorContractsModule,
     LegalKoperasiModule,
     NotificationsModule,
+    AkteDokumenModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

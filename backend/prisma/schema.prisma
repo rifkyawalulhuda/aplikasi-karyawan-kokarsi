@@ -431,6 +431,22 @@ model LegalKoperasi {
   @@map("legal_koperasi")
 }
 
+model AkteDokumen {
+  id          Int       @id @default(autoincrement())
+  tanggal     DateTime  @db.Date
+  notaris     String    @db.VarChar(255)
+  nomorAkte   String    @map("nomor_akte") @db.VarChar(100)
+  judulAkte   String    @map("judul_akte") @db.VarChar(255)
+  nomorSk     String?   @map("nomor_sk") @db.VarChar(100)
+  tanggalSk   DateTime? @map("tanggal_sk") @db.Date
+  keterangan  String?   @db.Text
+  fileUrl     String?   @map("file_url") @db.VarChar(500)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("akte_dokumen")
+}
+
 enum NotificationCategory {
   KONTRAK_KARYAWAN
   SERTIFIKASI_IJIN
