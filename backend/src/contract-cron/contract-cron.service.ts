@@ -49,7 +49,7 @@ export class ContractCronService {
     const updates: { id: number; newStatus: ContractStatus; employeeId: number; contractNo: string; employeeName: string; endDate: Date }[] = []
 
     if (contracts.length === 0) {
-      this.logger.log('No active contracts to evaluate.')
+      this.logger.debug('No active contracts to evaluate.')
     } else {
       for (const contract of contracts) {
         const end = startOfDay(contract.endDate).getTime()
@@ -139,7 +139,7 @@ export class ContractCronService {
 
     // ── EmployeeDocument status sync ─────────────────────────────────────────
 
-    this.logger.log('Starting employee document status synchronization...')
+    this.logger.debug('Starting employee document status synchronization...')
 
     const todayStart = startOfDay(now)
     const in30Days = new Date(todayStart.getTime() + 30 * DAY_MS)
@@ -206,10 +206,10 @@ export class ContractCronService {
         .catch(err => this.logger.error(`Document email notification failed: ${err?.message}`))
     }
 
-    this.logger.log('Employee document status sync complete.')
+    this.logger.debug('Employee document status sync complete.')
 
     // ── VendorContract status sync ──────────────────────────────────────
-    this.logger.log('Syncing vendor contract statuses...')
+    this.logger.debug('Syncing vendor contract statuses...')
     const { akanBerakhir: vcAkan, expired: vcExpired } = await this.vendorContractsService.syncExpiredStatuses()
 
     const vcChanges = [
@@ -235,7 +235,7 @@ export class ContractCronService {
     }
 
     // ── LegalKoperasi status sync ──────────────────────────────────────
-    this.logger.log('Syncing legal koperasi statuses...')
+    this.logger.debug('Syncing legal koperasi statuses...')
     const { akanBerakhir: lkAkan, expired: lkExpired } = await this.legalKoperasiService.syncExpiredStatuses()
 
     const lkChanges = [
@@ -259,19 +259,21 @@ export class ContractCronService {
     }
 
     // ── Generate in-app notifications ──────────────────────────────
-    this.logger.log('Generating expiry reminder notifications...')
+    this.logger.debug('Generating expiry reminder notifications...')
     const notifResult = await this.notificationsService.generateNotifications()
       .catch(err => {
         this.logger.error(`Notification generation failed: ${err?.message}`)
         return { created: 0, resolved: 0 }
       })
-    this.logger.log(`Notifications: ${notifResult.created} created, ${notifResult.resolved} resolved`)
+    if (notifResult.created > 0 || notifResult.resolved > 0) {
+      this.logger.log(`Notifications: ${notifResult.created} created, ${notifResult.resolved} resolved`)
+    }
   }
 
   // Setiap 5 menit — refresh notifikasi untuk semua modul (safety net)
   @Cron('*/5 * * * *', { name: 'notification-refresh', timeZone: 'Asia/Jakarta' })
   async refreshNotifications() {
-    this.logger.debug('Refreshing expiry notifications (5-min interval)...')
+    // Silent — jalan setiap 5 menit, error tetap di-log
     await this.notificationsService.generateNotifications()
       .catch(err => this.logger.error(`Notification refresh failed: ${err?.message}`))
   }
