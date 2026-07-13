@@ -1,7 +1,7 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.8 (Revisi)  
+**Versi Dokumen**: 1.9 (Revisi)  
 **Tanggal**: 13 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
@@ -399,7 +399,7 @@ Juga update tabel **contracts** — field tambahan:
 ---
 
 **Catatan Akhir**:
-Dokumen ini adalah **versi 1.8** (revisi sesuai permintaan).  
+Dokumen ini adalah **versi 1.9** (revisi sesuai permintaan).  
 Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
 
 **Perubahan v1.4 (9 Juli 2026)**:
@@ -433,6 +433,12 @@ Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperas
 - FR-41: Dokumentasi VitePress di `documentation/` — 22 halaman konten (Bahasa Indonesia), deploy otomatis ke GitHub Pages via CI/CD (`npm install` + `npx vitepress build`), URL: `https://rifkyawalulhuda.github.io/aplikasi-karyawan-kokarsi/`
 - FR-42: Tombol "Dokumentasi" di UserMenu (sidebar profile) — link ke GitHub Pages docs, dibuka di tab baru, posisi di bawah "Profil" dan di atas "Tampilan"
 - FR-43: Hapus toggle tema gelap/terang duplikat dari footer sidebar — hanya tersedia melalui UserMenu dropdown
+
+**Perubahan v1.9 (13 Juli 2026)**:
+- FR-44: Akte Dokumen ditambahkan ke pencarian global — fan-out ke `/akte-dokumen?search=`, group `akteDokumen` di `fetchGroups()`, deep-link `?openId=` ke drawer detail
+- FR-45: File upload user tidak lagi ter-track di git — tambah `backend/uploads/` ke `.gitignore`, untrack 63 file binary via `git rm -r --cached`, buat `.gitkeep` di setiap subfolder upload
+- FR-46: File cleanup saat record dihapus — shared utility `file-cleanup.util.ts` dengan `deleteUploadedFile()` + `deleteUploadedFiles()`, ditambahkan ke semua service `remove()` (akte-dokumen, employee-documents, warning-letters, legal-koperasi, vendor-contracts, employees)
+- FR-47: Orphaned files cleanup cron — `cleanupOrphanedFiles()` jalan setiap jam 02:00 WIB, scan disk vs DB, hapus file yang tidak ada referensinya dan lebih dari 24 jam. Script manual tersedia di `backend/scripts/cleanup-orphaned-files.js`
 
 ---
 

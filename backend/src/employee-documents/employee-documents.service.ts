@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsNotEmpty } from 'class-validator'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
 export class CreateEmployeeDocumentDto {
   @IsInt()
@@ -151,7 +152,8 @@ export class EmployeeDocumentsService {
   }
 
   async remove(id: number) {
-    await this.findOne(id)
+    const doc = await this.findOne(id)
+    deleteUploadedFile(doc.fileUrl)
     return this.prisma.employeeDocument.delete({ where: { id } })
   }
 

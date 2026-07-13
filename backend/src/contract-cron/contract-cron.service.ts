@@ -7,6 +7,8 @@ import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { VendorContractsService } from '../vendor-contracts/vendor-contracts.service'
 import { LegalKoperasiService } from '../legal-koperasi/legal-koperasi.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { existsSync, readdirSync, statSync, unlinkSync } from 'fs'
+import { join } from 'path'
 
 @Injectable()
 export class ContractCronService {
@@ -272,5 +274,72 @@ export class ContractCronService {
     this.logger.debug('Refreshing expiry notifications (5-min interval)...')
     await this.notificationsService.generateNotifications()
       .catch(err => this.logger.error(`Notification refresh failed: ${err?.message}`))
+  }
+
+  // Setiap hari jam 02:00 WIB — hapus file orphaned yang tidak ada referensinya di DB
+  @Cron('0 2 * * *', { name: 'orphaned-files-cleanup', timeZone: 'Asia/Jakarta' })
+  async cleanupOrphanedFiles() {
+    this.logger.log('Starting orphaned files cleanup...')
+    let deleted = 0
+    const uploadsRoot = join(process.cwd(), 'uploads')
+    if (!existsSync(uploadsRoot)) return
+
+    try {
+      // Ambil semua fileUrl aktif dari DB secara paralel
+      const [
+        employeeDocs, warningLetters, legalKoperasi, vendorContracts,
+        akteDokumen, employees, contracts,
+      ] = await Promise.all([
+        this.prisma.employeeDocument.findMany({ select: { fileUrl: true } }),
+        this.prisma.warningLetter.findMany({ select: { documentUrl: true } }),
+        this.prisma.legalKoperasi.findMany({ select: { fileUrl: true } }),
+        this.prisma.vendorContract.findMany({ select: { fileUrl: true } }),
+        this.prisma.akteDokumen.findMany({ select: { fileUrl: true } }),
+        this.prisma.employee.findMany({ select: { fotoKaryawan: true } }),
+        this.prisma.contract.findMany({ select: { documentUrl: true, generatedPdfUrl: true } }),
+      ])
+
+      // Kumpulkan semua path yang aktif (relatif, tanpa leading slash)
+      const activePaths = new Set<string>()
+      const addPath = (url: string | null | undefined) => {
+        if (!url) return
+        activePaths.add(url.startsWith('/') ? url.slice(1) : url)
+      }
+      employeeDocs.forEach(d => addPath(d.fileUrl))
+      warningLetters.forEach(d => addPath(d.documentUrl))
+      legalKoperasi.forEach(d => addPath(d.fileUrl))
+      vendorContracts.forEach(d => addPath(d.fileUrl))
+      akteDokumen.forEach(d => addPath(d.fileUrl))
+      employees.forEach(d => addPath(d.fotoKaryawan))
+      contracts.forEach(d => { addPath(d.documentUrl); addPath(d.generatedPdfUrl) })
+
+      // Scan semua file di uploads/ dan hapus yang orphaned
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000 // lebih dari 1 hari
+      const scanDir = (dir: string, relBase: string) => {
+        if (!existsSync(dir)) return
+        for (const entry of readdirSync(dir)) {
+          const full = join(dir, entry)
+          const rel = `${relBase}/${entry}`
+          const stat = statSync(full)
+          if (stat.isDirectory()) {
+            scanDir(full, rel)
+          } else if (stat.isFile() && entry !== '.gitkeep') {
+            if (!activePaths.has(rel) && stat.mtimeMs < cutoff) {
+              try {
+                unlinkSync(full)
+                deleted++
+                this.logger.debug(`Deleted orphaned file: ${rel}`)
+              } catch {
+                // non-fatal
+              }
+            }
+          }
+        }
+      }
+      scanDir(uploadsRoot, 'uploads')
+      this.logger.log(`Orphaned files cleanup complete. ${deleted} file(s) deleted.`)
+    } catch (err: any) {
+      this.logger.error(`Orphaned files cleanup failed: ${err?.message}`)
+    }
   }
 }

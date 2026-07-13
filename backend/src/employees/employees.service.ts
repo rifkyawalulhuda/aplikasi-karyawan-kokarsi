@@ -4,6 +4,7 @@ import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'clas
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { deleteUploadedFiles } from '../shared/file-cleanup.util'
 import ExcelJS from 'exceljs'
 
 export class CreateEmployeeDto {
@@ -302,6 +303,18 @@ export class EmployeesService {
       )
     }
 
+    // Ambil file-file yang perlu dihapus sebelum transaksi
+    const [employeeDocs, employee] = await Promise.all([
+      this.prisma.employeeDocument.findMany({
+        where: { employeeId: id },
+        select: { fileUrl: true },
+      }),
+      this.prisma.employee.findUnique({
+        where: { id },
+        select: { fotoKaryawan: true },
+      }),
+    ])
+
     // Hapus SEMUA related records dalam transaksi agar data bersih
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.employeeStatusHistory.deleteMany({ where: { employeeId: id } })
@@ -309,6 +322,13 @@ export class EmployeesService {
       await tx.employeeDocument.deleteMany({ where: { employeeId: id } })
       return tx.employee.delete({ where: { id } })
     })
+
+    // Hapus file fisik setelah transaksi berhasil (non-fatal)
+    deleteUploadedFiles([
+      employee?.fotoKaryawan,
+      ...employeeDocs.map(d => d.fileUrl),
+    ])
+
     this.dashboardCache.invalidate()
     return result
   }

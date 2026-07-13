@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import {
   IsString, IsInt, IsOptional, IsNotEmpty, IsBoolean, IsDateString, IsEnum,
 } from 'class-validator'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { VendorContractCategory, VendorContractStatus, VendorDocType } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 
@@ -156,7 +157,8 @@ export class VendorContractsService {
   }
 
   async remove(id: number) {
-    await this.findOne(id)
+    const contract = await this.findOne(id)
+    deleteUploadedFile(contract.fileUrl)
     return this.prisma.vendorContract.delete({ where: { id } })
   }
 

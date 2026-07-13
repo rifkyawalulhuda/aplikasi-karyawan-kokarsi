@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsArray, IsDateString, IsNotEmpty } from 'class-validator'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
 export class CreateWarningLetterDto {
   @IsInt()
@@ -245,7 +246,8 @@ export class WarningLettersService {
   }
 
   async remove(id: number) {
-    await this.findOne(id)
+    const letter = await this.findOne(id)
+    deleteUploadedFile(letter.documentUrl ?? undefined)
     const result = await this.prisma.warningLetter.delete({ where: { id } })
     this.dashboardCache.invalidate()
     return result

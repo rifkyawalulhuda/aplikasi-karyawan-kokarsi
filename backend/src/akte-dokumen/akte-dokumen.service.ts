@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsOptional, IsNotEmpty, IsDateString } from 'class-validator'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
 export class CreateAkteDokumenDto {
   @IsDateString() tanggal: string
@@ -71,7 +72,8 @@ export class AkteDokumenService {
   }
 
   async remove(id: number) {
-    await this.findOne(id)
+    const akte = await this.findOne(id)
+    deleteUploadedFile(akte.fileUrl)
     return this.prisma.akteDokumen.delete({ where: { id } })
   }
 

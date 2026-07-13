@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import {
   IsString, IsInt, IsOptional, IsNotEmpty, IsBoolean, IsDateString, IsEnum,
 } from 'class-validator'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { LegalKoperasiCategory, LegalKoperasiStatus } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 
@@ -134,7 +135,8 @@ export class LegalKoperasiService {
   }
 
   async remove(id: number) {
-    await this.findOne(id)
+    const doc = await this.findOne(id)
+    deleteUploadedFile(doc.fileUrl)
     return this.prisma.legalKoperasi.delete({ where: { id } })
   }
 
