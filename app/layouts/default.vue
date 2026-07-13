@@ -36,6 +36,7 @@ async function fetchGroups(query: string) {
       employeeDocuments: any[]
       vendorContracts: any[]
       legalKoperasi: any[]
+      akteDokumen: any[]
     }>(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
       credentials: 'include',
     })
@@ -128,6 +129,21 @@ async function fetchGroups(query: string) {
           suffix: `${lk.publisher}`,
           icon: 'i-lucide-file-signature',
           to: `/dokumen-legal/legal-koperasi?openId=${lk.id}`,
+        })),
+      })
+    }
+
+    if (results.akteDokumen?.length) {
+      groups.push({
+        id: 'akteDokumen',
+        label: 'Akte Dokumen',
+        ignoreFilter: true,
+        items: results.akteDokumen.map((a: any) => ({
+          id: `akte-${a.id}`,
+          label: a.judulAkte,
+          suffix: a.nomorAkte,
+          icon: 'i-lucide-scroll-text',
+          to: `/dokumen-legal/akte-dokumen?openId=${a.id}`,
         })),
       })
     }

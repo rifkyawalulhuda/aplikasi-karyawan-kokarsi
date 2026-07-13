@@ -9,13 +9,13 @@ export default defineEventHandler(async (event) => {
 
   const { q, limit = '5' } = getQuery(event)
   if (!q || String(q).trim().length < 2) {
-    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], vendorContracts: [], legalKoperasi: [] }
+    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], vendorContracts: [], legalKoperasi: [], akteDokumen: [] }
   }
 
   const searchParam = encodeURIComponent(String(q).trim())
   const limitParam = String(limit)
 
-  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, vendorContractsRes, legalKoperasiRes] = await Promise.allSettled([
+  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, vendorContractsRes, legalKoperasiRes, akteDokumenRes] = await Promise.allSettled([
     $fetch(`${BACKEND}/employees?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
@@ -32,6 +32,9 @@ export default defineEventHandler(async (event) => {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
     $fetch(`${BACKEND}/legal-koperasi?search=${searchParam}&limit=${limitParam}`, {
+      headers: authHeader,
+    }) as Promise<{ data: any[] }>,
+    $fetch(`${BACKEND}/akte-dokumen?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
   ])
@@ -53,6 +56,9 @@ export default defineEventHandler(async (event) => {
   }
   if (legalKoperasiRes.status === 'rejected') {
     console.error('[search] Gagal fetch legal-koperasi:', legalKoperasiRes.reason)
+  }
+  if (akteDokumenRes.status === 'rejected') {
+    console.error('[search] Gagal fetch akte-dokumen:', akteDokumenRes.reason)
   }
 
   const employees = employeesRes.status === 'fulfilled'
@@ -79,5 +85,9 @@ export default defineEventHandler(async (event) => {
     ? (legalKoperasiRes.value?.data ?? [])
     : []
 
-  return { employees, contracts, warningLetters, employeeDocuments, vendorContracts, legalKoperasi }
+  const akteDokumen = akteDokumenRes.status === 'fulfilled'
+    ? (akteDokumenRes.value?.data ?? [])
+    : []
+
+  return { employees, contracts, warningLetters, employeeDocuments, vendorContracts, legalKoperasi, akteDokumen }
 })
