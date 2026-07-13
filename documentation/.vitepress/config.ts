@@ -10,8 +10,7 @@ export default defineConfig({
   ignoreDeadLinks: true,
 
   themeConfig: {
-    logo: { light: '/logo-light.svg', dark: '/logo-dark.svg', alt: 'Kokarsi' },
-    siteTitle: 'Kokarsi Docs',
+    siteTitle: 'Kokarsi',
 
     nav: [
       { text: 'Memulai', link: '/memulai/pendahuluan' },
