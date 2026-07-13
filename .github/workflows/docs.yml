@@ -32,16 +32,13 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Setup pnpm
-        run: npm install -g pnpm@11.10.0
-
       - name: Install dependencies
         working-directory: documentation
-        run: pnpm install --no-frozen-lockfile --ignore-workspace
+        run: npm install
 
       - name: Build dokumentasi
         working-directory: documentation
-        run: pnpm docs:build
+        run: npm run docs:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
