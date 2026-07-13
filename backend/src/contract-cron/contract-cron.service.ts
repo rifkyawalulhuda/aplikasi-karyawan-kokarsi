@@ -290,7 +290,7 @@ export class ContractCronService {
       // Ambil semua fileUrl aktif dari DB secara paralel
       const [
         employeeDocs, warningLetters, legalKoperasi, vendorContracts,
-        akteDokumen, employees, contracts,
+        akteDokumen, employees, contracts, appSettings,
       ] = await Promise.all([
         this.prisma.employeeDocument.findMany({ select: { fileUrl: true } }),
         this.prisma.warningLetter.findMany({ select: { documentUrl: true } }),
@@ -299,6 +299,8 @@ export class ContractCronService {
         this.prisma.akteDokumen.findMany({ select: { fileUrl: true } }),
         this.prisma.employee.findMany({ select: { fotoKaryawan: true } }),
         this.prisma.contract.findMany({ select: { documentUrl: true, generatedPdfUrl: true } }),
+        // AppSetting menyimpan URL file logo & background di kolom `value`
+        (this.prisma.appSetting as any).findMany({ select: { value: true } }),
       ])
 
       // Kumpulkan semua path yang aktif (relatif, tanpa leading slash)
@@ -314,6 +316,10 @@ export class ContractCronService {
       akteDokumen.forEach(d => addPath(d.fileUrl))
       employees.forEach(d => addPath(d.fotoKaryawan))
       contracts.forEach(d => { addPath(d.documentUrl); addPath(d.generatedPdfUrl) })
+      // AppSetting: hanya nilai yang berisi path uploads (logo, background login)
+      appSettings.forEach((s: { value: string | null }) => {
+        if (s.value?.startsWith('/uploads/')) addPath(s.value)
+      })
 
       // Scan semua file di uploads/ dan hapus yang orphaned
       const cutoff = Date.now() - 24 * 60 * 60 * 1000 // lebih dari 1 hari
