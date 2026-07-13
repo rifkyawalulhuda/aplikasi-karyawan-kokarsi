@@ -39,6 +39,9 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
+# Upload files dari user (foto, dokumen, PDF) — jangan di-commit
+backend/uploads/
+
 # PM2 logs
 logs/
 
