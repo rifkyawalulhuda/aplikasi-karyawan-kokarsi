@@ -1,7 +1,7 @@
 # PRD - Aplikasi Manajemen Data Karyawan  
 **Koperasi Karyawan PT. Sankyu**
 
-**Versi Dokumen**: 1.7 (Revisi)  
+**Versi Dokumen**: 1.8 (Revisi)  
 **Tanggal**: 13 Juli 2026  
 **Penulis**: AnNahl Web Media  
 **Status**: Draft untuk Review
@@ -399,7 +399,7 @@ Juga update tabel **contracts** — field tambahan:
 ---
 
 **Catatan Akhir**:
-Dokumen ini adalah **versi 1.6** (revisi sesuai permintaan).  
+Dokumen ini adalah **versi 1.8** (revisi sesuai permintaan).  
 Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperasi Karyawan PT. Sankyu**.
 
 **Perubahan v1.4 (9 Juli 2026)**:
@@ -428,6 +428,11 @@ Fokus utama: **Peran internal Master Admin dan Pengelola Koperasi** di **Koperas
 - FR-38: Sertifikasi & Ijin DetailDrawer — USlideover, preview PDF/gambar, download link, edit/renew from drawer, deep-link `?openId=`
 - FR-39: Modul Akte Dokumen — tabel `akte_dokumen` (snake_case via `@map()`), backend CRUD + file upload max 10MB, Nitro proxy 3 routes, FormModal add/edit, DetailDrawer preview PDF/gambar, halaman index dengan table + pagination konsisten, sidebar menu di bawah Legal Koperasi
 - FR-40: Bug fix Akte Dokumen `watch { immediate: true }` — form edit tidak populate data karena komponen di-mount dengan `open = true`
+
+**Perubahan v1.8 (13 Juli 2026)**:
+- FR-41: Dokumentasi VitePress di `documentation/` — 22 halaman konten (Bahasa Indonesia), deploy otomatis ke GitHub Pages via CI/CD (`npm install` + `npx vitepress build`), URL: `https://rifkyawalulhuda.github.io/aplikasi-karyawan-kokarsi/`
+- FR-42: Tombol "Dokumentasi" di UserMenu (sidebar profile) — link ke GitHub Pages docs, dibuka di tab baru, posisi di bawah "Profil" dan di atas "Tampilan"
+- FR-43: Hapus toggle tema gelap/terang duplikat dari footer sidebar — hanya tersedia melalui UserMenu dropdown
 
 ---
 
