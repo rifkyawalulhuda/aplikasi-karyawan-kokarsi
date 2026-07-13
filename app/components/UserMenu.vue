@@ -28,6 +28,11 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   label: 'Profil',
   icon: 'i-lucide-user',
   to: '/settings'
+}, {
+  label: 'Dokumentasi',
+  icon: 'i-lucide-book-open',
+  href: 'https://rifkyawalulhuda.github.io/aplikasi-karyawan-kokarsi/',
+  target: '_blank',
 }], [{
   label: 'Tampilan',
   icon: 'i-lucide-palette',
