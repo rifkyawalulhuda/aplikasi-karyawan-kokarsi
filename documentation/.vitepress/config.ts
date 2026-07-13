@@ -5,6 +5,7 @@ export default defineConfig({
   description: 'Dokumentasi Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu',
   lang: 'id-ID',
   base: '/aplikasi-karyawan-kokarsi/',
+  srcDir: 'id',
   lastUpdated: true,
   ignoreDeadLinks: true,
 
@@ -13,70 +14,70 @@ export default defineConfig({
     siteTitle: 'Kokarsi Docs',
 
     nav: [
-      { text: 'Memulai', link: '/id/memulai/pendahuluan' },
-      { text: 'Panduan Pengguna', link: '/id/panduan-pengguna/login' },
-      { text: 'Deployment', link: '/id/deployment/arsitektur' },
-      { text: 'Teknis', link: '/id/teknis/arsitektur-sistem' },
-      { text: 'Referensi', link: '/id/referensi/peran-akses' },
+      { text: 'Memulai', link: '/memulai/pendahuluan' },
+      { text: 'Panduan Pengguna', link: '/panduan-pengguna/login' },
+      { text: 'Deployment', link: '/deployment/arsitektur' },
+      { text: 'Teknis', link: '/teknis/arsitektur-sistem' },
+      { text: 'Referensi', link: '/referensi/peran-akses' },
     ],
 
     sidebar: {
-      '/id/memulai/': [
+      '/memulai/': [
         {
           text: 'Memulai',
           items: [
-            { text: 'Pendahuluan', link: '/id/memulai/pendahuluan' },
-            { text: 'Prasyarat', link: '/id/memulai/prasyarat' },
-            { text: 'Instalasi & Development', link: '/id/memulai/instalasi-dev' },
+            { text: 'Pendahuluan', link: '/memulai/pendahuluan' },
+            { text: 'Prasyarat', link: '/memulai/prasyarat' },
+            { text: 'Instalasi & Development', link: '/memulai/instalasi-dev' },
           ],
         },
       ],
-      '/id/deployment/': [
+      '/deployment/': [
         {
           text: 'Deployment',
           items: [
-            { text: 'Arsitektur', link: '/id/deployment/arsitektur' },
-            { text: 'Docker (Rekomendasi)', link: '/id/deployment/docker' },
-            { text: 'PostgreSQL Native', link: '/id/deployment/postgresql-native' },
-            { text: 'Cloudflare Tunnel', link: '/id/deployment/cloudflare-tunnel' },
+            { text: 'Arsitektur', link: '/deployment/arsitektur' },
+            { text: 'Docker (Rekomendasi)', link: '/deployment/docker' },
+            { text: 'PostgreSQL Native', link: '/deployment/postgresql-native' },
+            { text: 'Cloudflare Tunnel', link: '/deployment/cloudflare-tunnel' },
           ],
         },
       ],
-      '/id/panduan-pengguna/': [
+      '/panduan-pengguna/': [
         {
           text: 'Panduan Pengguna',
           items: [
-            { text: 'Login & Akun', link: '/id/panduan-pengguna/login' },
-            { text: 'Dashboard', link: '/id/panduan-pengguna/dashboard' },
-            { text: 'Data Karyawan', link: '/id/panduan-pengguna/data-karyawan' },
-            { text: 'Kontrak Karyawan', link: '/id/panduan-pengguna/kontrak-karyawan' },
-            { text: 'Surat Peringatan', link: '/id/panduan-pengguna/surat-peringatan' },
-            { text: 'Sertifikasi & Ijin', link: '/id/panduan-pengguna/sertifikasi-ijin' },
-            { text: 'Kontrak Customer/Vendor', link: '/id/panduan-pengguna/kontrak-vendor' },
-            { text: 'Legal Koperasi', link: '/id/panduan-pengguna/legal-koperasi' },
-            { text: 'Akte Dokumen', link: '/id/panduan-pengguna/akte-dokumen' },
-            { text: 'Notifikasi', link: '/id/panduan-pengguna/notifikasi' },
-            { text: 'Pengaturan', link: '/id/panduan-pengguna/pengaturan' },
+            { text: 'Login & Akun', link: '/panduan-pengguna/login' },
+            { text: 'Dashboard', link: '/panduan-pengguna/dashboard' },
+            { text: 'Data Karyawan', link: '/panduan-pengguna/data-karyawan' },
+            { text: 'Kontrak Karyawan', link: '/panduan-pengguna/kontrak-karyawan' },
+            { text: 'Surat Peringatan', link: '/panduan-pengguna/surat-peringatan' },
+            { text: 'Sertifikasi & Ijin', link: '/panduan-pengguna/sertifikasi-ijin' },
+            { text: 'Kontrak Customer/Vendor', link: '/panduan-pengguna/kontrak-vendor' },
+            { text: 'Legal Koperasi', link: '/panduan-pengguna/legal-koperasi' },
+            { text: 'Akte Dokumen', link: '/panduan-pengguna/akte-dokumen' },
+            { text: 'Notifikasi', link: '/panduan-pengguna/notifikasi' },
+            { text: 'Pengaturan', link: '/panduan-pengguna/pengaturan' },
           ],
         },
       ],
-      '/id/teknis/': [
+      '/teknis/': [
         {
           text: 'Dokumentasi Teknis',
           items: [
-            { text: 'Arsitektur Sistem', link: '/id/teknis/arsitektur-sistem' },
-            { text: 'Database Schema', link: '/id/teknis/database-schema' },
-            { text: 'Autentikasi', link: '/id/teknis/autentikasi' },
-            { text: 'Environment Variables', link: '/id/teknis/environment-variables' },
+            { text: 'Arsitektur Sistem', link: '/teknis/arsitektur-sistem' },
+            { text: 'Database Schema', link: '/teknis/database-schema' },
+            { text: 'Autentikasi', link: '/teknis/autentikasi' },
+            { text: 'Environment Variables', link: '/teknis/environment-variables' },
           ],
         },
       ],
-      '/id/referensi/': [
+      '/referensi/': [
         {
           text: 'Referensi',
           items: [
-            { text: 'Peran & Akses', link: '/id/referensi/peran-akses' },
-            { text: 'Troubleshooting', link: '/id/referensi/troubleshooting' },
+            { text: 'Peran & Akses', link: '/referensi/peran-akses' },
+            { text: 'Troubleshooting', link: '/referensi/troubleshooting' },
           ],
         },
       ],
@@ -96,7 +97,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/rifkyawalulhuda/aplikasi-karyawan-kokarsi/edit/main/documentation/:path',
+      pattern: 'https://github.com/rifkyawalulhuda/aplikasi-karyawan-kokarsi/edit/main/documentation/id/:path',
       text: 'Edit halaman ini di GitHub',
     },
 
