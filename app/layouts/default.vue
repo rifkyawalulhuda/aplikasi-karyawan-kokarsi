@@ -289,18 +289,7 @@ const links = computed<NavigationMenuItem[]>(() => [
       </template>
 
       <template #footer="{ collapsed }">
-        <div class="flex items-center gap-1" :class="collapsed ? 'flex-col' : 'flex-row'">
-          <UButton
-            :icon="isDark ? 'i-lucide-sun' : 'i-lucide-moon'"
-            color="neutral"
-            variant="ghost"
-            square
-            :aria-label="isDark ? 'Ganti ke tema terang' : 'Ganti ke tema gelap'"
-            :tooltip="collapsed ? (isDark ? 'Tema Terang' : 'Tema Gelap') : undefined"
-            @click="toggleColorMode"
-          />
-          <UserMenu :collapsed="collapsed" class="flex-1 min-w-0" />
-        </div>
+        <UserMenu :collapsed="collapsed" class="flex-1 min-w-0" />
       </template>
     </UDashboardSidebar>
 
