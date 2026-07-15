@@ -141,6 +141,46 @@ async findAll(limit = 10) {
 
 ---
 
+## Dok. Karyawan
+
+### Dropdown Tipe Dokumen Kosong di Form Tambah
+
+**Gejala:** Dropdown tipe dokumen di form Tambah/Edit Dok. Karyawan kosong atau tidak menampilkan tipe yang diharapkan.
+
+**Penyebab:** Tipe dokumen belum ditambahkan atau kategori tipe dokumen belum diset ke "Dokumen Pribadi".
+
+**Solusi:**
+1. Buka **Pengaturan → Master Data → Jenis Dokumen**
+2. Pastikan tipe dokumen (KTP, SIM, dll) sudah ada
+3. Pastikan field **Kategori** diset ke **Dokumen Pribadi** (bukan Sertifikasi & Ijin)
+4. Jika belum ada, klik Tambah Data dan set kategori yang sesuai
+
+---
+
+### Data Dok. Karyawan Muncul di Halaman Sertifikasi & Ijin
+
+**Gejala:** Dokumen yang diinput di Dok. Karyawan ikut tampil di tabel Sertifikasi & Ijin.
+
+**Penyebab:** Kategori tipe dokumen salah (masih CERTIFICATION bukan PERSONAL).
+
+**Solusi:**
+1. Buka **Pengaturan → Master Data → Jenis Dokumen**
+2. Edit tipe dokumen yang bersangkutan
+3. Ubah **Kategori** dari "Sertifikasi & Ijin" menjadi "Dokumen Pribadi"
+4. Simpan — data akan otomatis terfilter dengan benar
+
+---
+
+### File Upload Gagal (Melebihi Batas Ukuran)
+
+**Gejala:** Upload file dokumen gagal dengan pesan error ukuran.
+
+**Penyebab:** File melebihi batas maksimal 10MB.
+
+**Solusi:** Kompres file PDF atau gambar terlebih dahulu sebelum upload. Format yang didukung: PDF, JPG, PNG.
+
+---
+
 ## Export Excel
 
 ### Export Gagal / File Rusak

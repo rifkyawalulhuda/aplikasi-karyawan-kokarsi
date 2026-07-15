@@ -41,7 +41,7 @@ Kustomisasi halaman login:
 **Pengaturan → Master Data** untuk mengelola:
 - Lokasi Kerja, Jabatan, Level Jabatan, Departemen
 - Status Pajak, Tipe Kontrak
-- Tipe Dokumen (untuk Sertifikasi & Ijin)
+- **Jenis Dokumen** — Tipe dokumen dengan field Kategori (Dokumen Pribadi untuk Dok. Karyawan, Sertifikasi & Ijin untuk modul Sertifikasi & Ijin)
 
 ## Manajemen User (Admin Only)
 

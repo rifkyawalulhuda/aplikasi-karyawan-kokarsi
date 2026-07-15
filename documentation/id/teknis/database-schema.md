@@ -48,7 +48,9 @@ Kontrak kerja karyawan.
 
 ## Tabel Dokumen Karyawan
 
-### `employee_documents` (Sertifikasi & Ijin)
+### `employee_documents` (Dok. Karyawan & Sertifikasi & Ijin)
+
+Tabel yang dipakai bersama oleh modul Dok. Karyawan (PERSONAL) dan Sertifikasi & Ijin (CERTIFICATION). Pemisahan berdasarkan kategori `documentType`.
 
 | Kolom | Tipe | Keterangan |
 |-------|------|-----------|
@@ -56,7 +58,7 @@ Kontrak kerja karyawan.
 | `employeeId` | INT | FK ke `employees` |
 | `documentTypeId` | INT | FK ke `document_types` |
 | `documentNumber` | VARCHAR | Nomor dokumen |
-| `expiryDate` | DATE | Tanggal kadaluarsa |
+| `expiryDate` | DATE? | Tanggal kadaluarsa (nullable — opsional untuk KTP/NPWP/KK) |
 | `status` | ENUM | AKTIF/AKAN_EXPIRED/EXPIRED |
 | `fileUrl` | VARCHAR | Path file upload |
 | `notes` | TEXT | Catatan |

@@ -51,6 +51,7 @@ export default defineConfig({
             { text: 'Data Karyawan', link: '/panduan-pengguna/data-karyawan' },
             { text: 'Kontrak Karyawan', link: '/panduan-pengguna/kontrak-karyawan' },
             { text: 'Surat Peringatan', link: '/panduan-pengguna/surat-peringatan' },
+            { text: 'Dok. Karyawan', link: '/panduan-pengguna/dok-karyawan' },
             { text: 'Sertifikasi & Ijin', link: '/panduan-pengguna/sertifikasi-ijin' },
             { text: 'Kontrak Customer/Vendor', link: '/panduan-pengguna/kontrak-vendor' },
             { text: 'Legal Koperasi', link: '/panduan-pengguna/legal-koperasi' },

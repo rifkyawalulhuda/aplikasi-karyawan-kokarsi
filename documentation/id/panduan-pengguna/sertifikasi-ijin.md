@@ -56,10 +56,15 @@ Klik tombol **Export** → **Export Excel** untuk mengunduh semua data ke file E
 
 ## Master Dokumen
 
-Tipe dokumen dikelola melalui **Pengaturan → Master Data**. Setiap tipe dokumen memiliki:
+Tipe dokumen dikelola melalui **Pengaturan → Master Data → Jenis Dokumen**. Setiap tipe dokumen memiliki:
 - Nama dokumen
 - Jenis (Sertifikat, Lisensi, Ijin, Rahasia, Lainnya)
 - Penerbit default
+- **Kategori** — Hanya tipe dengan kategori **Sertifikasi & Ijin** yang muncul di halaman ini
+
+::: tip Dok. Karyawan
+Dokumen identitas pribadi (KTP, SIM, NPWP, Kartu Keluarga, dll) dikelola di halaman [Dok. Karyawan](/panduan-pengguna/dok-karyawan) yang terpisah.
+:::
 
 ## Notifikasi Kadaluarsa
 
