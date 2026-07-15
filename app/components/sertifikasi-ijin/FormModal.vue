@@ -257,28 +257,28 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
         <!-- Karyawan -->
         <UFormField label="Karyawan" name="employeeId" required>
-          <USelect
+          <USelectMenu
             v-model="state.employeeId"
             :items="employeeOptions"
+            value-key="value"
             placeholder="Pilih karyawan..."
             class="w-full"
             :class="isRenewMode ? 'opacity-60' : ''"
-            searchable
-            searchable-placeholder="Cari karyawan..."
+            :search-input="{ placeholder: 'Cari karyawan...' }"
             :disabled="isRenewMode"
           />
         </UFormField>
 
         <!-- Jenis Dokumen -->
         <UFormField label="Nama Dokumen" name="documentTypeId" required>
-          <USelect
+          <USelectMenu
             v-model="state.documentTypeId"
             :items="documentTypeOptions"
+            value-key="value"
             placeholder="Pilih dokumen..."
             class="w-full"
             :class="isRenewMode ? 'opacity-60' : ''"
-            searchable
-            searchable-placeholder="Cari dokumen..."
+            :search-input="{ placeholder: 'Cari dokumen...' }"
             :disabled="isRenewMode"
             @update:model-value="onDocumentTypeSelect"
           />

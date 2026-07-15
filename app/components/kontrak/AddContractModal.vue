@@ -202,11 +202,13 @@ function resetForm() {
     <template #body>
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
         <UFormField label="Karyawan" name="employeeId" required>
-          <USelect
+          <USelectMenu
             v-model="state.employeeId"
             :items="employeeOptions"
+            value-key="value"
             placeholder="Pilih karyawan..."
             class="w-full"
+            :search-input="{ placeholder: 'Cari nama atau no. karyawan...' }"
           />
         </UFormField>
 
