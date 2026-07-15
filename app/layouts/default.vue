@@ -34,6 +34,7 @@ async function fetchGroups(query: string) {
       contracts: any[]
       warningLetters: any[]
       employeeDocuments: any[]
+      dokKaryawan: any[]
       vendorContracts: any[]
       legalKoperasi: any[]
       akteDokumen: any[]
@@ -99,6 +100,21 @@ async function fetchGroups(query: string) {
           suffix: `${doc.employee?.fullName ?? ''}`,
           icon: 'i-lucide-file-badge',
           to: '/dokumen/sertifikasi-ijin',
+        })),
+      })
+    }
+
+    if ((results as any).dokKaryawan?.length) {
+      groups.push({
+        id: 'dokKaryawan',
+        label: 'Dok. Karyawan',
+        ignoreFilter: true,
+        items: (results as any).dokKaryawan.map((doc: any) => ({
+          id: `dok-${doc.id}`,
+          label: `${doc.documentType?.name ?? 'Dokumen'}`,
+          suffix: `${doc.employee?.fullName ?? ''} · ${doc.documentNumber ?? ''}`.replace(/\s·\s$/, ''),
+          icon: 'i-lucide-id-card',
+          to: '/dokumen/dok-karyawan',
         })),
       })
     }

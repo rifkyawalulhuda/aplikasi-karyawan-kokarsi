@@ -9,13 +9,13 @@ export default defineEventHandler(async (event) => {
 
   const { q, limit = '5' } = getQuery(event)
   if (!q || String(q).trim().length < 2) {
-    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], vendorContracts: [], legalKoperasi: [], akteDokumen: [] }
+    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], dokKaryawan: [], vendorContracts: [], legalKoperasi: [], akteDokumen: [] }
   }
 
   const searchParam = encodeURIComponent(String(q).trim())
   const limitParam = String(limit)
 
-  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, vendorContractsRes, legalKoperasiRes, akteDokumenRes] = await Promise.allSettled([
+  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, dokKaryawanRes, vendorContractsRes, legalKoperasiRes, akteDokumenRes] = await Promise.allSettled([
     $fetch(`${BACKEND}/employees?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
@@ -25,7 +25,12 @@ export default defineEventHandler(async (event) => {
     $fetch(`${BACKEND}/warning-letters?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
-    $fetch(`${BACKEND}/employee-documents?search=${searchParam}&limit=${limitParam}`, {
+    // Sertifikasi & Ijin — hanya CERTIFICATION category
+    $fetch(`${BACKEND}/employee-documents?search=${searchParam}&limit=${limitParam}&documentTypeCategory=CERTIFICATION`, {
+      headers: authHeader,
+    }) as Promise<{ data: any[] }>,
+    // Dok. Karyawan — hanya PERSONAL category
+    $fetch(`${BACKEND}/employee-documents?search=${searchParam}&limit=${limitParam}&documentTypeCategory=PERSONAL`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
     $fetch(`${BACKEND}/vendor-contracts?search=${searchParam}&limit=${limitParam}`, {
@@ -49,7 +54,10 @@ export default defineEventHandler(async (event) => {
     console.error('[search] Gagal fetch warning-letters:', warningLettersRes.reason)
   }
   if (employeeDocumentsRes.status === 'rejected') {
-    console.error('[search] Gagal fetch employee-documents:', employeeDocumentsRes.reason)
+    console.error('[search] Gagal fetch employee-documents (CERTIFICATION):', employeeDocumentsRes.reason)
+  }
+  if (dokKaryawanRes.status === 'rejected') {
+    console.error('[search] Gagal fetch employee-documents (PERSONAL):', dokKaryawanRes.reason)
   }
   if (vendorContractsRes.status === 'rejected') {
     console.error('[search] Gagal fetch vendor-contracts:', vendorContractsRes.reason)
@@ -77,6 +85,10 @@ export default defineEventHandler(async (event) => {
     ? (employeeDocumentsRes.value?.data ?? [])
     : []
 
+  const dokKaryawan = dokKaryawanRes.status === 'fulfilled'
+    ? (dokKaryawanRes.value?.data ?? [])
+    : []
+
   const vendorContracts = vendorContractsRes.status === 'fulfilled'
     ? (vendorContractsRes.value?.data ?? [])
     : []
@@ -89,5 +101,5 @@ export default defineEventHandler(async (event) => {
     ? (akteDokumenRes.value?.data ?? [])
     : []
 
-  return { employees, contracts, warningLetters, employeeDocuments, vendorContracts, legalKoperasi, akteDokumen }
+  return { employees, contracts, warningLetters, employeeDocuments, dokKaryawan, vendorContracts, legalKoperasi, akteDokumen }
 })
