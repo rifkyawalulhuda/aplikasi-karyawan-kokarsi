@@ -6,6 +6,7 @@ import { h } from 'vue'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
+const UIcon = resolveComponent('UIcon')
 
 // --- Types ---
 interface EmployeeSummary {
@@ -113,11 +114,71 @@ watch(searchQuery, () => {
   page.value = 1
 })
 
+// --- Sorting ---
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+  sorting.value = null
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
+}
+
+// Priority map untuk sorting status: EXPIRED paling atas saat asc
+const statusPriority: Record<string, number> = { EXPIRED: 0, AKAN_EXPIRED: 1, AKTIF: 2 }
+
+const sortedRows = computed<EmployeeSummary[]>(() => {
+  const sort = sorting.value
+  if (!sort) return rows.value
+
+  return [...rows.value].sort((a, b) => {
+    let compare = 0
+    switch (sort.key) {
+      case 'employee':
+        compare = (a.employee.fullName ?? '').localeCompare(b.employee.fullName ?? '', 'id')
+        break
+      case 'totalDocs':
+        compare = a.totalDocs - b.totalDocs
+        break
+      case 'worstStatus':
+        compare = (statusPriority[a.worstStatus] ?? 99) - (statusPriority[b.worstStatus] ?? 99)
+        break
+      default:
+        compare = 0
+    }
+    return sort.direction === 'asc' ? compare : -compare
+  })
+})
+
 // --- Table Columns ---
 const columns: TableColumn<EmployeeSummary>[] = [
   {
     accessorKey: 'employee',
-    header: 'Karyawan',
+    header: () => sortableHeader('Karyawan', 'employee'),
     cell: ({ row }: { row: Row<EmployeeSummary> }) => {
       const emp = row.original.employee
       const avatar = emp.fotoKaryawan
@@ -141,7 +202,7 @@ const columns: TableColumn<EmployeeSummary>[] = [
   },
   {
     accessorKey: 'totalDocs',
-    header: 'Jumlah Dokumen',
+    header: () => sortableHeader('Jumlah Dokumen', 'totalDocs'),
     cell: ({ row }: { row: Row<EmployeeSummary> }) =>
       h(UBadge, {
         label: String(row.original.totalDocs),
@@ -152,7 +213,7 @@ const columns: TableColumn<EmployeeSummary>[] = [
   },
   {
     accessorKey: 'worstStatus',
-    header: 'Status',
+    header: () => sortableHeader('Status', 'worstStatus'),
     cell: ({ row }: { row: Row<EmployeeSummary> }) => {
       const s = row.original.worstStatus
       return h(UBadge, {
@@ -230,7 +291,7 @@ const table = useTemplateRef('table')
         v-model:pagination="pagination"
         :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
-        :data="rows"
+        :data="sortedRows"
         :columns="columns"
         :loading="status === 'pending'"
         :ui="{

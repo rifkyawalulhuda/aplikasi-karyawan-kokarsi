@@ -164,7 +164,7 @@ const columns: TableColumn<AkteDokumen>[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: 'Aksi',
     cell: ({ row }: { row: Row<AkteDokumen> }) =>
       h(UDropdownMenu, { items: getRowItems(row) }, () =>
         h(UButton, { icon: 'i-lucide-ellipsis-vertical', color: 'neutral', variant: 'ghost', size: 'xs' }),

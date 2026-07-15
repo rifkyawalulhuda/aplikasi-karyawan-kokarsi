@@ -16,9 +16,9 @@ const { data: employee, status, refresh, error } = await useFetch<Employee>(
   }
 )
 
-// Fetch dokumen karyawan (sertifikasi & ijin)
+// Fetch dokumen karyawan (sertifikasi & ijin only — CERTIFICATION category)
 const { data: docsRes } = await useFetch<{ data: any[]; total: number }>(
-  () => `/api/employee-documents?employeeId=${employeeId.value}&limit=999`,
+  () => `/api/employee-documents?employeeId=${employeeId.value}&limit=999&documentTypeCategory=CERTIFICATION`,
   {
     credentials: 'include',
     watch: [employeeId],
