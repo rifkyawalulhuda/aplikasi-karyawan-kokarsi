@@ -375,14 +375,14 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
 
         <!-- Nama Perusahaan -->
         <UFormField label="Nama Perusahaan" name="companyId" required>
-          <USelect
+          <USelectMenu
             v-model="state.companyId"
             :items="companyOptions"
+            value-key="value"
             placeholder="Pilih perusahaan..."
             class="w-full"
             :class="isReadonlyMode ? 'opacity-60' : ''"
-            searchable
-            searchable-placeholder="Cari perusahaan..."
+            :search-input="{ placeholder: 'Cari perusahaan...' }"
             :disabled="isReadonlyMode"
           />
         </UFormField>

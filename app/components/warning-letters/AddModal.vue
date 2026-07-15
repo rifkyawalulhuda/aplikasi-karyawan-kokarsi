@@ -280,11 +280,13 @@ function resetForm() {
         </UFormField>
 
         <UFormField label="Karyawan" name="employeeId" required>
-          <USelect
+          <USelectMenu
             v-model="state.employeeId"
             :items="employeeItems"
+            value-key="value"
             placeholder="Pilih karyawan..."
             class="w-full"
+            :search-input="{ placeholder: 'Cari nama atau no. karyawan...' }"
             @update:model-value="onEmployeeChange"
           />
         </UFormField>

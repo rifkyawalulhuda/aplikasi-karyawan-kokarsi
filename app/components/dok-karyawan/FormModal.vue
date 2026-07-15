@@ -249,13 +249,13 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <!-- Tipe Dokumen -->
         <UFormField label="Tipe Dokumen" name="documentTypeId" required>
-          <USelect
+          <USelectMenu
             v-model="state.documentTypeId"
             :items="documentTypeOptions"
+            value-key="value"
             placeholder="Pilih tipe dokumen..."
             class="w-full"
-            searchable
-            searchable-placeholder="Cari tipe dokumen..."
+            :search-input="{ placeholder: 'Cari tipe dokumen...' }"
           />
         </UFormField>
 

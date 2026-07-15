@@ -338,12 +338,13 @@ const table = useTemplateRef('table')
     <template #body>
       <div class="space-y-4 p-1">
         <UFormField label="Pilih Karyawan" required>
-          <USelect
+          <USelectMenu
             v-model="addDocEmployeeId"
             :items="employeeOptions"
+            value-key="value"
             placeholder="Cari dan pilih karyawan..."
-            searchable
             class="w-full"
+            :search-input="{ placeholder: 'Cari nama atau no. karyawan...' }"
           />
         </UFormField>
         <div class="flex justify-end gap-2">
