@@ -309,8 +309,10 @@ const links = computed<NavigationMenuItem[]>(() => [
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <TeamsMenu :collapsed="collapsed" />
-        <NotificationBell :collapsed="collapsed" />
+        <div :class="collapsed ? 'flex flex-col items-center gap-1 w-full' : 'flex items-center justify-between w-full gap-2'">
+          <TeamsMenu :collapsed="collapsed" />
+          <NotificationBell :collapsed="collapsed" />
+        </div>
       </template>
 
       <template #default="{ collapsed }">

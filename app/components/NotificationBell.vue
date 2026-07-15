@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   collapsed?: boolean
 }>()
 
@@ -55,6 +55,10 @@ function relativeTime(dateStr: string) {
   return `${Math.floor(hours / 24)} hari lalu`
 }
 
+const tooltipText = computed(() =>
+  unreadCount.value > 0 ? `Notifikasi (${unreadCount.value})` : 'Notifikasi'
+)
+
 const router = useRouter()
 async function handleNotifClick(notif: any) {
   await markOneRead(notif.id)
@@ -63,7 +67,30 @@ async function handleNotifClick(notif: any) {
 </script>
 
 <template>
-  <UPopover :content="{ side: 'right', sideOffset: 8 }">
+  <!-- Collapsed: tampilkan sebagai tooltip + button sederhana, konsisten dengan sidebar lain -->
+  <UTooltip v-if="props.collapsed" :text="tooltipText" :content="{ side: 'right' }">
+    <div class="relative">
+      <UButton
+        icon="i-lucide-bell"
+        color="neutral"
+        variant="ghost"
+        square
+        :aria-label="`Notifikasi${unreadCount > 0 ? `, ${unreadCount} belum dibaca` : ''}`"
+        :class="{ 'animate-bounce': hasNewNotification }"
+        to="/notifications"
+      />
+      <span
+        v-if="unreadCount > 0"
+        class="absolute -top-1 -right-1 min-w-4 h-4 flex items-center justify-center text-[10px] font-bold rounded-full px-1 pointer-events-none z-10"
+        :class="badgeColor === 'error' ? 'bg-red-500 text-white' : 'bg-amber-500 text-white'"
+      >
+        {{ unreadCount > 99 ? '99+' : unreadCount }}
+      </span>
+    </div>
+  </UTooltip>
+
+  <!-- Expanded: tampilkan popover notifikasi lengkap -->
+  <UPopover v-else :content="{ side: 'right', sideOffset: 8 }">
     <!-- Trigger: UButton langsung sebagai child pertama agar UPopover menjadikannya trigger -->
     <UButton
       icon="i-lucide-bell"

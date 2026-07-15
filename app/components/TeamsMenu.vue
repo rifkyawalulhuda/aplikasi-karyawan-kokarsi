@@ -10,7 +10,7 @@ const { logoUrl, organizationName } = useAppSettings()
   <UButton
     color="neutral"
     variant="ghost"
-    block
+    :block="!collapsed"
     :square="collapsed"
     class="py-2 cursor-default"
     :ui="{ trailingIcon: 'text-dimmed' }"
