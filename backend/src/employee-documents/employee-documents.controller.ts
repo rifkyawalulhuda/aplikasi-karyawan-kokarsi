@@ -46,13 +46,15 @@ export class EmployeeDocumentsController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('employeeId') employeeId?: string,
+    @Query('documentTypeCategory') documentTypeCategory?: string,
   ) {
     return this.service.findAll({
-      page: page ? +page : 1,
-      limit: limit ? +limit : 10,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
       search,
       status,
-      employeeId: employeeId ? +employeeId : undefined,
+      employeeId: employeeId ? parseInt(employeeId) : undefined,
+      documentTypeCategory,
     })
   }
 

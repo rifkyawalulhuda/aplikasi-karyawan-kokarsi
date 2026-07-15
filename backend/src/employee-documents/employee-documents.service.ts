@@ -62,12 +62,14 @@ export class EmployeeDocumentsService {
     search,
     status,
     employeeId,
+    documentTypeCategory,
   }: {
     page?: number
     limit?: number
     search?: string
     status?: string
     employeeId?: number
+    documentTypeCategory?: string
   }) {
     const where: any = {}
 
@@ -85,6 +87,10 @@ export class EmployeeDocumentsService {
 
     if (status) {
       where.status = status
+    }
+
+    if (documentTypeCategory) {
+      where.documentType = { category: documentTypeCategory }
     }
 
     const [data, total] = await Promise.all([

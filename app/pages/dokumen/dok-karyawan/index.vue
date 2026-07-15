@@ -189,13 +189,18 @@ const table = useTemplateRef('table')
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
+        <template #right>
+          <UButton
+            label="Tambah Dokumen"
+            icon="i-lucide-plus"
+            color="primary"
+            @click="addDocModal = true"
+          />
+        </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <!-- Subtitle -->
-      <p class="text-sm text-muted mb-4">Manajemen dokumen pribadi karyawan</p>
-
       <!-- Summary badges -->
       <div class="flex flex-wrap gap-3 mb-4">
         <UBadge variant="subtle" color="neutral" size="lg">
@@ -216,11 +221,6 @@ const table = useTemplateRef('table')
           class="max-w-xs"
           icon="i-lucide-search"
           placeholder="Cari nama atau no. karyawan..."
-        />
-        <UButton
-          icon="i-lucide-plus"
-          label="Tambah Dokumen"
-          @click="addDocModal = true"
         />
       </div>
 

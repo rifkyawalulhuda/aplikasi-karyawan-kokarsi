@@ -39,11 +39,45 @@ const { data: documentTypesRes } = useFetch<DocumentType[]>('/api/lookups/docume
   credentials: 'include',
 })
 
+// --- Fetch existing documents untuk karyawan ini (untuk rule no-duplicate) ---
+const { data: existingDocsRes, refresh: refreshExisting } = useFetch<{ data: EmployeeDocument[] } | EmployeeDocument[]>(
+  '/api/employee-documents',
+  {
+    query: computed(() => ({ employeeId: props.employeeId, limit: 100 })),
+    immediate: false,
+    server: false,
+  },
+)
+
+// Trigger fetch saat modal dibuka dan employeeId tersedia
+watch(
+  () => props.open,
+  (isOpen) => {
+    if (isOpen && props.employeeId) refreshExisting()
+  },
+)
+
+// Set documentTypeId yang sudah dipakai karyawan ini
+// Di mode Edit: exclude tipe yang sedang diedit (boleh tetap dipilih)
+const existingDocTypeIds = computed<Set<number>>(() => {
+  const raw = existingDocsRes.value
+  const docs: EmployeeDocument[] = Array.isArray(raw) ? raw : ((raw as any)?.data ?? [])
+  return new Set(
+    docs
+      .filter(d => !isEditMode.value || d.documentTypeId !== props.doc?.documentTypeId)
+      .map(d => d.documentTypeId),
+  )
+})
+
 const documentTypeOptions = computed(() =>
-  (documentTypesRes.value ?? []).map(dt => ({
-    label: dt.name,
-    value: dt.id,
-  }))
+  (documentTypesRes.value ?? []).map(dt => {
+    const alreadyExists = existingDocTypeIds.value.has(dt.id)
+    return {
+      label: alreadyExists ? `${dt.name} ✓` : dt.name,
+      value: dt.id,
+      disabled: alreadyExists,
+    }
+  })
 )
 
 // --- Schema ---

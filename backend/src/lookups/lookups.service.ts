@@ -1,12 +1,14 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsNotEmpty, IsOptional, IsString, IsEmail } from 'class-validator'
+import { DocCategory } from '@prisma/client'
 import * as XLSX from 'xlsx'
 
 export class CreateDocumentTypeDto {
   @IsString() @IsNotEmpty() name: string
   @IsString() @IsNotEmpty() documentType: string
   @IsString() @IsNotEmpty() issuer: string
+  @IsString() @IsOptional() category?: string
 }
 
 export class CreateCompanyDto {
@@ -210,13 +212,24 @@ export class LookupsService {
   }
 
   async createDocumentType(dto: CreateDocumentTypeDto) {
-    return this.prisma.documentType.create({ data: dto })
+    return this.prisma.documentType.create({
+      data: {
+        ...dto,
+        ...(dto.category && { category: dto.category as DocCategory }),
+      },
+    })
   }
 
   async updateDocumentType(id: number, dto: CreateDocumentTypeDto) {
     const existing = await this.prisma.documentType.findUnique({ where: { id } })
     if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
-    return this.prisma.documentType.update({ where: { id }, data: dto })
+    return this.prisma.documentType.update({
+      where: { id },
+      data: {
+        ...dto,
+        ...(dto.category && { category: dto.category as DocCategory }),
+      },
+    })
   }
 
   async deleteDocumentType(id: number) {

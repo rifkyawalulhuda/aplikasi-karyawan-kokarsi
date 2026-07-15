@@ -67,7 +67,7 @@ function openDetail(doc: EmployeeDocument) {
 
 // --- Fetch Data ---
 const { data: docsRes, status, refresh } = await useFetch<{ data: EmployeeDocument[]; total: number }>('/api/employee-documents', {
-  query: { limit: 999 },
+  query: { limit: 999, documentTypeCategory: 'CERTIFICATION' },
   lazy: true,
   credentials: 'include',
 })

@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
   if (query.page) params.set('page', String(query.page))
   if (query.status) params.set('status', String(query.status))
   if (query.employeeId) params.set('employeeId', String(query.employeeId))
+  if (query.documentTypeCategory) params.set('documentTypeCategory', String(query.documentTypeCategory))
   const qs = params.toString() ? `?${params.toString()}` : ''
 
   const body = method !== 'GET' ? await readBody(event) : undefined
