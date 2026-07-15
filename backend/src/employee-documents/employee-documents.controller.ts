@@ -26,6 +26,19 @@ import { validateImageBuffer, validatePdfBuffer } from '../shared/file-validatio
 export class EmployeeDocumentsController {
   constructor(private service: EmployeeDocumentsService) {}
 
+  @Get('summary')
+  findSummary(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.service.findEmployeeSummary({
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      search,
+    })
+  }
+
   @Get()
   findAll(
     @Query('page') page?: string,

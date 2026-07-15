@@ -199,6 +199,11 @@ const links = computed<NavigationMenuItem[]>(() => [
     type: 'trigger',
     children: [
       {
+        label: 'Dok. Karyawan',
+        to: '/dokumen/dok-karyawan',
+        onSelect: () => { open.value = false },
+      },
+      {
         label: 'Surat Peringatan',
         to: '/dokumen/surat-peringatan',
         onSelect: () => { open.value = false },

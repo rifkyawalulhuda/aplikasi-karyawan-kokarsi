@@ -6,6 +6,7 @@ interface DocumentTypeItem {
   name: string
   documentType: string
   issuer: string
+  category: 'PERSONAL' | 'CERTIFICATION'
 }
 
 interface CompanyItem {
@@ -234,11 +235,13 @@ function onTabChange(key: ResourceKey) {
 const newDocName = ref('')
 const newDocType = ref('')
 const newDocIssuer = ref('')
+const newDocCategory = ref<'PERSONAL' | 'CERTIFICATION'>('CERTIFICATION')
 const addDocLoading = ref(false)
 
 const editDocState = reactive({
   documentType: '',
-  issuer: ''
+  issuer: '',
+  category: 'CERTIFICATION' as 'PERSONAL' | 'CERTIFICATION'
 })
 
 const documentTypeOptions = [
@@ -262,6 +265,7 @@ function openEditDoc(item: DocumentTypeItem) {
   editState.name = item.name
   editDocState.documentType = item.documentType
   editDocState.issuer = item.issuer
+  editDocState.category = item.category ?? 'CERTIFICATION'
   editState.open = true
 }
 
@@ -271,12 +275,13 @@ async function doAddDoc() {
   try {
     await $fetch('/api/lookups/document-types', {
       method: 'POST',
-      body: { name: newDocName.value.trim(), documentType: newDocType.value, issuer: newDocIssuer.value.trim() }
+      body: { name: newDocName.value.trim(), documentType: newDocType.value, issuer: newDocIssuer.value.trim(), category: newDocCategory.value }
     })
     toast.add({ title: 'Berhasil ditambahkan', color: 'success' })
     newDocName.value = ''
     newDocType.value = ''
     newDocIssuer.value = ''
+    newDocCategory.value = 'CERTIFICATION'
     addOpen.value = false
     await loadResource('document-types')
   } catch (e: any) {
@@ -292,7 +297,7 @@ async function saveEditDoc() {
   try {
     await $fetch(`/api/lookups/document-types/${editState.id}`, {
       method: 'PUT',
-      body: { name: editState.name, documentType: editDocState.documentType, issuer: editDocState.issuer }
+      body: { name: editState.name, documentType: editDocState.documentType, issuer: editDocState.issuer, category: editDocState.category }
     })
     toast.add({ title: 'Berhasil diperbarui', color: 'success' })
     editState.open = false
@@ -597,6 +602,18 @@ async function saveEditCompany() {
                     size="sm"
                     class="flex-1"
                   />
+                  <USelect
+                    v-model="newDocCategory"
+                    :items="[
+                      { label: 'Dokumen Pribadi (KTP, SIM, NPWP, dll)', value: 'PERSONAL' },
+                      { label: 'Sertifikasi & Ijin', value: 'CERTIFICATION' },
+                    ]"
+                    placeholder="Pilih kategori..."
+                    size="sm"
+                    class="flex-1"
+                  />
+                </div>
+                <div class="flex gap-2 justify-end">
                   <UButton
                     label="Simpan"
                     size="sm"
@@ -609,7 +626,7 @@ async function saveEditCompany() {
                     size="sm"
                     color="neutral"
                     variant="ghost"
-                    @click="addOpen = false; newDocName = ''; newDocType = ''; newDocIssuer = ''"
+                    @click="addOpen = false; newDocName = ''; newDocType = ''; newDocIssuer = ''; newDocCategory = 'CERTIFICATION'"
                   />
                 </div>
               </div>
@@ -749,6 +766,13 @@ async function saveEditCompany() {
                         size="xs"
                       />
                       <span v-if="item.issuer" class="text-xs text-muted truncate">{{ item.issuer }}</span>
+                      <UBadge
+                        :label="item.category === 'PERSONAL' ? 'Dokumen Pribadi' : 'Sertifikasi & Ijin'"
+                        :color="item.category === 'PERSONAL' ? 'primary' : 'warning'"
+                        variant="subtle"
+                        size="xs"
+                        class="mt-0.5 self-start"
+                      />
                     </div>
                   </div>
                 </div>
@@ -814,6 +838,17 @@ async function saveEditCompany() {
               v-model="editDocState.issuer"
               class="w-full"
               placeholder="Penerbit"
+            />
+          </UFormField>
+          <UFormField label="Kategori" required>
+            <USelect
+              v-model="editDocState.category"
+              :items="[
+                { label: 'Dokumen Pribadi (KTP, SIM, NPWP, dll)', value: 'PERSONAL' },
+                { label: 'Sertifikasi & Ijin', value: 'CERTIFICATION' },
+              ]"
+              placeholder="Pilih kategori..."
+              class="w-full"
             />
           </UFormField>
         </div>

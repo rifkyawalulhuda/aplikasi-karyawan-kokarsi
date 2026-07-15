@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException, UploadedFile, UseInterceptors, BadRequestException, Res } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException, UploadedFile, UseInterceptors, BadRequestException, Res, Query } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { LookupsService, CreateDocumentTypeDto, CreateCompanyDto } from './lookups.service'
@@ -154,8 +154,8 @@ export class LookupsController {
   }
 
   @Get('document-types')
-  getDocumentTypes() {
-    return this.service.getDocumentTypes()
+  getDocumentTypes(@Query('category') category?: string) {
+    return this.service.getDocumentTypes(category)
   }
 
   @Post('document-types')

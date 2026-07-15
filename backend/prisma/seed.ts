@@ -246,6 +246,30 @@ async function main() {
     })
   }
 
+  const personalDocTypes = [
+    { name: 'KTP', documentType: 'KTP', issuer: 'Dukcapil', category: 'PERSONAL' as const },
+    { name: 'SIM', documentType: 'SIM', issuer: 'Polri', category: 'PERSONAL' as const },
+    { name: 'NPWP', documentType: 'NPWP', issuer: 'Ditjen Pajak', category: 'PERSONAL' as const },
+    { name: 'Kartu Keluarga', documentType: 'KK', issuer: 'Dukcapil', category: 'PERSONAL' as const },
+    { name: 'Paspor', documentType: 'PASPOR', issuer: 'Imigrasi', category: 'PERSONAL' as const },
+    { name: 'BPJS Ketenagakerjaan', documentType: 'BPJS_TK', issuer: 'BPJS TK', category: 'PERSONAL' as const },
+    { name: 'BPJS Kesehatan', documentType: 'BPJS_KES', issuer: 'BPJS Kesehatan', category: 'PERSONAL' as const },
+    { name: 'Ijazah', documentType: 'IJAZAH', issuer: 'Institusi Pendidikan', category: 'PERSONAL' as const },
+    { name: 'Sertifikat Kompetensi', documentType: 'SERTIFIKAT', issuer: 'Lembaga Sertifikasi', category: 'PERSONAL' as const },
+  ]
+
+  for (const dt of personalDocTypes) {
+    const existing = await prisma.documentType.findFirst({ where: { documentType: dt.documentType } })
+    if (existing) {
+      await prisma.documentType.update({
+        where: { id: existing.id },
+        data: { category: dt.category },
+      })
+    } else {
+      await prisma.documentType.create({ data: dt })
+    }
+  }
+
   console.log('Seed selesai!')
   console.log('Login admin: employeeNo=EMP001, password=admin123')
   console.log('Login admin user: username=admin.kokarsi, password=admin123')

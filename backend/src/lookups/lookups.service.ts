@@ -203,8 +203,10 @@ export class LookupsService {
     })
   }
 
-  async getDocumentTypes() {
-    return this.prisma.documentType.findMany({ orderBy: { name: 'asc' } })
+  async getDocumentTypes(category?: string) {
+    const where: any = {}
+    if (category) where.category = category
+    return this.prisma.documentType.findMany({ where, orderBy: { name: 'asc' } })
   }
 
   async createDocumentType(dto: CreateDocumentTypeDto) {

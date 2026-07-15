@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsNotEmpty } from 'class-validator'
+import { PartialType } from '@nestjs/mapped-types'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
@@ -15,15 +16,16 @@ export class CreateEmployeeDocumentDto {
   @IsNotEmpty()
   documentNumber: string
 
+  @IsOptional()
   @IsDateString()
-  expiryDate: string
+  expiryDate?: string
 
   @IsOptional()
   @IsString()
   notes?: string
 }
 
-export class UpdateEmployeeDocumentDto extends CreateEmployeeDocumentDto {}
+export class UpdateEmployeeDocumentDto extends PartialType(CreateEmployeeDocumentDto) {}
 
 @Injectable()
 export class EmployeeDocumentsService {
@@ -40,9 +42,10 @@ export class EmployeeDocumentsService {
    * Hitung status dokumen berdasarkan tanggal kedaluwarsa.
    * - EXPIRED      : expiryDate sudah lewat hari ini
    * - AKAN_EXPIRED : sisa ≤ 30 hari
-   * - AKTIF        : lebih dari 30 hari lagi
+   * - AKTIF        : lebih dari 30 hari lagi (atau tidak ada tanggal)
    */
-  private computeStatus(expiryDate: Date): 'AKTIF' | 'AKAN_EXPIRED' | 'EXPIRED' {
+  private computeStatus(expiryDate: Date | null): 'AKTIF' | 'AKAN_EXPIRED' | 'EXPIRED' {
+    if (!expiryDate) return 'AKTIF'
     const today = startOfDay(new Date())
     const expiry = startOfDay(expiryDate)
     const diffMs = expiry.getTime() - today.getTime()
@@ -115,7 +118,7 @@ export class EmployeeDocumentsService {
   }
 
   async create(dto: CreateEmployeeDocumentDto) {
-    const expiryDate = new Date(dto.expiryDate)
+    const expiryDate = dto.expiryDate ? new Date(dto.expiryDate) : null
     const status = this.computeStatus(expiryDate)
 
     return this.prisma.employeeDocument.create({
@@ -134,7 +137,7 @@ export class EmployeeDocumentsService {
   async update(id: number, dto: UpdateEmployeeDocumentDto) {
     await this.findOne(id)
 
-    const expiryDate = new Date(dto.expiryDate)
+    const expiryDate = dto.expiryDate ? new Date(dto.expiryDate) : null
     const status = this.computeStatus(expiryDate)
 
     return this.prisma.employeeDocument.update({
@@ -164,5 +167,69 @@ export class EmployeeDocumentsService {
       data: { fileUrl },
       include: this.include,
     })
+  }
+
+  async findEmployeeSummary({
+    page = 1,
+    limit = 10,
+    search,
+  }: {
+    page?: number
+    limit?: number
+    search?: string
+  }) {
+    const where: any = {}
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' as const } },
+        { employeeNo: { contains: search, mode: 'insensitive' as const } },
+      ]
+    }
+
+    const [employees, total] = await Promise.all([
+      this.prisma.employee.findMany({
+        where: {
+          ...where,
+          employeeDocuments: { some: {} },
+        },
+        include: {
+          employeeDocuments: {
+            include: { documentType: true },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.employee.count({
+        where: {
+          ...where,
+          employeeDocuments: { some: {} },
+        },
+      }),
+    ])
+
+    const data = employees.map(emp => {
+      const docs = emp.employeeDocuments
+      const worstStatus = docs.some(d => d.status === 'EXPIRED')
+        ? 'EXPIRED'
+        : docs.some(d => d.status === 'AKAN_EXPIRED')
+          ? 'AKAN_EXPIRED'
+          : 'AKTIF'
+      return {
+        employee: {
+          id: emp.id,
+          employeeNo: emp.employeeNo,
+          fullName: emp.fullName,
+          fotoKaryawan: emp.fotoKaryawan,
+        },
+        totalDocs: docs.length,
+        worstStatus,
+        documents: docs,
+      }
+    })
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) }
   }
 }

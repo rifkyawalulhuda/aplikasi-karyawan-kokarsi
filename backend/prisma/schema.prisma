@@ -297,11 +297,17 @@ enum AdminRole {
   PENGELOLA_KOPERASI
 }
 
+enum DocCategory {
+  PERSONAL
+  CERTIFICATION
+}
+
 model DocumentType {
-  id           Int    @id @default(autoincrement())
-  name         String @db.VarChar(255)
-  documentType String @db.VarChar(50)
-  issuer       String @db.VarChar(255)
+  id           Int         @id @default(autoincrement())
+  name         String      @db.VarChar(255)
+  documentType String      @db.VarChar(50)
+  issuer       String      @db.VarChar(255)
+  category     DocCategory @default(CERTIFICATION)
 
   employeeDocuments EmployeeDocument[]
 
@@ -313,7 +319,7 @@ model EmployeeDocument {
   employeeId     Int
   documentTypeId Int
   documentNumber String       @db.VarChar(100)
-  expiryDate     DateTime     @db.Date
+  expiryDate     DateTime?    @db.Date
   notes          String?      @db.Text
   fileUrl        String?      @db.VarChar(500)
   status         DocStatus    @default(AKTIF)

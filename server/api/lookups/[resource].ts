@@ -1,4 +1,4 @@
-import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } from 'h3'
+import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody, getQuery } from 'h3'
 
 
 const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types', 'departments', 'document-types']
@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const method = getMethod(event)
+  const query = getQuery(event)
   const token = getCookie(event, 'auth_token') ?? ''
   const authHeader: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` } as Record<string, string>
@@ -17,8 +18,15 @@ export default defineEventHandler(async (event) => {
 
   const body = method !== 'GET' ? await readBody(event) : undefined
 
+  // Build query string dari params yang diterima (misal ?category=PERSONAL)
+  const params = new URLSearchParams()
+  for (const [key, val] of Object.entries(query)) {
+    if (val !== undefined && val !== null) params.set(key, String(val))
+  }
+  const qs = params.toString() ? `?${params.toString()}` : ''
+
   try {
-    return await $fetch(`${BACKEND}/lookups/${resource}`, {
+    return await $fetch(`${BACKEND}/lookups/${resource}${qs}`, {
       method: method as any,
       headers: authHeader,
       body,

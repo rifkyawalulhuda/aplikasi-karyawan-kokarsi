@@ -120,8 +120,8 @@ export class NotificationsService {
               triggerDay,
               deeplink:
                 triggerDay === 0
-                  ? '/dokumen/sertifikasi-ijin?status=EXPIRED'
-                  : '/dokumen/sertifikasi-ijin?status=AKAN_EXPIRED',
+                  ? '/dokumen/dok-karyawan?status=EXPIRED'
+                  : '/dokumen/dok-karyawan?status=AKAN_EXPIRED',
               expiryDate: d.expiryDate!,
             },
           })
@@ -231,7 +231,7 @@ export class NotificationsService {
             sourceType: 'employee_document',
             sourceId: d.id,
             triggerDay: CATCHALL_DAY,
-            deeplink: '/dokumen/sertifikasi-ijin?status=AKAN_EXPIRED',
+            deeplink: '/dokumen/dok-karyawan?status=AKAN_EXPIRED',
             expiryDate: d.expiryDate!,
           },
         })

@@ -61,6 +61,7 @@ const { data: employeesRes } = useFetch<{ data: { id: number; fullName: string; 
 
 // --- Fetch document types ---
 const { data: documentTypesRes } = useFetch<DocumentTypeItem[]>('/api/lookups/document-types', {
+  query: { category: 'CERTIFICATION' },
   credentials: 'include',
 })
 
