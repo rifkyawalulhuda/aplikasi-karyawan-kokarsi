@@ -136,6 +136,43 @@ const spDonutData = computed(() => {
   ]
 })
 
+// SP donut segments — menggunakan SVG path arc untuk presisi penuh
+const spDonutSegments = computed(() => {
+  const total = spDonutData.value.reduce((s, d) => s + d.value, 0)
+  if (total === 0) return []
+  const cx = 60, cy = 60, r = 40
+  let currentAngle = -90 // mulai dari posisi 12 jam
+  return spDonutData.value
+    .filter(d => d.value > 0)
+    .map(d => {
+      const pct = d.value / total
+      const sweepAngle = pct * 360
+      const startAngle = currentAngle
+      const endAngle = currentAngle + sweepAngle
+      currentAngle = endAngle
+      // Konversi sudut ke koordinat
+      const rad = (a: number) => (a * Math.PI) / 180
+      const x1 = cx + r * Math.cos(rad(startAngle))
+      const y1 = cy + r * Math.sin(rad(startAngle))
+      const x2 = cx + r * Math.cos(rad(endAngle))
+      const y2 = cy + r * Math.sin(rad(endAngle))
+      const largeArc = sweepAngle > 180 ? 1 : 0
+      // Kalau full circle (100%), gambar 2 semicircle
+      if (pct >= 0.9999) {
+        const xMid = cx + r * Math.cos(rad(startAngle + 180))
+        const yMid = cy + r * Math.sin(rad(startAngle + 180))
+        return {
+          ...d,
+          d: `M ${x1.toFixed(3)} ${y1.toFixed(3)} A ${r} ${r} 0 0 1 ${xMid.toFixed(3)} ${yMid.toFixed(3)} A ${r} ${r} 0 0 1 ${x1.toFixed(3)} ${y1.toFixed(3)}`
+        }
+      }
+      return {
+        ...d,
+        d: `M ${x1.toFixed(3)} ${y1.toFixed(3)} A ${r} ${r} 0 ${largeArc} 1 ${x2.toFixed(3)} ${y2.toFixed(3)}`
+      }
+    })
+})
+
 // Contract family donut data
 const contractFamilyDonutData = computed(() => {
   const d = stats.value?.byContractFamily
@@ -483,27 +520,15 @@ const offboardingMax = computed(() => {
               <div class="flex justify-center">
                 <svg width="120" height="120" viewBox="0 0 120 120">
                   <circle cx="60" cy="60" r="40" fill="none" class="stroke-accented" stroke-width="16" />
-                  <template v-for="(seg, idx) in (() => {
-                    const circ = 2 * Math.PI * 40
-                    const total = spDonutData.reduce((s, d) => s + d.value, 0)
-                    let used = 0
-                    return spDonutData.map(d => {
-                      const len = total > 0 ? (d.value / total) * circ : 0
-                      const off = circ * 0.25 - used
-                      used += len
-                      return { ...d, len, off, circ }
-                    })
-                  })()" :key="seg.label">
-                    <circle
-                      v-show="seg.value > 0"
-                      cx="60" cy="60" r="40" fill="none"
-                      :stroke="seg.color"
-                      stroke-width="16"
-                      stroke-linecap="round"
-                      :stroke-dasharray="`${seg.len} ${seg.circ}`"
-                      :stroke-dashoffset="seg.off"
-                    />
-                  </template>
+                  <path
+                    v-for="seg in spDonutSegments"
+                    :key="seg.label"
+                    :d="seg.d"
+                    fill="none"
+                    :stroke="seg.color"
+                    stroke-width="16"
+                    stroke-linecap="butt"
+                  />
                 </svg>
               </div>
               <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
