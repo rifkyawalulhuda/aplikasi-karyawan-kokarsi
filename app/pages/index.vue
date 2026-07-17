@@ -20,6 +20,21 @@ interface DashboardStats {
 const auth = useAuthStore()
 const { data: stats, pending: statsLoading, error: statsError } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
 
+// --- Collapsible section state (persisted ke localStorage) ---
+const sectionKpi        = useLocalStorage('dashboard-section-kpi', true)
+const sectionCharts     = useLocalStorage('dashboard-section-charts', true)
+const sectionDemografi  = useLocalStorage('dashboard-section-demografi', false)
+const sectionDistribusi = useLocalStorage('dashboard-section-distribusi', false)
+const sectionTrend      = useLocalStorage('dashboard-section-trend', false)
+const sectionAksiCepat  = useLocalStorage('dashboard-section-aksi-cepat', true)
+
+const allSections = [sectionKpi, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
+const allExpanded = computed(() => allSections.every(s => s.value === true))
+function toggleAll() {
+  const next = !allExpanded.value
+  allSections.forEach(s => s.value = next)
+}
+
 const statCards = computed(() => [
   {
     title: 'Total Karyawan',
@@ -190,6 +205,39 @@ const offboardingMax = computed(() => {
           description="Pastikan server backend berjalan dan coba refresh halaman."
         />
 
+        <!-- Collapse/Uncollapse All -->
+        <div class="flex justify-end">
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-muted hover:text-highlighted hover:bg-accented/50 transition-colors duration-150 cursor-pointer"
+            @click="toggleAll"
+          >
+            <UIcon
+              name="i-lucide-chevrons-up-down"
+              class="size-3.5"
+            />
+            {{ allExpanded ? 'Collapse All' : 'Expand All' }}
+          </button>
+        </div>
+
+        <!-- Section: Ringkasan KPI -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionKpi = !sectionKpi"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-layout-dashboard" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Ringkasan KPI</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionKpi }"
+          />
+        </button>
+
+        <div v-show="sectionKpi">
         <!-- Stat Cards -->
         <div class="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-3 sm:gap-4">
           <!-- Skeleton loading -->
@@ -230,7 +278,26 @@ const offboardingMax = computed(() => {
           </UCard>
           </template>
         </div>
+        </div><!-- end v-show sectionKpi -->
 
+        <!-- Section: Distribusi & Status -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionCharts = !sectionCharts"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-bar-chart-3" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Distribusi & Status</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionCharts }"
+          />
+        </button>
+
+        <div v-show="sectionCharts">
         <!-- Charts Row -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
 
@@ -366,7 +433,26 @@ const offboardingMax = computed(() => {
           </UCard>
 
         </div>
+        </div><!-- end v-show sectionCharts -->
 
+        <!-- Section: Demografi Karyawan -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionDemografi = !sectionDemografi"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-users-round" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Demografi Karyawan</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionDemografi }"
+          />
+        </button>
+
+        <div v-show="sectionDemografi">
         <!-- Row 3: SP / Contract Family / Gender Donuts -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -516,7 +602,26 @@ const offboardingMax = computed(() => {
           </UCard>
 
         </div>
+        </div><!-- end v-show sectionDemografi -->
 
+        <!-- Section: Distribusi Pendidikan & Departemen -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionDistribusi = !sectionDistribusi"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-graduation-cap" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Distribusi Pendidikan & Departemen</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionDistribusi }"
+          />
+        </button>
+
+        <div v-show="sectionDistribusi">
         <!-- Row 4: Education + Department bars -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
@@ -575,7 +680,26 @@ const offboardingMax = computed(() => {
           </UCard>
 
         </div>
+        </div><!-- end v-show sectionDistribusi -->
 
+        <!-- Section: Trend Rekrutmen & Offboarding -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionTrend = !sectionTrend"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-trending-up" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Trend Rekrutmen & Offboarding</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionTrend }"
+          />
+        </button>
+
+        <div v-show="sectionTrend">
         <!-- Row 5: Recruitment + Offboarding Trend bars -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
@@ -657,7 +781,26 @@ const offboardingMax = computed(() => {
           </UCard>
 
         </div>
+        </div><!-- end v-show sectionTrend -->
 
+        <!-- Section: Akses Cepat -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionAksiCepat = !sectionAksiCepat"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-zap" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Akses Cepat</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionAksiCepat }"
+          />
+        </button>
+
+        <div v-show="sectionAksiCepat">
         <!-- Quick Actions -->
         <UCard :ui="{ body: 'p-4 sm:p-5' }">
           <template #header>
@@ -701,6 +844,7 @@ const offboardingMax = computed(() => {
             />
           </div>
         </UCard>
+        </div><!-- end v-show sectionAksiCepat -->
 
       </div>
     </template>
