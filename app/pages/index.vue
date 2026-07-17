@@ -167,7 +167,12 @@ const educationData = computed(() => {
 
 // Max count helpers for bar widths
 const educationMax = computed(() => Math.max(...educationData.value.map(x => x.count), 1))
-const departmentMax = computed(() => Math.max(...(stats.value?.byDepartment?.map(x => x.count) ?? [1]), 1))
+
+// Sorted department (descending by count)
+const sortedDepartments = computed(() =>
+  [...(stats.value?.byDepartment ?? [])].sort((a, b) => b.count - a.count)
+)
+const departmentMax = computed(() => Math.max(...(sortedDepartments.value.map(x => x.count) ?? [1]), 1))
 
 // Recruitment + Offboarding trend helpers
 const recruitmentMax = computed(() => Math.max(...(stats.value?.recruitmentTrend?.map(x => x.count) ?? [1]), 1))
@@ -384,9 +389,12 @@ const offboardingMax = computed(() => {
                   :key="item.name"
                   class="space-y-1.5"
                 >
-                  <div class="flex items-center justify-between text-xs">
-                    <span class="text-muted truncate max-w-[70%]">{{ item.name }}</span>
-                    <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                   <div class="flex items-center justify-between text-xs">
+                    <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                      <span class="text-muted tabular-nums">({{ stats?.total ? Math.round((item.count / stats.total) * 100) : 0 }}%)</span>
+                    </div>
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
@@ -417,8 +425,11 @@ const offboardingMax = computed(() => {
                   class="space-y-1.5"
                 >
                   <div class="flex items-center justify-between text-xs">
-                    <span class="text-muted truncate max-w-[70%]">{{ item.name }}</span>
-                    <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                    <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                      <span class="text-muted tabular-nums">({{ stats?.total ? Math.round((item.count / stats.total) * 100) : 0 }}%)</span>
+                    </div>
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
@@ -505,7 +516,7 @@ const offboardingMax = computed(() => {
             </template>
           </UCard>
 
-          <!-- Contract Family Chart -->
+          <!-- Contract Family Chart — Split Bar -->
           <UCard :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
@@ -517,43 +528,46 @@ const offboardingMax = computed(() => {
               <p class="text-sm text-muted text-center py-6">Tidak ada data</p>
             </template>
             <template v-else>
-              <div class="flex justify-center">
-                <svg width="120" height="120" viewBox="0 0 120 120">
-                  <circle cx="60" cy="60" r="40" fill="none" class="stroke-accented" stroke-width="16" />
-                  <template v-for="(seg, idx) in (() => {
-                    const circ = 2 * Math.PI * 40
-                    const total = contractFamilyDonutData.reduce((s, d) => s + d.value, 0)
-                    let used = 0
-                    return contractFamilyDonutData.map(d => {
-                      const len = total > 0 ? (d.value / total) * circ : 0
-                      const off = circ * 0.25 - used
-                      used += len
-                      return { ...d, len, off, circ }
-                    })
-                  })()" :key="seg.label">
-                    <circle
-                      v-show="seg.value > 0"
-                      cx="60" cy="60" r="40" fill="none"
-                      :stroke="seg.color"
-                      stroke-width="16"
-                      stroke-linecap="round"
-                      :stroke-dasharray="`${seg.len} ${seg.circ}`"
-                      :stroke-dashoffset="seg.off"
-                    />
-                  </template>
-                </svg>
-              </div>
-              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-                <div v-for="item in contractFamilyDonutData" :key="item.label" class="flex items-center gap-1.5 text-xs">
-                  <span class="size-2 rounded-full shrink-0" :style="{ backgroundColor: item.color }" />
-                  <span class="text-muted">{{ item.label }}</span>
-                  <span class="font-medium text-highlighted">{{ item.value }}</span>
+              <div class="space-y-4 py-2">
+                <!-- Total label -->
+                <div class="flex justify-between text-xs text-muted mb-1">
+                  <span>Tipe Kontrak</span>
+                  <span>{{ contractFamilyDonutData.reduce((s, d) => s + d.value, 0) }} total</span>
+                </div>
+                <!-- Split bar -->
+                <div class="w-full h-5 rounded-full overflow-hidden flex">
+                  <div
+                    v-for="item in contractFamilyDonutData"
+                    :key="item.label"
+                    class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full"
+                    :style="{
+                      width: `${(item.value / contractFamilyDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
+                      backgroundColor: item.color
+                    }"
+                  />
+                </div>
+                <!-- Legend -->
+                <div class="space-y-2.5 mt-3">
+                  <div
+                    v-for="item in contractFamilyDonutData"
+                    :key="item.label"
+                    class="flex items-center justify-between text-sm"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="size-2.5 rounded-full shrink-0" :style="{ backgroundColor: item.color }" />
+                      <span class="text-muted">{{ item.label }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold text-highlighted tabular-nums">{{ item.value }}</span>
+                      <span class="text-xs text-muted tabular-nums">({{ contractFamilyDonutData.reduce((s, d) => s + d.value, 0) > 0 ? Math.round((item.value / contractFamilyDonutData.reduce((s, d) => s + d.value, 0)) * 100) : 0 }}%)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
           </UCard>
 
-          <!-- Gender Chart -->
+          <!-- Gender Chart — Split Bar -->
           <UCard :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
@@ -565,37 +579,40 @@ const offboardingMax = computed(() => {
               <p class="text-sm text-muted text-center py-6">Tidak ada data</p>
             </template>
             <template v-else>
-              <div class="flex justify-center">
-                <svg width="120" height="120" viewBox="0 0 120 120">
-                  <circle cx="60" cy="60" r="40" fill="none" class="stroke-accented" stroke-width="16" />
-                  <template v-for="(seg, idx) in (() => {
-                    const circ = 2 * Math.PI * 40
-                    const total = genderDonutData.reduce((s, d) => s + d.value, 0)
-                    let used = 0
-                    return genderDonutData.map(d => {
-                      const len = total > 0 ? (d.value / total) * circ : 0
-                      const off = circ * 0.25 - used
-                      used += len
-                      return { ...d, len, off, circ }
-                    })
-                  })()" :key="seg.label">
-                    <circle
-                      v-show="seg.value > 0"
-                      cx="60" cy="60" r="40" fill="none"
-                      :stroke="seg.color"
-                      stroke-width="16"
-                      stroke-linecap="round"
-                      :stroke-dasharray="`${seg.len} ${seg.circ}`"
-                      :stroke-dashoffset="seg.off"
-                    />
-                  </template>
-                </svg>
-              </div>
-              <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-                <div v-for="item in genderDonutData" :key="item.label" class="flex items-center gap-1.5 text-xs">
-                  <span class="size-2 rounded-full shrink-0" :style="{ backgroundColor: item.color }" />
-                  <span class="text-muted">{{ item.label }}</span>
-                  <span class="font-medium text-highlighted">{{ item.value }}</span>
+              <div class="space-y-4 py-2">
+                <!-- Total label -->
+                <div class="flex justify-between text-xs text-muted mb-1">
+                  <span>Gender</span>
+                  <span>{{ genderDonutData.reduce((s, d) => s + d.value, 0) }} total</span>
+                </div>
+                <!-- Split bar -->
+                <div class="w-full h-5 rounded-full overflow-hidden flex">
+                  <div
+                    v-for="item in genderDonutData"
+                    :key="item.label"
+                    class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full"
+                    :style="{
+                      width: `${(item.value / genderDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
+                      backgroundColor: item.color
+                    }"
+                  />
+                </div>
+                <!-- Legend -->
+                <div class="space-y-2.5 mt-3">
+                  <div
+                    v-for="item in genderDonutData"
+                    :key="item.label"
+                    class="flex items-center justify-between text-sm"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="size-2.5 rounded-full shrink-0" :style="{ backgroundColor: item.color }" />
+                      <span class="text-muted">{{ item.label }}</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-semibold text-highlighted tabular-nums">{{ item.value }}</span>
+                      <span class="text-xs text-muted tabular-nums">({{ genderDonutData.reduce((s, d) => s + d.value, 0) > 0 ? Math.round((item.value / genderDonutData.reduce((s, d) => s + d.value, 0)) * 100) : 0 }}%)</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
@@ -662,10 +679,13 @@ const offboardingMax = computed(() => {
             </template>
             <div class="space-y-3.5">
               <template v-if="(stats?.byDepartment?.length ?? 0) > 0">
-                <div v-for="(item, i) in stats?.byDepartment" :key="item.name" class="space-y-1.5">
+                <div v-for="(item, i) in sortedDepartments" :key="item.name" class="space-y-1.5">
                   <div class="flex items-center justify-between text-xs">
-                    <span class="text-muted truncate max-w-[70%]">{{ item.name }}</span>
-                    <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                    <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
+                      <span class="text-muted tabular-nums">({{ stats?.total ? Math.round((item.count / stats.total) * 100) : 0 }}%)</span>
+                    </div>
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
@@ -703,38 +723,79 @@ const offboardingMax = computed(() => {
         <!-- Row 5: Recruitment + Offboarding Trend bars -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-          <!-- Recruitment Trend -->
+          <!-- Recruitment Trend — Line Chart -->
           <UCard :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
                 <UIcon name="i-lucide-trending-up" class="size-4 text-blue-500" />
-                <span class="text-sm font-semibold text-highlighted">Trend Rekrutmen (5 Tahun)</span>
+                <span class="text-sm font-semibold text-highlighted">Trend Rekrutmen per Tahun</span>
               </div>
             </template>
             <template v-if="(stats?.recruitmentTrend?.length ?? 0) === 0">
               <p class="text-sm text-muted text-center py-4">Belum ada data</p>
             </template>
             <template v-else>
-              <div class="flex items-end gap-2 h-36 px-1">
+              <div class="relative w-full" style="height: 120px;">
+                <svg class="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
+                  <!-- Grid lines -->
+                  <line x1="0" y1="0" x2="300" y2="0" class="stroke-accented" stroke-width="0.5" />
+                  <line x1="0" y1="50" x2="300" y2="50" class="stroke-accented" stroke-width="0.5" stroke-dasharray="4,4" />
+                  <line x1="0" y1="100" x2="300" y2="100" class="stroke-accented" stroke-width="0.5" />
+                  <!-- Area fill -->
+                  <path
+                    :d="(() => {
+                      const data = stats?.recruitmentTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      const points = data.map((d, i) => `${i * xStep},${100 - (d.count / recruitmentMax) * 90}`)
+                      return `M ${points[0]} L ${points.slice(1).join(' L ')} L ${(n-1)*xStep},100 L 0,100 Z`
+                    })()"
+                    fill="rgba(59,130,246,0.12)"
+                  />
+                  <!-- Line -->
+                  <polyline
+                    :points="(() => {
+                      const data = stats?.recruitmentTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      return data.map((d, i) => `${i * xStep},${100 - (d.count / recruitmentMax) * 90}`).join(' ')
+                    })()"
+                    fill="none"
+                    stroke="#3b82f6"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <!-- Dots -->
+                  <template v-for="(item, i) in stats?.recruitmentTrend" :key="item.year">
+                    <circle
+                      :cx="(stats?.recruitmentTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.recruitmentTrend?.length ?? 1) - 1)) : 150"
+                      :cy="100 - (item.count / recruitmentMax) * 90"
+                      r="3"
+                      fill="#3b82f6"
+                      class="stroke-background"
+                      stroke-width="1.5"
+                    />
+                  </template>
+                </svg>
+              </div>
+              <!-- X-axis labels + values -->
+              <div class="flex justify-between mt-2 px-0.5">
                 <div
                   v-for="item in stats?.recruitmentTrend"
                   :key="item.year"
-                  class="flex-1 flex flex-col items-center gap-1"
+                  class="flex flex-col items-center gap-0.5"
                 >
-                  <span class="text-xs font-medium text-highlighted tabular-nums">{{ item.count }}</span>
-                  <div class="w-full bg-accented rounded-t overflow-hidden" :style="{ height: '96px' }">
-                    <div
-                      class="w-full bg-blue-500 rounded-t transition-all duration-700"
-                      :style="{ height: `${(item.count / recruitmentMax) * 96}px` }"
-                    />
-                  </div>
+                  <span class="text-xs font-semibold text-blue-500 tabular-nums">{{ item.count }}</span>
                   <span class="text-xs text-muted tabular-nums">{{ item.year }}</span>
                 </div>
               </div>
             </template>
           </UCard>
 
-          <!-- Offboarding Trend -->
+          <!-- Offboarding Trend — Line Chart -->
           <UCard :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
@@ -746,27 +807,99 @@ const offboardingMax = computed(() => {
               <p class="text-sm text-muted text-center py-4">Belum ada data</p>
             </template>
             <template v-else>
-              <div class="flex items-end gap-3 h-36 px-1">
-                <div
+              <div class="relative w-full" style="height: 120px;">
+                <svg class="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
+                  <!-- Grid lines -->
+                  <line x1="0" y1="0" x2="300" y2="0" class="stroke-accented" stroke-width="0.5" />
+                  <line x1="0" y1="50" x2="300" y2="50" class="stroke-accented" stroke-width="0.5" stroke-dasharray="4,4" />
+                  <line x1="0" y1="100" x2="300" y2="100" class="stroke-accented" stroke-width="0.5" />
+                  <!-- Resign area -->
+                  <path
+                    :d="(() => {
+                      const data = stats?.offboardingTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      const points = data.map((d, i) => `${i * xStep},${100 - (d.resign / offboardingMax) * 90}`)
+                      return `M ${points[0]} L ${points.slice(1).join(' L ')} L ${(n-1)*xStep},100 L 0,100 Z`
+                    })()"
+                    fill="rgba(148,163,184,0.15)"
+                  />
+                  <!-- Resign line -->
+                  <polyline
+                    :points="(() => {
+                      const data = stats?.offboardingTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      return data.map((d, i) => `${i * xStep},${100 - (d.resign / offboardingMax) * 90}`).join(' ')
+                    })()"
+                    fill="none"
+                    stroke="#94a3b8"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <!-- PHK area -->
+                  <path
+                    :d="(() => {
+                      const data = stats?.offboardingTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      const points = data.map((d, i) => `${i * xStep},${100 - (d.phk / offboardingMax) * 90}`)
+                      return `M ${points[0]} L ${points.slice(1).join(' L ')} L ${(n-1)*xStep},100 L 0,100 Z`
+                    })()"
+                    fill="rgba(244,63,94,0.12)"
+                  />
+                  <!-- PHK line -->
+                  <polyline
+                    :points="(() => {
+                      const data = stats?.offboardingTrend ?? []
+                      const n = data.length
+                      if (n < 2) return ''
+                      const xStep = 300 / (n - 1)
+                      return data.map((d, i) => `${i * xStep},${100 - (d.phk / offboardingMax) * 90}`).join(' ')
+                    })()"
+                    fill="none"
+                    stroke="#f43f5e"
+                    stroke-width="2"
+                    stroke-linejoin="round"
+                    stroke-linecap="round"
+                  />
+                  <!-- Resign dots -->
+                  <template v-for="(item, i) in stats?.offboardingTrend" :key="`resign-${item.year}`">
+                    <circle
+                      :cx="(stats?.offboardingTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.offboardingTrend?.length ?? 1) - 1)) : 150"
+                      :cy="100 - (item.resign / offboardingMax) * 90"
+                      r="3"
+                      fill="#94a3b8"
+                      class="stroke-background"
+                      stroke-width="1.5"
+                    />
+                  </template>
+                  <!-- PHK dots -->
+                  <template v-for="(item, i) in stats?.offboardingTrend" :key="`phk-${item.year}`">
+                    <circle
+                      :cx="(stats?.offboardingTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.offboardingTrend?.length ?? 1) - 1)) : 150"
+                      :cy="100 - (item.phk / offboardingMax) * 90"
+                      r="3"
+                      fill="#f43f5e"
+                      class="stroke-background"
+                      stroke-width="1.5"
+                    />
+                  </template>
+                </svg>
+              </div>
+              <!-- X-axis labels -->
+              <div class="flex justify-between mt-2 px-0.5">
+                <span
                   v-for="item in stats?.offboardingTrend"
                   :key="item.year"
-                  class="flex-1 flex flex-col items-center gap-1"
-                >
-                  <div class="w-full flex gap-0.5 items-end" :style="{ height: '96px' }">
-                    <div
-                      class="flex-1 bg-slate-400 rounded-t transition-all duration-700"
-                      :style="{ height: `${((item.resign) / offboardingMax) * 96}px` }"
-                      :title="`Resign: ${item.resign}`"
-                    />
-                    <div
-                      class="flex-1 bg-rose-500 rounded-t transition-all duration-700"
-                      :style="{ height: `${((item.phk) / offboardingMax) * 96}px` }"
-                      :title="`PHK: ${item.phk}`"
-                    />
-                  </div>
-                  <span class="text-xs text-muted tabular-nums">{{ item.year }}</span>
-                </div>
+                  class="text-xs text-muted tabular-nums"
+                >{{ item.year }}</span>
               </div>
+              <!-- Legend -->
               <div class="mt-2 flex gap-4">
                 <div class="flex items-center gap-1.5 text-xs">
                   <span class="size-2 rounded-full bg-slate-400 shrink-0" />
