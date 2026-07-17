@@ -217,6 +217,30 @@ const offboardingMax = computed(() => {
   const data = stats.value?.offboardingTrend ?? []
   return Math.max(...data.map(x => x.resign + x.phk), 1)
 })
+
+// --- Tooltip interaktif ---
+interface TooltipData { x: number; y: number; label: string; value: string; extra?: string }
+const tooltipDonut     = ref<TooltipData | null>(null)
+const tooltipSp        = ref<TooltipData | null>(null)
+const tooltipKontrak   = ref<TooltipData | null>(null)
+const tooltipGender    = ref<TooltipData | null>(null)
+const tooltipRekrutmen = ref<TooltipData | null>(null)
+const tooltipOffboard  = ref<TooltipData | null>(null)
+const tooltipBar       = ref<TooltipData | null>(null)
+
+// Elemen refs untuk kalkulasi posisi tooltip relatif
+const donutWrapRef    = ref<HTMLElement | null>(null)
+const spWrapRef       = ref<HTMLElement | null>(null)
+const kontrakWrapRef  = ref<HTMLElement | null>(null)
+const genderWrapRef   = ref<HTMLElement | null>(null)
+const rekrutmenWrapRef= ref<HTMLElement | null>(null)
+const offboardWrapRef = ref<HTMLElement | null>(null)
+
+function getRelPos(e: MouseEvent, el: HTMLElement | null) {
+  if (!el) return { x: 0, y: 0 }
+  const r = el.getBoundingClientRect()
+  return { x: e.clientX - r.left, y: e.clientY - r.top }
+}
 </script>
 
 <template>
@@ -354,7 +378,7 @@ const offboardingMax = computed(() => {
 
             <div class="flex flex-col items-center gap-4">
               <!-- SVG Donut -->
-              <div class="relative">
+              <div ref="donutWrapRef" class="relative" @mouseleave="tooltipDonut = null">
                 <svg width="120" height="120" viewBox="0 0 120 120">
                   <!-- Background circle -->
                   <circle
@@ -374,20 +398,33 @@ const offboardingMax = computed(() => {
                     :r="donutData.r"
                     fill="none"
                     :class="segment.color"
-                    stroke-width="16"
+                    :stroke-width="tooltipDonut?.label === segment.label ? 20 : 16"
                     stroke-linecap="round"
                     :stroke-dasharray="`${segment.length} ${donutData.circ}`"
                     :stroke-dashoffset="segment.offset"
-                    style="transition: stroke-dasharray 0.6s ease"
+                    style="transition: stroke-width 0.15s ease, stroke-dasharray 0.6s ease; cursor: pointer"
+                    @mousemove="(e: MouseEvent) => { const p = getRelPos(e, donutWrapRef); tooltipDonut = { x: p.x, y: p.y, label: segment.label, value: `${segment.count} orang`, extra: `${segment.pct}%` } }"
                   />
                   <!-- Center text -->
-                  <text x="60" y="56" text-anchor="middle" class="fill-highlighted" font-size="18" font-weight="700">
+                  <text x="60" y="56" text-anchor="middle" font-size="18" font-weight="700" style="fill: var(--ui-text-highlighted)">
                     {{ donutData.total }}
                   </text>
-                  <text x="60" y="71" text-anchor="middle" class="fill-muted" font-size="9">
+                  <text x="60" y="71" text-anchor="middle" font-size="9" style="fill: var(--ui-text-muted)">
                     Total
                   </text>
                 </svg>
+                <!-- Tooltip -->
+                <Transition name="tt">
+                  <div
+                    v-if="tooltipDonut"
+                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    :style="{ left: tooltipDonut.x + 'px', top: tooltipDonut.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                  >
+                    <div class="font-semibold text-highlighted">{{ tooltipDonut.label }}</div>
+                    <div class="text-muted">{{ tooltipDonut.value }}</div>
+                    <div v-if="tooltipDonut.extra" class="text-muted">{{ tooltipDonut.extra }}</div>
+                  </div>
+                </Transition>
               </div>
 
               <!-- Legend -->
@@ -424,7 +461,7 @@ const offboardingMax = computed(() => {
                 <div
                   v-for="(item, i) in stats?.byLocation"
                   :key="item.name"
-                  class="space-y-1.5"
+                  class="space-y-1.5 group/bar cursor-default rounded-md px-1 py-0.5 hover:bg-accented/40 transition-colors duration-150"
                 >
                    <div class="flex items-center justify-between text-xs">
                     <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
@@ -435,7 +472,7 @@ const offboardingMax = computed(() => {
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
-                      :class="['h-full rounded-full transition-all duration-700', locationColors[i % locationColors.length]]"
+                      :class="['h-full rounded-full transition-all duration-700 group-hover/bar:brightness-125', locationColors[i % locationColors.length]]"
                       :style="{ width: `${(item.count / (stats?.total || 1)) * 100}%` }"
                     />
                   </div>
@@ -459,7 +496,7 @@ const offboardingMax = computed(() => {
                 <div
                   v-for="(item, i) in stats?.byLevel"
                   :key="item.name"
-                  class="space-y-1.5"
+                  class="space-y-1.5 group/bar cursor-default rounded-md px-1 py-0.5 hover:bg-accented/40 transition-colors duration-150"
                 >
                   <div class="flex items-center justify-between text-xs">
                     <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
@@ -470,7 +507,7 @@ const offboardingMax = computed(() => {
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
-                      :class="['h-full rounded-full transition-all duration-700', levelColors[i % levelColors.length]]"
+                      :class="['h-full rounded-full transition-all duration-700 group-hover/bar:brightness-125', levelColors[i % levelColors.length]]"
                       :style="{ width: `${(item.count / (stats?.total || 1)) * 100}%` }"
                     />
                   </div>
@@ -517,7 +554,7 @@ const offboardingMax = computed(() => {
             </template>
             <template v-else>
               <!-- SVG Donut -->
-              <div class="flex justify-center">
+              <div ref="spWrapRef" class="flex justify-center relative" @mouseleave="tooltipSp = null">
                 <svg width="120" height="120" viewBox="0 0 120 120">
                   <circle cx="60" cy="60" r="40" fill="none" class="stroke-accented" stroke-width="16" />
                   <path
@@ -526,10 +563,24 @@ const offboardingMax = computed(() => {
                     :d="seg.d"
                     fill="none"
                     :stroke="seg.color"
-                    stroke-width="16"
+                    :stroke-width="tooltipSp?.label === seg.label ? 20 : 16"
                     stroke-linecap="butt"
+                    style="cursor: pointer; transition: stroke-width 0.15s ease"
+                    @mousemove="(e: MouseEvent) => { const p = getRelPos(e, spWrapRef); const total = spDonutData.reduce((s,d)=>s+d.value,0); tooltipSp = { x: p.x, y: p.y, label: seg.label, value: `${seg.value} orang`, extra: total > 0 ? `${Math.round(seg.value/total*100)}%` : '' } }"
                   />
                 </svg>
+                <!-- Tooltip -->
+                <Transition name="tt">
+                  <div
+                    v-if="tooltipSp"
+                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    :style="{ left: tooltipSp.x + 'px', top: tooltipSp.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                  >
+                    <div class="font-semibold text-highlighted">{{ tooltipSp.label }}</div>
+                    <div class="text-muted">{{ tooltipSp.value }}</div>
+                    <div v-if="tooltipSp.extra" class="text-muted">{{ tooltipSp.extra }}</div>
+                  </div>
+                </Transition>
               </div>
               <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1">
                 <div v-for="item in spDonutData" :key="item.label" class="flex items-center gap-1.5 text-xs">
@@ -559,17 +610,32 @@ const offboardingMax = computed(() => {
                   <span>Tipe Kontrak</span>
                   <span>{{ contractFamilyDonutData.reduce((s, d) => s + d.value, 0) }} total</span>
                 </div>
-                <!-- Split bar -->
-                <div class="w-full h-5 rounded-full overflow-hidden flex">
-                  <div
-                    v-for="item in contractFamilyDonutData"
-                    :key="item.label"
-                    class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full"
-                    :style="{
-                      width: `${(item.value / contractFamilyDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
-                      backgroundColor: item.color
-                    }"
-                  />
+                <!-- Split bar wrapper — relative untuk tooltip -->
+                <div ref="kontrakWrapRef" class="relative" @mouseleave="tooltipKontrak = null">
+                  <div class="w-full h-5 rounded-full overflow-hidden flex">
+                    <div
+                      v-for="item in contractFamilyDonutData"
+                      :key="item.label"
+                      class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full hover:brightness-110 cursor-pointer"
+                      :style="{
+                        width: `${(item.value / contractFamilyDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
+                        backgroundColor: item.color
+                      }"
+                      @mousemove="(e: MouseEvent) => { const p = getRelPos(e, kontrakWrapRef); const total = contractFamilyDonutData.reduce((s,d)=>s+d.value,0); tooltipKontrak = { x: p.x, y: p.y, label: item.label, value: `${item.value} orang`, extra: total > 0 ? `${Math.round(item.value/total*100)}%` : '' } }"
+                    />
+                  </div>
+                  <!-- Tooltip di luar overflow-hidden -->
+                  <Transition name="tt">
+                    <div
+                      v-if="tooltipKontrak"
+                      class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                      :style="{ left: tooltipKontrak.x + 'px', top: tooltipKontrak.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                    >
+                      <div class="font-semibold text-highlighted">{{ tooltipKontrak.label }}</div>
+                      <div class="text-muted">{{ tooltipKontrak.value }}</div>
+                      <div v-if="tooltipKontrak.extra" class="text-muted">{{ tooltipKontrak.extra }}</div>
+                    </div>
+                  </Transition>
                 </div>
                 <!-- Legend -->
                 <div class="space-y-2.5 mt-3">
@@ -611,16 +677,32 @@ const offboardingMax = computed(() => {
                   <span>{{ genderDonutData.reduce((s, d) => s + d.value, 0) }} total</span>
                 </div>
                 <!-- Split bar -->
-                <div class="w-full h-5 rounded-full overflow-hidden flex">
-                  <div
-                    v-for="item in genderDonutData"
-                    :key="item.label"
-                    class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full"
-                    :style="{
-                      width: `${(item.value / genderDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
-                      backgroundColor: item.color
-                    }"
-                  />
+                <!-- Split bar wrapper — relative untuk tooltip -->
+                <div ref="genderWrapRef" class="relative" @mouseleave="tooltipGender = null">
+                  <div class="w-full h-5 rounded-full overflow-hidden flex">
+                    <div
+                      v-for="item in genderDonutData"
+                      :key="item.label"
+                      class="h-full transition-all duration-700 first:rounded-l-full last:rounded-r-full hover:brightness-110 cursor-pointer"
+                      :style="{
+                        width: `${(item.value / genderDonutData.reduce((s, d) => s + d.value, 0)) * 100}%`,
+                        backgroundColor: item.color
+                      }"
+                      @mousemove="(e: MouseEvent) => { const p = getRelPos(e, genderWrapRef); const total = genderDonutData.reduce((s,d)=>s+d.value,0); tooltipGender = { x: p.x, y: p.y, label: item.label, value: `${item.value} orang`, extra: total > 0 ? `${Math.round(item.value/total*100)}%` : '' } }"
+                    />
+                  </div>
+                  <!-- Tooltip di luar overflow-hidden -->
+                  <Transition name="tt">
+                    <div
+                      v-if="tooltipGender"
+                      class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                      :style="{ left: tooltipGender.x + 'px', top: tooltipGender.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                    >
+                      <div class="font-semibold text-highlighted">{{ tooltipGender.label }}</div>
+                      <div class="text-muted">{{ tooltipGender.value }}</div>
+                      <div v-if="tooltipGender.extra" class="text-muted">{{ tooltipGender.extra }}</div>
+                    </div>
+                  </Transition>
                 </div>
                 <!-- Legend -->
                 <div class="space-y-2.5 mt-3">
@@ -677,14 +759,14 @@ const offboardingMax = computed(() => {
             </template>
             <div class="space-y-3.5">
               <template v-if="educationData.length > 0">
-                <div v-for="(item, i) in educationData" :key="item.label" class="space-y-1.5">
+                <div v-for="(item, i) in educationData" :key="item.label" class="space-y-1.5 group/bar cursor-default rounded-md px-1 py-0.5 hover:bg-accented/40 transition-colors duration-150">
                   <div class="flex items-center justify-between text-xs">
                     <span class="text-muted">{{ item.label }}</span>
                     <span class="font-semibold text-highlighted tabular-nums">{{ item.count }}</span>
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
-                      :class="['h-full rounded-full transition-all duration-700', educationColors[i % educationColors.length]]"
+                      :class="['h-full rounded-full transition-all duration-700 group-hover/bar:brightness-125', educationColors[i % educationColors.length]]"
                       :style="{ width: `${(item.count / educationMax) * 100}%` }"
                     />
                   </div>
@@ -704,7 +786,7 @@ const offboardingMax = computed(() => {
             </template>
             <div class="space-y-3.5">
               <template v-if="(stats?.byDepartment?.length ?? 0) > 0">
-                <div v-for="(item, i) in sortedDepartments" :key="item.name" class="space-y-1.5">
+                <div v-for="(item, i) in sortedDepartments" :key="item.name" class="space-y-1.5 group/bar cursor-default rounded-md px-1 py-0.5 hover:bg-accented/40 transition-colors duration-150">
                   <div class="flex items-center justify-between text-xs">
                     <span class="text-muted truncate max-w-[60%]">{{ item.name }}</span>
                     <div class="flex items-center gap-1.5">
@@ -714,7 +796,7 @@ const offboardingMax = computed(() => {
                   </div>
                   <div class="h-2 bg-accented rounded-full overflow-hidden">
                     <div
-                      :class="['h-full rounded-full transition-all duration-700', departmentColors[i % departmentColors.length]]"
+                      :class="['h-full rounded-full transition-all duration-700 group-hover/bar:brightness-125', departmentColors[i % departmentColors.length]]"
                       :style="{ width: `${(item.count / departmentMax) * 100}%` }"
                     />
                   </div>
@@ -760,12 +842,24 @@ const offboardingMax = computed(() => {
               <p class="text-sm text-muted text-center py-4">Belum ada data</p>
             </template>
             <template v-else>
-              <div class="relative w-full" style="height: 120px;">
+              <div ref="rekrutmenWrapRef" class="relative w-full" style="height: 120px;" @mouseleave="tooltipRekrutmen = null">
                 <svg class="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
                   <!-- Grid lines -->
                   <line x1="0" y1="0" x2="300" y2="0" class="stroke-accented" stroke-width="0.5" />
                   <line x1="0" y1="50" x2="300" y2="50" class="stroke-accented" stroke-width="0.5" stroke-dasharray="4,4" />
                   <line x1="0" y1="100" x2="300" y2="100" class="stroke-accented" stroke-width="0.5" />
+                  <!-- Vertical guideline -->
+                  <line
+                    v-if="tooltipRekrutmen"
+                    :x1="tooltipRekrutmen.extra"
+                    y1="0"
+                    :x2="tooltipRekrutmen.extra"
+                    y2="100"
+                    stroke="#3b82f6"
+                    stroke-width="0.5"
+                    stroke-dasharray="2,2"
+                    opacity="0.5"
+                  />
                   <!-- Area fill -->
                   <path
                     :d="(() => {
@@ -798,13 +892,31 @@ const offboardingMax = computed(() => {
                     <circle
                       :cx="(stats?.recruitmentTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.recruitmentTrend?.length ?? 1) - 1)) : 150"
                       :cy="100 - (item.count / recruitmentMax) * 90"
-                      r="3"
+                      :r="tooltipRekrutmen?.label === String(item.year) ? 5 : 3"
                       fill="#3b82f6"
                       class="stroke-background"
                       stroke-width="1.5"
+                      style="cursor: pointer; transition: r 0.15s ease"
+                      @mousemove.stop="(e: MouseEvent) => {
+                        const n = stats?.recruitmentTrend?.length ?? 1
+                        const cx = n > 1 ? i * (300 / (n - 1)) : 150
+                        const p = getRelPos(e, rekrutmenWrapRef)
+                        tooltipRekrutmen = { x: p.x, y: p.y, label: String(item.year), value: `${item.count} rekrutmen`, extra: String(cx) }
+                      }"
                     />
                   </template>
                 </svg>
+                <!-- Tooltip -->
+                <Transition name="tt">
+                  <div
+                    v-if="tooltipRekrutmen"
+                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    :style="{ left: tooltipRekrutmen.x + 'px', top: tooltipRekrutmen.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                  >
+                    <div class="font-semibold text-highlighted">{{ tooltipRekrutmen.label }}</div>
+                    <div class="text-muted">{{ tooltipRekrutmen.value }}</div>
+                  </div>
+                </Transition>
               </div>
               <!-- X-axis labels + values -->
               <div class="flex justify-between mt-2 px-0.5">
@@ -832,12 +944,24 @@ const offboardingMax = computed(() => {
               <p class="text-sm text-muted text-center py-4">Belum ada data</p>
             </template>
             <template v-else>
-              <div class="relative w-full" style="height: 120px;">
+              <div ref="offboardWrapRef" class="relative w-full" style="height: 120px;" @mouseleave="tooltipOffboard = null">
                 <svg class="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
                   <!-- Grid lines -->
                   <line x1="0" y1="0" x2="300" y2="0" class="stroke-accented" stroke-width="0.5" />
                   <line x1="0" y1="50" x2="300" y2="50" class="stroke-accented" stroke-width="0.5" stroke-dasharray="4,4" />
                   <line x1="0" y1="100" x2="300" y2="100" class="stroke-accented" stroke-width="0.5" />
+                  <!-- Vertical guideline -->
+                  <line
+                    v-if="tooltipOffboard"
+                    :x1="tooltipOffboard.extra"
+                    y1="0"
+                    :x2="tooltipOffboard.extra"
+                    y2="100"
+                    stroke="#94a3b8"
+                    stroke-width="0.5"
+                    stroke-dasharray="2,2"
+                    opacity="0.5"
+                  />
                   <!-- Resign area -->
                   <path
                     :d="(() => {
@@ -897,10 +1021,17 @@ const offboardingMax = computed(() => {
                     <circle
                       :cx="(stats?.offboardingTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.offboardingTrend?.length ?? 1) - 1)) : 150"
                       :cy="100 - (item.resign / offboardingMax) * 90"
-                      r="3"
+                      :r="tooltipOffboard?.label === String(item.year) ? 5 : 3"
                       fill="#94a3b8"
                       class="stroke-background"
                       stroke-width="1.5"
+                      style="cursor: pointer; transition: r 0.15s ease"
+                      @mousemove.stop="(e: MouseEvent) => {
+                        const n = stats?.offboardingTrend?.length ?? 1
+                        const cx = n > 1 ? i * (300 / (n - 1)) : 150
+                        const p = getRelPos(e, offboardWrapRef)
+                        tooltipOffboard = { x: p.x, y: p.y, label: String(item.year), value: `Resign: ${item.resign}`, extra: String(cx) }
+                      }"
                     />
                   </template>
                   <!-- PHK dots -->
@@ -908,13 +1039,31 @@ const offboardingMax = computed(() => {
                     <circle
                       :cx="(stats?.offboardingTrend?.length ?? 1) > 1 ? i * (300 / ((stats?.offboardingTrend?.length ?? 1) - 1)) : 150"
                       :cy="100 - (item.phk / offboardingMax) * 90"
-                      r="3"
+                      :r="tooltipOffboard?.label === String(item.year) ? 5 : 3"
                       fill="#f43f5e"
                       class="stroke-background"
                       stroke-width="1.5"
+                      style="cursor: pointer; transition: r 0.15s ease"
+                      @mousemove.stop="(e: MouseEvent) => {
+                        const n = stats?.offboardingTrend?.length ?? 1
+                        const cx = n > 1 ? i * (300 / (n - 1)) : 150
+                        const p = getRelPos(e, offboardWrapRef)
+                        tooltipOffboard = { x: p.x, y: p.y, label: String(item.year), value: `PHK: ${item.phk}`, extra: String(cx) }
+                      }"
                     />
                   </template>
                 </svg>
+                <!-- Tooltip -->
+                <Transition name="tt">
+                  <div
+                    v-if="tooltipOffboard"
+                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    :style="{ left: tooltipOffboard.x + 'px', top: tooltipOffboard.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
+                  >
+                    <div class="font-semibold text-highlighted">{{ tooltipOffboard.label }}</div>
+                    <div class="text-muted">{{ tooltipOffboard.value }}</div>
+                  </div>
+                </Transition>
               </div>
               <!-- X-axis labels -->
               <div class="flex justify-between mt-2 px-0.5">
@@ -1008,3 +1157,15 @@ const offboardingMax = computed(() => {
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.tt-enter-active,
+.tt-leave-active {
+  transition: opacity 0.1s ease, transform 0.1s ease;
+}
+.tt-enter-from,
+.tt-leave-to {
+  opacity: 0;
+  transform: translate(-50%, calc(-100% - 4px));
+}
+</style>
