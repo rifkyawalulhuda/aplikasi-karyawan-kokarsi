@@ -350,7 +350,7 @@ const columns: TableColumn<Employee>[] = [
   },
   {
     accessorKey: 'jobRole',
-    header: () => sortableHeader('Jabatan', 'jobRole'),
+    header: () => sortableHeader('Pekerjaan', 'jobRole'),
     cell: ({ row }) => h('span', { class: 'text-sm' }, row.original.jobRole?.name ?? '-')
   },
   {

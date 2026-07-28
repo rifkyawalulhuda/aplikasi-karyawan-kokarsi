@@ -67,8 +67,8 @@ const COLUMN_HEADERS = [
   'Email',
   'No. HP',
   'Pendidikan',
-  'Lokasi Kerja',
-  'Jabatan',
+  'Site',
+  'Pekerjaan',
   'Level Jabatan',
   'Departemen',
   'Status Pajak',
@@ -236,8 +236,8 @@ export function useImportTemplate() {
       if (!raw.educationLevel) errors.push('Pendidikan wajib diisi')
       else if (!EDUCATION_LABELS.includes(raw.educationLevel)) errors.push(`Pendidikan harus salah satu: ${EDUCATION_LABELS.join(', ')}`)
 
-      if (!raw.workLocation) errors.push('Lokasi Kerja wajib diisi')
-      else if (!lookupMaps.workLocations.has(raw.workLocation)) errors.push(`Lokasi Kerja "${raw.workLocation}" tidak ditemukan di master data`)
+      if (!raw.workLocation) errors.push('Site wajib diisi')
+      else if (!lookupMaps.workLocations.has(raw.workLocation)) errors.push(`Site "${raw.workLocation}" tidak ditemukan di master data`)
 
       if (!raw.jobRole) errors.push('Jabatan wajib diisi')
       else if (!lookupMaps.jobRoles.has(raw.jobRole)) errors.push(`Jabatan "${raw.jobRole}" tidak ditemukan di master data`)

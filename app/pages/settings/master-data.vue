@@ -57,8 +57,8 @@ const searchQuery = ref('')
 const deleteLoading = ref<number | null>(null)
 
 const resourceLabelMap: Record<ResourceKey, string> = {
-  'work-locations': 'Lokasi Kerja',
-  'job-roles': 'Jabatan',
+  'work-locations': 'Site',
+  'job-roles': 'Pekerjaan',
   'job-levels': 'Level Jabatan',
   'tax-status': 'Status Pajak',
   'contract-types': 'Tipe Kontrak',
@@ -79,8 +79,8 @@ const resourceIconMap: Record<ResourceKey, string> = {
 }
 
 const resourceDescMap: Record<ResourceKey, string> = {
-  'work-locations': 'Daftar lokasi kerja karyawan',
-  'job-roles': 'Daftar jabatan karyawan',
+  'work-locations': 'Daftar site/lokasi kerja karyawan',
+  'job-roles': 'Daftar pekerjaan karyawan',
   'job-levels': 'Daftar level jabatan karyawan',
   'tax-status': 'Daftar status pajak karyawan',
   'contract-types': 'Daftar tipe kontrak kerja',
@@ -90,12 +90,12 @@ const resourceDescMap: Record<ResourceKey, string> = {
 }
 
 const tabs = computed(() => [
-  { key: 'work-locations' as ResourceKey, label: 'Lokasi Kerja', icon: 'i-lucide-map-pin', count: workLocations.value.length },
-  { key: 'job-roles' as ResourceKey, label: 'Jabatan', icon: 'i-lucide-briefcase', count: jobRoles.value.length },
-  { key: 'job-levels' as ResourceKey, label: 'Level Jabatan', icon: 'i-lucide-layers', count: jobLevels.value.length },
-  { key: 'tax-status' as ResourceKey, label: 'Status Pajak', icon: 'i-lucide-receipt', count: taxStatuses.value.length },
-  { key: 'contract-types' as ResourceKey, label: 'Tipe Kontrak', icon: 'i-lucide-file-text', count: contractTypes.value.length },
+  { key: 'work-locations' as ResourceKey, label: 'Site', icon: 'i-lucide-map-pin', count: workLocations.value.length },
   { key: 'departments' as ResourceKey, label: 'Departement', icon: 'i-lucide-building-2', count: departments.value.length },
+  { key: 'job-roles' as ResourceKey, label: 'Pekerjaan', icon: 'i-lucide-briefcase', count: jobRoles.value.length },
+  { key: 'job-levels' as ResourceKey, label: 'Level Jabatan', icon: 'i-lucide-layers', count: jobLevels.value.length },
+  { key: 'contract-types' as ResourceKey, label: 'Tipe Kontrak', icon: 'i-lucide-file-text', count: contractTypes.value.length },
+  { key: 'tax-status' as ResourceKey, label: 'Status Pajak', icon: 'i-lucide-receipt', count: taxStatuses.value.length },
   { key: 'document-types' as ResourceKey, label: 'Dokumen', icon: 'i-lucide-file-text', count: documentTypes.value.length },
   { key: 'companies' as ResourceKey, label: 'Perusahaan', icon: 'i-lucide-building-2', count: companies.value.length }
 ])

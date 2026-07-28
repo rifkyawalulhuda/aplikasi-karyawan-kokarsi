@@ -19,8 +19,8 @@ const genderLabelMap: Record<string, string> = {
 }
 
 const workItems = computed(() => [
-  { label: 'Lokasi Kerja', value: props.employee.workLocation?.name ?? '-', icon: 'i-lucide-map-pin' },
-  { label: 'Jabatan', value: props.employee.jobRole?.name ?? '-', icon: 'i-lucide-briefcase' },
+  { label: 'Site', value: props.employee.workLocation?.name ?? '-', icon: 'i-lucide-map-pin' },
+  { label: 'Pekerjaan', value: props.employee.jobRole?.name ?? '-', icon: 'i-lucide-briefcase' },
   { label: 'Departemen', value: props.employee.department?.name ?? '-', icon: 'i-lucide-building-2' },
   { label: 'Level Jabatan', value: props.employee.jobLevel?.name ?? '-', icon: 'i-lucide-layers' },
   { label: 'Tgl. Bergabung', value: formatDate(props.employee.joinDate), icon: 'i-lucide-calendar' },

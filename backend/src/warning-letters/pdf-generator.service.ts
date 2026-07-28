@@ -85,7 +85,7 @@ export class PdfGeneratorService {
       doc.text(`:  ${employee.employeeNo}`, 180, y)
 
       y = 279
-      doc.text('Jabatan', 72, y)
+      doc.text('Pekerjaan', 72, y)
       doc.text(`:  ${employee.jobRole?.name || '-'}`, 180, y)
 
       y = 303

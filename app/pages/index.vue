@@ -447,12 +447,12 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
             </div>
           </UCard>
 
-          <!-- Bar: Distribusi Lokasi Kerja -->
+          <!-- Bar: Distribusi Site -->
           <UCard :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
                 <UIcon name="i-lucide-map-pin" class="size-4 text-muted" />
-                <span class="text-sm font-semibold text-highlighted">Lokasi Kerja</span>
+                <span class="text-sm font-semibold text-highlighted">Site</span>
               </div>
             </template>
 

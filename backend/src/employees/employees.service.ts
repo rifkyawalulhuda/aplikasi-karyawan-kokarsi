@@ -560,8 +560,8 @@ export class EmployeesService {
       'Email',
       'No. HP',
       'Pendidikan',
-      'Lokasi Kerja',
-      'Jabatan',
+      'Site',
+      'Pekerjaan',
       'Level Jabatan',
       'Departemen',
       'Status Pajak',
@@ -645,8 +645,8 @@ export class EmployeesService {
 
     addDropdown(4, 'JK', GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
     addDropdown(11, 'Pendidikan', EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
-    addDropdown(12, 'Lokasi', workLocations.map(l => l.name), 'Lokasi Kerja Tidak Valid', 'Pilih dari daftar lokasi kerja yang tersedia.')
-    addDropdown(13, 'Jabatan', jobRoles.map(l => l.name), 'Jabatan Tidak Valid', 'Pilih dari daftar jabatan yang tersedia.')
+    addDropdown(12, 'Lokasi', workLocations.map(l => l.name), 'Site Tidak Valid', 'Pilih dari daftar site yang tersedia.')
+    addDropdown(13, 'Pekerjaan', jobRoles.map(l => l.name), 'Pekerjaan Tidak Valid', 'Pilih dari daftar pekerjaan yang tersedia.')
     addDropdown(14, 'Level', jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
     addDropdown(15, 'Departemen', departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
     addDropdown(16, 'Pajak', taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')

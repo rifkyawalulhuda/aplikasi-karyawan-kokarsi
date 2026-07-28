@@ -294,7 +294,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <!-- Baris 5: Lokasi + Jabatan -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Lokasi Kerja" name="workLocationId" required>
+          <UFormField label="Site" name="workLocationId" required>
             <USelect
               v-model="state.workLocationId"
               :items="workLocationItems"
