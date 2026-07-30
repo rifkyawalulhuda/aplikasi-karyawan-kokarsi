@@ -738,7 +738,7 @@ function onTabChange(key: SettingsTab) {
 
           <!-- Tab: Email Config -->
           <div v-else-if="activeTab === 'email-config'">
-            <EmailConfigTab />
+            <SettingsEmailConfigTab />
           </div>
         </div>
       </div>
