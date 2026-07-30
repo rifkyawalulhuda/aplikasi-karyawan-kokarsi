@@ -61,6 +61,8 @@ model UserAccount {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  emailNotificationRecipient EmailNotificationRecipient?
+
   @@map("user_accounts")
 }
 
@@ -485,4 +487,34 @@ model Notification {
   @@unique([sourceType, sourceId, triggerDay])
   @@index([isRead, resolvedAt])
   @@map("notifications")
+}
+
+model EmailNotificationRecipient {
+  id            Int         @id @default(autoincrement())
+  userAccountId Int
+  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([userAccountId])
+  @@map("email_notification_recipients")
+}
+
+model EmailNotificationSentLog {
+  id         Int      @id @default(autoincrement())
+  sourceType String   @db.VarChar(50)
+  sourceId   Int
+  triggerDay Int
+  sentAt     DateTime @default(now())
+
+  @@unique([sourceType, sourceId, triggerDay])
+  @@map("email_notification_sent_log")
+}
+
+model EmailNotificationConfigLog {
+  id          Int      @id @default(autoincrement())
+  changedBy   String   @db.VarChar(255)
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@map("email_notification_config_log")
 }
