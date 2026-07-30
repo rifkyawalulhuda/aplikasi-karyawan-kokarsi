@@ -54,6 +54,9 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get legalKoperasi() { return this.client.legalKoperasi }
   get notification() { return this.client.notification }
   get akteDokumen() { return this.client.akteDokumen }
+  get emailNotificationRecipient() { return this.client.emailNotificationRecipient }
+  get emailNotificationSentLog() { return this.client.emailNotificationSentLog }
+  get emailNotificationConfigLog() { return this.client.emailNotificationConfigLog }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }
