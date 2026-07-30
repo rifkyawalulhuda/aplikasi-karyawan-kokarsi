@@ -314,14 +314,17 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
   }
 }
 
-type SettingsTab = 'general' | 'profile' | 'login-appearance'
+type SettingsTab = 'general' | 'profile' | 'login-appearance' | 'email-config'
 const activeTab = ref<SettingsTab>('general')
 
 const tabs = computed(() => [
   { key: 'general' as SettingsTab, label: 'Umum', icon: 'i-lucide-building-2' },
   { key: 'profile' as SettingsTab, label: 'Profil Akun', icon: 'i-lucide-user-cog' },
   ...(auth.canManageMasterData
-    ? [{ key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' }]
+    ? [
+        { key: 'login-appearance' as SettingsTab, label: 'Tampilan Login', icon: 'i-lucide-monitor' },
+        { key: 'email-config' as SettingsTab, label: 'Email Config', icon: 'i-lucide-mail' },
+      ]
     : []),
 ])
 
@@ -731,6 +734,11 @@ function onTabChange(key: SettingsTab) {
             </div>
           </div>
           </UCard>
+          </div>
+
+          <!-- Tab: Email Config -->
+          <div v-else-if="activeTab === 'email-config'">
+            <EmailConfigTab />
           </div>
         </div>
       </div>
