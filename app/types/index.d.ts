@@ -281,6 +281,19 @@ export interface GeneralSettings {
   loginRightTextColor?: string
 }
 
+// --- Email Notification ---
+export interface EmailNotificationConfig {
+  isEnabled: boolean
+  triggerWindows: number[]
+  recipients: EmailNotificationUser[]
+}
+
+export interface EmailNotificationUser {
+  id: number
+  name: string
+  email: string
+}
+
 // --- Misc ---
 export type Period = 'daily' | 'weekly' | 'monthly'
 
