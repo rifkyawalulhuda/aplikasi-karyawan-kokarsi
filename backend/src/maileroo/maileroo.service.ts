@@ -67,13 +67,15 @@ export class MailerooService {
     }
   }
 
-  async sendDocumentStatusNotification(changes: DocumentStatusChange[]): Promise<boolean> {
+  async sendDocumentStatusNotification(
+    changes: DocumentStatusChange[],
+    recipients?: { email: string; name: string }[],
+  ): Promise<boolean> {
     if (!changes.length) return false
 
-    const allUsers = await this.prisma.userAccount.findMany({
+    const users = recipients ?? await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
-    })
-    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
+    }).then(rows => rows.filter(u => u.email && u.email.trim() !== ''))
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping notification')
@@ -168,18 +170,20 @@ export class MailerooService {
     `
   }
 
-  async sendLegalKoperasiNotification(changes: {
-    documentName: string
-    publisher: string
-    endDate: Date
-    newStatus: 'AKAN_BERAKHIR' | 'EXPIRED'
-  }[]): Promise<boolean> {
+  async sendLegalKoperasiNotification(
+    changes: {
+      documentName: string
+      publisher: string
+      endDate: Date
+      newStatus: 'AKAN_BERAKHIR' | 'EXPIRED'
+    }[],
+    recipients?: { email: string; name: string }[],
+  ): Promise<boolean> {
     if (!changes.length) return false
 
-    const allUsers = await this.prisma.userAccount.findMany({
+    const users = recipients ?? await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
-    })
-    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
+    }).then(rows => rows.filter(u => u.email && u.email.trim() !== ''))
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping legal notification')
@@ -240,19 +244,21 @@ export class MailerooService {
     return this.sendEmail({ to: users.map(u => ({ email: u.email, name: u.name })), subject, html })
   }
 
-  async sendVendorContractNotification(changes: {
-    documentName: string
-    documentNumber: string
-    companyName: string
-    endDate: Date
-    newStatus: 'AKAN_BERAKHIR' | 'EXPIRED'
-  }[]): Promise<boolean> {
+  async sendVendorContractNotification(
+    changes: {
+      documentName: string
+      documentNumber: string
+      companyName: string
+      endDate: Date
+      newStatus: 'AKAN_BERAKHIR' | 'EXPIRED'
+    }[],
+    recipients?: { email: string; name: string }[],
+  ): Promise<boolean> {
     if (!changes.length) return false
 
-    const allUsers = await this.prisma.userAccount.findMany({
+    const users = recipients ?? await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
-    })
-    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
+    }).then(rows => rows.filter(u => u.email && u.email.trim() !== ''))
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping vendor contract notification')
@@ -325,13 +331,15 @@ export class MailerooService {
     })
   }
 
-  async sendContractStatusNotification(changes: ContractStatusChange[]): Promise<boolean> {
+  async sendContractStatusNotification(
+    changes: ContractStatusChange[],
+    recipients?: { email: string; name: string }[],
+  ): Promise<boolean> {
     if (!changes.length) return false
 
-    const allUsers = await this.prisma.userAccount.findMany({
+    const users = recipients ?? await this.prisma.userAccount.findMany({
       select: { email: true, name: true },
-    })
-    const users = allUsers.filter(u => u.email && u.email.trim() !== '')
+    }).then(rows => rows.filter(u => u.email && u.email.trim() !== ''))
 
     if (!users.length) {
       this.logger.warn('No UserAccount emails found, skipping notification')

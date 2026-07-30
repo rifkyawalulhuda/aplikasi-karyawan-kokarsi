@@ -7,6 +7,7 @@ import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { VendorContractsService } from '../vendor-contracts/vendor-contracts.service'
 import { LegalKoperasiService } from '../legal-koperasi/legal-koperasi.service'
 import { NotificationsService } from '../notifications/notifications.service'
+import { EmailNotificationConfigService } from '../email-notification-config/email-notification-config.service'
 import { existsSync, readdirSync, statSync, unlinkSync } from 'fs'
 import { join } from 'path'
 
@@ -20,12 +21,18 @@ export class ContractCronService {
     private vendorContractsService: VendorContractsService,
     private legalKoperasiService: LegalKoperasiService,
     private notificationsService: NotificationsService,
+    private emailConfig: EmailNotificationConfigService,
   ) {}
 
   // Setiap hari jam 00:01 WIB (Asia/Jakarta)
   @Cron('1 0 * * *', { name: 'contract-status-sync', timeZone: 'Asia/Jakarta' })
   async syncContractStatuses() {
     this.logger.log('Starting contract status synchronization...')
+
+    // Read email config from DB
+    const emailEnabled = await this.emailConfig.isEnabled()
+    const recipients = emailEnabled ? await this.emailConfig.getActiveRecipients() : []
+    const triggerWindows = await this.emailConfig.getTriggerWindows()
 
     const now = new Date()
     const today = startOfDay(now).getTime()
@@ -120,21 +127,68 @@ export class ContractCronService {
 
     this.logger.log(`Contract status sync complete. ${updates.length} contract(s) updated.`)
 
-    // Kirim email notifikasi untuk kontrak yang berubah ke AKAN_HABIS atau EXPIRED
-    const notifyChanges = updates
-      .filter(u => u.newStatus === 'AKAN_HABIS' || u.newStatus === 'EXPIRED')
-      .map(u => ({
-        contractNo: u.contractNo,
-        employeeName: u.employeeName,
-        endDate: u.endDate,
-        newStatus: u.newStatus as 'AKAN_HABIS' | 'EXPIRED',
-      }))
+    // Kirim email notifikasi per trigger window dengan deduplication
+    if (emailEnabled && recipients.length > 0 && updates.length > 0) {
+      const todayMs = startOfDay(new Date())
 
-    if (notifyChanges.length > 0) {
-      this.logger.log(`Sending email notification for ${notifyChanges.length} contract change(s)...`)
-      await this.maileroo
-        .sendContractStatusNotification(notifyChanges)
-        .catch(err => this.logger.error(`Email notification failed: ${err?.message}`))
+      // AKAN_HABIS: kirim per window, skip jika sudah pernah dikirim
+      for (const window of triggerWindows) {
+        const changesForWindow: typeof updates = []
+        for (const u of updates) {
+          if (u.newStatus === 'AKAN_HABIS') {
+            const daysLeft = Math.ceil((startOfDay(u.endDate).getTime() - todayMs.getTime()) / DAY_MS)
+            if (daysLeft === window) {
+              const alreadySent = await this.emailConfig.hasSent('contract', u.id, window)
+              if (!alreadySent) changesForWindow.push(u)
+            }
+          }
+        }
+        if (changesForWindow.length > 0) {
+          this.logger.log(`Sending contract email for window=${window}d: ${changesForWindow.length} contract(s)`)
+          const sent = await this.maileroo
+            .sendContractStatusNotification(
+              changesForWindow.map(u => ({
+                contractNo: u.contractNo,
+                employeeName: u.employeeName,
+                endDate: u.endDate,
+                newStatus: u.newStatus as 'AKAN_HABIS' | 'EXPIRED',
+              })),
+              recipients,
+            )
+            .catch(err => { this.logger.error(`Email notification failed: ${err?.message}`); return false })
+          if (sent) {
+            for (const u of changesForWindow) {
+              await this.emailConfig.recordSent('contract', u.id, window)
+            }
+          }
+        }
+      }
+
+      // EXPIRED: sentinel -1, kirim sekali per kontrak
+      const expiredUnsent: typeof updates = []
+      for (const u of updates.filter(u => u.newStatus === 'EXPIRED')) {
+        const alreadySent = await this.emailConfig.hasSent('contract', u.id, -1)
+        if (!alreadySent) expiredUnsent.push(u)
+      }
+      if (expiredUnsent.length > 0) {
+        this.logger.log(`Sending expired contract email: ${expiredUnsent.length} contract(s)`)
+        const sent = await this.maileroo
+          .sendContractStatusNotification(
+            expiredUnsent.map(u => ({
+              contractNo: u.contractNo,
+              employeeName: u.employeeName,
+              endDate: u.endDate,
+              newStatus: u.newStatus as 'AKAN_HABIS' | 'EXPIRED',
+            })),
+            recipients,
+          )
+          .catch(err => { this.logger.error(`Email notification failed: ${err?.message}`); return false })
+        if (sent) {
+          for (const u of expiredUnsent) {
+            await this.emailConfig.recordSent('contract', u.id, -1)
+          }
+        }
+      }
     }
 
     // ── EmployeeDocument status sync ─────────────────────────────────────────
@@ -171,7 +225,7 @@ export class ContractCronService {
       }))
 
       await this.maileroo
-        .sendDocumentStatusNotification(docNotifyAkan)
+        .sendDocumentStatusNotification(docNotifyAkan, recipients)
         .catch(err => this.logger.error(`Document email notification failed: ${err?.message}`))
     }
 
@@ -202,7 +256,7 @@ export class ContractCronService {
       }))
 
       await this.maileroo
-        .sendDocumentStatusNotification(docNotifyExpired)
+        .sendDocumentStatusNotification(docNotifyExpired, recipients)
         .catch(err => this.logger.error(`Document email notification failed: ${err?.message}`))
     }
 
@@ -230,7 +284,7 @@ export class ContractCronService {
     ]
 
     if (vcChanges.length > 0) {
-      await this.maileroo.sendVendorContractNotification(vcChanges)
+      await this.maileroo.sendVendorContractNotification(vcChanges, recipients)
         .catch(err => this.logger.error(`Vendor contract notification failed: ${err?.message}`))
     }
 
@@ -254,7 +308,7 @@ export class ContractCronService {
     ]
 
     if (lkChanges.length > 0) {
-      await this.maileroo.sendLegalKoperasiNotification(lkChanges)
+      await this.maileroo.sendLegalKoperasiNotification(lkChanges, recipients)
         .catch(err => this.logger.error(`Legal koperasi notification failed: ${err?.message}`))
     }
 
