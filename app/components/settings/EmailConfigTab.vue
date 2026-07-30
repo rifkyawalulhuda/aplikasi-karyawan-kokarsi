@@ -4,10 +4,10 @@ import type { EmailNotificationConfig, EmailNotificationUser } from '~/types'
 const toast = useToast()
 
 // Fetch config
-const { data: config, refresh } = await useFetch<EmailNotificationConfig>('/api/settings/email-config')
+const { data: config, refresh } = useFetch<EmailNotificationConfig>('/api/settings/email-config')
 
 // Fetch all users
-const { data: allUsers } = await useFetch<EmailNotificationUser[]>('/api/settings/email-config-users')
+const { data: allUsers } = useFetch<EmailNotificationUser[]>('/api/settings/email-config-users')
 
 const form = reactive({
   isEnabled: true,
