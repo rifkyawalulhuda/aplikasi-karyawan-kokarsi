@@ -109,7 +109,7 @@ const selectedCount = computed(() => form.recipientUserIds.length)
       </template>
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-3">
-          <UToggle v-model="form.isEnabled" />
+          <USwitch v-model="form.isEnabled" />
           <span class="text-sm">Aktifkan Notifikasi Email</span>
         </div>
         <p v-if="!form.isEnabled" class="text-sm text-muted">
