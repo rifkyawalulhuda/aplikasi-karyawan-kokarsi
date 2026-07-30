@@ -18,6 +18,7 @@ import { VendorContractsModule } from './vendor-contracts/vendor-contracts.modul
 import { LegalKoperasiModule } from './legal-koperasi/legal-koperasi.module'
 import { NotificationsModule } from './notifications/notifications.module'
 import { AkteDokumenModule } from './akte-dokumen/akte-dokumen.module'
+import { EmailNotificationConfigModule } from './email-notification-config/email-notification-config.module'
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AkteDokumenModule } from './akte-dokumen/akte-dokumen.module'
     LegalKoperasiModule,
     NotificationsModule,
     AkteDokumenModule,
+    EmailNotificationConfigModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

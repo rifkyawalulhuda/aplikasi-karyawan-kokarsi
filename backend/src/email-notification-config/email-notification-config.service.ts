@@ -93,4 +93,58 @@ export class EmailNotificationConfigService {
 
     return this.getConfig()
   }
+
+  async getAllUsers(): Promise<{ id: number; name: string; email: string }[]> {
+    const users = await this.prisma.userAccount.findMany({
+      select: { id: true, name: true, email: true },
+      orderBy: { name: 'asc' },
+    })
+    return users
+  }
+
+  // --- Cron helper methods ---
+
+  async isEnabled(): Promise<boolean> {
+    const row = await this.prisma.appSetting.findUnique({
+      where: { key: 'emailNotificationEnabled' },
+    })
+    return row ? row.value === 'true' : true
+  }
+
+  async getTriggerWindows(): Promise<number[]> {
+    const row = await this.prisma.appSetting.findUnique({
+      where: { key: 'emailNotificationWindows' },
+    })
+    if (!row || !row.value) return [90, 60, 30, 7, 0]
+    return row.value
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n >= 0)
+  }
+
+  async getActiveRecipients(): Promise<{ email: string; name: string }[]> {
+    const rows = await this.prisma.emailNotificationRecipient.findMany({
+      include: {
+        userAccount: { select: { email: true, name: true } },
+      },
+    })
+    return rows
+      .map((r) => ({ email: r.userAccount.email, name: r.userAccount.name }))
+      .filter((u) => u.email && u.email.trim() !== '')
+  }
+
+  async hasSent(sourceType: string, sourceId: number, triggerDay: number): Promise<boolean> {
+    const row = await this.prisma.emailNotificationSentLog.findUnique({
+      where: { sourceType_sourceId_triggerDay: { sourceType, sourceId, triggerDay } },
+    })
+    return row !== null
+  }
+
+  async recordSent(sourceType: string, sourceId: number, triggerDay: number): Promise<void> {
+    await this.prisma.emailNotificationSentLog.upsert({
+      where: { sourceType_sourceId_triggerDay: { sourceType, sourceId, triggerDay } },
+      update: { sentAt: new Date() },
+      create: { sourceType, sourceId, triggerDay },
+    })
+  }
 }
