@@ -311,7 +311,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
       paragraphs: [
         '1. Setiap pemberitahuan, permintaan, dan lain-lain berkaitan dengan Perjanjian ini harus dibuat secara tertulis dan harus dikirim dengan surat tercatat, jasa kurir, dikirim secara langsung dengan mendapat tanda terima, atau melalui e-mail, yang ditujukan ke alamat:',
         'Jika dikirim kepada PIHAK PERTAMA dialamatkan kepada: Alamat: Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20 GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330; Telepon: 021 - 50555340; E-mail: Kokarsi_unitjkt@sankyu.co.id',
-        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: __MITRA_ADDRESS__; Telepon: ....................; E-mail: ....................',
+        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: __MITRA_ADDRESS__; Telepon: __MITRA_PHONE__; E-mail: __MITRA_EMAIL__',
         '2. Pemberitahuan dianggap telah diterima oleh Pihak yang dituju: pada saat ditandatanganinya tanda terima oleh Pihak yang dituju (dalam hal dikirim langsung atau menggunakan jasa kurir); dalam 3 (tiga) hari kerja setelah tanggal pengiriman jika pemberitahuan disampaikan melalui surat tercatat; dan pada saat konfirmasi laporan pengiriman telah diterima oleh pengirim, pada tanggal diterimanya e-mail, jika pemberitahuan disampaikan melalui e-mail.',
       ],
     },

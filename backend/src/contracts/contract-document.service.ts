@@ -501,6 +501,11 @@ export class ContractDocumentService {
           text = `a. Imbalan Jasa Bulanan sebesar ${meta.compensation} yang dibayarkan setiap bulan sesuai ketentuan perjanjian ini.`
         } else if (text === '__MITRA_ADDRESS__') {
           text = emp.address ?? '.................'
+        } else {
+          text = text
+            .replace(/__MITRA_ADDRESS__/g, emp.address?.trim() || '....................')
+            .replace(/__MITRA_PHONE__/g, emp.phoneNumber?.trim() || '....................')
+            .replace(/__MITRA_EMAIL__/g, emp.email?.trim() || '....................')
         }
         addPara(text)
       }
