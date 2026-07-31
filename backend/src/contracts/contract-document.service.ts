@@ -460,7 +460,7 @@ export class ContractDocumentService {
         text,
         font: 'Times-Roman',
         fontSize: bodySize,
-        align: (this.isMitraListItem(text) ? 'left' : 'justify') as TextAlign,
+        align: 'justify' as TextAlign,
         gapAfter: 6,
         ...opts,
       })
