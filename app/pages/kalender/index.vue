@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CalendarDate, DateFormatter, getLocalTimeZone, Time } from '@internationalized/date'
 import type { CalendarEventInput, CalendarItem } from '~/types'
 
 const toast = useToast()
@@ -6,6 +7,44 @@ const { confirmDeleteToast } = useConfirmDeleteToast()
 const router = useRouter()
 const requestFetch = useRequestFetch()
 const today = new Date()
+
+// ── DatePicker state ────────────────────────────────────────────────────────
+const dfLong = new DateFormatter('id-ID', { dateStyle: 'long' })
+
+function toCalDate(s: string): CalendarDate | null {
+  if (!s) return null
+  const [y, m, d] = s.split('-').map(Number)
+  return new CalendarDate(y, m, d)
+}
+
+function fromCalDate(c: CalendarDate | null): string {
+  if (!c) return ''
+  return `${c.year}-${String(c.month).padStart(2, '0')}-${String(c.day).padStart(2, '0')}`
+}
+
+const startDateCal = shallowRef<CalendarDate | null>(null)
+const endDateCal   = shallowRef<CalendarDate | null>(null)
+
+watch(startDateCal, val => { form.startDate = fromCalDate(val) })
+watch(endDateCal,   val => { form.endDate   = fromCalDate(val) })
+
+// ── TimePicker state ────────────────────────────────────────────────────────
+function toTime(s: string): Time | null {
+  if (!s) return null
+  const [h, m] = s.split(':').map(Number)
+  return new Time(h ?? 0, m ?? 0)
+}
+
+function fromTime(t: Time | null): string {
+  if (!t) return ''
+  return `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`
+}
+
+const startTimeCal = shallowRef<Time | null>(null)
+const endTimeCal   = shallowRef<Time | null>(null)
+
+watch(startTimeCal, val => { form.startTime = fromTime(val) })
+watch(endTimeCal,   val => { form.endTime   = fromTime(val) })
 
 // ── View state ─────────────────────────────────────────────────────────────
 type CalendarView = 'month' | 'week' | 'day'
@@ -326,13 +365,17 @@ function resetForm() {
   editingId.value = null
   assignAll.value = false
   selectedUserIds.value = []
+  startDateCal.value = null
+  endDateCal.value = null
+  startTimeCal.value = null
+  endTimeCal.value = null
   Object.assign(form, { title: '', description: '', location: '', startDate: '', endDate: '', startTime: '', endTime: '', color: 'blue', assignedUserIds: [] })
 }
 
 function openCreate(date = isoDate(today)) {
   resetForm()
-  form.startDate = date
-  form.endDate = date
+  startDateCal.value = toCalDate(date)
+  endDateCal.value   = toCalDate(date)
   selectedDate.value = null  // tutup modal detail sebelum buka form
   formOpen.value = true
 }
@@ -346,6 +389,10 @@ function openEdit(item: CalendarItem) {
     startDate: item.startDate, endDate: item.endDate, startTime: item.startTime ?? '', endTime: item.endTime ?? '', color: item.color,
     assignedUserIds: item.assignedUserIds ?? [],
   })
+  startDateCal.value = toCalDate(item.startDate)
+  endDateCal.value   = toCalDate(item.endDate)
+  startTimeCal.value = toTime(item.startTime ?? '')
+  endTimeCal.value   = toTime(item.endTime ?? '')
   assignAll.value = false
   selectedUserIds.value = item.assignedUserIds ?? []
   selectedDate.value = null
@@ -711,16 +758,42 @@ function openItem(item: CalendarItem) {
         </UFormField>
         <div class="grid gap-4 sm:grid-cols-2">
           <UFormField label="Tanggal Mulai" required>
-            <UInput v-model="form.startDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!startDateCal ? 'text-muted' : ''"
+              >
+                {{ startDateCal ? dfLong.format(startDateCal.toDate(getLocalTimeZone())) : 'Pilih tanggal mulai' }}
+              </UButton>
+              <template #content>
+                <UCalendar v-model="startDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
           <UFormField label="Tanggal Selesai" required>
-            <UInput v-model="form.endDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!endDateCal ? 'text-muted' : ''"
+              >
+                {{ endDateCal ? dfLong.format(endDateCal.toDate(getLocalTimeZone())) : 'Pilih tanggal selesai' }}
+              </UButton>
+              <template #content>
+                <UCalendar v-model="endDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
           <UFormField label="Jam Mulai" required>
-            <UInput v-model="form.startTime" type="time" class="w-full" />
+            <UInputTime v-model="startTimeCal" :hour-cycle="24" class="w-full" />
           </UFormField>
           <UFormField label="Jam Selesai">
-            <UInput v-model="form.endTime" type="time" class="w-full" />
+            <UInputTime v-model="endTimeCal" :hour-cycle="24" class="w-full" />
           </UFormField>
         </div>
         <UFormField label="Lokasi">
