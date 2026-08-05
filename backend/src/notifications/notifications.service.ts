@@ -23,6 +23,122 @@ export class NotificationsService {
     this.clients.forEach(s => s.next(event))
   }
 
+  private async broadcastUnreadCount(): Promise<void> {
+    try {
+      const currentCount = await this.getUnreadCount()
+      this.broadcast(currentCount)
+    } catch {
+      // non-fatal
+    }
+  }
+
+  // ── Agenda Notifications ────────────────────────────────────────────────────
+
+  /**
+   * Cron H-0: kirim notifikasi pagi untuk agenda hari ini.
+   * Dipanggil oleh AgendaNotificationScheduler setiap menit — cek jam dari AppSetting.
+   */
+  async generateMorningAgendaNotifications(): Promise<{ created: number }> {
+    const today = startOfDay(new Date())
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+    let created = 0
+
+    const agendas = await this.prisma.calendarEvent.findMany({
+      where: {
+        startDate: { gte: today, lt: tomorrow },
+        notifyMorningSent: false,
+        assignedUserIds: { isEmpty: false },
+      },
+    })
+
+    for (const agenda of agendas) {
+      for (const userId of agenda.assignedUserIds) {
+        const sourceKey = `agenda_morning_${agenda.id}_${userId}`
+        try {
+          await this.prisma.notification.create({
+            data: {
+              category: 'AGENDA',
+              severity: 'WARNING',
+              title: 'Agenda Hari Ini',
+              message: `${agenda.title} — ${agenda.startDate.toISOString().slice(0, 10)} pukul ${agenda.startTime}`,
+              sourceType: 'agenda_morning',
+              sourceId: agenda.id,
+              triggerDay: 0,
+              deeplink: '/kalender',
+              expiryDate: agenda.startDate,
+            },
+          })
+          created++
+        } catch (e: any) {
+          if (e.code !== 'P2002') throw e
+        }
+      }
+      await this.prisma.calendarEvent.update({
+        where: { id: agenda.id },
+        data: { notifyMorningSent: true },
+      })
+    }
+
+    if (created > 0) await this.broadcastUnreadCount()
+    return { created }
+  }
+
+  /**
+   * Cron 5 menit sebelum: kirim notifikasi reminder untuk agenda yang startTime-nya
+   * 5 menit dari sekarang (window ±1 menit untuk toleransi polling).
+   */
+  async generateBeforeAgendaNotifications(): Promise<{ created: number }> {
+    const now = new Date()
+    const today = startOfDay(now)
+    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000)
+    let created = 0
+
+    // Hitung window waktu: 4–6 menit dari sekarang
+    const windowStart = new Date(now.getTime() + 4 * 60 * 1000)
+    const windowEnd = new Date(now.getTime() + 6 * 60 * 1000)
+    const timeStart = `${String(windowStart.getHours()).padStart(2, '0')}:${String(windowStart.getMinutes()).padStart(2, '0')}`
+    const timeEnd = `${String(windowEnd.getHours()).padStart(2, '0')}:${String(windowEnd.getMinutes()).padStart(2, '0')}`
+
+    const agendas = await this.prisma.calendarEvent.findMany({
+      where: {
+        startDate: { gte: today, lt: tomorrow },
+        startTime: { gte: timeStart, lte: timeEnd },
+        notifyBeforeSent: false,
+        assignedUserIds: { isEmpty: false },
+      },
+    })
+
+    for (const agenda of agendas) {
+      for (const userId of agenda.assignedUserIds) {
+        try {
+          await this.prisma.notification.create({
+            data: {
+              category: 'AGENDA',
+              severity: 'CRITICAL',
+              title: 'Agenda Dimulai 5 Menit Lagi',
+              message: `${agenda.title} — pukul ${agenda.startTime}`,
+              sourceType: 'agenda_before',
+              sourceId: agenda.id,
+              triggerDay: 0,
+              deeplink: '/kalender',
+              expiryDate: agenda.startDate,
+            },
+          })
+          created++
+        } catch (e: any) {
+          if (e.code !== 'P2002') throw e
+        }
+      }
+      await this.prisma.calendarEvent.update({
+        where: { id: agenda.id },
+        data: { notifyBeforeSent: true },
+      })
+    }
+
+    if (created > 0) await this.broadcastUnreadCount()
+    return { created }
+  }
+
   async findAll(limit = 10) {
     return this.prisma.notification.findMany({
       where: { resolvedAt: null },

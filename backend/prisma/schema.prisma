@@ -460,6 +460,7 @@ enum NotificationCategory {
   SERTIFIKASI_IJIN
   KONTRAK_VENDOR
   LEGAL_KOPERASI
+  AGENDA
 }
 
 enum NotificationSeverity {
@@ -517,4 +518,25 @@ model EmailNotificationConfigLog {
   createdAt   DateTime @default(now())
 
   @@map("email_notification_config_log")
+}
+
+model CalendarEvent {
+  id                Int      @id @default(autoincrement())
+  title             String   @db.VarChar(255)
+  description       String?  @db.Text
+  location          String?  @db.VarChar(255)
+  startDate         DateTime @db.Date
+  endDate           DateTime @db.Date
+  startTime         String   @db.VarChar(5)
+  endTime           String?  @db.VarChar(5)
+  color             String   @default("blue") @db.VarChar(20)
+  createdByName     String   @db.VarChar(255)
+  assignedUserIds   Int[]    @default([])
+  notifyMorningSent Boolean  @default(false)
+  notifyBeforeSent  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([startDate, endDate])
+  @@map("calendar_events")
 }

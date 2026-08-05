@@ -279,6 +279,7 @@ export interface GeneralSettings {
   loginRightOverlayOpacity?: string
   loginLeftTextColor?: string
   loginRightTextColor?: string
+  agendaNotificationMorningHour?: string
 }
 
 // --- Email Notification ---
@@ -292,6 +293,40 @@ export interface EmailNotificationUser {
   id: number
   name: string
   email: string
+}
+
+export type CalendarItemType = 'agenda' | 'employee_contract' | 'employee_document' | 'vendor_contract' | 'legal_koperasi'
+
+export interface CalendarItem {
+  id: string
+  sourceId: number
+  type: CalendarItemType
+  title: string
+  description?: string | null
+  location?: string | null
+  startDate: string
+  endDate: string
+  startTime?: string | null
+  endTime?: string | null
+  color: string
+  readOnly: boolean
+  status?: string | null
+  deeplink?: string
+  createdByName?: string | null
+  assignedUserIds?: number[]
+}
+
+export interface CalendarEventInput {
+  title: string
+  description?: string
+  location?: string
+  startDate: string
+  endDate: string
+  startTime: string
+  endTime?: string
+  color: 'blue' | 'sky' | 'green' | 'teal' | 'yellow' | 'orange' | 'red' | 'pink' | 'purple' | 'indigo' | 'gray' | 'slate'
+  assignedUserIds?: number[]
+  assignAll?: boolean
 }
 
 // --- Misc ---

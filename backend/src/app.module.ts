@@ -19,6 +19,7 @@ import { LegalKoperasiModule } from './legal-koperasi/legal-koperasi.module'
 import { NotificationsModule } from './notifications/notifications.module'
 import { AkteDokumenModule } from './akte-dokumen/akte-dokumen.module'
 import { EmailNotificationConfigModule } from './email-notification-config/email-notification-config.module'
+import { CalendarModule } from './calendar/calendar.module'
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { EmailNotificationConfigModule } from './email-notification-config/email
     NotificationsModule,
     AkteDokumenModule,
     EmailNotificationConfigModule,
+    CalendarModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

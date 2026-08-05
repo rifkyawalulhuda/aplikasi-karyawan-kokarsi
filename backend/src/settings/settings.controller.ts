@@ -49,6 +49,10 @@ class UpdateGeneralSettingsDto {
   @IsOptional()
   @IsString()
   loginRightTextColor?: string
+
+  @IsOptional()
+  @IsString()
+  agendaNotificationMorningHour?: string
 }
 
 @Controller('settings')

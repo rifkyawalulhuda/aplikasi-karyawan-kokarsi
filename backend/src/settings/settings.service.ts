@@ -13,6 +13,7 @@ export interface GeneralSettingsPayload {
   loginRightOverlayOpacity?: string
   loginLeftTextColor?: string
   loginRightTextColor?: string
+  agendaNotificationMorningHour?: string
 }
 
 @Injectable()
@@ -29,6 +30,7 @@ export class SettingsService {
     'loginRightOverlayOpacity',
     'loginLeftTextColor',
     'loginRightTextColor',
+    'agendaNotificationMorningHour',
   ]
 
   private readonly defaults: GeneralSettingsPayload = {
@@ -43,6 +45,7 @@ export class SettingsService {
     loginRightOverlayOpacity: '0',
     loginLeftTextColor: '',
     loginRightTextColor: '',
+    agendaNotificationMorningHour: '7',
   }
 
   constructor(private prisma: PrismaService) {}
@@ -72,6 +75,7 @@ export class SettingsService {
       loginRightOverlayOpacity: map.get('loginRightOverlayOpacity') ?? this.defaults.loginRightOverlayOpacity,
       loginLeftTextColor: map.get('loginLeftTextColor') ?? this.defaults.loginLeftTextColor,
       loginRightTextColor: map.get('loginRightTextColor') ?? this.defaults.loginRightTextColor,
+      agendaNotificationMorningHour: map.get('agendaNotificationMorningHour') ?? this.defaults.agendaNotificationMorningHour,
     }
   }
 
@@ -109,6 +113,13 @@ export class SettingsService {
     }
     if (payload.loginRightTextColor !== undefined) {
       updates.push({ key: 'loginRightTextColor', value: payload.loginRightTextColor })
+    }
+    if (payload.agendaNotificationMorningHour !== undefined) {
+      const hour = parseInt(payload.agendaNotificationMorningHour, 10)
+      if (isNaN(hour) || hour < 0 || hour > 23) {
+        throw new Error('Jam notifikasi pagi tidak valid (0-23)')
+      }
+      updates.push({ key: 'agendaNotificationMorningHour', value: String(hour) })
     }
 
     if (updates.length > 0) {

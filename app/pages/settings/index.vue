@@ -38,6 +38,31 @@ const currentLogoUrl = computed(() => {
   return generalSettings.value.appLogoUrl
 })
 
+// --- Agenda Notification ---
+const savingAgendaNotif = ref(false)
+const agendaMorningHour = ref(7)
+
+watchEffect(() => {
+  agendaMorningHour.value = Number(generalSettings.value?.agendaNotificationMorningHour ?? '7')
+})
+
+async function saveAgendaNotificationSettings() {
+  if (!auth.canManageMasterData) return
+  savingAgendaNotif.value = true
+  try {
+    await $fetch('/api/settings/general', {
+      method: 'PUT',
+      body: { agendaNotificationMorningHour: String(agendaMorningHour.value) },
+    })
+    await refreshGeneralSettings()
+    toast.add({ title: 'Pengaturan notifikasi agenda disimpan', color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menyimpan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    savingAgendaNotif.value = false
+  }
+}
+
 // --- Login Appearance ---
 const loginForm = reactive({
   loginLeftBgColor: '',
@@ -479,6 +504,61 @@ function onTabChange(key: SettingsTab) {
               </UForm>
             </div>
           </div>
+          </UCard>
+
+          <!-- Card: Notifikasi Agenda Kalender -->
+          <UCard class="mt-4">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-bell" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Notifikasi Agenda Kalender</span>
+              </div>
+            </template>
+            <div class="space-y-5">
+              <p class="text-sm text-muted">
+                Atur jam pengiriman notifikasi pagi untuk agenda kalender hari ini. Notifikasi 5 menit sebelum agenda dimulai akan selalu dikirim otomatis.
+              </p>
+              <UFormField
+                label="Jam Notifikasi Pagi"
+                description="Notifikasi ringkasan agenda hari ini dikirim pada jam ini setiap hari."
+              >
+                <div class="flex items-center gap-3">
+                  <UInput
+                    v-model.number="agendaMorningHour"
+                    type="number"
+                    :min="0"
+                    :max="23"
+                    class="w-24"
+                    :disabled="!auth.canManageMasterData"
+                  />
+                  <span class="text-sm text-muted">:00 WIB</span>
+                </div>
+                <p class="mt-1 text-xs text-muted">
+                  Contoh: 7 = jam 07:00, 8 = jam 08:00 (0–23)
+                </p>
+              </UFormField>
+              <div class="rounded-md border border-default bg-elevated/30 p-3 text-sm">
+                <div class="flex items-start gap-2">
+                  <UIcon name="i-lucide-info" class="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div class="space-y-1 text-muted">
+                    <p><span class="font-medium text-highlighted">Notifikasi Pagi</span> — Dikirim pada jam yang dikonfigurasi untuk agenda yang ada hari ini.</p>
+                    <p><span class="font-medium text-highlighted">Notifikasi 5 Menit Sebelum</span> — Dikirim otomatis 5 menit sebelum jam mulai agenda.</p>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between gap-3">
+                <p class="text-xs text-muted">
+                  {{ auth.canManageMasterData ? 'Perubahan akan berlaku pada pengiriman notifikasi berikutnya.' : 'Hanya Admin yang dapat mengubah pengaturan ini.' }}
+                </p>
+                <UButton
+                  v-if="auth.canManageMasterData"
+                  label="Simpan Pengaturan"
+                  color="primary"
+                  :loading="savingAgendaNotif"
+                  @click="saveAgendaNotificationSettings"
+                />
+              </div>
+            </div>
           </UCard>
           </div>
 

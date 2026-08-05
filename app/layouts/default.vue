@@ -209,6 +209,12 @@ const links = computed<NavigationMenuItem[]>(() => [
     onSelect: () => { open.value = false },
   },
   {
+    label: 'Kalender',
+    icon: 'i-lucide-calendar-days',
+    to: '/kalender',
+    onSelect: () => { open.value = false },
+  },
+  {
     label: 'Dokumen Karyawan',
     icon: 'i-lucide-file-badge',
     defaultOpen: true,
