@@ -10,6 +10,15 @@ const emit = defineEmits<{
 const toast = useToast()
 const spaceId = computed(() => props.space.id)
 
+// Fetch user map untuk resolve assignee names di card
+const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
+  credentials: 'include',
+  lazy: true,
+})
+const memberMap = computed<Record<number, string>>(() =>
+  Object.fromEntries((usersRes.value ?? []).map(u => [u.id, u.name]))
+)
+
 // SSE real-time
 const { events } = useSpaceSSE(spaceId)
 
@@ -327,6 +336,7 @@ async function saveColName() {
           <SpacesKanbanCard
             :card="card"
             :space-id="space.id"
+            :member-map="memberMap"
             @click="emit('cardClick', card)"
           />
         </div>
