@@ -9,6 +9,7 @@ export interface SpaceEvent {
     | 'COMMENT_ADDED' | 'COMMENT_UPDATED' | 'COMMENT_DELETED'
     | 'CHECKLIST_TOGGLED' | 'ATTACHMENT_ADDED' | 'ATTACHMENT_DELETED'
     | 'MEMBER_ADDED' | 'MEMBER_REMOVED'
+    | 'ANNOUNCEMENT_CREATED' | 'ANNOUNCEMENT_UPDATED' | 'ANNOUNCEMENT_DELETED'
   payload: any
   actorId: number
   actorName: string

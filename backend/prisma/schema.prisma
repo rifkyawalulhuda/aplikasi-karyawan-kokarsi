@@ -461,6 +461,7 @@ enum NotificationCategory {
   KONTRAK_VENDOR
   LEGAL_KOPERASI
   AGENDA
+  SPACE
 }
 
 enum NotificationSeverity {
@@ -569,6 +570,8 @@ model Space {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   columns       SpaceColumn[]
+  announcements SpaceAnnouncement[]
+  documents     SpaceDocument[]
 
   @@map("spaces")
 }
@@ -653,4 +656,35 @@ model SpaceCardComment {
 
   @@index([cardId])
   @@map("space_card_comments")
+}
+
+model SpaceAnnouncement {
+  id            Int      @id @default(autoincrement())
+  spaceId       Int
+  space         Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  content       String   @db.Text
+  isPinned      Boolean  @default(true)
+  createdById   Int
+  createdByName String   @db.VarChar(255)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([spaceId])
+  @@map("space_announcements")
+}
+
+model SpaceDocument {
+  id            Int      @id @default(autoincrement())
+  spaceId       Int
+  space         Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  title         String   @db.VarChar(255)
+  content       String   @db.Text
+  emoji         String?  @db.VarChar(10)
+  createdById   Int
+  createdByName String   @db.VarChar(255)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([spaceId])
+  @@map("space_documents")
 }

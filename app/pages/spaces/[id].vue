@@ -20,6 +20,19 @@ watchEffect(() => {
   }
 })
 
+// View mode: board | list | docs
+type ViewMode = 'board' | 'list' | 'docs'
+const viewMode = ref<ViewMode>('board')
+
+// Member map untuk resolve assignee names
+const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
+  credentials: 'include',
+  lazy: true,
+})
+const memberMap = computed<Record<number, string>>(() =>
+  Object.fromEntries((usersRes.value ?? []).map(u => [u.id, u.name]))
+)
+
 // Card detail modal
 const selectedCard = ref<SpaceCard | null>(null)
 const cardDetailOpen = ref(false)
@@ -69,7 +82,7 @@ const colorMap: Record<string, string> = {
           <div class="flex items-center gap-3">
             <UDashboardSidebarCollapse />
             <NuxtLink to="/spaces" class="text-muted hover:text-highlighted">
-              <UIcon name="i-lucide-layout-kanban" class="size-4" />
+              <UIcon name="i-lucide-kanban" class="size-4" />
             </NuxtLink>
             <UIcon name="i-lucide-chevron-right" class="size-3 text-muted" />
             <div v-if="space" class="flex items-center gap-2">
@@ -85,6 +98,25 @@ const colorMap: Record<string, string> = {
         </template>
         <template #right>
           <div class="flex items-center gap-2">
+            <!-- View toggle -->
+            <div class="flex rounded-lg border border-default overflow-hidden text-xs">
+              <button
+                v-for="v in [
+                  { key: 'board', icon: 'i-lucide-kanban', label: 'Board' },
+                  { key: 'list', icon: 'i-lucide-list', label: 'List' },
+                  { key: 'docs', icon: 'i-lucide-file-text', label: 'Docs' },
+                ]"
+                :key="v.key"
+                type="button"
+                class="flex items-center gap-1.5 px-2.5 py-1.5 font-medium transition-colors"
+                :class="viewMode === v.key ? 'bg-primary text-inverted' : 'text-muted hover:text-highlighted hover:bg-elevated/60'"
+                @click="viewMode = v.key as ViewMode"
+              >
+                <UIcon :name="v.icon" class="size-3.5" />
+                {{ v.label }}
+              </button>
+            </div>
+
             <UButton
               icon="i-lucide-refresh-cw"
               color="neutral"
@@ -114,13 +146,33 @@ const colorMap: Record<string, string> = {
         <UButton label="Kembali ke Daftar Space" color="neutral" variant="outline" to="/spaces" />
       </div>
 
-      <!-- Board -->
-      <div v-else-if="space" class="h-full overflow-hidden">
-        <SpacesKanbanBoard
-          :space="space"
-          @refresh="refresh()"
-          @card-click="openCard"
-        />
+      <!-- Content -->
+      <div v-else-if="space" class="flex h-full flex-col overflow-hidden">
+        <!-- Announcement Bar (tampil di semua view) -->
+        <SpacesSpaceAnnouncementBar :space="space" :space-id="spaceId" @updated="refresh()" />
+
+        <!-- Board View -->
+        <div v-if="viewMode === 'board'" class="flex-1 overflow-hidden">
+          <SpacesKanbanBoard
+            :space="space"
+            @refresh="refresh()"
+            @card-click="openCard"
+          />
+        </div>
+
+        <!-- List View -->
+        <div v-else-if="viewMode === 'list'" class="flex-1 overflow-hidden">
+          <SpacesListView
+            :space="space"
+            :member-map="memberMap"
+            @card-click="openCard"
+          />
+        </div>
+
+        <!-- Docs View -->
+        <div v-else-if="viewMode === 'docs'" class="flex-1 overflow-auto p-6">
+          <NuxtPage :space-id="spaceId" />
+        </div>
       </div>
     </template>
   </UDashboardPanel>

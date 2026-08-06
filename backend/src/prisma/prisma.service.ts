@@ -64,6 +64,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get spaceCardChecklist() { return (this.client as any).spaceCardChecklist }
   get spaceCardAttachment() { return (this.client as any).spaceCardAttachment }
   get spaceCardComment() { return (this.client as any).spaceCardComment }
+  get spaceAnnouncement() { return (this.client as any).spaceAnnouncement }
+  get spaceDocument() { return (this.client as any).spaceDocument }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

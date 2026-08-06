@@ -7,6 +7,7 @@ export type SpaceEventType =
   | 'COMMENT_ADDED' | 'COMMENT_UPDATED' | 'COMMENT_DELETED'
   | 'CHECKLIST_TOGGLED' | 'ATTACHMENT_ADDED' | 'ATTACHMENT_DELETED'
   | 'MEMBER_ADDED' | 'MEMBER_REMOVED'
+  | 'ANNOUNCEMENT_CREATED' | 'ANNOUNCEMENT_UPDATED' | 'ANNOUNCEMENT_DELETED'
 
 export interface SpaceEvent {
   type: SpaceEventType
@@ -26,7 +27,95 @@ export interface Space {
   memberIds: number[]
   memberTypes: string[]
   columns?: SpaceColumn[]
+  announcements?: SpaceAnnouncement[]
+  documents?: SpaceDocument[]
   _count?: { columns: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SpaceAnnouncement {
+  id: number
+  spaceId: number
+  content: string
+  isPinned: boolean
+  createdById: number
+  createdByName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SpaceDocument {
+  id: number
+  spaceId: number
+  title: string
+  content?: string
+  emoji?: string | null
+  createdById: number
+  createdByName: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SpaceColumn {
+  id: number
+  spaceId: number
+  name: string
+  color: string
+  position: number
+  cards?: SpaceCard[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SpaceCard {
+  id: number
+  columnId: number
+  title: string
+  description?: string | null
+  position: number
+  priority: CardPriority
+  dueDate?: string | null
+  assigneeIds: number[]
+  labels: string[]
+  coverColor?: string | null
+  createdById: number
+  createdByType: string
+  checklists?: SpaceCardChecklist[]
+  attachments?: SpaceCardAttachment[]
+  comments?: SpaceCardComment[]
+  _count?: { checklists: number; comments: number; attachments: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SpaceCardChecklist {
+  id: number
+  cardId: number
+  title: string
+  checked: boolean
+  position: number
+  createdAt: string
+}
+
+export interface SpaceCardAttachment {
+  id: number
+  cardId: number
+  type: AttachmentType
+  name: string
+  url: string
+  mimeType?: string | null
+  size?: number | null
+  createdAt: string
+}
+
+export interface SpaceCardComment {
+  id: number
+  cardId: number
+  content: string
+  authorId: number
+  authorType: string
+  authorName: string
   createdAt: string
   updatedAt: string
 }
