@@ -10,10 +10,22 @@ const toast = useToast()
 const spaceId = computed(() => Number(route.params.id))
 const docId = computed(() => Number(route.params.docId))
 
-const { data: doc, refresh } = await useFetch<SpaceDocument>(
+const { data: doc, refresh, pending, error } = useFetch<SpaceDocument>(
   () => `/api/spaces/${spaceId.value}/documents/${docId.value}`,
-  { credentials: 'include' }
+  {
+    credentials: 'include',
+    onResponseError({ response }) {
+      console.error('[DocPage] fetch error:', response.status, response._data)
+    },
+  }
 )
+
+// Redirect to space if error after load
+watch(error, (err) => {
+  if (err) {
+    console.error('[DocPage] Document fetch failed:', err)
+  }
+})
 
 const title = ref('')
 const content = ref('')
@@ -91,7 +103,20 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
     </template>
 
     <template #body>
-      <div class="mx-auto max-w-3xl px-6 py-8">
+      <!-- Loading state -->
+      <div v-if="pending" class="flex h-full items-center justify-center">
+        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-muted" />
+      </div>
+
+      <!-- Error state -->
+      <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-3 text-center">
+        <UIcon name="i-lucide-alert-circle" class="size-10 text-error" />
+        <p class="font-medium text-highlighted">Dokumen tidak ditemukan</p>
+        <UButton label="Kembali" color="neutral" variant="outline" @click="router.push(`/spaces/${spaceId}`)" />
+      </div>
+
+      <!-- Editor -->
+      <div v-else-if="doc" class="mx-auto max-w-3xl px-6 py-8">
         <!-- Emoji + Title -->
         <div class="mb-6 flex items-start gap-4">
           <UPopover :content="{ side: 'bottom', align: 'start' }">
@@ -124,7 +149,6 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
 
         <!-- Rich text editor -->
         <SpacesTiptapEditor
-          v-if="doc"
           v-model="content"
           placeholder="Mulai menulis dokumen..."
           class="min-h-[60vh]"

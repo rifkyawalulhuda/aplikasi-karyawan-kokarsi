@@ -170,8 +170,8 @@ const colorMap: Record<string, string> = {
         </div>
 
         <!-- Docs View -->
-        <div v-else-if="viewMode === 'docs'" class="flex-1 overflow-auto p-6">
-          <NuxtPage :space-id="spaceId" />
+        <div v-else-if="viewMode === 'docs'" class="flex-1 overflow-auto">
+          <SpacesSpaceDocsView :space-id="spaceId" />
         </div>
       </div>
     </template>
