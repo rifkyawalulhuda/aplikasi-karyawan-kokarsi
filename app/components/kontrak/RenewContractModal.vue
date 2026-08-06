@@ -2,6 +2,7 @@
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Contract, ContractTemplate } from '~/types'
+import { CalendarDate } from '@internationalized/date'
 
 interface LookupOption { label: string; value: number }
 
@@ -13,6 +14,7 @@ const emit = defineEmits<{
 
 const toast = useToast()
 const loading = ref(false)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
 
 const previewContractNo = ref('')
 const loadingPreview = ref(false)
@@ -132,6 +134,9 @@ function resetForm() {
   state.positionLabel = ''
   state.workLocationLabel = ''
   state.baseCompensation = undefined
+  startDateCal.value = null
+  endDateCal.value = null
+  signedDateCal.value = null
 }
 
 const statusLabelMap: Record<string, string> = {
@@ -141,6 +146,17 @@ const statusLabelMap: Record<string, string> = {
   SELESAI: 'Selesai',
   DIBATALKAN: 'Dibatalkan',
 }
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const startDateCal  = shallowRef<CalendarDate | null>(null)
+const endDateCal    = shallowRef<CalendarDate | null>(null)
+const signedDateCal = shallowRef<CalendarDate | null>(null)
+
+const minStartDateCal = computed(() => toCalDate(minStartDate.value))
+
+watch(startDateCal,  val => { state.startDate  = fromCalDate(val) })
+watch(endDateCal,    val => { state.endDate    = fromCalDate(val) })
+watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
 </script>
 
 <template>
@@ -186,10 +202,20 @@ const statusLabelMap: Record<string, string> = {
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Mulai" name="startDate" required :hint="minStartDate ? `Min: ${minStartDate}` : ''">
-            <UInput v-model="state.startDate" type="date" :min="minStartDate" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!startDateCal ? 'text-muted' : ''">
+                {{ startDateCal ? formatDisplay(startDateCal) : 'Pilih tanggal mulai' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="startDateCal" :min-date="minStartDateCal" /></template>
+            </UPopover>
           </UFormField>
           <UFormField label="Tanggal Selesai" name="endDate" required>
-            <UInput v-model="state.endDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!endDateCal ? 'text-muted' : ''">
+                {{ endDateCal ? formatDisplay(endDateCal) : 'Pilih tanggal selesai' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="endDateCal" /></template>
+            </UPopover>
           </UFormField>
         </div>
 
@@ -213,7 +239,12 @@ const statusLabelMap: Record<string, string> = {
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>
-            <UInput v-model="state.signedDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!signedDateCal ? 'text-muted' : ''">
+                {{ signedDateCal ? formatDisplay(signedDateCal) : 'Pilih tanggal tanda tangan' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="signedDateCal" /></template>
+            </UPopover>
           </UFormField>
           <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
             <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />

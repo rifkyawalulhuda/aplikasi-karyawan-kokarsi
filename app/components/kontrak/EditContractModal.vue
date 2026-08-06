@@ -2,6 +2,7 @@
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Contract, ContractTemplate } from '~/types'
+import { CalendarDate } from '@internationalized/date'
 
 interface LookupOption { label: string; value: number }
 
@@ -15,6 +16,16 @@ const toast = useToast()
 const loading = ref(false)
 const uploadingDoc = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const startDateCal  = shallowRef<CalendarDate | null>(null)
+const endDateCal    = shallowRef<CalendarDate | null>(null)
+const signedDateCal = shallowRef<CalendarDate | null>(null)
+
+watch(startDateCal,  val => { state.startDate  = fromCalDate(val) })
+watch(endDateCal,    val => { state.endDate    = fromCalDate(val) })
+watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
 
 async function onFileSelected(e: Event) {
   const input = e.target as HTMLInputElement
@@ -105,6 +116,10 @@ function fillState(c: Contract | null) {
   state.workLocationLabel = c.workLocationLabel ?? ''
   state.baseCompensation = c.baseCompensation ?? undefined
   state.documentUrl = c.documentUrl ?? ''
+  // Sync CalendarDate refs
+  startDateCal.value  = toCalDate(state.startDate)
+  endDateCal.value    = toCalDate(state.endDate)
+  signedDateCal.value = toCalDate(state.signedDate)
 }
 
 const fetchLoading = ref(false)
@@ -170,10 +185,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Mulai" name="startDate" required>
-            <UInput v-model="state.startDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!startDateCal ? 'text-muted' : ''">
+                {{ startDateCal ? formatDisplay(startDateCal) : 'Pilih tanggal mulai' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="startDateCal" /></template>
+            </UPopover>
           </UFormField>
           <UFormField label="Tanggal Selesai" name="endDate" required>
-            <UInput v-model="state.endDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!endDateCal ? 'text-muted' : ''">
+                {{ endDateCal ? formatDisplay(endDateCal) : 'Pilih tanggal selesai' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="endDateCal" /></template>
+            </UPopover>
           </UFormField>
         </div>
 
@@ -197,7 +222,12 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>
-            <UInput v-model="state.signedDate" type="date" class="w-full" />
+            <UPopover :content="{ side: 'bottom', align: 'start' }">
+              <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!signedDateCal ? 'text-muted' : ''">
+                {{ signedDateCal ? formatDisplay(signedDateCal) : 'Pilih tanggal tanda tangan' }}
+              </UButton>
+              <template #content><CalendarPicker v-model="signedDateCal" /></template>
+            </UPopover>
           </UFormField>
           <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
             <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
