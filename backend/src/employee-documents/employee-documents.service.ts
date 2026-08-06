@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsDateString, IsOptional, IsNotEmpty } from 'class-validator'
-import { PartialType } from '@nestjs/mapped-types'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
@@ -25,7 +24,28 @@ export class CreateEmployeeDocumentDto {
   notes?: string
 }
 
-export class UpdateEmployeeDocumentDto extends PartialType(CreateEmployeeDocumentDto) {}
+export class UpdateEmployeeDocumentDto {
+  @IsOptional()
+  @IsInt()
+  employeeId?: number
+
+  @IsOptional()
+  @IsInt()
+  documentTypeId?: number
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  documentNumber?: string
+
+  @IsOptional()
+  @IsDateString()
+  expiryDate?: string
+
+  @IsOptional()
+  @IsString()
+  notes?: string
+}
 
 @Injectable()
 export class EmployeeDocumentsService {

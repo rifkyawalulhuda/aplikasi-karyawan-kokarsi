@@ -540,3 +540,117 @@ model CalendarEvent {
   @@index([startDate, endDate])
   @@map("calendar_events")
 }
+
+// ── Space (Kanban Board) ─────────────────────────────────────────────────────
+
+enum CardPriority {
+  NONE
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum AttachmentType {
+  FILE
+  LINK
+}
+
+model Space {
+  id            Int           @id @default(autoincrement())
+  name          String        @db.VarChar(255)
+  description   String?       @db.Text
+  icon          String?       @db.VarChar(50)
+  color         String        @default("blue") @db.VarChar(20)
+  createdById   Int
+  createdByType String        @db.VarChar(20)
+  memberIds     Int[]         @default([])
+  memberTypes   String[]      @default([])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  columns       SpaceColumn[]
+
+  @@map("spaces")
+}
+
+model SpaceColumn {
+  id        Int         @id @default(autoincrement())
+  spaceId   Int
+  space     Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name      String      @db.VarChar(100)
+  color     String      @default("gray") @db.VarChar(20)
+  position  Int
+  cards     SpaceCard[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([spaceId, position])
+  @@map("space_columns")
+}
+
+model SpaceCard {
+  id          Int                   @id @default(autoincrement())
+  columnId    Int
+  column      SpaceColumn           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  title       String                @db.VarChar(255)
+  description String?               @db.Text
+  position    Int
+  priority    CardPriority          @default(NONE)
+  dueDate     DateTime?             @db.Date
+  assigneeIds Int[]                 @default([])
+  labels      String[]              @default([])
+  coverColor  String?               @db.VarChar(20)
+  createdById Int
+  createdByType String              @db.VarChar(20)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  checklists  SpaceCardChecklist[]
+  attachments SpaceCardAttachment[]
+  comments    SpaceCardComment[]
+
+  @@index([columnId, position])
+  @@map("space_cards")
+}
+
+model SpaceCardChecklist {
+  id        Int       @id @default(autoincrement())
+  cardId    Int
+  card      SpaceCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  title     String    @db.VarChar(255)
+  checked   Boolean   @default(false)
+  position  Int
+  createdAt DateTime  @default(now())
+
+  @@index([cardId, position])
+  @@map("space_card_checklists")
+}
+
+model SpaceCardAttachment {
+  id        Int            @id @default(autoincrement())
+  cardId    Int
+  card      SpaceCard      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  type      AttachmentType
+  name      String         @db.VarChar(255)
+  url       String         @db.VarChar(500)
+  mimeType  String?        @db.VarChar(100)
+  size      Int?
+  createdAt DateTime       @default(now())
+
+  @@index([cardId])
+  @@map("space_card_attachments")
+}
+
+model SpaceCardComment {
+  id          Int       @id @default(autoincrement())
+  cardId      Int
+  card        SpaceCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  content     String    @db.Text
+  authorId    Int
+  authorType  String    @db.VarChar(20)
+  authorName  String    @db.VarChar(255)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([cardId])
+  @@map("space_card_comments")
+}

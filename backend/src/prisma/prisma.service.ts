@@ -58,6 +58,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get emailNotificationSentLog() { return this.client.emailNotificationSentLog }
   get emailNotificationConfigLog() { return this.client.emailNotificationConfigLog }
   get calendarEvent() { return this.client.calendarEvent }
+  get space() { return (this.client as any).space }
+  get spaceColumn() { return (this.client as any).spaceColumn }
+  get spaceCard() { return (this.client as any).spaceCard }
+  get spaceCardChecklist() { return (this.client as any).spaceCardChecklist }
+  get spaceCardAttachment() { return (this.client as any).spaceCardAttachment }
+  get spaceCardComment() { return (this.client as any).spaceCardComment }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

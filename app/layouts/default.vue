@@ -215,6 +215,12 @@ const links = computed<NavigationMenuItem[]>(() => [
     onSelect: () => { open.value = false },
   },
   {
+    label: 'Space',
+    icon: 'i-lucide-kanban',
+    to: '/spaces',
+    onSelect: () => { open.value = false },
+  },
+  {
     label: 'Dokumen Karyawan',
     icon: 'i-lucide-file-badge',
     defaultOpen: true,
