@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "8084a8cdf7f4c177a6eedbb9c3118736b784d4fd",
-    "indexed_at": "2026-08-05T12:37:13Z",
+    "commit": "dcbd52fffe7fbdfa61ec3dc73c11d23fe2dcb549",
+    "indexed_at": "2026-08-06T02:35:37Z",
     "project": "E-Github-aplikasi-karyawan-kokarsi",
-    "nodes": 2525,
-    "edges": 4584,
+    "nodes": 2540,
+    "edges": 4630,
     "original_size": 7274496,
-    "compressed_size": 1087872,
+    "compressed_size": 1085508,
     "compression_level": 3
 }

@@ -25,8 +25,15 @@ function fromCalDate(c: CalendarDate | null): string {
 const startDateCal = shallowRef<CalendarDate | null>(null)
 const endDateCal   = shallowRef<CalendarDate | null>(null)
 
-watch(startDateCal, val => { form.startDate = fromCalDate(val) })
-watch(endDateCal,   val => { form.endDate   = fromCalDate(val) })
+// Sync CalendarDate → form string
+// Saat mode create, endDate ikuti startDate otomatis
+watch(startDateCal, val => {
+  form.startDate = fromCalDate(val)
+  if (formMode.value === 'create' && val) {
+    endDateCal.value = val
+  }
+})
+watch(endDateCal, val => { form.endDate = fromCalDate(val) })
 
 // ── TimePicker state ────────────────────────────────────────────────────────
 function toTime(s: string): Time | null {
@@ -769,7 +776,7 @@ function openItem(item: CalendarItem) {
                 {{ startDateCal ? dfLong.format(startDateCal.toDate(getLocalTimeZone())) : 'Pilih tanggal mulai' }}
               </UButton>
               <template #content>
-                <UCalendar v-model="startDateCal" class="p-2" />
+                <CalendarPicker v-model="startDateCal" />
               </template>
             </UPopover>
           </UFormField>
@@ -785,7 +792,7 @@ function openItem(item: CalendarItem) {
                 {{ endDateCal ? dfLong.format(endDateCal.toDate(getLocalTimeZone())) : 'Pilih tanggal selesai' }}
               </UButton>
               <template #content>
-                <UCalendar v-model="endDateCal" class="p-2" />
+                <CalendarPicker v-model="endDateCal" />
               </template>
             </UPopover>
           </UFormField>
