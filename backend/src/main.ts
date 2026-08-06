@@ -11,6 +11,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule) as any
 
   app.use(cookieParser())
+  app.use(require('express').json({ limit: '25mb' }))
+  app.use(require('express').urlencoded({ limit: '25mb', extended: true }))
   app.setGlobalPrefix('api')
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
   app.enableCors({ origin: 'http://localhost:3000', credentials: true })

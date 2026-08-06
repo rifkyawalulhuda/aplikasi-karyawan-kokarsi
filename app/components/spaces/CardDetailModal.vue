@@ -110,6 +110,11 @@ const attLinkName = ref('')
 const attLinkUrl = ref('')
 const attLinkOpen = ref(false)
 const uploadingAtt = ref(false)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+
+function triggerFileUpload() {
+  fileInputRef.value?.click()
+}
 
 async function uploadAttFile(e: Event) {
   const input = e.target as HTMLInputElement
@@ -119,12 +124,19 @@ async function uploadAttFile(e: Event) {
   try {
     const fd = new FormData()
     fd.append('file', file)
-    await $fetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/attachments`, {
-      method: 'POST', body: fd, credentials: 'include',
+    // Use native fetch — $fetch serializes FormData as JSON which breaks multipart upload
+    const res = await fetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/attachments`, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.message ?? `Upload gagal (${res.status})`)
+    }
     refresh()
   } catch (err: any) {
-    toast.add({ title: 'Gagal upload', description: err?.data?.message ?? 'Error', color: 'error' })
+    toast.add({ title: 'Gagal upload', description: err?.message ?? 'Error', color: 'error' })
   } finally {
     uploadingAtt.value = false
     input.value = ''
@@ -138,6 +150,23 @@ async function addAttLink() {
   })
   attLinkName.value = ''; attLinkUrl.value = ''; attLinkOpen.value = false
   refresh()
+}
+
+function getFileUrl(att: SpaceCardAttachment): string {
+  if (att.type === 'LINK') return att.url
+  const url = att.url.startsWith('/') ? att.url : `/${att.url}`
+  return url
+}
+
+function getFileIcon(att: SpaceCardAttachment): string {
+  if (att.type === 'LINK') return 'i-lucide-link'
+  const ext = att.name.split('.').pop()?.toLowerCase() ?? ''
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext)) return 'i-lucide-image'
+  if (['pdf'].includes(ext)) return 'i-lucide-file-text'
+  if (['doc', 'docx'].includes(ext)) return 'i-lucide-file-type'
+  if (['xls', 'xlsx'].includes(ext)) return 'i-lucide-table'
+  if (['zip', 'rar', '7z'].includes(ext)) return 'i-lucide-archive'
+  return 'i-lucide-file'
 }
 
 async function deleteAtt(attId: number) {
@@ -312,10 +341,20 @@ const currentPriority = computed(() =>
               Lampiran
             </div>
             <div class="flex gap-1.5">
-              <label class="cursor-pointer">
-                <input type="file" class="hidden" @change="uploadAttFile" />
-                <UButton tag="span" label="Upload" size="xs" color="neutral" variant="outline" :loading="uploadingAtt" />
-              </label>
+              <input
+                ref="fileInputRef"
+                type="file"
+                class="hidden"
+                @change="uploadAttFile"
+              />
+              <UButton
+                label="Upload"
+                size="xs"
+                color="neutral"
+                variant="outline"
+                :loading="uploadingAtt"
+                @click="triggerFileUpload"
+              />
               <UButton label="Tambah Link" size="xs" color="neutral" variant="outline" @click="attLinkOpen = !attLinkOpen" />
             </div>
           </div>
@@ -335,15 +374,37 @@ const currentPriority = computed(() =>
               :key="att.id"
               class="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-elevated/50"
             >
-              <UIcon :name="att.type === 'LINK' ? 'i-lucide-link' : 'i-lucide-file'" class="size-4 text-muted shrink-0" />
+              <UIcon :name="getFileIcon(att)" class="size-4 text-muted shrink-0" />
+              <!-- LINK type: open in new tab -->
               <a
                 v-if="att.type === 'LINK'"
                 :href="att.url"
                 target="_blank"
+                rel="noopener noreferrer"
                 class="flex-1 truncate text-sm text-primary hover:underline"
               >{{ att.name }}</a>
-              <span v-else class="flex-1 truncate text-sm text-highlighted">{{ att.name }}</span>
-              <span v-if="att.size" class="text-xs text-muted">{{ (att.size / 1024).toFixed(0) }}KB</span>
+              <!-- FILE type: download link -->
+              <a
+                v-else
+                :href="getFileUrl(att)"
+                :download="att.name"
+                target="_blank"
+                class="flex-1 truncate text-sm text-primary hover:underline"
+              >{{ att.name }}</a>
+              <span v-if="att.size" class="shrink-0 text-xs text-muted">
+                {{ att.size < 1024 * 1024 ? `${(att.size / 1024).toFixed(0)}KB` : `${(att.size / 1024 / 1024).toFixed(1)}MB` }}
+              </span>
+              <UButton
+                icon="i-lucide-download"
+                variant="ghost"
+                color="neutral"
+                size="xs"
+                :href="getFileUrl(att)"
+                :download="att.type === 'FILE' ? att.name : undefined"
+                :target="att.type === 'LINK' ? '_blank' : undefined"
+                tag="a"
+                aria-label="Download"
+              />
               <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" @click="deleteAtt(att.id)" />
             </div>
           </div>
