@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { useEditor, EditorContent } from '@tiptap/vue-3'
+import { Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: string
   placeholder?: string
   editable?: boolean
   memberMap?: Record<number, string>
-}>()
+}>(), {
+  editable: true,
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -25,31 +27,48 @@ function parseContent(value: string) {
   }
 }
 
-const editor = useEditor({
-  extensions: [
-    StarterKit,
-    Placeholder.configure({
-      placeholder: props.placeholder ?? 'Mulai menulis...',
-    }),
-    Typography,
-  ],
-  content: parseContent(props.modelValue),
-  editable: props.editable ?? true,
-  onUpdate: ({ editor }) => {
-    emit('update:modelValue', JSON.stringify(editor.getJSON()))
-  },
+// Referensi untuk node DOM editor (manual mount — lebih reliable untuk Nuxt/modal)
+const editorEl = ref<HTMLElement | null>(null)
+const editor = shallowRef<Editor | null>(null)
+
+onMounted(() => {
+  if (!editorEl.value) return
+  editor.value = new Editor({
+    element: editorEl.value,
+    extensions: [
+      StarterKit,
+      Placeholder.configure({
+        placeholder: props.placeholder ?? 'Mulai menulis...',
+      }),
+      Typography,
+    ],
+    content: parseContent(props.modelValue),
+    editable: props.editable ?? true,
+    onCreate: () => {
+      // Pastikan content sudah ter-render setelah artisan siap
+      const ed = editor.value
+      if (ed && props.modelValue) {
+        ed.commands.setContent(parseContent(props.modelValue), false)
+      }
+    },
+    onUpdate: ({ editor }) => {
+      emit('update:modelValue', JSON.stringify(editor.getJSON()))
+    },
+  })
 })
 
-// Sync external value changes - improved handling for race condition
+onBeforeUnmount(() => {
+  editor.value?.destroy()
+  editor.value = null
+})
+
+// Sync content dari parent saat berubah
 watch(() => props.modelValue, (val) => {
-  if (!editor.value) return
-  const current = JSON.stringify(editor.value.getJSON())
+  const ed = editor.value
+  if (!ed) return
+  const current = JSON.stringify(ed.getJSON())
   if (current !== val) {
-    // Use setTimeout untuk hindari race condition saat sync cepat
-    setTimeout(() => {
-      if (!editor.value) return
-      editor.value.commands.setContent(parseContent(val), false)
-    }, 10)
+    ed.commands.setContent(parseContent(val), false)
   }
 })
 
@@ -57,8 +76,6 @@ watch(() => props.modelValue, (val) => {
 watch(() => props.editable, (val) => {
   editor.value?.setEditable(val ?? true)
 })
-
-onBeforeUnmount(() => editor.value?.destroy())
 
 // Toolbar actions
 const tools = [
@@ -99,9 +116,9 @@ const tools = [
       </template>
     </div>
 
-    <!-- Editor content -->
-    <EditorContent
-      :editor="editor"
+    <!-- Editor content (manual mount) -->
+    <div
+      ref="editorEl"
       class="tiptap-content min-h-[200px] flex-1 px-4 py-3"
     />
   </div>

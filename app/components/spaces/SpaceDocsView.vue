@@ -5,8 +5,10 @@ const props = defineProps<{
   spaceId: number
 }>()
 
+const router = useRouter()
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { confirmActionToast } = useConfirmActionToast()
 
 const { data: docs, refresh, pending } = useFetch<SpaceDocument[]>(
   () => `/api/spaces/${props.spaceId}/documents`,
@@ -69,8 +71,28 @@ const editorTitle = ref('')
 const editorContent = ref('')
 const editorEmoji = ref('📄')
 const editorLoading = ref(false)
-const autoSaveStatus = ref<'idle' | 'saving' | 'saved'>('idle')
+
+// State baru untuk smart save
+type DocStatus = 'idle' | 'dirty' | 'saving' | 'saved'
+const docStatus = ref<DocStatus>('idle')
+const lastSavedAt = ref<Date | null>(null)
+const isHydrating = ref(false)
+const isNavigatingToFullPage = ref(false)
+
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+
+// Composable untuk word/char count
+const { wordCount, charCount } = useDocStats(editorContent)
+
+// Computed untuk status
+const hasUnsavedChanges = computed(() => docStatus.value === 'dirty')
+const isSaving = computed(() => docStatus.value === 'saving')
+
+// Format timestamp
+function formatTime(date: Date | null): string {
+  if (!date) return ''
+  return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
 
 async function openDoc(doc: SpaceDocument) {
   editorDocId.value = doc.id
@@ -78,6 +100,9 @@ async function openDoc(doc: SpaceDocument) {
   editorEmoji.value = doc.emoji ?? '📄'
   editorOpen.value = true
   editorLoading.value = true
+  isHydrating.value = true
+  docStatus.value = 'idle'
+  lastSavedAt.value = null
 
   try {
     const full = await $fetch<SpaceDocument>(
@@ -85,11 +110,19 @@ async function openDoc(doc: SpaceDocument) {
       { credentials: 'include' }
     )
     editorContent.value = full.content ?? JSON.stringify({ type: 'doc', content: [] })
+    // Set lastSavedAt dari updatedAt dokumen
+    if (full.updatedAt) {
+      lastSavedAt.value = new Date(full.updatedAt)
+    }
   } catch (e: any) {
     toast.add({ title: 'Gagal memuat dokumen', color: 'error' })
     editorOpen.value = false
   } finally {
     editorLoading.value = false
+    // Delay reset hydrating agar watch tidak trigger
+    nextTick(() => {
+      isHydrating.value = false
+    })
   }
 }
 
@@ -100,21 +133,47 @@ function closeEditor() {
   editorContent.value = ''
   editorTitle.value = ''
   editorEmoji.value = '📄'
-  autoSaveStatus.value = 'idle'
+  docStatus.value = 'idle'
+  lastSavedAt.value = null
   refresh()
 }
 
-// Auto-save on changes
+// Konfirmasi tutup saat ada perubahan belum disimpan
+function handleCloseEditor() {
+  // Skip jika sedang navigasi ke full-page
+  if (isNavigatingToFullPage.value) {
+    isNavigatingToFullPage.value = false
+    return
+  }
+  
+  if (hasUnsavedChanges.value) {
+    confirmActionToast({
+      title: 'Perubahan Belum Disimpan',
+      description: 'Ada perubahan yang belum disimpan. Buang perubahan?',
+      icon: 'i-lucide-alert-triangle',
+      color: 'warning',
+      confirmLabel: 'Buang Perubahan',
+      confirmColor: 'error',
+      onConfirm: () => {
+        closeEditor()
+      },
+    })
+  } else {
+    closeEditor()
+  }
+}
+
+// Auto-save on changes dengan guard hydrating
 watch([editorTitle, editorContent, editorEmoji], () => {
-  if (!editorDocId.value || editorLoading.value) return
-  autoSaveStatus.value = 'idle'
+  if (!editorDocId.value || editorLoading.value || isHydrating.value) return
+  docStatus.value = 'dirty'
   if (saveTimer) clearTimeout(saveTimer)
   saveTimer = setTimeout(saveDoc, 1500)
 })
 
 async function saveDoc() {
   if (!editorDocId.value) return
-  autoSaveStatus.value = 'saving'
+  docStatus.value = 'saving'
   try {
     await $fetch(`/api/spaces/${props.spaceId}/documents/${editorDocId.value}`, {
       method: 'PUT',
@@ -125,13 +184,62 @@ async function saveDoc() {
       },
       credentials: 'include',
     })
-    autoSaveStatus.value = 'saved'
-    setTimeout(() => { autoSaveStatus.value = 'idle' }, 2000)
+    lastSavedAt.value = new Date()
+    docStatus.value = 'saved'
   } catch {
-    autoSaveStatus.value = 'idle'
+    docStatus.value = 'dirty'
     toast.add({ title: 'Gagal menyimpan', color: 'error' })
   }
 }
+
+// Simpan langsung (untuk tombol & Ctrl+S)
+function saveNow() {
+  if (!hasUnsavedChanges.value) return
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  saveDoc()
+}
+
+// Buka di halaman penuh (auto-save dulu jika ada perubahan)
+async function openFullPage() {
+  const docId = editorDocId.value
+  const spaceId = props.spaceId
+  if (!docId) return
+  
+  // Auto-save jika ada perubahan belum disimpan
+  if (hasUnsavedChanges.value) {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+    await saveDoc()
+  }
+  
+  // Set flag agar handleCloseEditor tidak memproses
+  isNavigatingToFullPage.value = true
+  editorOpen.value = false
+  
+  // Route flat: /spaces/[id]-docs-[docId]
+  await navigateTo(`/spaces/${spaceId}-docs-${docId}`)
+}
+
+// Keyboard shortcut Ctrl/Cmd+S
+function handleKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault()
+    saveNow()
+  }
+}
+
+// Pasang/lepas listener keyboard saat modal open/close
+watch(editorOpen, (open) => {
+  if (open) {
+    window.addEventListener('keydown', handleKeyDown)
+  } else {
+    window.removeEventListener('keydown', handleKeyDown)
+  }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+  if (saveTimer) clearTimeout(saveTimer)
+})
 
 function formatDate(d: string) {
   return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -213,18 +321,18 @@ function formatDate(d: string) {
     </div>
   </div>
 
-  <!-- Inline Document Editor Modal -->
+  <!-- Inline Document Editor Modal (Notion-style) -->
   <UModal
     v-model:open="editorOpen"
-    :ui="{ content: 'max-w-4xl w-full' }"
+    :ui="{ content: 'max-w-5xl w-full' }"
     :title="editorTitle || 'Untitled'"
-    @update:open="(v) => { if (!v) closeEditor() }"
+    @update:open="(v) => { if (!v) handleCloseEditor() }"
   >
     <template #header>
       <div class="flex flex-1 items-center gap-3 min-w-0 pr-8">
         <!-- Emoji picker -->
         <UPopover :content="{ side: 'bottom', align: 'start' }">
-          <button type="button" class="flex size-8 shrink-0 items-center justify-center rounded-lg text-xl hover:bg-elevated transition-colors">
+          <button type="button" class="flex size-10 shrink-0 items-center justify-center rounded-lg text-2xl hover:bg-elevated transition-colors">
             {{ editorEmoji }}
           </button>
           <template #content>
@@ -237,25 +345,25 @@ function formatDate(d: string) {
           </template>
         </UPopover>
 
-        <!-- Editable title -->
+        <!-- Editable title (larger, Notion-style) -->
         <input
           v-model="editorTitle"
-          class="flex-1 min-w-0 bg-transparent text-base font-semibold text-highlighted outline-none placeholder:text-muted truncate"
+          class="flex-1 min-w-0 bg-transparent text-lg font-semibold text-highlighted outline-none placeholder:text-muted truncate"
           placeholder="Untitled"
           @keydown.enter.prevent
         />
 
-        <!-- Auto-save status -->
-        <div class="flex items-center gap-1.5 text-xs text-muted shrink-0">
-          <template v-if="autoSaveStatus === 'saving'">
-            <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />
-            <span>Menyimpan...</span>
-          </template>
-          <template v-else-if="autoSaveStatus === 'saved'">
-            <UIcon name="i-lucide-check" class="size-3.5 text-green-500" />
-            <span>Tersimpan</span>
-          </template>
-        </div>
+        <!-- Expand to full page -->
+        <UButton
+          icon="i-lucide-maximize-2"
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          class="shrink-0"
+          title="Buka halaman penuh"
+          aria-label="Buka halaman penuh"
+          @click.stop="openFullPage"
+        />
       </div>
     </template>
 
@@ -265,14 +373,66 @@ function formatDate(d: string) {
         <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-muted" />
       </div>
 
-      <!-- Editor -->
-      <div v-else class="min-h-[60vh]">
+      <!-- Editor (centered, Notion-style) -->
+      <div v-else class="mx-auto max-w-3xl px-4 py-2">
         <SpacesTiptapEditor
-          :key="editorDocId"
+          :key="editorDocId ?? 'new'"
           v-model="editorContent"
           placeholder="Mulai menulis dokumen..."
           class="min-h-[55vh]"
         />
+      </div>
+    </template>
+
+    <template #footer>
+      <div class="flex items-center justify-between w-full">
+        <!-- Left: Status + Stats -->
+        <div class="flex items-center gap-3 text-xs text-muted" aria-live="polite">
+          <!-- Status indicator -->
+          <div class="flex items-center gap-1.5">
+            <template v-if="docStatus === 'saving'">
+              <UIcon name="i-lucide-loader-circle" class="size-3.5 animate-spin" />
+              <span>Menyimpan...</span>
+            </template>
+            <template v-else-if="docStatus === 'dirty'">
+              <UIcon name="i-lucide-circle-dot" class="size-3.5 text-amber-500" />
+              <span class="text-amber-600 dark:text-amber-400">Perubahan belum disimpan</span>
+            </template>
+            <template v-else-if="docStatus === 'saved' || lastSavedAt">
+              <UIcon name="i-lucide-check" class="size-3.5 text-green-500" />
+              <span>Tersimpan</span>
+              <span v-if="lastSavedAt" class="text-muted">• {{ formatTime(lastSavedAt) }}</span>
+            </template>
+          </div>
+
+          <!-- Word/char count -->
+          <div class="flex items-center gap-1.5 border-l border-default pl-3">
+            <span class="tabular-nums">{{ wordCount.toLocaleString('id-ID') }}</span>
+            <span>kata</span>
+            <span class="text-muted">·</span>
+            <span class="tabular-nums">{{ charCount.toLocaleString('id-ID') }}</span>
+            <span>karakter</span>
+          </div>
+        </div>
+
+        <!-- Right: Actions -->
+        <div class="flex items-center gap-2">
+          <UButton
+            label="Batal"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="handleCloseEditor"
+          />
+          <UButton
+            label="Simpan"
+            color="primary"
+            size="sm"
+            :disabled="!hasUnsavedChanges"
+            :loading="isSaving"
+            @click="saveNow"
+          />
+        </div>
       </div>
     </template>
   </UModal>
