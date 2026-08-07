@@ -47,6 +47,7 @@ watch(() => props.modelValue, (val) => {
   if (current !== val) {
     // Use setTimeout untuk hindari race condition saat sync cepat
     setTimeout(() => {
+      if (!editor.value) return
       editor.value.commands.setContent(parseContent(val), false)
     }, 10)
   }

@@ -97,6 +97,9 @@ function closeEditor() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   editorOpen.value = false
   editorDocId.value = null
+  editorContent.value = ''
+  editorTitle.value = ''
+  editorEmoji.value = '📄'
   autoSaveStatus.value = 'idle'
   refresh()
 }
@@ -265,6 +268,7 @@ function formatDate(d: string) {
       <!-- Editor -->
       <div v-else class="min-h-[60vh]">
         <SpacesTiptapEditor
+          :key="editorDocId"
           v-model="editorContent"
           placeholder="Mulai menulis dokumen..."
           class="min-h-[55vh]"
