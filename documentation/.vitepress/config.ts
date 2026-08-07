@@ -56,6 +56,8 @@ export default defineConfig({
             { text: 'Kontrak Customer/Vendor', link: '/panduan-pengguna/kontrak-vendor' },
             { text: 'Legal Koperasi', link: '/panduan-pengguna/legal-koperasi' },
             { text: 'Akte Dokumen', link: '/panduan-pengguna/akte-dokumen' },
+            { text: 'Kalender', link: '/panduan-pengguna/kalender' },
+            { text: 'Space', link: '/panduan-pengguna/space' },
             { text: 'Notifikasi', link: '/panduan-pengguna/notifikasi' },
             { text: 'Pengaturan', link: '/panduan-pengguna/pengaturan' },
           ],
