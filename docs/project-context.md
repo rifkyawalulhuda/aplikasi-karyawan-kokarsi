@@ -1,8 +1,8 @@
-# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
+﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-08-06 (v24) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v26) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail.
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, simpan lokal `public/uploads/documents/`).
 
 ---
 
@@ -196,8 +196,8 @@ pm2 save                          # simpan daftar proses aktif
 | 113 | Kalender: Tampilan Month/Week/Day View -- toggle button di header, navigasi prev/today/next adaptif per view | `app/pages/kalender/index.vue` |
 | 114 | Kalender: Week View -- grid jam 00-23, all-day strip, blok event posisi CSS berbasis `startTime`+durasi, current time indicator, auto-scroll ke jam pertama agenda | `app/pages/kalender/index.vue` |
 | 115 | Kalender: Day View -- grid jam 24 jam, all-day strip, blok event penuh, info pembuat di blok event langsung | `app/pages/kalender/index.vue` |
-| 116 | Kalender: Tooltip popup di Week/Day View -- klik item → floating tooltip dengan judul/waktu/lokasi/deskripsi/pembuat, tombol Edit & Hapus, animasi transisi, backdrop tutup | `app/pages/kalender/index.vue` |
-| 117 | Kalender: Double-click tanggal di Month View → pindah ke Day View untuk tanggal itu | `app/pages/kalender/index.vue` |
+| 116 | Kalender: Tooltip popup di Week/Day View -- klik item â†’ floating tooltip dengan judul/waktu/lokasi/deskripsi/pembuat, tombol Edit & Hapus, animasi transisi, backdrop tutup | `app/pages/kalender/index.vue` |
+| 117 | Kalender: Double-click tanggal di Month View â†’ pindah ke Day View untuk tanggal itu | `app/pages/kalender/index.vue` |
 | 118 | Kalender: `confirmDeleteToast` untuk hapus agenda -- ganti native `confirm()` dengan toast konfirmasi yang konsisten | `app/pages/kalender/index.vue`, `app/composables/useConfirmDeleteToast.ts` |
 | 119 | Bug fix Kalender: 401 SSR auth -- `$fetch` diganti `requestFetch` (useRequestFetch) agar cookie diteruskan saat SSR | `app/pages/kalender/index.vue` |
 | 120 | Bug fix Kalender: form Tambah/Edit tumpang tindih -- `openCreate` dan `openEdit` set `selectedDate = null` sebelum buka form | `app/pages/kalender/index.vue` |
@@ -205,21 +205,25 @@ pm2 save                          # simpan daftar proses aktif
 | 122 | Bug fix Kalender: `overlaps()` di service memiliki 4 parameter tapi hanya pakai 2 -- hapus parameter tidak terpakai | `backend/src/calendar/calendar.service.ts` |
 | 123 | Bug fix Kalender: `UpdateGeneralSettingsDto` tidak punya field `agendaNotificationMorningHour` -- NestJS strip field sebelum sampai service, setting jam selalu kembali ke default | `backend/src/settings/settings.controller.ts` |
 
-| 124 | Modul Space Phase 1 � Kanban Board: CRUD Space + kolom + card, drag & drop native HTML5, template kolom preset (Simple/Dev/Bug/HR/Custom), member management, SSE real-time per-Space | `app/pages/spaces/`, `app/components/spaces/`, `backend/src/spaces/`, `server/api/spaces/` |
-| 125 | Space: Card detail lengkap � checklist, attachment (upload file + link), komentar, priority, due date, assignee, label, cover color | `app/components/spaces/CardDetailModal.vue` |
-| 126 | Space: KanbanCard redesign modern � cover bar, priority pill berwarna, assignee initials (dari memberMap), description preview, checklist inline progress bar, overdue pulsing indicator, hover lift+ring | `app/components/spaces/KanbanCard.vue` |
-| 127 | Space: List View � tabel semua cards dengan sort/filter/grouping (grouped by column / flat), sorted by title/priority/due/created/updated | `app/components/spaces/ListView.vue`, `app/components/spaces/ListCardRow.vue` |
-| 128 | Space: Announcement/Pinned Notes � area pengumuman di atas board, collapsible, pin/unpin, edit inline | `app/components/spaces/SpaceAnnouncement.vue`, `app/components/spaces/SpaceAnnouncementBar.vue` |
-| 129 | Space: Dokumen � CRUD dokumen bersama dengan Tiptap rich text editor (bold/italic/heading/list/blockquote/code), auto-save 1.5 detik, emoji picker, editor dibuka sebagai inline modal | `app/components/spaces/TiptapEditor.client.vue`, `app/components/spaces/SpaceDocsView.vue` |
-| 130 | Space: Notifikasi in-app � card assign, @mention di komentar, due date H-1, card pindah kolom ? kategori `SPACE` di bell existing | `backend/src/spaces/space-notification.service.ts` |
+| 124 | Modul Space Phase 1 ï¿½ Kanban Board: CRUD Space + kolom + card, drag & drop native HTML5, template kolom preset (Simple/Dev/Bug/HR/Custom), member management, SSE real-time per-Space | `app/pages/spaces/`, `app/components/spaces/`, `backend/src/spaces/`, `server/api/spaces/` |
+| 125 | Space: Card detail lengkap ï¿½ checklist, attachment (upload file + link), komentar, priority, due date, assignee, label, cover color | `app/components/spaces/CardDetailModal.vue` |
+| 126 | Space: KanbanCard redesign modern ï¿½ cover bar, priority pill berwarna, assignee initials (dari memberMap), description preview, checklist inline progress bar, overdue pulsing indicator, hover lift+ring | `app/components/spaces/KanbanCard.vue` |
+| 127 | Space: List View ï¿½ tabel semua cards dengan sort/filter/grouping (grouped by column / flat), sorted by title/priority/due/created/updated | `app/components/spaces/ListView.vue`, `app/components/spaces/ListCardRow.vue` |
+| 128 | Space: Announcement/Pinned Notes ï¿½ area pengumuman di atas board, collapsible, pin/unpin, edit inline | `app/components/spaces/SpaceAnnouncement.vue`, `app/components/spaces/SpaceAnnouncementBar.vue` |
+| 129 | Space: Dokumen ï¿½ CRUD dokumen bersama dengan Tiptap rich text editor (bold/italic/heading/list/blockquote/code), auto-save 1.5 detik, emoji picker, editor dibuka sebagai inline modal | `app/components/spaces/TiptapEditor.client.vue`, `app/components/spaces/SpaceDocsView.vue` |
+| 130 | Space: Notifikasi in-app ï¿½ card assign, @mention di komentar, due date H-1, card pindah kolom ? kategori `SPACE` di bell existing | `backend/src/spaces/space-notification.service.ts` |
 | 131 | Space: View toggle Board/List/Docs di header + Announcement Bar di semua view | `app/pages/spaces/[id].vue` |
-| 132 | Space: Kelola Member � modal tambah/hapus member per Space | `app/components/spaces/SpaceMemberModal.vue` |
-| 133 | Space Phase 2: Prisma schema � `SpaceAnnouncement`, `SpaceDocument`, `NotificationCategory.SPACE` | `backend/prisma/schema.prisma` |
-| 134 | Bug fix Space: drag & drop card � HTML5 DnD `setData()` wajib dipanggil di dragstart, kolom sebagai drop target langsung (bukan slot-based), optimistic UI update | `app/components/spaces/KanbanBoard.vue` |
-| 135 | Bug fix Space: Tiptap SSE hydration mismatch � rename `TiptapEditor.vue` ? `TiptapEditor.client.vue` agar hanya render di browser | `app/components/spaces/TiptapEditor.client.vue` |
-| 136 | Bug fix Space: Document editor blank � standalone `[docId].vue` route konflik dengan nested routing Nuxt 4, fix: inline modal editor di `SpaceDocsView.vue`, hapus standalone page files | `app/components/spaces/SpaceDocsView.vue` |
-| 137 | Bug fix Space: `AddMemberDto` tidak punya validator � `memberId` tiba sebagai string, `{ push: undefined }` gagal Prisma; fix: tambah `@IsInt()` + `@Type(() => Number)` + build array baru | `backend/src/spaces/spaces.controller.ts`, `backend/src/spaces/spaces.service.ts` |
-| 138 | Bug fix Space: Announcement dropdown tidak tampil � `hidden group-hover:flex` CSS broken, fix: hapus class `hidden`, dropdown selalu visible | `app/components/spaces/SpaceAnnouncement.vue` |
+| 132 | Space: Kelola Member ï¿½ modal tambah/hapus member per Space | `app/components/spaces/SpaceMemberModal.vue` |
+| 133 | Space Phase 2: Prisma schema ï¿½ `SpaceAnnouncement`, `SpaceDocument`, `NotificationCategory.SPACE` | `backend/prisma/schema.prisma` |
+| 134 | Bug fix Space: drag & drop card ï¿½ HTML5 DnD `setData()` wajib dipanggil di dragstart, kolom sebagai drop target langsung (bukan slot-based), optimistic UI update | `app/components/spaces/KanbanBoard.vue` |
+| 135 | Bug fix Space: Tiptap SSE hydration mismatch ï¿½ rename `TiptapEditor.vue` ? `TiptapEditor.client.vue` agar hanya render di browser | `app/components/spaces/TiptapEditor.client.vue` |
+| 136 | Bug fix Space: Document editor blank ï¿½ standalone `[docId].vue` route konflik dengan nested routing Nuxt 4, fix: inline modal editor di `SpaceDocsView.vue`, hapus standalone page files | `app/components/spaces/SpaceDocsView.vue` |
+| 137 | Bug fix Space: `AddMemberDto` tidak punya validator ï¿½ `memberId` tiba sebagai string, `{ push: undefined }` gagal Prisma; fix: tambah `@IsInt()` + `@Type(() => Number)` + build array baru | `backend/src/spaces/spaces.controller.ts`, `backend/src/spaces/spaces.service.ts` |
+| 138 | Bug fix Space: Announcement dropdown tidak tampil ï¿½ `hidden group-hover:flex` CSS broken, fix: hapus class `hidden`, dropdown selalu visible | `app/components/spaces/SpaceAnnouncement.vue` |
+| 139 | Space Dokumen: UI/UX Notion-style + Tombol Save cerdas (dirty/saving/saved/idle), footer status + word/char count + timestamp "Tersimpan ï¿½ HH:mm", Ctrl/Cmd+S, konfirmasi tutup saat unsaved changes, auto-save 1.5s tetap jalan, `max-w-5xl` modal + editor `max-w-3xl`, `max-w` lega untuk full-page | `app/components/spaces/SpaceDocsView.vue`, `app/pages/spaces/[id]-docs-[docId].vue`, `app/composables/useDocStats.ts` |
+| 140 | Space Dokumen: Tombol "Buka halaman penuh" (expand) di header modal editor `<` auto-save dulu jika dirty, navigasi ke route full-page `/spaces/[id]-docs-[docId]` | `app/components/spaces/SpaceDocsView.vue` |
+| 141 | Space Dokumen: Route full-page editor flat `/spaces/[id]-docs-[docId]` (fix konflik nested routing Nuxt 4 tanpa `<NuxtPage />` di parent) + smart save + navbar status & tombol Simpan + onBeforeRouteLeave/beforeunload unsaved confirm | `app/pages/spaces/[id]-docs-[docId].vue` |
+| 142 | Space Dokumen: Upload gambar di Tiptap editor (toolbar button + drag & drop + paste clipboard + URL eksternal), simpan ke `public/uploads/documents/` via endpoint lokal, max 5MB, semua format gambar, alt text, validasi MIME | `app/components/spaces/TiptapEditor.client.vue`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `nuxt.config.ts` |
 ## Arsitektur
 
 ```
@@ -369,6 +373,10 @@ app/
     settings/master-data.vue  # Master data
     settings/contract-templates.vue # Master template kontrak
     settings/users.vue        # Master user
+    spaces/
+      index.vue              # List Space
+      [id].vue               # Detail Space (Board/List/Docs + modal editor)
+      [id]-docs-[docId].vue  # Editor dokumen full-page (route flat)
     login.vue              # Login
   components/
     PdfViewer.client.vue   # Preview PDF via PDF.js canvas render
@@ -384,10 +392,17 @@ app/
       RenewContractModal.vue # Perpanjang kontrak dari parent (renewal flow)
     warning-letters/
       AddModal.vue           # Form SP + eskalasi rule
+    spaces/
+      SpaceDocsView.vue      # Dokumen Space - modal editor + smart save + expand full-page
+      TiptapEditor.client.vue # Tiptap rich editor + upload gambar
+      KanbanBoard.vue        # Board drag & drop
+      KanbanCard.vue         # Card design
+      ListView.vue, ListCardRow.vue, SpaceAnnouncement*.vue, CardDetailModal.vue, SpaceMemberModal.vue
   composables/
     useConfirmDeleteToast.ts   # Toast konfirmasi hapus reusable
     useConfirmActionToast.ts   # Toast konfirmasi aksi generic
     useExport.ts             # Export Excel & PDF (semua data + NIK/Alamat/TmptLahir)
+    useDocStats.ts           # Word/char count dari content ProseMirror (dipakai SpaceDocsView + full-page)
   types/
     index.d.ts              # Employee, Contract, dll
 
@@ -427,6 +442,17 @@ server/
     lookups/
       [resource].ts         # GET list + POST
       [resource]/[id].ts    # PUT + DELETE
+    spaces/
+      index.ts              # GET list + POST
+      [id].ts               # GET detail + PUT + DELETE
+      [id]/documents/index.ts  # GET list dokumen + POST
+      [id]/documents/[docId].ts  # GET detail + PUT + DELETE
+      [id]/documents/upload-image.post.ts # POST upload gambar editor (local public/uploads/documents)
+      [id]/members.post.ts  # POST tambah member
+      [id]/columns.post.ts, [id]/columns/[colId].ts, [id]/columns/reorder.post.ts
+      [id]/cards/*          # card CRUD + move + checklist + attachment + komentar
+      [id]/stream.get.ts    # SSE per-Space
+      [id]/announcements.*  # CRUD pengumuman
     users.ts                # CRUD master user list/create
     users/[id].ts           # CRUD master user detail
     dashboard-stats.ts      # GET dashboard stats (proxy ke backend)
@@ -657,6 +683,8 @@ backend/
 | GET | `/api/spaces/:id/documents/:docId` | Detail dokumen (dengan content) |
 | PUT | `/api/spaces/:id/documents/:docId` | Update dokumen (auto-save) |
 | DELETE | `/api/spaces/:id/documents/:docId` | Hapus dokumen |
+| POST | `/api/spaces/:id/documents/upload-image` | Upload gambar editor (multipart field `image`, max 5MB, image/*, simpan ke `public/uploads/documents/`) |
+| GET | `/uploads/documents/:filename` | Serve gambar dokumen (statis dari public/uploads) |
 
 ---
 
@@ -706,7 +734,8 @@ routeRules: {
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     }
   },
-  '/uploads/**': { proxy: 'http://localhost:3001/uploads/**' }
+  // '/uploads/documents/**' dilayani dari public/uploads (lokal, gambar editor dokumen)
+  '/uploads/**': { proxy: 'http://localhost:3001/uploads/**' }  // upload lain -> backend
 }
 ```
 CORS tidak lagi wildcard ? gunakan env `NUXT_ALLOWED_ORIGINS` untuk production (contoh: `https://kokarsi-sankyu.web.id`).
@@ -788,25 +817,28 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Notifikasi kontrak pesan "X hari lagi" tidak update saat tanggal diubah lagi | Bug: `@@unique([sourceType, sourceId, triggerDay=-1])` menyebabkan P2002 di-skip, notifikasi lama tidak diupdate. Fix: ganti `create` dengan `upsert` di catch-all pass |
 | Edit kontrak error "Bad Request" tanpa detail pesan | Bug: Nitro proxy `server/api/contracts/[id].ts` menggunakan `statusMessage: res.statusText` ("Bad Request") bukan pesan custom dari NestJS body. Fix: ekstrak `(res._data as any)?.message` dan letakkan di `data.message` agar `e?.data?.message` di frontend bisa membaca pesan yang benar |
 | Klik notifikasi KONTRAK_KARYAWAN mengarah ke halaman list kontrak bukan karyawan spesifik | Bug: deeplink disimpan sebagai `/kontrak?status=AKAN_HABIS`. Fix: ubah deeplink ke `/karyawan/${c.employee.id}` dengan tambah `id: true` ke employee select di `generateNotifications()` |
-| Akte Dokumen create error P2022 "column nomorAkte does not exist" | Bug: migration SQL menggunakan camelCase column names tanpa quotes � PostgreSQL lowercased jadi `nomorakte`. Fix: tambah `@map()` di schema (e.g. `nomorAkte @map("nomor_akte")`), drop dan recreate tabel dengan snake_case columns |
-| Edit Akte Dokumen tidak populate data existing | Bug: `watch(() => props.open, ...)` tidak menyertakan `{ immediate: true }` � saat komponen di-mount dengan `open = true` (via `v-if="editTarget"`), watcher tidak trigger. Fix: tambah `{ immediate: true }` ke watch options |
+| Akte Dokumen create error P2022 "column nomorAkte does not exist" | Bug: migration SQL menggunakan camelCase column names tanpa quotes ï¿½ PostgreSQL lowercased jadi `nomorakte`. Fix: tambah `@map()` di schema (e.g. `nomorAkte @map("nomor_akte")`), drop dan recreate tabel dengan snake_case columns |
+| Edit Akte Dokumen tidak populate data existing | Bug: `watch(() => props.open, ...)` tidak menyertakan `{ immediate: true }` ï¿½ saat komponen di-mount dengan `open = true` (via `v-if="editTarget"`), watcher tidak trigger. Fix: tambah `{ immediate: true }` ke watch options |
 | Pagination Akte Dokumen mepet dengan table (tidak konsisten dengan halaman lain) | Bug: container pagination menggunakan `mt-4 px-1` tanpa border separator, dan `UTable` tidak memakai `:ui` styling. Fix: ganti ke `border-t border-default pt-4 mt-auto`, tambah `:ui` prop ke `UTable`, pakai `:loading` bawaan UTable, ganti `:page` ? `:default-page` di UPagination |
-| VitePress GitHub Pages CI/CD gagal � pnpm esbuild build scripts diblokir | Bug: `pnpm@11.10.0` memblokir esbuild build scripts secara global. Fix: ganti ke `npm install` + `npx vitepress build` di workflow agar tidak terpengaruh pnpm workspace/build-scripts policy |
+| VitePress GitHub Pages CI/CD gagal ï¿½ pnpm esbuild build scripts diblokir | Bug: `pnpm@11.10.0` memblokir esbuild build scripts secara global. Fix: ganti ke `npm install` + `npx vitepress build` di workflow agar tidak terpengaruh pnpm workspace/build-scripts policy |
 | Halaman dokumentasi 404 di `https://rifkyawalulhuda.github.io/aplikasi-karyawan-kokarsi/` | Bug: VitePress mencari `index.md` di root `documentation/` tapi konten ada di `documentation/id/`. Fix: tambah `srcDir: 'id'` di `config.ts` dan hapus semua prefix `/id/` dari nav/sidebar links |
-| Header dokumentasi menampilkan dua "Kokarsi" � broken image alt + siteTitle | Bug: `logo: { alt: 'Kokarsi' }` file tidak ada ? broken image menampilkan alt text + `siteTitle: 'Kokarsi Docs'`. Fix: hapus `logo` property, ubah `siteTitle` ke `'Kokarsi'` |
+| Header dokumentasi menampilkan dua "Kokarsi" ï¿½ broken image alt + siteTitle | Bug: `logo: { alt: 'Kokarsi' }` file tidak ada ? broken image menampilkan alt text + `siteTitle: 'Kokarsi Docs'`. Fix: hapus `logo` property, ubah `siteTitle` ke `'Kokarsi'` |
 | File upload user ter-track di git repo | Bug: `backend/uploads/` tidak ada di `.gitignore` sehingga PDF/gambar user ter-commit ke repo. Fix: tambah `backend/uploads/` ke `.gitignore`, untrack semua file via `git rm -r --cached backend/uploads/`, buat `.gitkeep` di setiap subfolder |
 | File fisik tidak terhapus saat data dihapus dari sistem | Bug: semua service `remove()` hanya delete DB record tanpa hapus file fisik di `uploads/`. Fix: (A) tambah `deleteUploadedFile()` di setiap `remove()` method via shared utility `file-cleanup.util.ts`; (B) tambah cron `cleanupOrphanedFiles()` setiap jam 02:00 WIB yang scan disk vs DB dan hapus orphaned files |
 | Log cron notifikasi spam di backend setiap 5 menit | Bug: `refreshNotifications()` dan intermediate step logs di `syncContractStatuses()` terlalu verbose. Fix: hapus `logger.debug` dari `refreshNotifications()`, downgrade step headers ke `logger.debug`, notifikasi result hanya log jika `created > 0 || resolved > 0` |
-| Kalender 401 Unauthorized saat SSR | `$fetch` di `loadItems`/`saveEvent`/`removeEvent` tidak meneruskan cookie saat SSR � ganti dengan `useRequestFetch()` yang sudah di-inisialisasi di script setup |
-| Form Tambah/Edit Agenda tumpang tindih dengan modal detail | `openCreate()` dan `openEdit()` tidak menutup modal detail sebelum membuka form � fix: set `selectedDate.value = null` di kedua fungsi sebelum `formOpen.value = true` |
-| Baris terakhir kalender terpotong di bulan yang berakhir Minggu | `rangeEnd` formula `(7 - date.getDay()) % 7` menghasilkan 0 jika hari = Minggu � fix: `day === 0 ? 7 : (7 - day)` |
-| Pengaturan jam notifikasi agenda selalu kembali ke jam 7 | `UpdateGeneralSettingsDto` tidak punya field `agendaNotificationMorningHour` � NestJS ValidationPipe men-strip field yang tidak terdaftar sebelum sampai ke service |
-| `CalendarService.overlaps()` membingungkan | Method memiliki 4 parameter tapi hanya menggunakan 2 (`rangeStart`, `rangeEnd`) � hapus 2 parameter tidak terpakai (`startDate`, `endDate`) |
-| Space: drag & drop card tidak berfungsi | HTML5 DnD membutuhkan `e.dataTransfer.setData()` di `dragstart` agar `drop` event bisa fire. Arsitektur slot-based (drag handler di dalam slot KanbanColumn) memblokir event propagation � fix: render card langsung di KanbanBoard, kolom sebagai drop target langsung |
-| Space: TiptapEditor hydration mismatch | Tiptap adalah browser-only library (`useEditor` tidak bisa jalan di SSR) � fix: rename `TiptapEditor.vue` ? `TiptapEditor.client.vue` agar Nuxt skip SSR rendering |
-| Space: Document editor blank setelah navigasi | `router.push('/spaces/:id/docs/:docId')` konflik dengan Nuxt 4 nested routing (`[id].vue` + `[id]/docs/[docId].vue`) � fix: gunakan inline modal editor di `SpaceDocsView.vue`, hapus standalone page files |
-| Space: AddMember error 500 "Prisma Int[] push undefined" | `AddMemberDto` tidak punya `@IsInt()/@Type(() => Number)` validator, `memberId` tiba sebagai string � fix: tambah validator + build array baru daripada `{ push: value }` |
-| Space: Announcement dropdown tidak muncul | CSS `hidden group-hover:flex` tidak bekerja karena parent tidak punya class `group` dan scoped CSS terbatas � fix: hapus class `hidden`, dropdown trigger selalu visible |
-| Space: Document loading forever setelah click | `await useFetch` di top-level page memblokir SSR navigation � fix: hapus `await`, tambah loading/error state di template |
+| Kalender 401 Unauthorized saat SSR | `$fetch` di `loadItems`/`saveEvent`/`removeEvent` tidak meneruskan cookie saat SSR ï¿½ ganti dengan `useRequestFetch()` yang sudah di-inisialisasi di script setup |
+| Form Tambah/Edit Agenda tumpang tindih dengan modal detail | `openCreate()` dan `openEdit()` tidak menutup modal detail sebelum membuka form ï¿½ fix: set `selectedDate.value = null` di kedua fungsi sebelum `formOpen.value = true` |
+| Baris terakhir kalender terpotong di bulan yang berakhir Minggu | `rangeEnd` formula `(7 - date.getDay()) % 7` menghasilkan 0 jika hari = Minggu ï¿½ fix: `day === 0 ? 7 : (7 - day)` |
+| Pengaturan jam notifikasi agenda selalu kembali ke jam 7 | `UpdateGeneralSettingsDto` tidak punya field `agendaNotificationMorningHour` ï¿½ NestJS ValidationPipe men-strip field yang tidak terdaftar sebelum sampai ke service |
+| `CalendarService.overlaps()` membingungkan | Method memiliki 4 parameter tapi hanya menggunakan 2 (`rangeStart`, `rangeEnd`) ï¿½ hapus 2 parameter tidak terpakai (`startDate`, `endDate`) |
+| Space: drag & drop card tidak berfungsi | HTML5 DnD membutuhkan `e.dataTransfer.setData()` di `dragstart` agar `drop` event bisa fire. Arsitektur slot-based (drag handler di dalam slot KanbanColumn) memblokir event propagation ï¿½ fix: render card langsung di KanbanBoard, kolom sebagai drop target langsung |
+| Space: TiptapEditor hydration mismatch | Tiptap adalah browser-only library (`useEditor` tidak bisa jalan di SSR) ï¿½ fix: rename `TiptapEditor.vue` ? `TiptapEditor.client.vue` agar Nuxt skip SSR rendering |
+| Space: Document editor blank setelah navigasi | `router.push('/spaces/:id/docs/:docId')` konflik dengan Nuxt 4 nested routing (`[id].vue` + `[id]/docs/[docId].vue`) ï¿½ fix: gunakan inline modal editor di `SpaceDocsView.vue`, hapus standalone page files |
+| Space: AddMember error 500 "Prisma Int[] push undefined" | `AddMemberDto` tidak punya `@IsInt()/@Type(() => Number)` validator, `memberId` tiba sebagai string ï¿½ fix: tambah validator + build array baru daripada `{ push: value }` |
+| Space: Announcement dropdown tidak muncul | CSS `hidden group-hover:flex` tidak bekerja karena parent tidak punya class `group` dan scoped CSS terbatas ï¿½ fix: hapus class `hidden`, dropdown trigger selalu visible |
+| Space: Document loading forever setelah click | `await useFetch` di top-level page memblokir SSR navigation ï¿½ fix: hapus `await`, tambah loading/error state di template |
 | Space: Semua route Space 404 setelah restart backend | Backend perlu di-restart setelah `SpaceAnnouncementsController` dan `SpaceDocumentsController` ditambahkan ke `SpacesModule` |
-| `SpacesTiptapEditorClient` tidak dikenali sebagai component | Nuxt 4 strip `.client` suffix dari nama auto-import � `TiptapEditor.client.vue` ? `SpacesTiptapEditor`, bukan `SpacesTiptapEditorClient` |
+| `SpacesTiptapEditorClient` tidak dikenali sebagai component | Nuxt 4 strip `.client` suffix dari nama auto-import ï¿½ `TiptapEditor.client.vue` ? `SpacesTiptapEditor`, bukan `SpacesTiptapEditorClient` |
+| Space: Tombol Expand modal tidak membuka halaman full-page | Route `/spaces/:id/docs/:docId` nested tidak bisa tampil karena parent `[id].vue` tidak render `<NuxtPage />`. Fix: pakai route flat `/spaces/[id]-docs-[docId].vue` |
+| Space: Upload gambar editor 404 "Cannot POST .../upload-image" | Endpoint backend `/spaces/:id/documents/upload-image` tidak ada. Fix: gunakan handler lokal di `server/api/spaces/[id]/documents/upload-image.post.ts` yang simpan ke `public/uploads/documents/` |
+| Space: Upload gambar gagal "field image tidak ditemukan" | Pastikan `FormData` memakai nama field `image`, bukan nama lain |
