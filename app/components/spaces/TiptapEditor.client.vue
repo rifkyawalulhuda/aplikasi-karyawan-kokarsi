@@ -40,12 +40,15 @@ const editor = useEditor({
   },
 })
 
-// Sync external value changes
+// Sync external value changes - improved handling for race condition
 watch(() => props.modelValue, (val) => {
   if (!editor.value) return
   const current = JSON.stringify(editor.value.getJSON())
   if (current !== val) {
-    editor.value.commands.setContent(parseContent(val), false)
+    // Use setTimeout untuk hindari race condition saat sync cepat
+    setTimeout(() => {
+      editor.value.commands.setContent(parseContent(val), false)
+    }, 10)
   }
 })
 

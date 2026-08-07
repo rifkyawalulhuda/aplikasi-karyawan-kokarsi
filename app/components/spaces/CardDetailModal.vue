@@ -45,6 +45,20 @@ function startEditDesc() {
   editDesc.value = cardDetail.value?.description ?? ''
   editingDesc.value = true
 }
+
+// Reset edit state saat card berubah atau modal ditutup
+watch(() => props.card.id, () => {
+  editingDesc.value = false
+  editDesc.value = ''
+  editingTitle.value = false
+})
+watch(() => props.open, (val) => {
+  if (!val) {
+    editingDesc.value = false
+    editDesc.value = ''
+    editingTitle.value = false
+  }
+})
 async function saveDesc() {
   await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}`, {
     method: 'PUT', body: { description: editDesc.value }

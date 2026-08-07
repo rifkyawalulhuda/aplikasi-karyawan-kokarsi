@@ -76,7 +76,6 @@ async function openDoc(doc: SpaceDocument) {
   editorDocId.value = doc.id
   editorTitle.value = doc.title
   editorEmoji.value = doc.emoji ?? '📄'
-  editorContent.value = ''
   editorOpen.value = true
   editorLoading.value = true
 
