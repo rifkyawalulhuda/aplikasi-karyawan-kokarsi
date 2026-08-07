@@ -1,33 +1,23 @@
+import { defineEventHandler, getRouterParam, getCookie, getHeader, proxyRequest, createError } from 'h3'
 
-export default eventHandler(async (event) => {
+export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
   const cardId = getRouterParam(event, 'cardId')
   const token = getCookie(event, 'auth_token') ?? getHeader(event, 'authorization') ?? ''
-  const authHeader: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
 
-  const contentType = getHeader(event, 'content-type') ?? ''
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers.Authorization = 'Bearer ' + token
+  }
 
   try {
-    if (contentType.includes('multipart/form-data')) {
-      // Forward multipart/form-data as raw stream — do NOT parse with readBody
-      const rawBody = await readRawBody(event)
-      const res = await $fetch.raw(`${BACKEND}/spaces/${id}/cards/${cardId}/attachments`, {
-        method: 'POST',
-        headers: {
-          ...authHeader,
-          'content-type': contentType,
-        },
-        body: rawBody,
-      })
-      return res._data
-    }
-
-    // JSON body (link attachment)
-    return await $fetch(`${BACKEND}/spaces/${id}/cards/${cardId}/attachments`, {
-      method: 'POST',
-      headers: authHeader,
-      body: await readBody(event),
-    })
+    // proxyRequest men-streaming body mentah (multipart, JSON, dst) tanpa decode ke text,
+    // sehingga file binary (gambar/PDF) tidak ter-corrupt saat diteruskan ke backend.
+    return await proxyRequest(
+      event,
+      `${BACKEND}/spaces/${id}/cards/${cardId}/attachments`,
+      { headers }
+    )
   } catch (error: any) {
     throw createError({
       statusCode: error?.statusCode ?? error?.response?.status ?? 500,
