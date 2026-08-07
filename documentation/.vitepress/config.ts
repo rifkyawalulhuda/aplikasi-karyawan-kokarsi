@@ -68,7 +68,9 @@ export default defineConfig({
           text: 'Dokumentasi Teknis',
           items: [
             { text: 'Arsitektur Sistem', link: '/teknis/arsitektur-sistem' },
+            { text: 'Arsitektur SSE Space', link: '/teknis/arsitektur-sse-space' },
             { text: 'Database Schema', link: '/teknis/database-schema' },
+            { text: 'Database Schema: Kalender & Space', link: '/teknis/database-schema-kalender-space' },
             { text: 'Autentikasi', link: '/teknis/autentikasi' },
             { text: 'Environment Variables', link: '/teknis/environment-variables' },
           ],
