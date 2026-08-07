@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v26) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v27) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, simpan lokal `public/uploads/documents/`).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production).
 
 ---
 
@@ -223,7 +223,9 @@ pm2 save                          # simpan daftar proses aktif
 | 139 | Space Dokumen: UI/UX Notion-style + Tombol Save cerdas (dirty/saving/saved/idle), footer status + word/char count + timestamp "Tersimpan ï¿½ HH:mm", Ctrl/Cmd+S, konfirmasi tutup saat unsaved changes, auto-save 1.5s tetap jalan, `max-w-5xl` modal + editor `max-w-3xl`, `max-w` lega untuk full-page | `app/components/spaces/SpaceDocsView.vue`, `app/pages/spaces/[id]-docs-[docId].vue`, `app/composables/useDocStats.ts` |
 | 140 | Space Dokumen: Tombol "Buka halaman penuh" (expand) di header modal editor `<` auto-save dulu jika dirty, navigasi ke route full-page `/spaces/[id]-docs-[docId]` | `app/components/spaces/SpaceDocsView.vue` |
 | 141 | Space Dokumen: Route full-page editor flat `/spaces/[id]-docs-[docId]` (fix konflik nested routing Nuxt 4 tanpa `<NuxtPage />` di parent) + smart save + navbar status & tombol Simpan + onBeforeRouteLeave/beforeunload unsaved confirm | `app/pages/spaces/[id]-docs-[docId].vue` |
-| 142 | Space Dokumen: Upload gambar di Tiptap editor (toolbar button + drag & drop + paste clipboard + URL eksternal), simpan ke `public/uploads/documents/` via endpoint lokal, max 5MB, semua format gambar, alt text, validasi MIME | `app/components/spaces/TiptapEditor.client.vue`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `nuxt.config.ts` |
+| 142 | Space Dokumen: Upload gambar di Tiptap editor (toolbar button + drag & drop + paste clipboard + URL eksternal), simpan ke `backend/uploads/documents/` dan diserve via proxy `/uploads/**`, max 5MB, semua format gambar, alt text, validasi magic bytes | `app/components/spaces/TiptapEditor.client.vue`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `backend/src/spaces/space-documents.controller.ts`, `nuxt.config.ts` |
+| 143 | Fix Space: Upload attachment (gambar/PDF) di card Space corrupt � proxy memakai `readRawBody`+`$fetch.raw` yang mendecode body multipart binary jadi UTF-8 (byte non-ASCII -> U+FFFD). Fix: ganti ke `proxyRequest` (stream body mentah tanpa decode), konsisten dengan proxy upload lain | `server/api/spaces/[id]/cards/[cardId]/attachments.post.ts` |
+| 144 | Fix Space: Gambar dokumen tidak tampil di production (build). Penyebab: file disimpan di `public/uploads/documents/` tapi Nuxt prod hanya serve snapshot statis `.output/public/` (salinan saat build) sehingga file runtime tidak pernah ada -> 404. Fix: pindahkan penyimpanan ke backend `backend/uploads/documents/` (pola sama dgn foto/logo) via endpoint `upload-image` di `SpaceDocumentsController` + `proxyRequest`; hapus rule khusus `/uploads/documents/**` di nuxt.config | `backend/src/spaces/space-documents.controller.ts`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `nuxt.config.ts` |
 ## Arsitektur
 
 ```
@@ -447,7 +449,7 @@ server/
       [id].ts               # GET detail + PUT + DELETE
       [id]/documents/index.ts  # GET list dokumen + POST
       [id]/documents/[docId].ts  # GET detail + PUT + DELETE
-      [id]/documents/upload-image.post.ts # POST upload gambar editor (local public/uploads/documents)
+      [id]/documents/upload-image.post.ts # POST proxy upload gambar editor -> backend (stream, tanpa corrupt)
       [id]/members.post.ts  # POST tambah member
       [id]/columns.post.ts, [id]/columns/[colId].ts, [id]/columns/reorder.post.ts
       [id]/cards/*          # card CRUD + move + checklist + attachment + komentar
@@ -476,6 +478,10 @@ backend/
     employee-documents/     # CRUD Sertifikasi & Ijin karyawan + upload file + compute status
     users/                  # Master user (MasterAdmin + UserAccount)
     auth/                   # Login, JWT strategy, local strategy
+    spaces/                 # Space: board, cards, columns, dokumen, announcement, SSE, upload-image
+      space-documents.controller.ts # CRUD dokumen + POST upload-image (magic bytes)
+      space-cards.controller.ts     # CRUD card + attachment upload (diskStorage)
+      space-sse.service.ts          # SSE per-Space (rooms Map + broadcast)
     prisma/                 # PrismaService (singleton pool)
     shared/
       date-utils.ts         # startOfDay, endOfDay, DAY_MS ? dipakai contracts & cron
@@ -497,6 +503,9 @@ backend/
       contracts/scanned/      # Dokumen kontrak scan (upload manual)
       employee-docs/          # File dokumen sertifikasi & ijin karyawan
       warning-letters/        # File dokumen SP yang diupload (PDF/gambar)
+      spaces/                 # Attachment card Space (file upload)
+      documents/              # Gambar yang diupload di editor dokumen Space
+      settings/               # Logo organisasi + gambar login
 ```
 
 ---
@@ -683,7 +692,7 @@ backend/
 | GET | `/api/spaces/:id/documents/:docId` | Detail dokumen (dengan content) |
 | PUT | `/api/spaces/:id/documents/:docId` | Update dokumen (auto-save) |
 | DELETE | `/api/spaces/:id/documents/:docId` | Hapus dokumen |
-| POST | `/api/spaces/:id/documents/upload-image` | Upload gambar editor (multipart field `image`, max 5MB, image/*, simpan ke `public/uploads/documents/`) |
+| POST | `/api/spaces/:id/documents/upload-image` | Upload gambar editor (multipart field `image`, max 5MB, image/*, disimpan backend `uploads/documents/`, serve via `/uploads/**` proxy) |
 | GET | `/uploads/documents/:filename` | Serve gambar dokumen (statis dari public/uploads) |
 
 ---
@@ -840,5 +849,7 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Space: Semua route Space 404 setelah restart backend | Backend perlu di-restart setelah `SpaceAnnouncementsController` dan `SpaceDocumentsController` ditambahkan ke `SpacesModule` |
 | `SpacesTiptapEditorClient` tidak dikenali sebagai component | Nuxt 4 strip `.client` suffix dari nama auto-import ï¿½ `TiptapEditor.client.vue` ? `SpacesTiptapEditor`, bukan `SpacesTiptapEditorClient` |
 | Space: Tombol Expand modal tidak membuka halaman full-page | Route `/spaces/:id/docs/:docId` nested tidak bisa tampil karena parent `[id].vue` tidak render `<NuxtPage />`. Fix: pakai route flat `/spaces/[id]-docs-[docId].vue` |
-| Space: Upload gambar editor 404 "Cannot POST .../upload-image" | Endpoint backend `/spaces/:id/documents/upload-image` tidak ada. Fix: gunakan handler lokal di `server/api/spaces/[id]/documents/upload-image.post.ts` yang simpan ke `public/uploads/documents/` |
+| Space: Upload gambar editor 404 "Cannot POST .../upload-image" | Endpoint backend `/spaces/:id/documents/upload-image` harus ada di `space-documents.controller.ts`; Nitro proxy `upload-image.post.ts` memakai `proxyRequest` ke backend. Pastikan backend di-compile & restart |
+| Space: Gambar dokumen tidak tampil di production | Jangan simpan di `public/uploads/documents/` (Nuxt prod hanya serve snapshot `.output/public/`). Simpan di backend `uploads/documents/` via endpoint `upload-image`, akses via proxy `/uploads/**` |
 | Space: Upload gambar gagal "field image tidak ditemukan" | Pastikan `FormData` memakai nama field `image`, bukan nama lain |
+
