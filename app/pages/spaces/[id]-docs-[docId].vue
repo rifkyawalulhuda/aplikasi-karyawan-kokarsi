@@ -227,8 +227,8 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
         <UButton label="Kembali" color="neutral" variant="outline" @click="router.push(`/spaces/${spaceId}`)" />
       </div>
 
-      <!-- Editor (Notion-style centered layout, wide for full-page desktop) -->
-      <div v-else-if="doc" class="mx-auto max-w-6xl px-6 py-8">
+      <!-- Editor (full-width for desktop) -->
+      <div v-else-if="doc" class="px-8 py-8 lg:px-12">
         <!-- Emoji + Title -->
         <div class="mb-6 flex items-start gap-4">
           <UPopover :content="{ side: 'bottom', align: 'start' }">
@@ -262,6 +262,7 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
         <!-- Rich text editor -->
         <SpacesTiptapEditor
           v-model="content"
+          :space-id="spaceId"
           placeholder="Mulai menulis dokumen..."
           class="min-h-[60vh]"
         />

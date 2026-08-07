@@ -34,6 +34,11 @@ export default defineNuxtConfig({
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       }
     },
+    // Serve local uploads from public/uploads
+    '/uploads/documents/**': {
+      // Local files served from public folder automatically
+    },
+    // Proxy other uploads to backend
     '/uploads/**': {
       proxy: 'http://localhost:3001/uploads/**'
     }

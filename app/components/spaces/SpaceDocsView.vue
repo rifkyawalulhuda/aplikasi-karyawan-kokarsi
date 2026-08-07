@@ -378,6 +378,7 @@ function formatDate(d: string) {
         <SpacesTiptapEditor
           :key="editorDocId ?? 'new'"
           v-model="editorContent"
+          :space-id="spaceId"
           placeholder="Mulai menulis dokumen..."
           class="min-h-[55vh]"
         />
