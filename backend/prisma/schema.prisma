@@ -57,6 +57,7 @@ model UserAccount {
   role      AdminRole @default(PENGELOLA_KOPERASI)
   username  String    @unique @db.VarChar(100)
   password  String    @db.VarChar(255)
+  photoUrl  String?   @db.VarChar(500)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -149,6 +150,7 @@ model MasterAdmin {
   fullName   String    @db.VarChar(255)
   password   String    @db.VarChar(255)
   role       AdminRole @default(ADMIN)
+  photoUrl   String?   @db.VarChar(500)
   employee   Employee  @relation(fields: [employeeNo], references: [employeeNo])
 
   @@map("master_admin")

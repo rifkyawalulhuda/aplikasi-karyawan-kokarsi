@@ -13,7 +13,9 @@ const { confirmActionToast } = useConfirmActionToast()
 const user = computed(() => ({
   name: auth.admin?.fullName ?? 'Master Admin',
   description: (auth.admin?.role ?? 'ADMIN') === 'PENGELOLA_KOPERASI' ? 'Pengelola Koperasi' : 'Admin',
-  avatar: { alt: auth.admin?.fullName ?? 'Master Admin' }
+  avatar: auth.admin?.photoUrl
+    ? { src: auth.admin.photoUrl, alt: auth.admin.fullName ?? 'Avatar' }
+    : { alt: auth.admin?.fullName ?? 'Master Admin' }
 }))
 
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']

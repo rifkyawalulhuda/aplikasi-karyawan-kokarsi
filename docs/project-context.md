@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v27) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v28) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production). **Upload Foto Profil user** (Admin & Pengelola): field `photoUrl`, endpoint `/api/auth/profile/photo`, tab Profil Akun + avatar UserMenu. **Favicon tab browser mengikuti logo** organisasi. **STOP.bat KeepPostgres** (stop tanpa mematikan PostgreSQL).
 
 ---
 
@@ -226,6 +226,9 @@ pm2 save                          # simpan daftar proses aktif
 | 142 | Space Dokumen: Upload gambar di Tiptap editor (toolbar button + drag & drop + paste clipboard + URL eksternal), simpan ke `backend/uploads/documents/` dan diserve via proxy `/uploads/**`, max 5MB, semua format gambar, alt text, validasi magic bytes | `app/components/spaces/TiptapEditor.client.vue`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `backend/src/spaces/space-documents.controller.ts`, `nuxt.config.ts` |
 | 143 | Fix Space: Upload attachment (gambar/PDF) di card Space corrupt � proxy memakai `readRawBody`+`$fetch.raw` yang mendecode body multipart binary jadi UTF-8 (byte non-ASCII -> U+FFFD). Fix: ganti ke `proxyRequest` (stream body mentah tanpa decode), konsisten dengan proxy upload lain | `server/api/spaces/[id]/cards/[cardId]/attachments.post.ts` |
 | 144 | Fix Space: Gambar dokumen tidak tampil di production (build). Penyebab: file disimpan di `public/uploads/documents/` tapi Nuxt prod hanya serve snapshot statis `.output/public/` (salinan saat build) sehingga file runtime tidak pernah ada -> 404. Fix: pindahkan penyimpanan ke backend `backend/uploads/documents/` (pola sama dgn foto/logo) via endpoint `upload-image` di `SpaceDocumentsController` + `proxyRequest`; hapus rule khusus `/uploads/documents/**` di nuxt.config | `backend/src/spaces/space-documents.controller.ts`, `server/api/spaces/[id]/documents/upload-image.post.ts`, `nuxt.config.ts` |
+| 145 | Upload Foto Profil user (Pengelola & Admin): field `photoUrl` di `MasterAdmin` + `UserAccount`, endpoint `POST/DELETE /api/auth/profile/photo` (diskStorage `uploads/profile-photos/`, max 2MB, magic bytes), login sertakan `photoUrl`, tab Profil Akun (preview bulat + Upload + Hapus + loading), avatar UserMenu pakai foto, cookie `auth_admin` diupdate via `setPhotoUrl` tanpa relogin | `backend/prisma/schema.prisma`, `backend/src/auth/auth.service.ts`, `backend/src/auth/auth.controller.ts`, `server/api/auth/profile/photo.post.ts`, `server/api/auth/profile/photo.delete.ts`, `app/pages/settings/index.vue`, `app/stores/auth.ts`, `app/components/UserMenu.vue` |
+| 146 | Favicon tab browser mengikuti logo organisasi (`appLogoUrl`) jika ada, fallback `/favicon.ico`; `rel="icon"` + `shortcut icon`, refetch settings setelah login (SPA) | `app/app.vue`, `app/composables/useAppSettings.ts` |
+| 147 | STOP.bat / `start.ps1 -Stop -KeepPostgres`: stop cloudflared + PM2 TANPA menghentikan PostgreSQL docker | `deploy/STOP.bat`, `deploy/start.ps1` |
 ## Arsitektur
 
 ```
@@ -411,6 +414,9 @@ app/
 server/
   api/
     auth/                   # Login, logout, me
+      login.post.ts         # Login (set cookie httpOnly)
+      profile/photo.post.ts   # POST upload foto profil (proxyRequest stream)
+      profile/photo.delete.ts # DELETE hapus foto profil
     employees/
       index.ts              # GET list + POST
       [id].ts               # GET detail + PUT + DELETE
@@ -506,6 +512,7 @@ backend/
       spaces/                 # Attachment card Space (file upload)
       documents/              # Gambar yang diupload di editor dokumen Space
       settings/               # Logo organisasi + gambar login
+      profile-photos/         # Foto profil user (Admin & Pengelola)
 ```
 
 ---
@@ -585,6 +592,29 @@ backend/
 - `organizationName` ? Nama Organisasi (tampil di sidebar header, default: "Kokarsi PT. Sankyu")
 - `appLogoUrl` ? Path logo organisasi (tampil di sidebar header, kosong = fallback huruf pertama)
 
+### MasterAdmin
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `id` | Int | Primary key |
+| `employeeNo` | String | Unique, akun ADMIN |
+| `fullName` | String | Nama lengkap |
+| `password` | String | Hash bcrypt |
+| `role` | Enum | ADMIN |
+| `photoUrl` | String? | Path foto profil (uploads/profile-photos/) |
+| `employee` | Relasi | FK via employeeNo |
+
+### UserAccount
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `id` | Int | Primary key |
+| `name` | String | Nama lengkap |
+| `nik` | String | Unique |
+| `email` | String | Unique |
+| `role` | Enum | ADMIN / PENGELOLA_KOPERASI |
+| `username` | String | Unique |
+| `password` | String | Hash bcrypt |
+| `photoUrl` | String? | Path foto profil (uploads/profile-photos/) |
+
 ---
 
 ## API Endpoints
@@ -593,6 +623,8 @@ backend/
 |--------|------|-----------|
 | POST | `/api/auth/login` | Login |
 | GET | `/api/auth/me` | Data user login |
+| POST | `/api/auth/profile/photo` | Upload foto profil (multipart field `photo`, max 2MB, image/*) |
+| DELETE | `/api/auth/profile/photo` | Hapus foto profil |
 | GET | `/api/employees` | List karyawan (pagination, search, filter) |
 | POST | `/api/employees` | Tambah karyawan |
 | GET | `/api/employees/:id` | Detail karyawan + kontrak |
@@ -852,4 +884,8 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Space: Upload gambar editor 404 "Cannot POST .../upload-image" | Endpoint backend `/spaces/:id/documents/upload-image` harus ada di `space-documents.controller.ts`; Nitro proxy `upload-image.post.ts` memakai `proxyRequest` ke backend. Pastikan backend di-compile & restart |
 | Space: Gambar dokumen tidak tampil di production | Jangan simpan di `public/uploads/documents/` (Nuxt prod hanya serve snapshot `.output/public/`). Simpan di backend `uploads/documents/` via endpoint `upload-image`, akses via proxy `/uploads/**` |
 | Space: Upload gambar gagal "field image tidak ditemukan" | Pastikan `FormData` memakai nama field `image`, bukan nama lain |
+| Foto profil tidak tampil setelah upload | Backend harus di-compile (`npx tsc`) + di-restart; upload via Nitro proxy `auth/profile/photo.post.ts` yang memakai `proxyRequest` (jangan `readBody` yang memecah binary) |
+| Foto profil upload 401/403 | Pastikan pengguna sudah login (cookie `auth_token` ada); endpoint `POST /api/auth/profile/photo` memakai guard `jwt` |
+| Foto profil piranti yang sudah login tidak berubah | Cookie `auth_admin` diupdate via `auth.setPhotoUrl()` di frontend; jika masih lama, logout + login ulang |
+
 

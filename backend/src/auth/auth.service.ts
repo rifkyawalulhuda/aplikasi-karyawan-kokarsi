@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
+import { existsSync, unlinkSync } from 'fs'
+import { join } from 'path'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bcrypt = require('bcrypt')
@@ -15,6 +17,7 @@ interface AuthenticatedUser {
   role: 'ADMIN' | 'PENGELOLA_KOPERASI'
   accountType: 'master_admin' | 'user_account'
   email?: string
+  photoUrl?: string | null
 }
 
 @Injectable()
@@ -57,7 +60,7 @@ export class AuthService {
     const payload = { sub: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email }
     return {
       access_token: this.jwt.sign(payload),
-      admin: { id: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email },
+      admin: { id: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email, photoUrl: admin.photoUrl ?? null },
     }
   }
 
@@ -78,5 +81,50 @@ export class AuthService {
     const hashed = await bcrypt.hash(newPassword, 10)
     await this.prisma.userAccount.update({ where: { id: userId }, data: { password: hashed } })
     return { message: 'Password berhasil diubah' }
+  }
+
+  async updateProfilePhoto(sub: number, kind: string, photoUrl: string) {
+    const previousUrl = await this.getProfilePhoto(sub, kind)
+    if (previousUrl && previousUrl !== photoUrl) {
+      const filePath = join(process.cwd(), previousUrl.replace(/^\//, ''))
+      if (existsSync(filePath)) {
+        try { unlinkSync(filePath) } catch { /* non-fatal */ }
+      }
+    }
+
+    if (kind === 'user_account') {
+      return this.prisma.userAccount.update({
+        where: { id: sub },
+        data: { photoUrl },
+        select: { id: true, photoUrl: true },
+      })
+    }
+    return this.prisma.masterAdmin.update({
+      where: { id: sub },
+      data: { photoUrl },
+      select: { id: true, photoUrl: true },
+    })
+  }
+
+  async clearProfilePhoto(sub: number, kind: string) {
+    if (kind === 'user_account') {
+      return this.prisma.userAccount.update({
+        where: { id: sub },
+        data: { photoUrl: null },
+        select: { id: true, photoUrl: true },
+      })
+    }
+    return this.prisma.masterAdmin.update({
+      where: { id: sub },
+      data: { photoUrl: null },
+      select: { id: true, photoUrl: true },
+    })
+  }
+
+  async getProfilePhoto(sub: number, kind: string): Promise<string | null> {
+    const row = kind === 'user_account'
+      ? await this.prisma.userAccount.findUnique({ where: { id: sub }, select: { photoUrl: true } })
+      : await this.prisma.masterAdmin.findUnique({ where: { id: sub }, select: { photoUrl: true } })
+    return row?.photoUrl ?? null
   }
 }

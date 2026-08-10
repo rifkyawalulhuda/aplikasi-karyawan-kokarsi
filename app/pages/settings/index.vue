@@ -342,6 +342,79 @@ async function saveGeneralSettings(event: FormSubmitEvent<GeneralSchema>) {
 type SettingsTab = 'general' | 'profile' | 'login-appearance' | 'email-config'
 const activeTab = ref<SettingsTab>('general')
 
+// Foto profil
+const uploadingProfilePhoto = ref(false)
+const deletingProfilePhoto = ref(false)
+const profilePhotoInput = ref<HTMLInputElement | null>(null)
+
+const profilePhotoUrl = computed(() => auth.admin?.photoUrl || '')
+
+function triggerProfilePhotoUpload() {
+  profilePhotoInput.value?.click()
+}
+
+async function onProfilePhotoSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (!file.type.startsWith('image/')) {
+    toast.add({ title: 'File harus berupa gambar', color: 'error' })
+    input.value = ''
+    return
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    toast.add({ title: 'Ukuran file maksimal 2MB', color: 'error' })
+    input.value = ''
+    return
+  }
+
+  uploadingProfilePhoto.value = true
+  try {
+    const fd = new FormData()
+    fd.append('photo', file)
+    // Native fetch — $fetch men-serialisasi FormData sebagai JSON yang memecah multipart
+    const res = await fetch('/api/auth/profile/photo', {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      throw new Error(err?.message ?? `Upload gagal (${res.status})`)
+    }
+    const data = await res.json()
+    auth.setPhotoUrl(data.photoUrl ?? null)
+    toast.add({ title: 'Foto profil diperbarui', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal upload foto', description: err?.message ?? 'Error', color: 'error' })
+  } finally {
+    uploadingProfilePhoto.value = false
+    input.value = ''
+  }
+}
+
+async function removeProfilePhoto() {
+  if (!profilePhotoUrl.value) return
+  deletingProfilePhoto.value = true
+  try {
+    await $fetch('/api/auth/profile/photo', { method: 'DELETE', credentials: 'include' })
+    auth.setPhotoUrl(null)
+    toast.add({ title: 'Foto profil dihapus', color: 'success' })
+  } catch (err: any) {
+    toast.add({ title: 'Gagal menghapus foto', description: err?.data?.message ?? 'Error', color: 'error' })
+  } finally {
+    deletingProfilePhoto.value = false
+  }
+}
+
+function profileInitials(): string {
+  const name = auth.admin?.fullName?.trim() ?? 'U'
+  const parts = name.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+  return (name[0] ?? 'U').toUpperCase()
+}
+
 const tabs = computed(() => [
   { key: 'general' as SettingsTab, label: 'Umum', icon: 'i-lucide-building-2' },
   { key: 'profile' as SettingsTab, label: 'Profil Akun', icon: 'i-lucide-user-cog' },
@@ -569,6 +642,66 @@ function onTabChange(key: SettingsTab) {
               <div class="flex items-center gap-2">
                 <UIcon name="i-lucide-user-cog" class="size-4 text-muted" />
                 <span class="font-semibold text-sm">Profil Akun</span>
+              </div>
+            </template>
+            <div class="flex items-center gap-6">
+              <!-- Avatar preview -->
+              <div class="relative shrink-0">
+                <div class="flex size-24 items-center justify-center overflow-hidden rounded-full bg-primary/10 ring-2 ring-default">
+                  <img
+                    v-if="profilePhotoUrl"
+                    :src="profilePhotoUrl"
+                    :alt="auth.admin?.fullName ?? 'Foto profil'"
+                    class="h-full w-full object-cover"
+                  />
+                  <span v-else class="text-3xl font-bold text-primary">{{ profileInitials() }}</span>
+                </div>
+              </div>
+
+              <!-- Buttons -->
+              <div class="space-y-3">
+                <div>
+                  <UButton
+                    label="Upload Foto"
+                    icon="i-lucide-upload"
+                    color="primary"
+                    size="sm"
+                    :loading="uploadingProfilePhoto"
+                    @click="triggerProfilePhotoUpload"
+                  />
+                  <input
+                    ref="profilePhotoInput"
+                    type="file"
+                    accept="image/*"
+                    class="hidden"
+                    :disabled="uploadingProfilePhoto"
+                    @change="onProfilePhotoSelected"
+                  />
+                </div>
+                <UButton
+                  v-if="profilePhotoUrl"
+                  label="Hapus Foto"
+                  icon="i-lucide-trash-2"
+                  color="error"
+                  variant="ghost"
+                  size="sm"
+                  :loading="deletingProfilePhoto"
+                  @click="removeProfilePhoto"
+                />
+                <p v-if="uploadingProfilePhoto" class="flex items-center gap-1 text-xs text-muted">
+                  <UIcon name="i-lucide-loader-circle" class="size-3 animate-spin" />
+                  Mengunggah...
+                </p>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-muted">Format gambar JPG, PNG, WebP, SVG. Maksimal 2MB.</p>
+          </UCard>
+
+          <UCard class="mt-4">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-id-card" class="size-4 text-muted" />
+                <span class="font-semibold text-sm">Data Login</span>
               </div>
             </template>
             <div class="space-y-4">
