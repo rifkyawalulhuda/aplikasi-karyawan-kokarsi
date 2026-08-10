@@ -5,9 +5,11 @@
 #   .\deploy\start.ps1                  - Start semua service (Docker mode)
 #   .\deploy\start.ps1 -Mode native     - Start semua service (PostgreSQL native)
 #   .\deploy\start.ps1 -Stop            - Stop semua service
+#   .\deploy\start.ps1 -Stop -KeepPostgres - Stop service TANPA menghentikan PostgreSQL
 
 param(
   [switch]$Stop,
+  [switch]$KeepPostgres,
   [ValidateSet("docker", "native")]
   [string]$Mode = "docker"
 )
@@ -28,8 +30,10 @@ if ($Stop) {
   pm2 delete kokarsi-frontend kokarsi-backend 2>$null
   Write-Host "  [ok] node processes stopped (PM2)"
 
-  # Stop Docker PostgreSQL (hanya jika mode docker)
-  if ($Mode -eq "docker") {
+  # Stop Docker PostgreSQL (kecuali diminta -KeepPostgres)
+  if ($KeepPostgres) {
+    Write-Host "  [skip] PostgreSQL container tetap berjalan (KeepPostgres)"
+  } elseif ($Mode -eq "docker") {
     docker compose -f (Join-Path $Root "docker-compose.db.yml") stop
     Write-Host "  [ok] PostgreSQL container stopped (data aman)"
   } else {
