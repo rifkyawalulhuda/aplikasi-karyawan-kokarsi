@@ -212,5 +212,61 @@ export function useExport() {
     return true
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel }
+  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel }
+
+  function toVendorContractRows(contracts: any[]) {
+    const docTypeLabel: Record<string, string> = {
+      DOKUMEN_KONTRAK: 'Kontrak',
+      DOKUMEN_PERJANJIAN: 'Perjanjian',
+      SURAT_PENAWARAN: 'Penawaran',
+      ADDENDUM: 'Addendum',
+      AMENDMENT: 'Amendment',
+      SURAT: 'Surat',
+    }
+    const statusLabel = (doc: any): string => {
+      if (doc.renewedTo) return 'Sudah Diperpanjang'
+      switch (doc.status) {
+        case 'AKTIF': return 'Aktif'
+        case 'AKAN_BERAKHIR': return 'Akan Berakhir'
+        case 'EXPIRED': return 'Expired'
+        case 'TIDAK_AKTIF': return 'Tidak Aktif'
+        default: return doc.status ?? '-'
+      }
+    }
+    return contracts.map((c, i) => ({
+      'No': i + 1,
+      'Kategori': c.category === 'CUSTOMER' ? 'Customer' : c.category === 'VENDOR' ? 'Vendor' : (c.category ?? '-'),
+      'Perusahaan': c.company?.name ?? '-',
+      'Nama Dokumen': c.documentName ?? '-',
+      'No. Dokumen': c.documentNumber ?? '-',
+      'Jenis': docTypeLabel[c.documentType] ?? c.documentType ?? '-',
+      'Tanggal Dibuat': fmt(c.createdDate),
+      'Perlu Perpanjangan': c.needsRenewal ? 'Ya' : 'Tidak',
+      'Tanggal Mulai': fmt(c.startDate),
+      'Tanggal Berakhir': fmt(c.endDate),
+      'Status': statusLabel(c),
+      'Lokasi': c.location ?? '-',
+      'Catatan': c.notes ?? '-',
+      'Mother Agreement': c.motherAgreement?.documentName ?? '-',
+    }))
+  }
+
+  function exportVendorContractsExcel(contracts: any[], year?: number, filename = 'kontrak-vendor') {
+    const filtered = year
+      ? contracts.filter(c => new Date(c.createdDate).getFullYear() === year)
+      : contracts
+    if (!filtered.length) return false
+    const rows = toVendorContractRows(filtered)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 10 }, { wch: 24 }, { wch: 30 }, { wch: 20 },
+      { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
+      { wch: 18 }, { wch: 20 }, { wch: 36 }, { wch: 30 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Kontrak Vendor')
+    const suffix = year ? `-${year}` : '-semua'
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
+    return true
+  }
 }
