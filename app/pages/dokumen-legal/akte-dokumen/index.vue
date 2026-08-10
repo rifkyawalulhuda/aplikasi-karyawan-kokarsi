@@ -11,6 +11,7 @@ const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { exportAkteDokumenExcel } = useExport()
 const table = useTemplateRef('table')
 
 // --- Types ---
@@ -103,6 +104,25 @@ function sortableHeader(label: string, key: string) {
     class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
     onClick: () => toggleSort(key),
   }, [h('span', label), h(UIcon, { name: icon, class: 'size-3.5 text-muted' })])
+}
+
+// --- Export ---
+const isExporting = ref(false)
+function handleExport() {
+  const data = filteredData.value
+  if (!data.length) {
+    toast.add({ title: 'Tidak ada data', description: 'Belum ada data Akte Dokumen untuk diekspor.', color: 'warning' })
+    return
+  }
+  isExporting.value = true
+  try {
+    exportAkteDokumenExcel(data)
+    toast.add({ title: 'Export berhasil', description: `${data.length} data berhasil diekspor ke Excel.`, color: 'success' })
+  } catch {
+    toast.add({ title: 'Export gagal', color: 'error' })
+  } finally {
+    isExporting.value = false
+  }
 }
 
 // --- Row Actions ---
@@ -215,6 +235,15 @@ onMounted(() => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UDropdownMenu
+            :items="[
+              [
+                { label: 'Export Excel', icon: 'i-lucide-file-spreadsheet', onSelect: () => handleExport() }
+              ]
+            ]"
+          >
+            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" :loading="isExporting" />
+          </UDropdownMenu>
           <UButton
             label="Tambah Akte"
             icon="i-lucide-plus"

@@ -212,7 +212,34 @@ export function useExport() {
     return true
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel, exportLegalKoperasiExcel }
+  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel, exportLegalKoperasiExcel, exportAkteDokumenExcel }
+
+  function toAkteDokumenRows(docs: any[]) {
+    return docs.map((d, i) => ({
+      'No': i + 1,
+      'Judul Akte': d.judulAkte ?? '-',
+      'Nomor Akte': d.nomorAkte ?? '-',
+      'Notaris': d.notaris ?? '-',
+      'Tanggal': fmt(d.tanggal),
+      'No. SK': d.nomorSk ?? '-',
+      'Tanggal SK': fmt(d.tanggalSk),
+      'Keterangan': d.keterangan ?? '-',
+    }))
+  }
+
+  function exportAkteDokumenExcel(docs: any[], filename = 'akte-dokumen') {
+    if (!docs.length) return false
+    const rows = toAkteDokumenRows(docs)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 32 }, { wch: 20 }, { wch: 24 },
+      { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Akte Dokumen')
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
 
   function toLegalKoperasiRows(docs: any[]) {
     const categoryLabel: Record<string, string> = {
