@@ -11,6 +11,7 @@ const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { exportLegalKoperasiExcel } = useExport()
 const table = useTemplateRef('table')
 
 // --- Types ---
@@ -145,6 +146,52 @@ const counts = computed(() => ({
   akanBerakhir: documents.value.filter(d => d.status === 'AKAN_BERAKHIR').length,
   expired: documents.value.filter(d => d.status === 'EXPIRED').length,
 }))
+
+// --- Export ---
+const currentYear = new Date().getFullYear()
+const exportModal = ref(false)
+const exportYear = ref<number | 'all'>(currentYear)
+
+const availableYears = computed(() => {
+  const years = new Set(
+    (documents.value ?? []).map((d: any) => new Date(d.documentDate).getFullYear())
+  )
+  years.add(currentYear)
+  return [...years].sort((a, b) => b - a)
+})
+
+const exportYearOptions = computed(() => [
+  { label: 'Semua Tahun', value: 'all' as const },
+  ...availableYears.value.map(y => ({ label: String(y), value: y })),
+])
+
+async function fetchAllForExport() {
+  const params: Record<string, string> = { page: '1', limit: '10000' }
+  if (searchQuery.value) params.search = searchQuery.value
+  if (categoryFilter.value !== 'all') params.category = categoryFilter.value
+  if (statusFilter.value !== 'all') params.status = statusFilter.value
+  const res = await $fetch<{ data: LegalKoperasi[]; total: number }>('/api/legal-koperasi', {
+    query: params,
+    credentials: 'include',
+  })
+  return res?.data ?? []
+}
+
+async function handleExport() {
+  try {
+    const all = await fetchAllForExport()
+    const year = exportYear.value === 'all' ? undefined : exportYear.value
+    const ok = exportLegalKoperasiExcel(all, year)
+    if (ok) {
+      toast.add({ title: 'Export berhasil', description: `Data legal koperasi${year ? ` tahun ${year}` : ''} berhasil diekspor.`, color: 'success' })
+      exportModal.value = false
+    } else {
+      toast.add({ title: 'Tidak ada data', description: `Tidak ada dokumen${year ? ` di tahun ${year}` : ''}.`, color: 'warning' })
+    }
+  } catch {
+    toast.add({ title: 'Export gagal', color: 'error' })
+  }
+}
 
 // --- Helpers ---
 function formatDate(date: string | null | undefined) {
@@ -389,6 +436,13 @@ onMounted(async () => {
         </template>
         <template #right>
           <UButton
+            label="Export"
+            icon="i-lucide-download"
+            color="neutral"
+            variant="subtle"
+            @click="exportModal = true"
+          />
+          <UButton
             label="Tambah Dokumen"
             icon="i-lucide-plus"
             color="primary"
@@ -491,6 +545,34 @@ onMounted(async () => {
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Modal Export -->
+  <UModal v-model:open="exportModal" title="Export Legal Koperasi" :ui="{ content: 'sm:max-w-sm w-full' }">
+    <template #body>
+      <div class="space-y-4 py-2">
+        <UFormField label="Pilih Tahun">
+          <USelect
+            v-model="exportYear"
+            :items="exportYearOptions"
+            value-key="value"
+            label-key="label"
+            class="w-full"
+          />
+        </UFormField>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <UButton label="Batal" color="neutral" variant="ghost" @click="exportModal = false" />
+        <UButton
+          label="Export Excel"
+          icon="i-lucide-file-spreadsheet"
+          color="primary"
+          @click="handleExport"
+        />
+      </div>
+    </template>
+  </UModal>
 
   <!-- Modal Tambah -->
   <LegalKoperasiFormModal

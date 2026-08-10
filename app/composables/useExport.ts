@@ -212,7 +212,61 @@ export function useExport() {
     return true
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel }
+  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel, exportLegalKoperasiExcel }
+
+  function toLegalKoperasiRows(docs: any[]) {
+    const categoryLabel: Record<string, string> = {
+      IZIN: 'Izin',
+      SERTIFIKAT: 'Sertifikat',
+      KEBIJAKAN: 'Kebijakan',
+      DOKUMEN_INTERNAL: 'Dok. Internal',
+      DOKUMEN_B3: 'Dok. B3',
+      LAIN_LAIN: 'Lain-lain',
+    }
+    const statusLabel = (doc: any): string => {
+      if (doc.renewedTo) return 'Sudah Diperpanjang'
+      switch (doc.status) {
+        case 'AKTIF': return 'Aktif'
+        case 'AKAN_BERAKHIR': return 'Akan Berakhir'
+        case 'EXPIRED': return 'Expired'
+        case 'TIDAK_AKTIF': return 'Tidak Aktif'
+        default: return doc.status ?? '-'
+      }
+    }
+    return docs.map((d, i) => ({
+      'No': i + 1,
+      'Kategori': categoryLabel[d.category] ?? d.category ?? '-',
+      'Nama Dokumen': d.documentName ?? '-',
+      'No. Dokumen': d.documentNumber ?? '-',
+      'Penerbit': d.publisher ?? '-',
+      'Tanggal Dokumen': fmt(d.documentDate),
+      'Perlu Perpanjangan': d.needsRenewal ? 'Ya' : 'Tidak',
+      'Tanggal Mulai': fmt(d.startDate),
+      'Tanggal Berakhir': fmt(d.endDate),
+      'Status': statusLabel(d),
+      'Lokasi': d.location ?? '-',
+      'Catatan': d.notes ?? '-',
+    }))
+  }
+
+  function exportLegalKoperasiExcel(docs: any[], year?: number, filename = 'legal-koperasi') {
+    const filtered = year
+      ? docs.filter(d => new Date(d.documentDate).getFullYear() === year)
+      : docs
+    if (!filtered.length) return false
+    const rows = toLegalKoperasiRows(filtered)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 16 }, { wch: 30 }, { wch: 20 },
+      { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
+      { wch: 18 }, { wch: 20 }, { wch: 36 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Legal Koperasi')
+    const suffix = year ? `-${year}` : '-semua'
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
+    return true
+  }
 
   function toVendorContractRows(contracts: any[]) {
     const docTypeLabel: Record<string, string> = {
