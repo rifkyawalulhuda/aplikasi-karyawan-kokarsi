@@ -26,11 +26,13 @@ export class SpaceNotificationService {
             severity: 'WARNING',
             title: 'Card Ditugaskan',
             message: `${actorName} menugaskan card "${cardTitle}" kepada kamu`,
-            sourceType: 'space_card_assign',
+            sourceType: `space_card_assign_${userId}`,
             sourceId: cardId,
             triggerDay: 0,
             deeplink: `/spaces/${spaceId}`,
             expiryDate: this.getExpiryDate(),
+            userId,
+            userType: 'user_account',
           },
         })
       } catch (e: any) {
@@ -38,10 +40,7 @@ export class SpaceNotificationService {
       }
     }
     try {
-      const count = await (this.notificationsService as any).prisma.notification.count({
-        where: { isRead: false, resolvedAt: null },
-      })
-      this.notificationsService.broadcast(count)
+      await this.notificationsService.broadcastUnreadToClients()
     } catch { /* non-fatal */ }
   }
 
@@ -55,11 +54,13 @@ export class SpaceNotificationService {
             severity: 'WARNING',
             title: `${actorName} menyebut kamu`,
             message: `Di card "${cardTitle}": ${commentPreview.slice(0, 100)}`,
-            sourceType: 'space_card_mention',
+            sourceType: `space_card_mention_${userId}`,
             sourceId: cardId,
             triggerDay: 0,
             deeplink: `/spaces/${spaceId}`,
             expiryDate: this.getExpiryDate(),
+            userId,
+            userType: 'user_account',
           },
         })
       } catch (e: any) {
@@ -67,10 +68,7 @@ export class SpaceNotificationService {
       }
     }
     try {
-      const count = await (this.notificationsService as any).prisma.notification.count({
-        where: { isRead: false, resolvedAt: null },
-      })
-      this.notificationsService.broadcast(count)
+      await this.notificationsService.broadcastUnreadToClients()
     } catch { /* non-fatal */ }
   }
 
@@ -84,11 +82,13 @@ export class SpaceNotificationService {
             severity: 'WARNING',
             title: 'Card Dipindahkan',
             message: `${actorName} memindahkan card "${cardTitle}" ke kolom "${toColumnName}"`,
-            sourceType: 'space_card_moved',
+            sourceType: `space_card_moved_${userId}`,
             sourceId: cardId,
             triggerDay: 0,
             deeplink: `/spaces/${spaceId}`,
             expiryDate: this.getExpiryDate(),
+            userId,
+            userType: 'user_account',
           },
         })
       } catch (e: any) {
@@ -96,10 +96,7 @@ export class SpaceNotificationService {
       }
     }
     try {
-      const count = await (this.notificationsService as any).prisma.notification.count({
-        where: { isRead: false, resolvedAt: null },
-      })
-      this.notificationsService.broadcast(count)
+      await this.notificationsService.broadcastUnreadToClients()
     } catch { /* non-fatal */ }
   }
 
@@ -129,11 +126,13 @@ export class SpaceNotificationService {
               severity: 'CRITICAL',
               title: 'Card Jatuh Tempo Besok',
               message: `Card "${card.title}" di Space "${(card.column as any).space.name}" jatuh tempo besok`,
-              sourceType: 'space_card_due',
+              sourceType: `space_card_due_${userId}`,
               sourceId: card.id,
               triggerDay: 1,
               deeplink: `/spaces/${(card.column as any).space.id}`,
               expiryDate: card.dueDate!,
+              userId,
+              userType: 'user_account',
             },
           })
           created++
@@ -145,10 +144,7 @@ export class SpaceNotificationService {
 
     if (created > 0) {
       try {
-        const count = await (this.notificationsService as any).prisma.notification.count({
-          where: { isRead: false, resolvedAt: null },
-        })
-        this.notificationsService.broadcast(count)
+        await this.notificationsService.broadcastUnreadToClients()
       } catch { /* non-fatal */ }
       this.logger.log(`Space due-tomorrow notifications: ${created} created`)
     }

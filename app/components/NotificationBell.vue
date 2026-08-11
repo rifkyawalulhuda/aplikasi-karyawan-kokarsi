@@ -39,6 +39,8 @@ const categoryIconMap: Record<string, string> = {
   SERTIFIKASI_IJIN: 'i-lucide-file-badge',
   KONTRAK_VENDOR: 'i-lucide-building-2',
   LEGAL_KOPERASI: 'i-lucide-file-signature',
+  AGENDA: 'i-lucide-calendar-days',
+  SPACE: 'i-lucide-kanban',
 }
 
 function getCategoryIcon(category: string) {

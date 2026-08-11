@@ -31,6 +31,8 @@ const categoryIconMap: Record<string, string> = {
   SERTIFIKASI_IJIN: 'i-lucide-file-badge',
   KONTRAK_VENDOR: 'i-lucide-building-2',
   LEGAL_KOPERASI: 'i-lucide-file-signature',
+  AGENDA: 'i-lucide-calendar-days',
+  SPACE: 'i-lucide-kanban',
 }
 
 const categoryLabel: Record<string, string> = {
@@ -38,6 +40,8 @@ const categoryLabel: Record<string, string> = {
   SERTIFIKASI_IJIN: 'Sertifikasi & Ijin',
   KONTRAK_VENDOR: 'Kontrak Vendor',
   LEGAL_KOPERASI: 'Legal Koperasi',
+  AGENDA: 'Agenda',
+  SPACE: 'Space',
 }
 
 const severityLabel: Record<string, string> = {
@@ -274,6 +278,8 @@ const columns: TableColumn<AppNotificationRow>[] = [
             { label: 'Sertifikasi & Ijin', value: 'SERTIFIKASI_IJIN' },
             { label: 'Kontrak Vendor', value: 'KONTRAK_VENDOR' },
             { label: 'Legal Koperasi', value: 'LEGAL_KOPERASI' },
+            { label: 'Agenda', value: 'AGENDA' },
+            { label: 'Space', value: 'SPACE' },
           ]"
           placeholder="Kategori"
           class="min-w-48"
@@ -334,7 +340,7 @@ const columns: TableColumn<AppNotificationRow>[] = [
               :key="cell.id"
               class="border-b border-default px-3 py-2.5"
             >
-              <component :is="cell.column.columnDef.cell" v-bind="{ row, cell }" />
+              <component :is="cell.column.columnDef.cell as any" :row="(row as any)" :cell="(cell as any)" />
             </td>
           </tr>
         </template>

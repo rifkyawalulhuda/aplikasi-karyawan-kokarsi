@@ -1,6 +1,6 @@
 export interface AppNotification {
   id: number
-  category: 'KONTRAK_KARYAWAN' | 'SERTIFIKASI_IJIN' | 'KONTRAK_VENDOR' | 'LEGAL_KOPERASI'
+  category: 'KONTRAK_KARYAWAN' | 'SERTIFIKASI_IJIN' | 'KONTRAK_VENDOR' | 'LEGAL_KOPERASI' | 'AGENDA' | 'SPACE'
   severity: 'WARNING' | 'CRITICAL'
   title: string
   message: string
@@ -12,6 +12,8 @@ export interface AppNotification {
   readAt: string | null
   resolvedAt: string | null
   expiryDate: string
+  userId?: number | null
+  userType?: string | null
   createdAt: string
 }
 
@@ -23,11 +25,25 @@ let intervalId: ReturnType<typeof setInterval> | null = null // kept for referen
 let eventSource: EventSource | null = null
 
 export function useNotifications() {
+  // Identitas user login untuk filter per-user
+  function getIdentity() {
+    const auth = useAuthStore()
+    const id = auth.admin?.id
+    const type = auth.admin?.accountType
+    return { id, type }
+  }
+
   async function fetchNotifications(limit = 10) {
     isLoading.value = true
     try {
+      const { id, type } = getIdentity()
+      const query: Record<string, string | number> = { limit }
+      if (id !== undefined && type) {
+        query.userId = id
+        query.userType = type
+      }
       const data = await $fetch<AppNotification[]>(`/api/notifications`, {
-        query: { limit },
+        query,
         credentials: 'include',
       })
       notifications.value = data
@@ -42,7 +58,14 @@ export function useNotifications() {
 
   async function fetchUnreadCount() {
     try {
+      const { id, type } = getIdentity()
+      const query: Record<string, string | number> = {}
+      if (id !== undefined && type) {
+        query.userId = id
+        query.userType = type
+      }
       const data = await $fetch<{ count: number }>('/api/notifications/count', {
+        query,
         credentials: 'include',
       })
       unreadCount.value = data.count
@@ -54,8 +77,15 @@ export function useNotifications() {
 
   async function markAllRead() {
     try {
+      const { id, type } = getIdentity()
+      const query: Record<string, string | number> = {}
+      if (id !== undefined && type) {
+        query.userId = id
+        query.userType = type
+      }
       await $fetch('/api/notifications/read-all', {
         method: 'POST',
+        query,
         credentials: 'include',
       })
       await Promise.all([fetchNotifications(), fetchUnreadCount()])
@@ -67,8 +97,15 @@ export function useNotifications() {
 
   async function markOneRead(id: number) {
     try {
+      const { id: userId, type } = getIdentity()
+      const query: Record<string, string | number> = {}
+      if (userId !== undefined && type) {
+        query.userId = userId
+        query.userType = type
+      }
       await $fetch(`/api/notifications/${id}/read`, {
         method: 'POST',
+        query,
         credentials: 'include',
       })
       // Update local state optimistically without a full refetch
