@@ -1,0 +1,18 @@
+{
+  "records": {
+    "opencode:61a85f2e3549b5367bd3b3039e168f962af772ff62d16c6615d976ec73e41715:ses_00ef40ac1ffel79PitFkzA2Pic": {
+      "host": "opencode",
+      "cwd": "E:\\Github\\aplikasi-karyawan-kokarsi",
+      "sessionId": "ses_00ef40ac1ffel79PitFkzA2Pic",
+      "promptHash": "8e0b94ee40cd1a4dc94342d86758ee41c908dbb48fbe38ef30e0f32acbc9dda8",
+      "routedSignature": "4261bcac0d01331dcb1713f7ef73a6c7e68d34116d9728f20248106876586631"
+    },
+    "opencode:61a85f2e3549b5367bd3b3039e168f962af772ff62d16c6615d976ec73e41715:ses_00ef331f6ffeMahACW41FG2g3W": {
+      "host": "opencode",
+      "cwd": "E:\\Github\\aplikasi-karyawan-kokarsi",
+      "sessionId": "ses_00ef331f6ffeMahACW41FG2g3W",
+      "promptHash": "c014c6ede92bc5ef001040048da8cd0a27eb95f2af2fc0784adc4a325c72652b",
+      "routedSignature": "4261bcac0d01331dcb1713f7ef73a6c7e68d34116d9728f20248106876586631"
+    }
+  }
+}
