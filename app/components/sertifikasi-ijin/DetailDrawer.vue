@@ -42,7 +42,9 @@ watch(() => props.document?.id, () => {
   previewOpen.value = false
 })
 
-const statusColor: Record<string, string> = {
+type BadgeColor = 'error' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'neutral'
+
+const statusColor: Record<string, BadgeColor> = {
   AKTIF: 'success',
   AKAN_EXPIRED: 'warning',
   EXPIRED: 'error',
@@ -54,7 +56,31 @@ const statusLabel: Record<string, string> = {
   EXPIRED: 'Expired',
 }
 
-const docTypeColor: Record<string, string> = {
+const statusIcon: Record<string, string> = {
+  AKTIF: 'i-lucide-shield-check',
+  AKAN_EXPIRED: 'i-lucide-alert-triangle',
+  EXPIRED: 'i-lucide-clock',
+}
+
+const statusRingClass: Record<string, string> = {
+  AKTIF: 'bg-success/10 text-success',
+  AKAN_EXPIRED: 'bg-warning/10 text-warning',
+  EXPIRED: 'bg-error/10 text-error',
+}
+
+const statusBarClass: Record<string, string> = {
+  AKTIF: 'bg-success',
+  AKAN_EXPIRED: 'bg-warning',
+  EXPIRED: 'bg-error',
+}
+
+const statusTextClass: Record<string, string> = {
+  AKTIF: 'text-success',
+  AKAN_EXPIRED: 'text-warning',
+  EXPIRED: 'text-error',
+}
+
+const docTypeColor: Record<string, BadgeColor> = {
   SERTIFIKAT: 'info',
   LISENSI: 'success',
   IZIN: 'warning',
@@ -79,17 +105,53 @@ const daysUntilExpiry = computed(() => {
   expiry.setHours(0, 0, 0, 0)
   return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 })
+
+// Total masa berlaku (dari updatedAt → expiryDate) untuk progress bar
+const totalDays = computed(() => {
+  const d = props.document
+  if (!d?.expiryDate || daysUntilExpiry.value === null) return 0
+  const start = new Date(d.updatedAt ?? d.createdAt)
+  start.setHours(0, 0, 0, 0)
+  const expiry = new Date(d.expiryDate)
+  expiry.setHours(0, 0, 0, 0)
+  const total = Math.ceil((expiry.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  return total > 0 ? total : 1
+})
+
+// Progress 0-100; expired -> 0
+const progressPercent = computed(() => {
+  if (daysUntilExpiry.value === null) return 0
+  const raw = (daysUntilExpiry.value / totalDays.value) * 100
+  return Math.min(100, Math.max(0, raw))
+})
+
+function daysText(): string {
+  const d = daysUntilExpiry.value
+  if (d === null) return ''
+  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d === 0) return 'Expired hari ini'
+  return `Sisa ${d} hari`
+}
 </script>
 
 <template>
   <USlideover
     :open="open"
     side="right"
-    :ui="{ panel: 'max-w-lg' }"
+    :ui="{ content: 'max-w-lg' }"
     @update:open="emit('update:open', $event)"
   >
     <template #header>
-      <div class="flex items-start justify-between gap-3 w-full">
+      <div class="flex items-center gap-3 w-full min-w-0">
+        <!-- Status ring -->
+        <div
+          v-if="document"
+          class="flex size-11 shrink-0 items-center justify-center rounded-full"
+          :class="statusRingClass[document.status] ?? 'bg-elevated text-muted'"
+        >
+          <UIcon :name="statusIcon[document.status] ?? 'i-lucide-file-badge'" class="size-5" />
+        </div>
+
         <div class="min-w-0 flex-1">
           <p class="text-lg font-semibold text-highlighted truncate">
             {{ document?.documentType?.name ?? '-' }}
@@ -115,61 +177,80 @@ const daysUntilExpiry = computed(() => {
     </template>
 
     <template #body>
-      <div v-if="document" class="space-y-6 py-2">
+      <div v-if="document" class="space-y-5 py-2">
 
-        <!-- Main info grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-          <!-- Left column -->
-          <div class="space-y-4">
+        <!-- Expiry Status Card (signature) -->
+        <div
+          class="rounded-xl border border-default bg-default p-4"
+        >
+          <div class="flex items-center gap-4">
+            <div
+              class="flex size-12 shrink-0 items-center justify-center rounded-full"
+              :class="statusRingClass[document.status] ?? 'bg-elevated text-muted'"
+            >
+              <UIcon :name="statusIcon[document.status] ?? 'i-lucide-file-badge'" class="size-6" />
+            </div>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold text-highlighted">
+                {{ statusLabel[document.status] ?? document.status }}
+              </p>
+              <p
+                v-if="daysUntilExpiry !== null"
+                class="text-lg font-bold tabular-nums leading-tight"
+                :class="statusTextClass[document.status] ?? 'text-highlighted'"
+              >
+                {{ daysText() }}
+              </p>
+              <p v-else class="text-sm text-muted">Tidak ada masa berlaku</p>
+            </div>
+          </div>
+
+          <!-- Progress bar -->
+          <div v-if="daysUntilExpiry !== null" class="mt-3">
+            <div class="h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :class="statusBarClass[document.status] ?? 'bg-primary'"
+                :style="{ width: `${progressPercent}%` }"
+              />
+            </div>
+            <div class="mt-1.5 flex items-center justify-between text-xs text-muted">
+              <span>Masa berlaku sampai {{ formatDate(document.expiryDate) }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Info cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Card 1: Karyawan & Penerbit -->
+          <div class="rounded-xl border border-default bg-default p-4 space-y-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">Karyawan &amp; Penerbit</p>
             <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Nama Karyawan</p>
               <p class="text-sm text-highlighted font-medium">{{ document.employee?.fullName ?? '-' }}</p>
               <p class="text-xs text-muted">{{ document.employee?.employeeNo ?? '-' }}</p>
             </div>
-
             <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Jenis Dokumen</p>
+              <p class="text-xs font-medium text-muted mb-0.5">Penerbit</p>
+              <p class="text-sm text-highlighted">{{ document.documentType?.issuer ?? '-' }}</p>
+            </div>
+          </div>
+
+          <!-- Card 2: Dokumen & Status -->
+          <div class="rounded-xl border border-default bg-default p-4 space-y-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">Dokumen &amp; Status</p>
+            <div>
+              <p class="text-xs font-medium text-muted mb-0.5">Jenis Dokumen</p>
               <UBadge
                 :label="docTypeLabel[document.documentType?.documentType] ?? document.documentType?.documentType ?? '-'"
                 :color="docTypeColor[document.documentType?.documentType] ?? 'neutral'"
                 variant="subtle"
               />
             </div>
-
             <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Penerbit</p>
-              <p class="text-sm text-highlighted">{{ document.documentType?.issuer ?? '-' }}</p>
-            </div>
-          </div>
-
-          <!-- Right column -->
-          <div class="space-y-4">
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">No. Dokumen</p>
-              <p class="text-sm font-mono text-highlighted">{{ document.documentNumber ?? '-' }}</p>
-            </div>
-
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Status</p>
-              <UBadge
-                :label="statusLabel[document.status] ?? document.status"
-                :color="statusColor[document.status] ?? 'neutral'"
-                variant="subtle"
-              />
-            </div>
-
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Masa Berlaku Sampai</p>
-              <p class="text-sm text-highlighted">{{ formatDate(document.expiryDate) }}</p>
-              <!-- Days indicator -->
-              <p
-                v-if="daysUntilExpiry !== null"
-                class="text-xs mt-0.5"
-                :class="daysUntilExpiry < 0 ? 'text-error' : daysUntilExpiry <= 30 ? 'text-warning' : 'text-muted'"
-              >
-                <template v-if="daysUntilExpiry < 0">Sudah expired {{ Math.abs(daysUntilExpiry) }} hari lalu</template>
-                <template v-else-if="daysUntilExpiry === 0">Expired hari ini</template>
-                <template v-else>Sisa {{ daysUntilExpiry }} hari</template>
+              <p class="text-xs font-medium text-muted mb-0.5">No. Dokumen</p>
+              <p class="inline-flex items-center gap-1.5 text-sm font-mono text-highlighted">
+                <UIcon name="i-lucide-hash" class="size-3.5 text-muted" />
+                {{ document.documentNumber ?? '-' }}
               </p>
             </div>
           </div>
@@ -178,7 +259,7 @@ const daysUntilExpiry = computed(() => {
         <USeparator />
 
         <!-- Keterangan -->
-        <div v-if="document.notes">
+        <div v-if="document.notes" class="border-l-2 border-default pl-3">
           <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">Keterangan</p>
           <p class="text-sm text-highlighted whitespace-pre-wrap">{{ document.notes }}</p>
         </div>
@@ -187,25 +268,24 @@ const daysUntilExpiry = computed(() => {
         <div v-if="document.fileUrl">
           <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">File Dokumen</p>
           <div class="space-y-2">
-            <!-- Download link -->
-            <a
-              :href="document.fileUrl"
-              target="_blank"
-              class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
-            >
-              <UIcon name="i-lucide-paperclip" class="size-4 shrink-0" />
-              Unduh File Dokumen
-              <UIcon name="i-lucide-external-link" class="size-3.5 shrink-0 text-muted" />
-            </a>
-            <!-- Preview toggle -->
-            <button
-              type="button"
-              class="flex items-center gap-1 text-xs text-muted hover:text-primary transition-colors"
-              @click="previewOpen = !previewOpen"
-            >
-              <UIcon :name="previewOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3.5" />
-              {{ previewOpen ? 'Sembunyikan Preview' : 'Lihat Preview' }}
-            </button>
+            <div class="flex items-center gap-2">
+              <a
+                :href="document.fileUrl"
+                target="_blank"
+                class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
+              >
+                <UIcon name="i-lucide-download" class="size-4 shrink-0" />
+                Unduh
+              </a>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted hover:text-primary hover:bg-elevated/60 transition-colors"
+                @click="previewOpen = !previewOpen"
+              >
+                <UIcon name="i-lucide-eye" class="size-4" />
+                {{ previewOpen ? 'Sembunyikan Preview' : 'Lihat Preview' }}
+              </button>
+            </div>
             <!-- Preview area -->
             <div v-if="previewOpen" class="mt-2 rounded-lg border border-default overflow-hidden">
               <!-- PDF preview -->

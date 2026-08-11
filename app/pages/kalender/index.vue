@@ -202,6 +202,104 @@ function itemHeightStyle(item: CalendarItem): string {
   return `height: ${(duration / 60) * HOUR_HEIGHT_REM}rem`
 }
 
+// ── Overlap-aware layout (Google Calendar style) ──────────────────────────────
+// Agenda yang saling bertabrakan waktu dibagi ke kolom horizontal agar tampil
+// berdampingan, bukan saling menutupi.
+
+function itemDurationMins(item: CalendarItem): number {
+  if (!item.startTime) return 60
+  const startMins = parseTime(item.startTime)
+  const endMins = item.endTime ? parseTime(item.endTime) : startMins + 60
+  return Math.max(endMins - startMins, 30)
+}
+
+function itemMins(item: CalendarItem): { start: number; end: number } {
+  const start = item.startTime ? parseTime(item.startTime) : 0
+  return { start, end: start + itemDurationMins(item) }
+}
+
+function itemsOverlap(a: CalendarItem, b: CalendarItem): boolean {
+  const ra = itemMins(a)
+  const rb = itemMins(b)
+  return ra.start < rb.end && rb.start < ra.end
+}
+
+// Mengembalikan array berisi style inline untuk tiap agenda agar yang overlap
+// terbagi ke kolom-kolom (left + width proporsional).
+function timedLayoutFor(date: Date): { item: CalendarItem; style: string }[] {
+  const dayItems = timedItemsFor(date)
+  if (!dayItems.length) return []
+
+  // Urutkan: startTime asc, durasi desc (yang lebih panjang di kiri, stabil)
+  const sorted = [...dayItems].sort((a, b) => {
+    const sa = itemMins(a).start
+    const sb = itemMins(b).start
+    if (sa !== sb) return sa - sb
+    return itemDurationMins(b) - itemDurationMins(a)
+  })
+
+  // Kelompokkan klaster overlap transitif
+  const clusters: CalendarItem[][] = []
+  for (const item of sorted) {
+    let placed = false
+    for (const cluster of clusters) {
+      if (cluster.some(existing => itemsOverlap(existing, item))) {
+        cluster.push(item)
+        placed = true
+        break
+      }
+    }
+    if (!placed) {
+      clusters.push([item])
+    }
+  }
+
+  const result: { item: CalendarItem; style: string }[] = []
+
+  for (const cluster of clusters) {
+    // Assign tiap agenda ke kolom pertama yang bebas (tidak overlap dengan
+    // agenda terakhir yang ditaruh di kolom itu)
+    const columns: CalendarItem[][] = []
+    const colOf = new Map<string, number>()
+
+    for (const item of cluster) {
+      let colIdx = -1
+      for (let i = 0; i < columns.length; i++) {
+        const column = columns[i]
+        if (!column) continue
+        const last = column[column.length - 1]
+        if (!last || !itemsOverlap(last, item)) {
+          colIdx = i
+          break
+        }
+      }
+      if (colIdx === -1) {
+        columns.push([])
+        colIdx = columns.length - 1
+      }
+      const target = columns[colIdx]
+      if (target) target.push(item)
+      colOf.set(item.id, colIdx)
+    }
+
+    const clusterCols = columns.length
+    for (const item of cluster) {
+      const colIdx = colOf.get(item.id) ?? 0
+      const width = 100 / clusterCols
+      const left = (colIdx * 100) / clusterCols
+      const style = [
+        itemTopStyle(item),
+        itemHeightStyle(item),
+        `left: ${left}%`,
+        `width: ${width}%`,
+      ].join('; ')
+      result.push({ item, style })
+    }
+  }
+
+  return result
+}
+
 // ── Current time indicator ──────────────────────────────────────────────────
 const currentTimeStyle = computed(() => {
   const now = new Date()
@@ -644,12 +742,12 @@ function openItem(item: CalendarItem) {
                 </div>
                 <!-- Timed events -->
                 <button
-                  v-for="item in timedItemsFor(date)"
+                  v-for="{ item, style } in timedLayoutFor(date)"
                   :key="item.id"
                   type="button"
-                  class="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded px-1.5 py-1 text-left text-xs font-medium shadow-sm transition-opacity hover:opacity-90"
+                  class="absolute z-20 overflow-hidden rounded border-l-2 border-black/10 px-1.5 py-1 text-left text-xs font-medium shadow-sm transition-opacity hover:opacity-90 dark:border-white/10"
                   :class="colorClass(item.color)"
-                  :style="`${itemTopStyle(item)}; ${itemHeightStyle(item)}`"
+                  :style="style"
                   @click="openTooltip(item, $event)"
                 >
                   <div class="truncate font-semibold leading-tight">{{ item.title }}</div>
@@ -724,12 +822,12 @@ function openItem(item: CalendarItem) {
                 </div>
                 <!-- Timed events -->
                 <button
-                  v-for="item in timedItemsFor(displayedDay)"
+                  v-for="{ item, style } in timedLayoutFor(displayedDay)"
                   :key="item.id"
                   type="button"
-                  class="absolute left-1 right-1 z-20 overflow-hidden rounded-lg px-2 py-1.5 text-left text-sm font-medium shadow-sm transition-opacity hover:opacity-90"
+                  class="absolute z-20 overflow-hidden rounded-lg border-l-2 border-black/10 px-2 py-1.5 text-left text-sm font-medium shadow-sm transition-opacity hover:opacity-90 dark:border-white/10"
                   :class="colorClass(item.color)"
-                  :style="`${itemTopStyle(item)}; ${itemHeightStyle(item)}`"
+                  :style="style"
                   @click="openTooltip(item, $event)"
                 >
                   <div class="truncate font-semibold leading-tight">{{ item.title }}</div>
@@ -745,7 +843,7 @@ function openItem(item: CalendarItem) {
                 <div
                   v-for="hour in HOURS"
                   :key="'add-' + hour"
-                  class="group absolute w-full cursor-pointer"
+                  class="group absolute z-0 w-full cursor-pointer"
                   :style="`top: ${hour * HOUR_HEIGHT_REM}rem; height: ${HOUR_HEIGHT_REM}rem`"
                   @dblclick="openCreate(`${isoDate(displayedDay)}`)"
                 />
