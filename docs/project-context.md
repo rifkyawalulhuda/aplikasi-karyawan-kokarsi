@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-08-11 (v29) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-08-11 (v30) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production). **Upload Foto Profil user** (Admin & Pengelola): field `photoUrl`, endpoint `/api/auth/profile/photo`, tab Profil Akun + avatar UserMenu. **Favicon tab browser mengikuti logo** organisasi. **STOP.bat KeepPostgres** (stop tanpa mematikan PostgreSQL). **Print CV Karyawan per individu** (A4, Teleport print multi-halaman). **Export Excel** kontrak vendor/legal/akte. **Notifikasi per-user** (kolom userId+userType, copy per akun, agenda/space per penerima, filter req.user, SSE broadcast per-user).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production). **Upload Foto Profil user** (Admin & Pengelola): field `photoUrl`, endpoint `/api/auth/profile/photo`, tab Profil Akun + avatar UserMenu. **Favicon tab browser mengikuti logo** organisasi. **STOP.bat KeepPostgres** (stop tanpa mematikan PostgreSQL). **Print CV Karyawan per individu** (A4, Teleport print multi-halaman). **Export Excel** kontrak vendor/legal/akte. **Notifikasi per-user** (kolom userId+userType, copy per akun, agenda/space per penerima, filter req.user, SSE broadcast per-user). **Redesign Drawer Sertifikasi & Ijin** (status ring, expiry card + progress bar, 2 kartu info). **Fix calendar overlap** (kolom berdampingan algoritma greedy cluster). **Hari Libur Nasional** di kalender (api.co.id, cache 24 jam per tahun, fail-silent, tampil Month/Week/Day View, auto-update per tahun).
 
 ---
 
@@ -233,6 +233,9 @@ pm2 save                          # simpan daftar proses aktif
 | 149 | Export Excel Kontrak Customer/Vendor (modal filter Tahun/Semua, pola Surat Peringatan), useExport `exportVendorContractsExcel` | `app/composables/useExport.ts`, `app/pages/dokumen-legal/kontrak-vendor/index.vue` |
 | 150 | Export Excel Legal Koperasi (tanpa filter, pola Sertifikasi & Ijin) + Export Akte Dokumen (pola sama) | `app/composables/useExport.ts`, `app/pages/dokumen-legal/legal-koperasi/index.vue`, `app/pages/dokumen-legal/akte-dokumen/index.vue` |
 | 151 | Notifikasi PER-USER (fix bug): kolom `userId`+`userType` di `Notification` (nullable, migrasi `add_notification_user`), notif expiry disalin per akun aktif (master_admin + user_account), agenda (`agenda_morning_${userId}`/`agenda_before_${userId}`) & space (`space_card_assign_${userId}` dsb) sourceType per-user, `findAll`/`unreadCount`/`markRead` filter `req.user`, SSE `subscribe(userId,userType)` broadcast per-user, frontend kirim `userId/userType` dari `auth.admin`, map ikon `AGENDA`/`SPACE`, proxy `POST /notifications/trigger` | `backend/prisma/schema.prisma`, `backend/src/notifications/notifications.service.ts`, `backend/src/notifications/notifications.controller.ts`, `backend/src/spaces/space-notification.service.ts`, `app/composables/useNotifications.ts`, `app/components/NotificationBell.vue`, `app/pages/notifications/index.vue`, `server/api/notifications/trigger.post.ts` |
+| 152 | Redesign Detail Drawer Sertifikasi & Ijin (modern, bersih): status ring berwarna (ikon + warna), Expiry Status Card dengan progress bar sisa hari (tabular), 2 kartu info (Karyawan/Penerbit & Dokumen/Status), file/keterangan rapi, metadata tipis; warna badge pakai type-safe `BadgeColor`, `panel` diubah ke `content` | `app/components/sertifikasi-ijin/DetailDrawer.vue` |
+| 153 | Kalender: Fix card agenda bertumpuk (overlap layout) di Week/Day View — algoritma kolom tumpang-tindih (cluster transitif + greedy track assignment), agenda yang waktunya bertabrakan tampil berdampingan via `left`/`width` proporsional, border aksen kiri, overlay "tambah" `z-0` | `app/pages/kalender/index.vue` |
+| 154 | Integrasi Hari Libur Nasional Indonesia (api.co.id) ke Kalender: backend `HolidaysService` (fetch + in-memory cache 24 jam per tahun, fail-silent jika tidak ada `HOLIDAY_API_KEY`), `GET /holidays?start=&end=`, Nitro proxy `holidays.get.ts`, frontend `loadHolidays`+`holidayMap` paralel dengan `loadItems`; tampilan nama libur merah kecil di bawah angka tanggal Month View, label merah di header kolom Week View, badge merah dengan ikon flag di header Day View; data terupdate otomatis per tahun (cache per tahun, TTL 24 jam) | `backend/src/holidays/`, `backend/src/app.module.ts`, `server/api/holidays.get.ts`, `app/pages/kalender/index.vue`, `backend/.env.example` |
 ## Arsitektur
 
 ```
@@ -476,6 +479,7 @@ server/
     users/[id].ts           # CRUD master user detail
     dashboard-stats.ts      # GET dashboard stats (proxy ke backend)
     search.get.ts           # GET global search (karyawan, kontrak, SP) ? filter di DB
+    holidays.get.ts         # GET hari libur nasional (proxy ke backend HolidaysService, fail-silent)
   utils/
     backend.ts              # BACKEND, BACKEND_URL, BACKEND_ROOT ? Nitro auto-import
   middleware/
@@ -500,6 +504,7 @@ backend/
       space-cards.controller.ts     # CRUD card + attachment upload (diskStorage)
       space-sse.service.ts          # SSE per-Space (rooms Map + broadcast)
     notifications/          # Notifikasi per-user (userId+userType), SSE broadcast per-user
+    holidays/               # Hari libur nasional (HolidaysService, in-memory cache 24 jam per tahun, HOLIDAY_API_KEY)
     prisma/                 # PrismaService (singleton pool)
     shared/
       date-utils.ts         # startOfDay, endOfDay, DAY_MS ? dipakai contracts & cron
@@ -709,6 +714,7 @@ backend/
 | POST | `/api/notifications/:id/read` | Tandai satu notifikasi dibaca (per-user) |
 | GET | `/api/notifications/stream` | SSE real-time count notifikasi (per-user, cookie auth) |
 | POST | `/api/notifications/trigger` | Trigger generate notifikasi manual (testing) |
+| GET | `/api/holidays` | Hari libur nasional Indonesia (proxy ke backend HolidaysService, filter Public + National Holiday, fail-silent, cache 24 jam per tahun) |
 | GET | `/api/employees/import-template` | Download template Excel import karyawan (dengan dropdown validasi data master) |
 | POST | `/api/employees/bulk-import` | Import karyawan bulk (all-or-nothing transaction, auto-reject duplikat) |
 | GET | `/api/lookups/*` | CRUD lookup data (termasuk document-types) |
@@ -837,9 +843,18 @@ pm2 startup && pm2 save     # auto-start saat Windows boot
 
 ### Email Notifikasi (Maileroo)
 Cron job berjalan setiap hari **jam 00:01 WIB** ? update status kontrak + kirim email ke semua user.
-- Service: ackend/src/contract-cron/contract-cron.service.ts
-- Config: MAILEROO_API_KEY, MAILEROO_FROM_EMAIL, MAILEROO_FROM_NAME di ackend/.env
+- Service: ackend/src/contract-cron/contract-cron.service.ts
+- Config: MAILEROO_API_KEY, MAILEROO_FROM_EMAIL, MAILEROO_FROM_NAME di ackend/.env
 - Email dikirim ke semua UserAccount yang terdaftar di sistem
+
+### Hari Libur Nasional (api.co.id)
+Data hari libur diambil otomatis dari `api.co.id` setiap tahun baru di-cache:
+- Service: `backend/src/holidays/holidays.service.ts`
+- Config: `HOLIDAY_API_KEY=` di `backend/.env` (wajib diisi, lihat `.env.example`)
+- Cache: in-memory, TTL 24 jam per tahun; refetch otomatis jika expired
+- Fail-silent: jika `HOLIDAY_API_KEY` tidak diset, kalender tetap tampil normal tanpa data libur
+- Endpoint: `GET /api/holidays?start=YYYY-MM-DD&end=YYYY-MM-DD`
+- Data otomatis update per tahun (tidak perlu perubahan kode)
 ## Troubleshooting
 
 | Masalah | Solusi |
@@ -930,6 +945,10 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Notifikasi agenda/space hanya sampai 1 user | SourceType harus menyertakan userId (`agenda_morning_${userId}`, `space_card_assign_${userId}`) agar UNIQUE `(sourceType, sourceId, triggerDay)` tidak bentrok antar penerima |
 | Notifikasi expiry tidak per-user (semua user lihat sama) | Kolom `userId`+`userType` di `Notification` (nullable); `generateNotifications()` membuat salinan per akun aktif (master_admin + user_account) |
 | Notifikasi tidak muncul di salah satu akun | Pastikan backend di-compile + restart, dan frontend mengirim `userId/userType` (dari `auth.admin.id` + `accountType`) di query `GET /notifications` |
+| Hari libur tidak tampil di kalender | Set `HOLIDAY_API_KEY=` di `backend/.env` lalu restart backend; tanpa API key fitur fail-silent (kalender tetap normal) |
+| Hari libur 2027+ tidak ada | Data bergantung ketersediaan dari `api.co.id` — data tahun depan biasanya tersedia setelah pemerintah mengumumkan SKB Cuti Bersama; cache per-tahun refetch otomatis setiap 24 jam |
+| Kalender: agenda bertumpuk saling menutupi | Fix sudah diimplementasikan (`timedLayoutFor` dengan algoritma cluster+greedy); jika masih overlap, pastikan file `kalender/index.vue` sudah di-build terbaru |
+
 
 
 
