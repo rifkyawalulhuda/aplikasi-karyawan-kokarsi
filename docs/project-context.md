@@ -1,8 +1,8 @@
 ﻿# Project Context - Aplikasi Manajemen Karyawan Kokarsi PT. Sankyu
 
-> Dibuat: 2026-06-30 | Diperbarui: 2026-08-07 (v28) | Stack: Nuxt 4 + NestJS + PostgreSQL
+> Dibuat: 2026-06-30 | Diperbarui: 2026-08-11 (v29) | Stack: Nuxt 4 + NestJS + PostgreSQL
 >
-> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production). **Upload Foto Profil user** (Admin & Pengelola): field `photoUrl`, endpoint `/api/auth/profile/photo`, tab Profil Akun + avatar UserMenu. **Favicon tab browser mengikuti logo** organisasi. **STOP.bat KeepPostgres** (stop tanpa mematikan PostgreSQL).
+> Catatan versi: context ini sudah mengikuti generator kontrak **pure PDF** berbasis `pdfkit`, flow **Pengaturan > Umum**, sinkronisasi template kontrak `PKWT` / `MITRA` terbaru, modul **Contract Management** lengkap (State Machine, Cron Job, Guards, Renewal Flow, Summary Mode), **Import Karyawan Bulk** via Excel template, **Riwayat SP** di detail karyawan, fitur **Ganti Logo & Nama Organisasi**, perbaikan bug timezone date import, **security hardening**, **centralisasi BACKEND_URL**, **SharedModule + DashboardCacheService**, **Unit Test Jest**, **PM2 process manager**, **Master Dokumen** (tabel `document_types` dengan Nama/Jenis/Penerbit), **Sertifikasi & Ijin** (halaman baru + modul backend + cron email + section detail karyawan + tombol Perpanjang), dan berbagai bug fix (contract 403 forbidden untuk karyawan baru, renew contractNo duplicate, hapus karyawan bersih semua tabel terkait, proxy employeeId filter). **auto-generate nomor kontrak & SP** (format {seq}/KK|SP/KUKP/SII/{bulan_romawi}/{tahun}, ikut tanggal acuan), **upload file di Surat Peringatan** (endpoint POST :id/file, magic bytes validation), **preview nomor dinamis** (refetch saat tanggal berubah), **CodeGraph integration** (pre-indexed knowledge graph untuk AI agent). **Legal Koperasi Perpanjang field Nama Dokumen read-only** (mode renew tidak bisa edit nama dokumen). **Bug fix cron email** (date boundary startOfDay, filter email null UserAccount, tambah MAILEROO_FROM_EMAIL/MAILEROO_FROM_NAME ke .env.example). **Sistem Notifikasi Expiry Reminder** (tabel `notifications`, endpoint /notifications, cron generateNotifications, catch-all pass berbasis tanggal bukan DB status, upsert untuk pesan selalu up-to-date, bell icon sidebar + UPopover + animasi bounce, halaman /notifications, SSE real-time via `CookieJwtStrategy` + `EventSource`, cron 5 menit untuk modul lain, hook fire-and-forget di ContractsService update/create/renew, deeplink notifikasi KONTRAK_KARYAWAN ke `/karyawan/{employeeId}`). **Status "Sudah Diperpanjang"** di Riwayat Kontrak halaman Kontrak (`getDisplayStatus` di `kontrak.vue`) DAN halaman Detail Karyawan (`ContractTimeline.vue`). **Mother Agreement sebagai link** di drawer detail Kontrak Vendor. **Pencarian global diperluas** ke Sertifikasi & Ijin, Kontrak Vendor, Legal Koperasi dengan deep-link `?openId=`. **Error message user-friendly** di edit kontrak (Nitro proxy `[id].ts` ekstrak pesan dari `res._data.message`, pesan backend diperbarui).openId=` untuk auto-buka drawer detail. **Space Dokumen: UI/UX Notion-style + Save cerdas + full-page editor** (route flat `/spaces/[id]-docs-[docId]` fix nested routing), **upload gambar di Tiptap editor** (toolbar/drag/paste/URL, disimpan backend `uploads/documents/` via endpoint `upload-image` + proxy, fix tampil di production). **Upload Foto Profil user** (Admin & Pengelola): field `photoUrl`, endpoint `/api/auth/profile/photo`, tab Profil Akun + avatar UserMenu. **Favicon tab browser mengikuti logo** organisasi. **STOP.bat KeepPostgres** (stop tanpa mematikan PostgreSQL). **Print CV Karyawan per individu** (A4, Teleport print multi-halaman). **Export Excel** kontrak vendor/legal/akte. **Notifikasi per-user** (kolom userId+userType, copy per akun, agenda/space per penerima, filter req.user, SSE broadcast per-user).
 
 ---
 
@@ -229,6 +229,10 @@ pm2 save                          # simpan daftar proses aktif
 | 145 | Upload Foto Profil user (Pengelola & Admin): field `photoUrl` di `MasterAdmin` + `UserAccount`, endpoint `POST/DELETE /api/auth/profile/photo` (diskStorage `uploads/profile-photos/`, max 2MB, magic bytes), login sertakan `photoUrl`, tab Profil Akun (preview bulat + Upload + Hapus + loading), avatar UserMenu pakai foto, cookie `auth_admin` diupdate via `setPhotoUrl` tanpa relogin | `backend/prisma/schema.prisma`, `backend/src/auth/auth.service.ts`, `backend/src/auth/auth.controller.ts`, `server/api/auth/profile/photo.post.ts`, `server/api/auth/profile/photo.delete.ts`, `app/pages/settings/index.vue`, `app/stores/auth.ts`, `app/components/UserMenu.vue` |
 | 146 | Favicon tab browser mengikuti logo organisasi (`appLogoUrl`) jika ada, fallback `/favicon.ico`; `rel="icon"` + `shortcut icon`, refetch settings setelah login (SPA) | `app/app.vue`, `app/composables/useAppSettings.ts` |
 | 147 | STOP.bat / `start.ps1 -Stop -KeepPostgres`: stop cloudflared + PM2 TANPA menghentikan PostgreSQL docker | `deploy/STOP.bat`, `deploy/start.ps1` |
+| 148 | Print CV Karyawan per individu (layout A4): tombol "Cetak CV" di navbar detail karyawan, modal preview + Teleport ke `body` (`print-only-cv`) agar print multi-halaman tanpa clipping modal fixed, CSS `@media print` global, header foto + data pribadi/pekerjaan + riwayat kontrak/sertifikasi/SP (style ui-ux-pro-max) | `app/components/karyawan/detail/CvDocument.vue`, `app/components/karyawan/detail/PrintCvModal.vue`, `app/pages/karyawan/[id].vue`, `app/assets/css/main.css` |
+| 149 | Export Excel Kontrak Customer/Vendor (modal filter Tahun/Semua, pola Surat Peringatan), useExport `exportVendorContractsExcel` | `app/composables/useExport.ts`, `app/pages/dokumen-legal/kontrak-vendor/index.vue` |
+| 150 | Export Excel Legal Koperasi (tanpa filter, pola Sertifikasi & Ijin) + Export Akte Dokumen (pola sama) | `app/composables/useExport.ts`, `app/pages/dokumen-legal/legal-koperasi/index.vue`, `app/pages/dokumen-legal/akte-dokumen/index.vue` |
+| 151 | Notifikasi PER-USER (fix bug): kolom `userId`+`userType` di `Notification` (nullable, migrasi `add_notification_user`), notif expiry disalin per akun aktif (master_admin + user_account), agenda (`agenda_morning_${userId}`/`agenda_before_${userId}`) & space (`space_card_assign_${userId}` dsb) sourceType per-user, `findAll`/`unreadCount`/`markRead` filter `req.user`, SSE `subscribe(userId,userType)` broadcast per-user, frontend kirim `userId/userType` dari `auth.admin`, map ikon `AGENDA`/`SPACE`, proxy `POST /notifications/trigger` | `backend/prisma/schema.prisma`, `backend/src/notifications/notifications.service.ts`, `backend/src/notifications/notifications.controller.ts`, `backend/src/spaces/space-notification.service.ts`, `app/composables/useNotifications.ts`, `app/components/NotificationBell.vue`, `app/pages/notifications/index.vue`, `server/api/notifications/trigger.post.ts` |
 ## Arsitektur
 
 ```
@@ -445,6 +449,13 @@ server/
       general.put.ts        # PUT pengaturan umum
     users/
       pengurus.get.ts       # GET list pengurus (no admin guard)
+    notifications/
+      index.get.ts          # GET list notifikasi (per-user)
+      count.get.ts          # GET unread count (per-user)
+      read-all.post.ts      # POST tandai semua dibaca (per-user)
+      trigger.post.ts       # POST trigger generate notifikasi manual
+      [id]/read.post.ts     # POST tandai satu dibaca (per-user)
+      stream.get.ts         # GET SSE real-time (raw proxy, cookie auth)
     contract-templates.ts   # GET/POST master template kontrak
     contract-templates/[id].ts # PUT/DELETE master template kontrak
     lookups/
@@ -488,6 +499,7 @@ backend/
       space-documents.controller.ts # CRUD dokumen + POST upload-image (magic bytes)
       space-cards.controller.ts     # CRUD card + attachment upload (diskStorage)
       space-sse.service.ts          # SSE per-Space (rooms Map + broadcast)
+    notifications/          # Notifikasi per-user (userId+userType), SSE broadcast per-user
     prisma/                 # PrismaService (singleton pool)
     shared/
       date-utils.ts         # startOfDay, endOfDay, DAY_MS ? dipakai contracts & cron
@@ -615,6 +627,28 @@ backend/
 | `password` | String | Hash bcrypt |
 | `photoUrl` | String? | Path foto profil (uploads/profile-photos/) |
 
+### Notification
+| Field | Type | Keterangan |
+|-------|------|-----------|
+| `id` | Int | Primary key |
+| `category` | Enum | KONTRAK_KARYAWAN / SERTIFIKASI_IJIN / KONTRAK_VENDOR / LEGAL_KOPERASI / AGENDA / SPACE |
+| `severity` | Enum | WARNING / CRITICAL |
+| `title` | String | Judul |
+| `message` | String | Isi pesan |
+| `sourceType` | String | Sumber + suffix userId (mis. `contract_12`, `agenda_morning_12`, `space_card_assign_12`) |
+| `sourceId` | Int | ID record sumber |
+| `triggerDay` | Int | H-berapa sebelum expired (0/-1 = catch-all) |
+| `deeplink` | String | URL navigasi saat klik |
+| `userId` | Int? | ID akun penerima (nullable utk data lama) |
+| `userType` | String? | `master_admin` / `user_account` |
+| `isRead` | Boolean | Status baca (per-user) |
+| `readAt` | DateTime? | Waktu dibaca |
+| `resolvedAt` | DateTime? | Waktu resolve (null = aktif) |
+| `expiryDate` | Date | Tanggal expired sumber |
+| `createdAt` | DateTime | Waktu dibuat |
+
+**Unique:** `(sourceType, sourceId, triggerDay)` — sourceType menyertakan userId sehingga unik per penerima.
+
 ---
 
 ## API Endpoints
@@ -669,6 +703,12 @@ backend/
 | POST | `/api/settings/login-image/:side` | Upload gambar login (left/right, Admin only, max 5MB, JPG/PNG/WEBP) |
 | GET | `/api/employees/dashboard-stats` | Dashboard stats (cache invalidasi berbasis event, TTL 5 menit fallback) |
 | GET | `/api/search?q=...` | Global search karyawan + kontrak + SP (filter di database) |
+| GET | `/api/notifications` | List notifikasi aktif (per-user: userId/userType dari cookie) |
+| GET | `/api/notifications/count` | Jumlah notifikasi belum dibaca (per-user) |
+| POST | `/api/notifications/read-all` | Tandai semua dibaca (per-user) |
+| POST | `/api/notifications/:id/read` | Tandai satu notifikasi dibaca (per-user) |
+| GET | `/api/notifications/stream` | SSE real-time count notifikasi (per-user, cookie auth) |
+| POST | `/api/notifications/trigger` | Trigger generate notifikasi manual (testing) |
 | GET | `/api/employees/import-template` | Download template Excel import karyawan (dengan dropdown validasi data master) |
 | POST | `/api/employees/bulk-import` | Import karyawan bulk (all-or-nothing transaction, auto-reject duplikat) |
 | GET | `/api/lookups/*` | CRUD lookup data (termasuk document-types) |
@@ -887,5 +927,9 @@ uxt.config.ts sudah aktif dan Nuxt sudah di-build ulang |
 | Foto profil tidak tampil setelah upload | Backend harus di-compile (`npx tsc`) + di-restart; upload via Nitro proxy `auth/profile/photo.post.ts` yang memakai `proxyRequest` (jangan `readBody` yang memecah binary) |
 | Foto profil upload 401/403 | Pastikan pengguna sudah login (cookie `auth_token` ada); endpoint `POST /api/auth/profile/photo` memakai guard `jwt` |
 | Foto profil piranti yang sudah login tidak berubah | Cookie `auth_admin` diupdate via `auth.setPhotoUrl()` di frontend; jika masih lama, logout + login ulang |
+| Notifikasi agenda/space hanya sampai 1 user | SourceType harus menyertakan userId (`agenda_morning_${userId}`, `space_card_assign_${userId}`) agar UNIQUE `(sourceType, sourceId, triggerDay)` tidak bentrok antar penerima |
+| Notifikasi expiry tidak per-user (semua user lihat sama) | Kolom `userId`+`userType` di `Notification` (nullable); `generateNotifications()` membuat salinan per akun aktif (master_admin + user_account) |
+| Notifikasi tidak muncul di salah satu akun | Pastikan backend di-compile + restart, dan frontend mengirim `userId/userType` (dari `auth.admin.id` + `accountType`) di query `GET /notifications` |
+
 
 
