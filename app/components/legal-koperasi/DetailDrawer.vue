@@ -19,6 +19,8 @@ interface LegalKoperasi {
   updatedAt: string
 }
 
+type BadgeColor = 'error' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'neutral'
+
 const props = defineProps<{
   open: boolean
   document: LegalKoperasi | null
@@ -47,7 +49,8 @@ watch(() => props.document?.id, () => {
   previewOpen.value = false
 })
 
-const statusColor: Record<string, string> = {
+// --- Status maps ---
+const statusColor: Record<string, BadgeColor> = {
   AKTIF: 'success',
   AKAN_BERAKHIR: 'warning',
   EXPIRED: 'error',
@@ -61,7 +64,36 @@ const statusLabel: Record<string, string> = {
   TIDAK_AKTIF: 'Tidak Aktif',
 }
 
-const categoryColor: Record<string, string> = {
+const statusIcon: Record<string, string> = {
+  AKTIF: 'i-lucide-shield-check',
+  AKAN_BERAKHIR: 'i-lucide-alert-triangle',
+  EXPIRED: 'i-lucide-clock',
+  TIDAK_AKTIF: 'i-lucide-minus-circle',
+}
+
+const statusRingClass: Record<string, string> = {
+  AKTIF: 'bg-success/10 text-success',
+  AKAN_BERAKHIR: 'bg-warning/10 text-warning',
+  EXPIRED: 'bg-error/10 text-error',
+  TIDAK_AKTIF: 'bg-muted/10 text-muted',
+}
+
+const statusBarClass: Record<string, string> = {
+  AKTIF: 'bg-success',
+  AKAN_BERAKHIR: 'bg-warning',
+  EXPIRED: 'bg-error',
+  TIDAK_AKTIF: 'bg-muted',
+}
+
+const statusTextClass: Record<string, string> = {
+  AKTIF: 'text-success',
+  AKAN_BERAKHIR: 'text-warning',
+  EXPIRED: 'text-error',
+  TIDAK_AKTIF: 'text-muted',
+}
+
+// --- Category maps ---
+const categoryColor: Record<string, BadgeColor> = {
   IZIN: 'warning',
   SERTIFIKAT: 'info',
   KEBIJAKAN: 'success',
@@ -78,17 +110,77 @@ const categoryLabel: Record<string, string> = {
   DOKUMEN_B3: 'Dokumen B3',
   LAIN_LAIN: 'Lain-lain',
 }
+
+const categoryIcon: Record<string, string> = {
+  IZIN: 'i-lucide-shield',
+  SERTIFIKAT: 'i-lucide-award',
+  KEBIJAKAN: 'i-lucide-scroll',
+  DOKUMEN_INTERNAL: 'i-lucide-file-code',
+  DOKUMEN_B3: 'i-lucide-flask-conical',
+  LAIN_LAIN: 'i-lucide-file-text',
+}
+
+// --- Expiry calculations ---
+const daysUntilExpiry = computed(() => {
+  if (!props.document?.needsRenewal || !props.document?.endDate) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const expiry = new Date(props.document.endDate)
+  expiry.setHours(0, 0, 0, 0)
+  return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+})
+
+const totalDays = computed(() => {
+  const d = props.document
+  if (!d?.endDate || !d.needsRenewal || daysUntilExpiry.value === null) return 0
+  const start = new Date(d.startDate ?? d.createdAt)
+  start.setHours(0, 0, 0, 0)
+  const expiry = new Date(d.endDate)
+  expiry.setHours(0, 0, 0, 0)
+  const total = Math.ceil((expiry.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  return total > 0 ? total : 1
+})
+
+const progressPercent = computed(() => {
+  if (daysUntilExpiry.value === null) return 0
+  const raw = (daysUntilExpiry.value / totalDays.value) * 100
+  return Math.min(100, Math.max(0, raw))
+})
+
+function daysText(): string {
+  const d = daysUntilExpiry.value
+  if (d === null) return ''
+  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d === 0) return 'Expired hari ini'
+  return `Sisa ${d} hari`
+}
+
+// Display status — jika sudah diperpanjang, tampilkan "Sudah Diperpanjang"
+const displayStatus = computed(() => {
+  if (!props.document) return null
+  if (props.document.renewedTo) return 'SUDAH_DIPERPANJANG'
+  return props.document.status
+})
 </script>
 
 <template>
   <USlideover
     :open="open"
     side="right"
-    :ui="{ panel: 'max-w-lg' }"
+    :ui="{ content: 'max-w-lg' }"
     @update:open="emit('update:open', $event)"
   >
     <template #header>
-      <div class="flex items-start justify-between gap-3 w-full">
+      <div class="flex items-center gap-3 w-full min-w-0">
+        <!-- Kategori ring -->
+        <div
+          v-if="document"
+          class="flex size-11 shrink-0 items-center justify-center rounded-full"
+          :class="categoryColor[document.category] ? `bg-${categoryColor[document.category]}/10 text-${categoryColor[document.category]}` : 'bg-elevated text-muted'"
+        >
+          <UIcon :name="categoryIcon[document.category] ?? 'i-lucide-file-text'" class="size-5" />
+        </div>
+
         <div class="min-w-0 flex-1">
           <p class="text-lg font-semibold text-highlighted truncate">
             {{ document?.documentName ?? '-' }}
@@ -102,16 +194,9 @@ const categoryLabel: Record<string, string> = {
               size="sm"
             />
             <UBadge
-              v-if="document?.renewedTo"
-              label="Sudah Diperpanjang"
-              color="info"
-              variant="subtle"
-              size="sm"
-            />
-            <UBadge
-              v-else-if="document?.needsRenewal && document?.status"
-              :label="statusLabel[document.status] ?? document.status"
-              :color="statusColor[document.status] ?? 'neutral'"
+              v-if="document?.status"
+              :label="displayStatus === 'SUDAH_DIPERPANJANG' ? 'Sudah Diperpanjang' : (statusLabel[document.status] ?? document.status)"
+              :color="displayStatus === 'SUDAH_DIPERPANJANG' ? 'info' : (statusColor[document.status] ?? 'neutral')"
               variant="subtle"
               size="sm"
             />
@@ -121,156 +206,235 @@ const categoryLabel: Record<string, string> = {
     </template>
 
     <template #body>
-      <div v-if="document" class="space-y-6 py-2">
+      <div v-if="document" class="space-y-5 py-2">
 
-        <!-- Main info grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-          <!-- Left column -->
-          <div class="space-y-4">
+        <!-- Expiry Status Card (signature) -->
+        <div class="rounded-xl border border-default bg-default p-4">
+
+          <!-- Kondisi: tidak memerlukan perpanjangan -->
+          <template v-if="!document.needsRenewal">
+            <div class="flex items-center gap-4">
+              <div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <UIcon name="i-lucide-infinity" class="size-6" />
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-highlighted">Tidak Memerlukan Perpanjangan</p>
+                <p class="text-sm text-muted">Dokumen ini berlaku tanpa batas waktu atau tidak memerlukan pembaruan</p>
+              </div>
+            </div>
+          </template>
+
+          <!-- Kondisi: sudah diperpanjang -->
+          <template v-else-if="document.renewedTo">
+            <div class="flex items-center gap-4">
+              <div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-info/10 text-info">
+                <UIcon name="i-lucide-check-circle-2" class="size-6" />
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-highlighted">Sudah Diperpanjang</p>
+                <p class="text-sm text-muted">Dokumen ini telah diperpanjang. Lihat dokumen baru di bawah.</p>
+              </div>
+            </div>
+          </template>
+
+          <!-- Kondisi: tidak aktif -->
+          <template v-else-if="document.status === 'TIDAK_AKTIF'">
+            <div class="flex items-center gap-4">
+              <div class="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted/10 text-muted">
+                <UIcon name="i-lucide-minus-circle" class="size-6" />
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-highlighted">Tidak Aktif</p>
+                <p class="text-sm text-muted">Dokumen ini berstatus tidak aktif</p>
+              </div>
+            </div>
+          </template>
+
+          <!-- Kondisi: aktif / akan berakhir / expired dengan countdown -->
+          <template v-else>
+            <div class="flex items-center gap-4">
+              <div
+                class="flex size-12 shrink-0 items-center justify-center rounded-full"
+                :class="statusRingClass[document.status] ?? 'bg-elevated text-muted'"
+              >
+                <UIcon :name="statusIcon[document.status] ?? 'i-lucide-file-badge'" class="size-6" />
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-highlighted">
+                  {{ statusLabel[document.status] ?? document.status }}
+                </p>
+                <p
+                  v-if="daysUntilExpiry !== null"
+                  class="text-lg font-bold tabular-nums leading-tight"
+                  :class="statusTextClass[document.status] ?? 'text-highlighted'"
+                >
+                  {{ daysText() }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div v-if="daysUntilExpiry !== null" class="mt-3">
+              <div class="h-1.5 w-full overflow-hidden rounded-full bg-elevated">
+                <div
+                  class="h-full rounded-full transition-all duration-300"
+                  :class="statusBarClass[document.status] ?? 'bg-primary'"
+                  :style="{ width: `${progressPercent}%` }"
+                />
+              </div>
+              <div class="mt-1.5 text-xs text-muted">
+                Berlaku sampai {{ formatDate(document.endDate) }}
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Info cards: 2 kartu bersih -->
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <!-- Kartu 1: Dokumen -->
+          <div class="rounded-xl border border-default bg-default p-4 space-y-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">Dokumen</p>
             <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Kategori</p>
+              <p class="text-xs font-medium text-muted mb-0.5">No. Dokumen</p>
+              <p class="inline-flex items-center gap-1.5 text-sm font-mono text-highlighted">
+                <UIcon name="i-lucide-hash" class="size-3.5 text-muted" />
+                {{ document.documentNumber || '-' }}
+              </p>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-muted mb-0.5">Tanggal Dokumen</p>
+              <p class="text-sm text-highlighted">{{ formatDate(document.documentDate) }}</p>
+            </div>
+            <div v-if="document.location">
+              <p class="text-xs font-medium text-muted mb-0.5">Lokasi</p>
+              <p class="text-sm text-highlighted">{{ document.location }}</p>
+            </div>
+          </div>
+
+          <!-- Kartu 2: Penerbitan -->
+          <div class="rounded-xl border border-default bg-default p-4 space-y-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide">Penerbitan</p>
+            <div>
+              <p class="text-xs font-medium text-muted mb-0.5">Penerbit</p>
+              <p class="text-sm text-highlighted">{{ document.publisher || '-' }}</p>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-muted mb-0.5">Kategori</p>
               <UBadge
                 :label="categoryLabel[document.category] ?? document.category"
                 :color="categoryColor[document.category] ?? 'neutral'"
                 variant="subtle"
               />
             </div>
-
             <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Penerbit</p>
-              <p class="text-sm text-highlighted">{{ document.publisher }}</p>
+              <p class="text-xs font-medium text-muted mb-0.5">Dibuat</p>
+              <p class="text-xs text-muted">{{ formatDate(document.createdAt) }}</p>
             </div>
-
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Tanggal</p>
-              <p class="text-sm text-highlighted">{{ formatDate(document.documentDate) }}</p>
-            </div>
-
-            <div v-if="document.location">
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Lokasi</p>
-              <p class="text-sm text-highlighted">{{ document.location }}</p>
-            </div>
-          </div>
-
-          <!-- Right column -->
-          <div class="space-y-4">
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Nama Dokumen</p>
-              <p class="text-sm text-highlighted">{{ document.documentName }}</p>
-            </div>
-
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">No. Dokumen</p>
-              <p class="text-sm font-mono text-highlighted">{{ document.documentNumber }}</p>
-            </div>
-
-            <div>
-              <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Status</p>
-              <template v-if="document.renewedTo">
-                <UBadge
-                  label="Sudah Diperpanjang"
-                  color="info"
-                  variant="subtle"
-                />
-              </template>
-              <template v-else-if="document.needsRenewal">
-                <UBadge
-                  :label="statusLabel[document.status] ?? document.status"
-                  :color="statusColor[document.status] ?? 'neutral'"
-                  variant="subtle"
-                />
-              </template>
-              <p v-else class="text-sm text-muted">-</p>
-            </div>
-
-            <template v-if="document.needsRenewal">
-              <div>
-                <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Tanggal Mulai</p>
-                <p class="text-sm text-highlighted">{{ formatDate(document.startDate) }}</p>
-              </div>
-              <div>
-                <p class="text-xs font-medium text-muted uppercase tracking-wide mb-0.5">Tanggal Berakhir</p>
-                <p class="text-sm text-highlighted">{{ formatDate(document.endDate) }}</p>
-              </div>
-            </template>
           </div>
         </div>
 
-        <USeparator />
+        <!-- Renewal Chain Timeline (signature element) -->
+        <div v-if="document.renewedFrom || document.renewedTo" class="space-y-2">
+          <p class="text-xs font-medium text-muted uppercase tracking-wide">Rantai Perpanjangan</p>
+          <div class="relative pl-5">
+            <!-- Garis konektor vertikal -->
+            <div class="absolute left-1.5 top-2.5 bottom-2.5 border-l-2 border-dashed border-default" />
 
-        <!-- Perpanjangan dari (this document is a renewal of an older one) -->
-        <div v-if="document.renewedFrom">
-          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">Perpanjangan Dari</p>
-          <div class="rounded-lg border border-default bg-elevated/40 px-3 py-2.5">
-            <p class="text-sm font-medium text-highlighted">{{ document.renewedFrom.documentName }}</p>
-            <p class="text-xs font-mono text-muted mt-0.5">{{ document.renewedFrom.documentNumber }}</p>
-            <p class="text-xs text-muted mt-0.5">Dibuat: {{ formatDate(document.renewedFrom.documentDate) }}</p>
-            <a
-              v-if="document.renewedFrom.fileUrl"
-              :href="document.renewedFrom.fileUrl"
-              target="_blank"
-              class="flex items-center gap-1 text-primary hover:underline text-xs mt-1"
-            >
-              <UIcon name="i-lucide-paperclip" class="size-3" />
-              Dokumen Lama
-            </a>
-          </div>
-        </div>
+            <!-- Node: Dokumen Lama (renewedFrom) -->
+            <div v-if="document.renewedFrom" class="relative mb-4">
+              <div class="absolute -left-3.5 top-1.5 size-2.5 rounded-full border-2 border-default bg-elevated" />
+              <div class="rounded-lg border border-default bg-elevated/40 p-3">
+                <p class="text-xs font-medium text-muted mb-0.5">Perpanjangan Dari</p>
+                <p class="text-sm font-medium text-highlighted truncate">{{ document.renewedFrom.documentName }}</p>
+                <p class="text-xs font-mono text-muted">{{ document.renewedFrom.documentNumber }}</p>
+                <p class="text-xs text-muted mt-1">{{ formatDate(document.renewedFrom.documentDate) }}</p>
+                <div class="flex items-center gap-2 mt-2">
+                  <a
+                    v-if="document.renewedFrom.fileUrl"
+                    :href="document.renewedFrom.fileUrl"
+                    target="_blank"
+                    class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <UIcon name="i-lucide-download" class="size-3" /> Unduh
+                  </a>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    @click="emit('open-document', document.renewedFrom!.id)"
+                  >
+                    <UIcon name="i-lucide-arrow-up-right" class="size-3" /> Lihat Detail
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        <!-- Sudah diperpanjang ke (this document has been renewed) -->
-        <div v-if="document.renewedTo">
-          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">Diperpanjang Ke</p>
-          <div class="rounded-lg border border-info/20 bg-info/5 px-3 py-2.5">
-            <p class="text-sm font-medium text-highlighted">{{ document.renewedTo.documentName }}</p>
-            <p class="text-xs font-mono text-muted mt-0.5">{{ document.renewedTo.documentNumber }}</p>
-            <p class="text-xs text-muted mt-0.5">Dibuat: {{ formatDate(document.renewedTo.documentDate) }}</p>
-            <button
-              type="button"
-              class="flex items-center gap-1 text-primary hover:underline text-xs mt-1 cursor-pointer"
-              @click="emit('open-document', document.renewedTo.id)"
-            >
-              <UIcon name="i-lucide-arrow-right" class="size-3" />
-              Lihat Dokumen Baru
-            </button>
+            <!-- Node: Dokumen Ini (aktif/center) -->
+            <div class="relative mb-4">
+              <div class="absolute -left-3.5 top-1.5 size-3 rounded-full bg-primary" />
+              <div class="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <p class="text-xs font-medium text-primary mb-0.5">Dokumen Ini</p>
+                <p class="text-sm font-medium text-highlighted truncate">{{ document.documentName }}</p>
+                <p class="text-xs font-mono text-muted">{{ document.documentNumber }}</p>
+              </div>
+            </div>
+
+            <!-- Node: Dokumen Baru (renewedTo) -->
+            <div v-if="document.renewedTo" class="relative">
+              <div class="absolute -left-3.5 top-1.5 size-2.5 rounded-full border-2 border-default bg-elevated" />
+              <div class="rounded-lg border border-default bg-elevated/40 p-3">
+                <p class="text-xs font-medium text-muted mb-0.5">Diperpanjang Ke</p>
+                <p class="text-sm font-medium text-highlighted truncate">{{ document.renewedTo.documentName }}</p>
+                <p class="text-xs font-mono text-muted">{{ document.renewedTo.documentNumber }}</p>
+                <p class="text-xs text-muted mt-1">{{ formatDate(document.renewedTo.documentDate) }}</p>
+                <button
+                  type="button"
+                  class="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  @click="emit('open-document', document.renewedTo!.id)"
+                >
+                  <UIcon name="i-lucide-arrow-right" class="size-3" /> Lihat Dokumen Baru
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Keterangan -->
         <div v-if="document.notes">
-          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">Keterangan</p>
-          <p class="text-sm text-highlighted whitespace-pre-wrap">{{ document.notes }}</p>
+          <USeparator />
+          <div class="mt-4 border-l-2 border-default pl-3">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">Keterangan</p>
+            <p class="text-sm text-highlighted whitespace-pre-wrap">{{ document.notes }}</p>
+          </div>
         </div>
 
         <!-- File dokumen -->
         <div v-if="document.fileUrl">
-          <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">File Dokumen</p>
-          <div class="space-y-2">
-            <!-- Download link -->
-            <a
-              :href="document.fileUrl"
-              target="_blank"
-              class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
-            >
-              <UIcon name="i-lucide-paperclip" class="size-4 shrink-0" />
-              Unduh File Dokumen
-              <UIcon name="i-lucide-external-link" class="size-3.5 shrink-0 text-muted" />
-            </a>
-            <!-- Preview toggle -->
-            <button
-              type="button"
-              class="flex items-center gap-1 text-xs text-muted hover:text-primary transition-colors"
-              @click="previewOpen = !previewOpen"
-            >
-              <UIcon :name="previewOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3.5" />
-              {{ previewOpen ? 'Sembunyikan Preview' : 'Lihat Preview' }}
-            </button>
+          <USeparator v-if="!document.notes" />
+          <div class="mt-4">
+            <p class="text-xs font-medium text-muted uppercase tracking-wide mb-2">File Dokumen</p>
+            <div class="flex items-center gap-2">
+              <a
+                :href="document.fileUrl"
+                target="_blank"
+                class="inline-flex items-center gap-2 rounded-lg border border-default bg-elevated/40 px-3 py-2 text-sm text-primary hover:bg-elevated transition-colors"
+              >
+                <UIcon name="i-lucide-download" class="size-4 shrink-0" />
+                Unduh
+              </a>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted hover:text-primary hover:bg-elevated/60 transition-colors"
+                @click="previewOpen = !previewOpen"
+              >
+                <UIcon name="i-lucide-eye" class="size-4" />
+                {{ previewOpen ? 'Sembunyikan Preview' : 'Lihat Preview' }}
+              </button>
+            </div>
             <!-- Preview area -->
             <div v-if="previewOpen" class="mt-2 rounded-lg border border-default overflow-hidden">
-              <!-- PDF preview -->
               <div v-if="isPdf(document.fileUrl)" class="h-[480px]">
                 <PdfViewer :src="document.fileUrl" />
               </div>
-              <!-- Image preview -->
               <img
                 v-else
                 :src="document.fileUrl"
