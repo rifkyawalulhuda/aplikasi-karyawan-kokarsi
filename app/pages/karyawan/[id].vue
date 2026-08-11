@@ -36,6 +36,9 @@ const editTarget = computed(() => employee.value ?? null)
 const offboardingModal = ref(false)
 const offboardingTarget = computed(() => employee.value ?? null)
 
+// Print CV modal
+const printCvOpen = ref(false)
+
 function onUpdated() {
   refresh()
   toast.add({ title: 'Data karyawan diperbarui', color: 'success' })
@@ -68,6 +71,16 @@ useHead({
         <template #title>
           <span v-if="employee">{{ employee.fullName }}</span>
           <span v-else>Detail Karyawan</span>
+        </template>
+        <template #right>
+          <UButton
+            label="Cetak CV"
+            icon="i-lucide-printer"
+            color="neutral"
+            variant="subtle"
+            :disabled="!employee"
+            @click="printCvOpen = true"
+          />
         </template>
       </UDashboardNavbar>
     </template>
@@ -148,6 +161,14 @@ useHead({
     v-model="offboardingModal"
     :employee="offboardingTarget"
     @saved="onOffboarded"
+  />
+
+  <!-- Print CV Modal -->
+  <KaryawanDetailPrintCvModal
+    v-if="employee"
+    v-model:open="printCvOpen"
+    :employee="employee"
+    :employee-docs="employeeDocs"
   />
 </template>
 
