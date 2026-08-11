@@ -21,6 +21,7 @@ import { AkteDokumenModule } from './akte-dokumen/akte-dokumen.module'
 import { EmailNotificationConfigModule } from './email-notification-config/email-notification-config.module'
 import { CalendarModule } from './calendar/calendar.module'
 import { SpacesModule } from './spaces/spaces.module'
+import { HolidaysModule } from './holidays/holidays.module'
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { SpacesModule } from './spaces/spaces.module'
     EmailNotificationConfigModule,
     CalendarModule,
     SpacesModule,
+    HolidaysModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

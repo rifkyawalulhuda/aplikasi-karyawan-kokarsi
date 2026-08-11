@@ -401,6 +401,66 @@ watch(displayedWeekStart, () => { if (activeView.value === 'week') loadItems() }
 watch(displayedDay, () => { if (activeView.value === 'day') loadItems() })
 watch(activeView, () => loadItems())
 
+// ── Hari Libur Nasional ─────────────────────────────────────────────────────
+interface HolidayItem { date: string; name: string; type: string }
+const holidays = ref<HolidayItem[]>([])
+
+// O(1) lookup: Map<isoDate, HolidayItem>
+const holidayMap = computed(() => {
+  const m = new Map<string, HolidayItem>()
+  holidays.value.forEach(h => m.set(h.date, h))
+  return m
+})
+
+function holidayFor(date: Date): HolidayItem | undefined {
+  return holidayMap.value.get(isoDate(date))
+}
+
+async function loadHolidays(start: string, end: string) {
+  try {
+    const data = await $fetch<HolidayItem[]>('/api/holidays', {
+      query: { start, end },
+      credentials: 'include',
+    })
+    // Merge, deduplicate by date
+    const merged = new Map<string, HolidayItem>()
+    holidays.value.forEach(h => merged.set(h.date, h))
+    ;(data ?? []).forEach(h => merged.set(h.date, h))
+    holidays.value = [...merged.values()]
+  } catch {
+    // Fail-silent — kalender tetap tampil tanpa data libur
+  }
+}
+
+// Load libur setiap kali range berubah (tidak blocking — paralel dgn loadItems)
+watch([rangeStart, rangeEnd], async () => {
+  if (activeView.value === 'month') {
+    await loadHolidays(isoDate(rangeStart.value), isoDate(rangeEnd.value))
+  }
+}, { immediate: true })
+watch(displayedWeekStart, async () => {
+  if (activeView.value === 'week') {
+    const weekEnd = new Date(displayedWeekStart.value)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    await loadHolidays(isoDate(displayedWeekStart.value), isoDate(weekEnd))
+  }
+})
+watch(displayedDay, async () => {
+  if (activeView.value === 'day') {
+    await loadHolidays(isoDate(displayedDay.value), isoDate(displayedDay.value))
+  }
+})
+watch(activeView, async (view) => {
+  if (view === 'month') await loadHolidays(isoDate(rangeStart.value), isoDate(rangeEnd.value))
+  else if (view === 'week') {
+    const weekEnd = new Date(displayedWeekStart.value)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    await loadHolidays(isoDate(displayedWeekStart.value), isoDate(weekEnd))
+  } else {
+    await loadHolidays(isoDate(displayedDay.value), isoDate(displayedDay.value))
+  }
+})
+
 // Auto-scroll ke jam pertama agenda atau jam 07:00
 async function scrollToFirstEvent() {
   await nextTick()
@@ -644,7 +704,19 @@ function openItem(item: CalendarItem) {
                 @click="selectedDate = isoDate(date)"
                 @dblclick="switchToDayView(date)"
               >
-                <span class="mb-2 inline-flex size-7 items-center justify-center rounded-full text-sm font-medium" :class="isoDate(date) === isoDate(today) ? 'bg-primary text-inverted' : ''">{{ date.getDate() }}</span>
+                <span
+                  class="mb-1 inline-flex size-7 items-center justify-center rounded-full text-sm font-medium"
+                  :class="[
+                    isoDate(date) === isoDate(today) ? 'bg-primary text-inverted' : '',
+                    holidayFor(date) && isoDate(date) !== isoDate(today) ? 'text-red-500 font-bold' : ''
+                  ]"
+                >{{ date.getDate() }}</span>
+                <!-- Nama hari libur di bawah angka -->
+                <span
+                  v-if="holidayFor(date)"
+                  class="mb-1 block truncate text-[9px] font-medium leading-tight text-red-500"
+                  :title="holidayFor(date)?.name"
+                >{{ holidayFor(date)?.name }}</span>
                 <div class="space-y-1">
                   <div
                     v-for="item in itemsFor(date).slice(0, 3)"
@@ -678,6 +750,12 @@ function openItem(item: CalendarItem) {
                 class="mx-auto mt-0.5 inline-flex size-7 items-center justify-center rounded-full text-sm font-semibold"
                 :class="isToday(date) ? 'bg-primary text-inverted' : 'text-highlighted'"
               >{{ date.getDate() }}</div>
+              <!-- Hari libur di header kolom Week View -->
+              <div
+                v-if="holidayFor(date)"
+                class="mx-auto mt-0.5 max-w-full truncate px-1 text-[9px] font-medium leading-tight text-red-400"
+                :title="holidayFor(date)?.name"
+              >{{ holidayFor(date)?.name }}</div>
             </div>
           </div>
 
@@ -768,6 +846,14 @@ function openItem(item: CalendarItem) {
             >{{ displayedDay.getDate() }}</div>
             <div class="mt-0.5 text-xs font-medium capitalize text-muted">
               {{ displayedDay.toLocaleDateString('id-ID', { weekday: 'long', month: 'long', year: 'numeric' }) }}
+            </div>
+            <!-- Hari libur di header Day View -->
+            <div
+              v-if="holidayFor(displayedDay)"
+              class="mt-1 inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-500 dark:bg-red-950/30"
+            >
+              <UIcon name="i-lucide-flag" class="size-2.5" />
+              {{ holidayFor(displayedDay)?.name }}
             </div>
           </div>
 
