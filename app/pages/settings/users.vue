@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import type { AdminRole, UserAccount } from '~/types'
+import type { TableColumn } from '@nuxt/ui'
+import { getPaginationRowModel } from '@tanstack/table-core'
+import type { Row } from '@tanstack/table-core'
+import { h } from 'vue'
+
+const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
+const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
@@ -10,6 +18,13 @@ const submitting = ref(false)
 const deleteLoading = ref<number | null>(null)
 const modalOpen = ref(false)
 const mode = ref<'create' | 'edit'>('create')
+
+const table = useTemplateRef('table')
+const searchQuery = ref('')
+const roleFilter = ref('all')
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
 const form = reactive({
   id: null as number | null,
@@ -216,6 +231,136 @@ const stats = computed(() => ({
   admin: users.value.filter((item) => item.role === 'ADMIN').length,
   pengelola: users.value.filter((item) => item.role === 'PENGELOLA_KOPERASI').length,
 }))
+
+// --- Search / Filter / Sort ---
+function getSearchText(item: UserAccount) {
+  return [
+    item.name,
+    item.nik,
+    item.email,
+    item.username,
+    roleLabel(item.role),
+  ]
+    .flatMap(v => String(v ?? '').toLowerCase().split(/\s+/))
+    .filter(Boolean)
+    .join(' ')
+}
+
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+  sorting.value = null
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
+}
+
+const filteredData = computed(() => {
+  let list = users.value
+
+  if (roleFilter.value !== 'all') {
+    list = list.filter(u => u.role === roleFilter.value)
+  }
+
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim()
+    list = list.filter(u => getSearchText(u).includes(q))
+  }
+
+  const sort = sorting.value
+  if (!sort) return list
+
+  return [...list].sort((a, b) => {
+    const aVal = String(a[sort.key as keyof UserAccount] ?? '')
+    const bVal = String(b[sort.key as keyof UserAccount] ?? '')
+    return sort.direction === 'asc'
+      ? aVal.localeCompare(bVal, 'id')
+      : bVal.localeCompare(aVal, 'id')
+  })
+})
+
+watch([searchQuery, roleFilter], () => {
+  pagination.value.pageIndex = 0
+})
+
+watch(() => pagination.value.pageSize, () => {
+  pagination.value.pageIndex = 0
+})
+
+const columns: TableColumn<UserAccount>[] = [
+  {
+    accessorKey: 'name',
+    header: () => sortableHeader('Nama', 'name'),
+    cell: ({ row }: { row: Row<UserAccount> }) => h('div', undefined, [
+      h('p', { class: 'font-medium text-sm text-highlighted' }, row.original.name),
+      h('p', { class: 'text-xs text-muted' }, `NIK: ${row.original.nik}`),
+    ]),
+  },
+  {
+    accessorKey: 'role',
+    header: () => sortableHeader('Role', 'role'),
+    cell: ({ row }: { row: Row<UserAccount> }) => h(UBadge, {
+      color: row.original.role === 'ADMIN' ? 'primary' : 'neutral',
+      variant: 'subtle',
+      label: roleLabel(row.original.role),
+    }),
+  },
+  {
+    accessorKey: 'email',
+    header: () => sortableHeader('Email', 'email'),
+    cell: ({ row }: { row: Row<UserAccount> }) => h('span', { class: 'text-sm' }, row.original.email),
+  },
+  {
+    accessorKey: 'username',
+    header: () => sortableHeader('Username', 'username'),
+    cell: ({ row }: { row: Row<UserAccount> }) =>
+      h('span', { class: 'text-sm font-medium text-highlighted' }, row.original.username),
+  },
+  {
+    id: 'actions',
+    header: 'Aksi',
+    cell: ({ row }: { row: Row<UserAccount> }) =>
+      h('div', { class: 'flex justify-end gap-1' }, [
+        h(UButton, {
+          icon: 'i-lucide-pencil',
+          size: 'xs',
+          variant: 'ghost',
+          color: 'neutral',
+          onClick: () => openEdit(row.original),
+        }),
+        h(UButton, {
+          icon: 'i-lucide-trash',
+          size: 'xs',
+          variant: 'ghost',
+          color: 'error',
+          loading: deleteLoading.value === row.original.id,
+          onClick: () => confirmDelete(row.original),
+        }),
+      ]),
+  },
+]
 </script>
 
 <template>
@@ -262,63 +407,70 @@ const stats = computed(() => ({
             </div>
           </template>
 
-          <div v-if="loading" class="px-4 py-6 text-sm text-muted">
-            Memuat data user...
+          <div class="px-4 py-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <UInput
+                v-model="searchQuery"
+                class="max-w-xs"
+                icon="i-lucide-search"
+                placeholder="Cari nama, NIK, email, username..."
+              />
+              <USelect
+                v-model="roleFilter"
+                :items="[
+                  { label: 'Semua Role', value: 'all' },
+                  { label: 'Admin', value: 'ADMIN' },
+                  { label: 'Pengelola Koperasi', value: 'PENGELOLA_KOPERASI' },
+                ]"
+                placeholder="Filter role"
+                class="min-w-40"
+              />
+            </div>
           </div>
 
-          <div v-else class="divide-y divide-default">
-            <div
-              v-if="users.length === 0"
-              class="px-4 py-10 text-center text-sm text-muted"
-            >
-              Belum ada data user.
+          <UTable
+            ref="table"
+            v-model:pagination="pagination"
+            :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+            class="shrink-0"
+            :data="filteredData"
+            :columns="columns"
+            :loading="loading"
+            :ui="{
+              base: 'table-fixed border-separate border-spacing-0',
+              thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+              tbody: '[&>tr]:last:[&>td]:border-b-0',
+              th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+              td: 'border-b border-default',
+              separator: 'h-0',
+            }"
+          >
+            <template #empty>
+              <div class="flex flex-col items-center gap-2 py-12 text-muted">
+                <UIcon name="i-lucide-users" class="size-10 opacity-40" />
+                <p class="text-sm">Belum ada data user.</p>
+              </div>
+            </template>
+          </UTable>
+
+          <div class="flex items-center justify-between gap-3 border-t border-default px-4 py-4 mt-auto">
+            <div class="flex items-center gap-3">
+              <div class="text-sm text-muted">
+                Menampilkan {{ filteredData.length }} user
+              </div>
+              <USelect
+                v-model="pagination.pageSize"
+                :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+                class="w-20"
+                aria-label="Jumlah baris per halaman"
+              />
             </div>
-
-            <div
-              v-for="item in users"
-              :key="item.id"
-              class="grid gap-4 px-4 py-4 lg:grid-cols-[1.25fr_.75fr_1.1fr_.85fr_.95fr_auto]"
-            >
-              <div>
-                <p class="text-xs uppercase tracking-[0.16em] text-muted lg:hidden">Nama</p>
-                <p class="font-medium text-highlighted">{{ item.name }}</p>
-                <p class="mt-1 text-xs text-muted">NIK: {{ item.nik }}</p>
-              </div>
-
-              <div>
-                <p class="text-xs uppercase tracking-[0.16em] text-muted lg:hidden">Role</p>
-                <UBadge :color="item.role === 'ADMIN' ? 'primary' : 'neutral'" variant="subtle">
-                  {{ roleLabel(item.role) }}
-                </UBadge>
-              </div>
-
-              <div>
-                <p class="text-xs uppercase tracking-[0.16em] text-muted lg:hidden">Email</p>
-                <p class="text-sm text-highlighted">{{ item.email }}</p>
-              </div>
-
-              <div>
-                <p class="text-xs uppercase tracking-[0.16em] text-muted lg:hidden">Username</p>
-                <p class="text-sm font-medium text-highlighted">{{ item.username }}</p>
-              </div>
-
-              <div>
-                <p class="text-xs uppercase tracking-[0.16em] text-muted lg:hidden">Password</p>
-                <p class="text-sm text-muted">Disimpan aman di backend</p>
-              </div>
-
-              <div class="flex items-start gap-1 lg:justify-end">
-                <UButton icon="i-lucide-pencil" size="xs" variant="ghost" color="neutral" @click="openEdit(item)" />
-                <UButton
-                  icon="i-lucide-trash"
-                  size="xs"
-                  variant="ghost"
-                  color="error"
-                  :loading="deleteLoading === item.id"
-                  @click="confirmDelete(item)"
-                />
-              </div>
-            </div>
+            <UPagination
+              :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
+              :items-per-page="table?.tableApi?.getState().pagination.pageSize"
+              :total="filteredData.length"
+              @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+            />
           </div>
         </UCard>
       </div>
