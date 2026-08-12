@@ -45,7 +45,8 @@ const searchQuery = ref('')
 const categoryFilter = ref('all')
 const statusFilter = ref('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
 
 const addModal = ref(false)
 const editModal = ref(false)
@@ -87,6 +88,11 @@ function refresh() {
 }
 
 watch([searchQuery, categoryFilter, statusFilter], () => {
+  pagination.value.pageIndex = 0
+  fetchContracts()
+})
+
+watch(() => pagination.value.pageSize, () => {
   pagination.value.pageIndex = 0
   fetchContracts()
 })
@@ -547,14 +553,22 @@ onMounted(async () => {
 
       <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ contracts.length }} dari {{ totalContracts }} kontrak
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-muted">
+            Menampilkan {{ contracts.length }} dari {{ totalContracts }} kontrak
+          </div>
+          <USelect
+            v-model="pagination.pageSize"
+            :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+            class="w-20"
+            aria-label="Jumlah baris per halaman"
+          />
         </div>
         <UPagination
-          :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-          :items-per-page="table?.tableApi?.getState().pagination.pageSize"
-          :total="contracts.length"
-          @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+          :page="pagination.pageIndex + 1"
+          :items-per-page="pagination.pageSize"
+          :total="totalContracts"
+          @update:page="(p: number) => { pagination.pageIndex = p - 1; fetchContracts() }"
         />
       </div>
     </template>

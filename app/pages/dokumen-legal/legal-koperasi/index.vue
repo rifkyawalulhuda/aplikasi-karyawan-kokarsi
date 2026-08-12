@@ -40,7 +40,8 @@ const searchQuery = ref('')
 const categoryFilter = ref('all')
 const statusFilter = ref('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
 
 const addModal = ref(false)
 const editModal = ref(false)
@@ -82,6 +83,11 @@ function refresh() {
 }
 
 watch([searchQuery, categoryFilter, statusFilter], () => {
+  pagination.value.pageIndex = 0
+  fetchDocuments()
+})
+
+watch(() => pagination.value.pageSize, () => {
   pagination.value.pageIndex = 0
   fetchDocuments()
 })
@@ -533,14 +539,22 @@ onMounted(async () => {
 
       <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ documents.length }} dari {{ totalDocuments }} dokumen
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-muted">
+            Menampilkan {{ documents.length }} dari {{ totalDocuments }} dokumen
+          </div>
+          <USelect
+            v-model="pagination.pageSize"
+            :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+            class="w-20"
+            aria-label="Jumlah baris per halaman"
+          />
         </div>
         <UPagination
-          :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-          :items-per-page="table?.tableApi?.getState().pagination.pageSize"
-          :total="documents.length"
-          @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+          :page="pagination.pageIndex + 1"
+          :items-per-page="pagination.pageSize"
+          :total="totalDocuments"
+          @update:page="(p: number) => { pagination.pageIndex = p - 1; fetchDocuments() }"
         />
       </div>
     </template>
