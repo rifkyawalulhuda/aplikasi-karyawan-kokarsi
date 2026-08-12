@@ -32,7 +32,11 @@ interface SummaryResponse {
 // --- State ---
 const searchQuery = ref('')
 const page = ref(1)
-const limit = ref(10)
+const limit = ref(15)
+const pageSizeOptions = [15, 30, 50, 100]
+
+const pagination = ref({ pageIndex: 0, pageSize: limit.value })
+const table = useTemplateRef('table')
 
 const drawerOpen = ref(false)
 const selectedEmployeeId = ref<number | null>(null)
@@ -71,7 +75,7 @@ const { data: summaryRes, status } = await useFetch<SummaryResponse>('/api/emplo
     limit: limit.value,
     search: searchQuery.value || undefined,
   })),
-  watch: [page, searchQuery],
+  watch: [page, searchQuery, limit],
   lazy: true,
   credentials: 'include',
 })
@@ -112,6 +116,13 @@ function getInitials(name: string) {
 // --- Reset page on search ---
 watch(searchQuery, () => {
   page.value = 1
+})
+
+// --- Reset page on limit change ---
+watch(limit, () => {
+  page.value = 1
+  pagination.value.pageIndex = 0
+  pagination.value.pageSize = limit.value
 })
 
 // --- Sorting ---
@@ -239,8 +250,6 @@ const columns: TableColumn<EmployeeSummary>[] = [
   },
 ]
 
-const pagination = ref({ pageIndex: 0, pageSize: limit.value })
-const table = useTemplateRef('table')
 </script>
 
 <template>
@@ -314,8 +323,16 @@ const table = useTemplateRef('table')
 
       <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ rows.length }} dari {{ total }} karyawan
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-muted">
+            Menampilkan {{ rows.length }} dari {{ total }} karyawan
+          </div>
+          <USelect
+            v-model="limit"
+            :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+            class="w-20"
+            aria-label="Jumlah baris per halaman"
+          />
         </div>
         <UPagination
           v-model:page="page"

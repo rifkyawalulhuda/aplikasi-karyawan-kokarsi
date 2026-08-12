@@ -52,7 +52,8 @@ interface EmployeeDocument {
 const searchQuery = ref('')
 const statusFilter = ref('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
-const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
 
 const addModal = ref(false)
 const editModal = ref(false)
@@ -346,6 +347,10 @@ watch([searchQuery, statusFilter], () => {
   pagination.value.pageIndex = 0
 })
 
+watch(() => pagination.value.pageSize, () => {
+  pagination.value.pageIndex = 0
+})
+
 // --- Deep-link: ?openId=<id> dari pencarian global ---
 const route = useRoute()
 onMounted(() => {
@@ -450,8 +455,16 @@ onMounted(() => {
 
       <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ filteredData.length }} dokumen
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-muted">
+            Menampilkan {{ filteredData.length }} dokumen
+          </div>
+          <USelect
+            v-model="pagination.pageSize"
+            :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+            class="w-20"
+            aria-label="Jumlah baris per halaman"
+          />
         </div>
         <UPagination
           :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"

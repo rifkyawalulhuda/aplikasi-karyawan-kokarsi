@@ -21,7 +21,8 @@ const summaryRows = computed<ContractSummaryRow[]>(() => summaryRes.value ?? [])
 
 const statusFilter = ref('all')
 const searchQuery = ref('')
-const pagination = ref({ pageIndex: 0, pageSize: 10 })
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
 // Modal state
@@ -496,6 +497,10 @@ const counts = computed(() => {
 watch([statusFilter, searchQuery], () => {
   pagination.value.pageIndex = 0
 })
+
+watch(() => pagination.value.pageSize, () => {
+  pagination.value.pageIndex = 0
+})
 </script>
 
 <template>
@@ -571,8 +576,16 @@ watch([statusFilter, searchQuery], () => {
       />
 
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ filteredData.length }} karyawan
+        <div class="flex items-center gap-3">
+          <div class="text-sm text-muted">
+            Menampilkan {{ filteredData.length }} kontrak
+          </div>
+          <USelect
+            v-model="pagination.pageSize"
+            :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+            class="w-20"
+            aria-label="Jumlah baris per halaman"
+          />
         </div>
         <UPagination
           :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
