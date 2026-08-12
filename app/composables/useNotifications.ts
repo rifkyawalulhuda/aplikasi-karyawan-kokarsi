@@ -154,6 +154,21 @@ export function useNotifications() {
   }
 
   // Aliases for backward compatibility
+  async function deleteAll() {
+    try {
+      await $fetch('/api/notifications/delete-all', {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      // Clear local state immediately
+      notifications.value = []
+      unreadCount.value = 0
+    }
+    catch {
+      // silently fail
+    }
+  }
+
   const startPolling = connectSSE
   const stopPolling = disconnectSSE
 
@@ -171,6 +186,7 @@ export function useNotifications() {
     fetchUnreadCount,
     markAllRead,
     markOneRead,
+    deleteAll,
     connectSSE,
     disconnectSSE,
     startPolling,

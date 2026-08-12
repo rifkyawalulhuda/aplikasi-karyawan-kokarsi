@@ -11,7 +11,22 @@ const {
   fetchUnreadCount,
   markAllRead,
   markOneRead,
+  deleteAll,
 } = useNotifications()
+
+const { confirmActionToast } = useConfirmActionToast()
+
+function handleDeleteAll() {
+  confirmActionToast({
+    title: 'Hapus Semua Notifikasi',
+    description: 'Semua notifikasi aktif akan dihapus. Tindakan ini tidak dapat dibatalkan.',
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    confirmLabel: 'Hapus Semua',
+    confirmColor: 'error',
+    onConfirm: () => deleteAll(),
+  })
+}
 
 onMounted(() => {
   fetchNotifications()
@@ -127,14 +142,25 @@ async function handleNotifClick(notif: any) {
               {{ unreadCount }}
             </span>
           </div>
-          <UButton
-            v-if="unreadCount > 0"
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            label="Tandai dibaca"
-            @click="markAllRead"
-          />
+          <div class="flex items-center gap-1">
+            <UButton
+              v-if="unreadCount > 0"
+              size="xs"
+              variant="ghost"
+              color="neutral"
+              label="Tandai dibaca"
+              @click="markAllRead"
+            />
+            <UButton
+              v-if="notifications.filter(n => !n.resolvedAt).length > 0"
+              size="xs"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-trash-2"
+              aria-label="Hapus semua notifikasi"
+              @click="handleDeleteAll"
+            />
+          </div>
         </div>
 
         <!-- Loading -->

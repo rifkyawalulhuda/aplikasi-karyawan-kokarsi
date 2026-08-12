@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, ParseIntPipe, UseGuards, Request, Sse, MessageEvent } from '@nestjs/common'
+import { Controller, Get, Post, Delete, Param, Query, ParseIntPipe, UseGuards, Request, Sse, MessageEvent } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { Observable } from 'rxjs'
 import { NotificationsService } from './notifications.service'
@@ -25,6 +25,11 @@ export class NotificationsController {
   @Post('read-all')
   markAllRead(@Request() req: any) {
     return this.service.markAllRead(req.user?.sub, req.user?.kind)
+  }
+
+  @Delete('all')
+  deleteAll(@Request() req: any) {
+    return this.service.deleteAll(req.user?.sub, req.user?.kind)
   }
 
   @Post(':id/read')

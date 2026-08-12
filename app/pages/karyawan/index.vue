@@ -14,7 +14,7 @@ const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 const { exportExcel, exportPDF } = useExport()
-const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true, credentials: 'include' })
+const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true, credentials: 'include', query: { limit: 10000 } })
 
 const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
 
@@ -22,8 +22,6 @@ const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
 const searchQuery = ref('')
 const statusFilter = ref('all')
 
-const columnVisibility = ref({})
-const rowSelection = ref({})
 const pagination = ref({ pageIndex: 0, pageSize: 10 })
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 
@@ -288,21 +286,6 @@ function getRowItems(row: Row<Employee>) {
 
 const columns: TableColumn<Employee>[] = [
   {
-    id: 'select',
-    header: ({ table }) =>
-      h(UCheckbox, {
-        'modelValue': table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected(),
-        'onUpdate:modelValue': (value: boolean | 'indeterminate') => table.toggleAllPageRowsSelected(!!value),
-        'ariaLabel': 'Pilih semua'
-      }),
-    cell: ({ row }) =>
-      h(UCheckbox, {
-        'modelValue': row.getIsSelected(),
-        'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
-        'ariaLabel': 'Pilih baris'
-      })
-  },
-  {
     accessorKey: 'employeeNo',
     header: () => sortableHeader('No. Induk', 'employeeNo'),
     cell: ({ row }) => h('span', { class: 'font-mono text-sm text-muted' }, row.original.employeeNo)
@@ -480,8 +463,6 @@ watch([statusFilter, searchQuery], () => {
       <!-- Table -->
       <UTable
         ref="table"
-        v-model:column-visibility="columnVisibility"
-        v-model:row-selection="rowSelection"
         v-model:pagination="pagination"
         :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
@@ -501,7 +482,6 @@ watch([statusFilter, searchQuery], () => {
       <!-- Pagination -->
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
         <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0 }} dipilih dari
           {{ filteredData.length }} karyawan
         </div>
         <UPagination

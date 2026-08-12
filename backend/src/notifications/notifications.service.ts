@@ -214,6 +214,20 @@ export class NotificationsService {
     })
   }
 
+  async deleteAll(userId?: number, userType?: string) {
+    const where: any = { resolvedAt: null }
+    if (userId !== undefined && userType) {
+      where.userId = userId
+      where.userType = userType
+    }
+    const result = await this.prisma.notification.updateMany({
+      where,
+      data: { resolvedAt: new Date() },
+    })
+    await this.broadcastUnreadCount()
+    return { deleted: result.count }
+  }
+
   // ── Expiry reminder generation (per-user copies) ────────────────────────────
 
   async generateNotifications(): Promise<{ created: number; resolved: number }> {
