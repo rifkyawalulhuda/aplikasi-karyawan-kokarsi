@@ -7,6 +7,7 @@ interface LookupItem { id: number; name: string }
 
 const toast = useToast()
 const auth = useAuthStore()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 
 const { data: templatesRes, refresh } = await useFetch<ContractTemplate[]>('/api/contract-templates')
 const { data: contractTypesRes } = await useFetch<LookupItem[]>('/api/lookups/contract-types')
@@ -129,14 +130,21 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   }
 }
 
-async function removeTemplate(id: number) {
-  try {
-    await $fetch(`/api/contract-templates/${id}`, { method: 'DELETE' })
-    toast.add({ title: 'Template kontrak dihapus', color: 'success' })
-    await refresh()
-  } catch (e: any) {
-    toast.add({ title: 'Gagal menghapus template', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
-  }
+async function removeTemplate(id: number, name: string) {
+  confirmDeleteToast({
+    title: 'Hapus Template Kontrak?',
+    description: `Template "${name}" akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus Template',
+    onConfirm: async () => {
+      try {
+        await $fetch(`/api/contract-templates/${id}`, { method: 'DELETE' })
+        toast.add({ title: 'Template kontrak dihapus', color: 'success' })
+        await refresh()
+      } catch (e: any) {
+        toast.add({ title: 'Gagal menghapus template', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+      }
+    },
+  })
 }
 </script>
 
@@ -187,7 +195,7 @@ async function removeTemplate(id: number) {
 
               <div v-if="auth.canManageMasterData" class="flex gap-2 pt-2">
                 <UButton label="Edit" size="sm" color="neutral" variant="subtle" icon="i-lucide-pencil" @click="openEdit(template)" />
-                <UButton label="Hapus" size="sm" color="error" variant="ghost" icon="i-lucide-trash" @click="removeTemplate(template.id)" />
+                <UButton label="Hapus" size="sm" color="error" variant="ghost" icon="i-lucide-trash" @click="removeTemplate(template.id, template.name)" />
               </div>
             </div>
           </UCard>
