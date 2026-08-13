@@ -154,11 +154,21 @@ function daysText(date: string | null | undefined): string {
   return `Sisa ${d} hari`
 }
 
-// --- Preview state (per dokumen, toggle accordion) ---
-const previewDocId = ref<number | null>(null)
+// --- Preview state (popup modal, pola Surat Peringatan) ---
+const previewModal = ref(false)
+const previewDoc = ref<EmployeeDocument | null>(null)
+const previewSrc = ref('')
 
-function togglePreview(docId: number) {
-  previewDocId.value = previewDocId.value === docId ? null : docId
+function openPreview(doc: EmployeeDocument) {
+  previewDoc.value = doc
+  previewSrc.value = (doc.fileUrl ?? '') + `?t=${Date.now()}`
+  previewModal.value = true
+}
+
+function closePreview() {
+  previewModal.value = false
+  previewDoc.value = null
+  previewSrc.value = ''
 }
 
 // --- Worst status badge (header) ---
@@ -212,7 +222,7 @@ watch(() => props.employeeId, (id) => {
 }, { immediate: true })
 
 watch(() => props.employeeId, () => {
-  previewDocId.value = null
+  closePreview()
 })
 
 const documents = computed<EmployeeDocument[]>(() => {
@@ -412,28 +422,18 @@ function deleteDoc(id: number) {
                   <div class="flex gap-1 shrink-0">
                     <UButton
                       v-if="doc.fileUrl"
-                      :icon="previewDocId === doc.id ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      icon="i-lucide-eye"
                       size="xs"
                       color="primary"
                       variant="ghost"
-                      :aria-label="previewDocId === doc.id ? 'Tutup Preview' : 'Preview Dokumen'"
-                      @click="togglePreview(doc.id)"
+                      aria-label="Preview Dokumen"
+                      @click="openPreview(doc)"
                     />
                     <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
                       <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
                     </a>
                     <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit" @click="openEditForm(doc)" />
                     <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="Hapus" @click="deleteDoc(doc.id)" />
-                  </div>
-                </div>
-
-                <!-- Preview inline (accordion, satu sekaligus) -->
-                <div v-if="previewDocId === doc.id && doc.fileUrl" class="border-t border-default mx-4 mb-4 pt-3">
-                  <div class="rounded-lg overflow-hidden bg-elevated/30 max-h-[400px] overflow-y-auto">
-                    <ClientOnly>
-                      <PdfViewer v-if="isPdf(doc.fileUrl)" :src="doc.fileUrl" class="w-full" />
-                      <img v-else :src="doc.fileUrl" :alt="doc.documentType?.name" class="w-full h-auto object-contain" />
-                    </ClientOnly>
                   </div>
                 </div>
               </div>
@@ -503,26 +503,16 @@ function deleteDoc(id: number) {
                   <div class="flex gap-1 shrink-0">
                     <UButton
                       v-if="doc.fileUrl"
-                      :icon="previewDocId === doc.id ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      icon="i-lucide-eye"
                       size="xs"
                       color="primary"
                       variant="ghost"
-                      :aria-label="previewDocId === doc.id ? 'Tutup Preview' : 'Preview Dokumen'"
-                      @click="togglePreview(doc.id)"
+                      aria-label="Preview Dokumen"
+                      @click="openPreview(doc)"
                     />
                     <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
                       <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
                     </a>
-                  </div>
-                </div>
-
-                <!-- Preview inline -->
-                <div v-if="previewDocId === doc.id && doc.fileUrl" class="border-t border-default mx-4 mb-4 pt-3">
-                  <div class="rounded-lg overflow-hidden bg-elevated/30 max-h-[400px] overflow-y-auto">
-                    <ClientOnly>
-                      <PdfViewer v-if="isPdf(doc.fileUrl)" :src="doc.fileUrl" class="w-full" />
-                      <img v-else :src="doc.fileUrl" :alt="doc.documentType?.name" class="w-full h-auto object-contain" />
-                    </ClientOnly>
                   </div>
                 </div>
               </div>
@@ -547,6 +537,47 @@ function deleteDoc(id: number) {
     </template>
 
   </USlideover>
+
+  <!-- Preview Modal (pola Surat Peringatan) -->
+  <UModal
+    v-model:open="previewModal"
+    :ui="{ content: 'max-w-5xl h-[90vh]' }"
+    @update:open="(open) => { if (!open) closePreview() }"
+  >
+    <template #body>
+      <!-- Header info dokumen -->
+      <div class="flex items-center justify-between gap-3 border-b border-default pb-3 mb-3">
+        <div class="min-w-0">
+          <p class="font-semibold text-highlighted truncate">
+            {{ previewDoc?.documentType?.name ?? 'Preview Dokumen' }}
+          </p>
+          <p v-if="previewDoc?.documentNumber" class="text-sm text-muted font-mono truncate">
+            {{ previewDoc.documentNumber }}
+          </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <a v-if="previewDoc?.fileUrl" :href="previewDoc.fileUrl" target="_blank">
+            <UButton label="Unduh" icon="i-lucide-download" color="primary" />
+          </a>
+        </div>
+      </div>
+
+      <!-- Viewer area -->
+      <div class="h-[calc(90vh-8rem)] rounded-xl border border-default bg-elevated/30 overflow-auto p-4 md:p-6">
+        <div class="mx-auto h-full w-full max-w-[794px] rounded-xl bg-white p-2">
+          <ClientOnly>
+            <PdfViewer v-if="previewSrc && isPdf(previewDoc?.fileUrl ?? '')" :src="previewSrc" />
+            <img
+              v-else-if="previewSrc"
+              :src="previewSrc"
+              :alt="previewDoc?.documentType?.name"
+              class="w-full h-auto object-contain rounded-lg"
+            />
+          </ClientOnly>
+        </div>
+      </div>
+    </template>
+  </UModal>
 
   <!-- Form modal -->
   <DokKaryawanFormModal
