@@ -3,7 +3,7 @@ import PDFDocument from 'pdfkit'
 import { promises as fs, existsSync } from 'fs'
 import { join, resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
-import { getContractDocumentDefinition } from './contract-document-definitions'
+import { getContractDocumentDefinition, mergeDefinition } from './contract-document-definitions'
 import { SettingsService } from '../settings/settings.service'
 
 type RenderEngine = 'PDF_NATIVE'
@@ -62,13 +62,22 @@ export class ContractDocumentService {
       },
     },
     contractType: true,
-    template: true,
+    template: {
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        family: true,
+        templateKey: true,
+        contentOverrides: true,
+      },
+    },
   }
 
   private readonly pkwtEnglishSectionMap: Record<string, string[]> = {
     'Pasal 1\nMaksud Kesepakatan': [
       '1. Company employ the Employee for stated periods according to company need.',
-      '2. Work Location in Koperation PT Sankyu Indonesia International for work section.',
+      '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
       '3. The company has the right to move employee from one job to other or from one section to other with doesn\'t reduce the agreed wage in this agreement.',
     ],
     'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
@@ -174,10 +183,11 @@ export class ContractDocumentService {
     if (!contract) throw new NotFoundException('Kontrak tidak ditemukan')
     if (!contract.template) throw new BadRequestException('Template dokumen kontrak belum dipilih')
 
-    const definition = getContractDocumentDefinition(contract.template.templateKey)
-    if (!definition) {
+    const rawDefinition = getContractDocumentDefinition(contract.template.templateKey)
+    if (!rawDefinition) {
       throw new BadRequestException(`Template key ${contract.template.templateKey} belum terdaftar di generator dokumen`)
     }
+    const definition = mergeDefinition(rawDefinition, contract.template.contentOverrides as Record<string, any> | null)
 
     const employee = contract.employee
     const missingFields: string[] = []
@@ -329,6 +339,9 @@ export class ContractDocumentService {
         if (p === '__WAGE_AMOUNT__') {
           return `1. Karyawan akan menerima upah sebesar : ${payload.meta.compensation}.`
         }
+        if (p.includes('__ROLE_LABEL__')) {
+          return p.replace('__ROLE_LABEL__', payload.definition.roleLabel)
+        }
         return p
       })
       
@@ -417,7 +430,9 @@ export class ContractDocumentService {
         gapAfter: 6,
       })
 
-      const translatedParagraphs = this.pkwtEnglishSectionMap[section.heading] ?? section.paragraphs
+      const translatedParagraphs = (payload.definition.englishSections?.[section.heading])
+        ?? this.pkwtEnglishSectionMap[section.heading]
+        ?? section.paragraphs
       // Replace placeholders with actual data (English)
       const resolvedTranslated = translatedParagraphs.map(p => {
         if (p === '__TERM_DATE__') {
@@ -425,6 +440,9 @@ export class ContractDocumentService {
         }
         if (p === '__WAGE_AMOUNT__') {
           return `1. The employee shall accept wage amount : ${payload.meta.compensation}.`
+        }
+        if (p.includes('__ROLE_LABEL__')) {
+          return p.replace('__ROLE_LABEL__', payload.definition.roleLabel)
         }
         return p
       })
@@ -478,7 +496,7 @@ export class ContractDocumentService {
     addPara('Kemudian PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").')
     addPara('Dengan ini masing-masing bertindak dalam kedudukannya tersebut di atas terlebih dahulu menerangkan hal-hal sebagai berikut:')
     addPara('1. Bahwa PIHAK PERTAMA adalah suatu koperasi yang salah satu ruang lingkup kegiatannya bergerak di bidang Penyediaan Tenaga Kerja.')
-    addPara('2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA dalam penyediaan jasa kepada perusahaan-perusahaan yang membutuhkan jasa dari PIHAK PERTAMA.')
+    addPara(`2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA untuk pekerjaan ${payload.definition.roleLabel} koperasi Pt Sankyu Indonesia international.`)
     addPara('3. Bahwa Para Pihak sepakat untuk mengikatkan diri dalam suatu Perjanjian dan dalam rangka melaksanakan maksud dan tujuan tersebut, Para Pihak sepakat untuk melakukan kerjasama kemitraan sebagaimana diatur menurut Perjanjian ini.')
     addPara('Sehubungan dengan hal-hal tersebut diatas, Para Pihak sepakat untuk membuat dan menandatangani Perjanjian ini dengan syarat-syarat dan ketentuan sebagai berikut:')
 

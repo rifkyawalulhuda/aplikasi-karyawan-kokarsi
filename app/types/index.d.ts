@@ -161,6 +161,7 @@ export interface ContractTemplate {
   description?: string | null
   templateKey: string
   requiredFields?: unknown
+  contentOverrides?: Record<string, any> | null
   isActive: boolean
   version: number
   notes?: string | null

@@ -73,6 +73,21 @@ export class ContractTemplatesController {
     return this.service.update(id, dto)
   }
 
+  @Get(':id/content-preview')
+  getContentPreview(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getContentPreview(id)
+  }
+
+  @Put(':id/content-overrides')
+  updateContentOverrides(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { overrides: Record<string, any> },
+  ) {
+    this.service.ensureAdmin(req.user?.role)
+    return this.service.updateContentOverrides(id, body.overrides)
+  }
+
   @Delete(':id')
   remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.service.ensureAdmin(req.user?.role)

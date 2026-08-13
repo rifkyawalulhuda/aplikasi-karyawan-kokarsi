@@ -22,6 +22,7 @@ export interface ContractDocumentDefinition {
     paragraphs: string[]
   }>
   requiredFields: string[]
+  englishSections?: Record<string, string[]>
 }
 
 const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sections'] => [
@@ -29,7 +30,7 @@ const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sect
     heading: 'Pasal 1\nMaksud Kesepakatan',
     paragraphs: [
       `1. Perusahaan mempekerjakan Karyawan untuk waktu tertentu sesuai dengan kebutuhan perusahaan.`,
-      `2. Dengan pekerjaan di Koperasi PT Sankyu Indonesia Internasional untuk Pekerjaan Sebagai ${roleLabel}.`,
+      `2. Dengan pekerjaan di Koperasi PT Sankyu Indonesia Internasional untuk Pekerjaan Sebagai __ROLE_LABEL__.`,
       '3. Perusahaan berhak memindahkan karyawan dari satu tugas ke tugas lain atau dari satu bagian ke bagian lain, dengan tidak mengurangi upah yang telah disepakati dalam kesepakatan kerja ini.',
     ],
   },
@@ -369,6 +370,69 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Driver'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+    englishSections: {
+      'Pasal 1\nMaksud Kesepakatan': [
+        '1. Company employ the Employee for stated periods according to company need.',
+        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
+        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
+      ],
+      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
+        '__TERM_DATE__',
+        "2. In this Agreement for Certain Time doesn't required probation period.",
+      ],
+      'Pasal 3\nPengupahan': [
+        '__WAGE_AMOUNT__',
+        "2. Company shall deduct employee's wage for individual income tax.",
+        "3. Employee's wage shall be paid on date of 7 every month.",
+      ],
+      'Pasal 4\nWaktu Kerja': [
+        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
+      ],
+      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
+        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
+        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
+      ],
+      'Pasal 6\nTata Tertib Kerja': [
+        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
+        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
+        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
+        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
+        '5. Employee is obliged to maintain the equipment of company property.',
+      ],
+      'Pasal 7\nDisiplin Kerja': [
+        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
+        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
+        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
+        'c. Doing immoral action in working place.',
+        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
+        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
+        'f. Persuade the employer or co-worker to do something violate the law or morality.',
+        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
+        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
+        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
+        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
+        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
+      ],
+      'Pasal 8\nMangkir': [
+        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
+        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
+      ],
+      'Pasal 9\nBerakhirnya Kesepakatan': [
+        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
+        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
+        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
+        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
+      ],
+      'Pasal 10\nTugas dan Tanggung Jawab': [
+        '1. Employee should do work job well regarding to instruction of superior or company leader.',
+        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
+      ],
+      'Pasal 11\nPenyelesaian Keluh Kesah': [
+        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
+        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
+        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
+      ],
+    },
   },
   PKWT_KASIR: {
     key: 'PKWT_KASIR',
@@ -394,6 +458,69 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Kasir Kopmart'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+    englishSections: {
+      'Pasal 1\nMaksud Kesepakatan': [
+        '1. Company employ the Employee for stated periods according to company need.',
+        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
+        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
+      ],
+      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
+        '__TERM_DATE__',
+        "2. In this Agreement for Certain Time doesn't required probation period.",
+      ],
+      'Pasal 3\nPengupahan': [
+        '__WAGE_AMOUNT__',
+        "2. Company shall deduct employee's wage for individual income tax.",
+        "3. Employee's wage shall be paid on date of 7 every month.",
+      ],
+      'Pasal 4\nWaktu Kerja': [
+        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
+      ],
+      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
+        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
+        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
+      ],
+      'Pasal 6\nTata Tertib Kerja': [
+        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
+        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
+        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
+        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
+        '5. Employee is obliged to maintain the equipment of company property.',
+      ],
+      'Pasal 7\nDisiplin Kerja': [
+        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
+        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
+        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
+        'c. Doing immoral action in working place.',
+        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
+        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
+        'f. Persuade the employer or co-worker to do something violate the law or morality.',
+        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
+        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
+        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
+        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
+        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
+      ],
+      'Pasal 8\nMangkir': [
+        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
+        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
+      ],
+      'Pasal 9\nBerakhirnya Kesepakatan': [
+        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
+        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
+        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
+        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
+      ],
+      'Pasal 10\nTugas dan Tanggung Jawab': [
+        '1. Employee should do work job well regarding to instruction of superior or company leader.',
+        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
+      ],
+      'Pasal 11\nPenyelesaian Keluh Kesah': [
+        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
+        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
+        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
+      ],
+    },
   },
   PKWT_STAFF: {
     key: 'PKWT_STAFF',
@@ -419,6 +546,69 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Staff Admin'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+    englishSections: {
+      'Pasal 1\nMaksud Kesepakatan': [
+        '1. Company employ the Employee for stated periods according to company need.',
+        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
+        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
+      ],
+      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
+        '__TERM_DATE__',
+        "2. In this Agreement for Certain Time doesn't required probation period.",
+      ],
+      'Pasal 3\nPengupahan': [
+        '__WAGE_AMOUNT__',
+        "2. Company shall deduct employee's wage for individual income tax.",
+        "3. Employee's wage shall be paid on date of 7 every month.",
+      ],
+      'Pasal 4\nWaktu Kerja': [
+        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
+      ],
+      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
+        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
+        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
+      ],
+      'Pasal 6\nTata Tertib Kerja': [
+        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
+        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
+        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
+        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
+        '5. Employee is obliged to maintain the equipment of company property.',
+      ],
+      'Pasal 7\nDisiplin Kerja': [
+        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
+        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
+        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
+        'c. Doing immoral action in working place.',
+        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
+        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
+        'f. Persuade the employer or co-worker to do something violate the law or morality.',
+        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
+        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
+        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
+        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
+        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
+      ],
+      'Pasal 8\nMangkir': [
+        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
+        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
+      ],
+      'Pasal 9\nBerakhirnya Kesepakatan': [
+        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
+        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
+        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
+        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
+      ],
+      'Pasal 10\nTugas dan Tanggung Jawab': [
+        '1. Employee should do work job well regarding to instruction of superior or company leader.',
+        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
+      ],
+      'Pasal 11\nPenyelesaian Keluh Kesah': [
+        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
+        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
+        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
+      ],
+    },
   },
   PKWT_WAREHOUSE: {
     key: 'PKWT_WAREHOUSE',
@@ -444,6 +634,69 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Karyawan Gudang'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+    englishSections: {
+      'Pasal 1\nMaksud Kesepakatan': [
+        '1. Company employ the Employee for stated periods according to company need.',
+        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
+        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
+      ],
+      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
+        '__TERM_DATE__',
+        "2. In this Agreement for Certain Time doesn't required probation period.",
+      ],
+      'Pasal 3\nPengupahan': [
+        '__WAGE_AMOUNT__',
+        "2. Company shall deduct employee's wage for individual income tax.",
+        "3. Employee's wage shall be paid on date of 7 every month.",
+      ],
+      'Pasal 4\nWaktu Kerja': [
+        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
+      ],
+      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
+        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
+        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
+      ],
+      'Pasal 6\nTata Tertib Kerja': [
+        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
+        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
+        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
+        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
+        '5. Employee is obliged to maintain the equipment of company property.',
+      ],
+      'Pasal 7\nDisiplin Kerja': [
+        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
+        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
+        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
+        'c. Doing immoral action in working place.',
+        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
+        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
+        'f. Persuade the employer or co-worker to do something violate the law or morality.',
+        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
+        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
+        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
+        "j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company's work results.",
+        "k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company's superior or management.",
+      ],
+      'Pasal 8\nMangkir': [
+        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
+        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
+      ],
+      'Pasal 9\nBerakhirnya Kesepakatan': [
+        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
+        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
+        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
+        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
+      ],
+      'Pasal 10\nTugas dan Tanggung Jawab': [
+        '1. Employee should do work job well regarding to instruction of superior or company leader.',
+        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
+      ],
+      'Pasal 11\nPenyelesaian Keluh Kesah': [
+        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
+        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
+        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
+      ],
+    },
   },
   MITRA_DRIVER: {
     key: 'MITRA_DRIVER',
@@ -545,6 +798,58 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     sections: mitraFullSections('MITRA_WAREHOUSE'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
   },
+}
+
+export function mergeDefinition(
+  base: ContractDocumentDefinition,
+  overrides: Record<string, any> | null | undefined,
+): ContractDocumentDefinition {
+  if (!overrides || Object.keys(overrides).length === 0) return base
+
+  const merged: ContractDocumentDefinition = { ...base }
+
+  // Field string pendek
+  const stringFields: (keyof ContractDocumentDefinition)[] = [
+    'title', 'subtitle', 'openingLine', 'roleLabel', 'locationLine',
+    'termLine', 'compensationLabel', 'firstPartyLabel', 'secondPartyLabel',
+  ]
+  for (const field of stringFields) {
+    const val = overrides[field]
+    if (typeof val === 'string' && val.trim().length > 0) {
+      ;(merged as any)[field] = val
+    }
+  }
+
+  // Array fields (recitals, closingParagraphs)
+  for (const field of ['recitals', 'closingParagraphs'] as const) {
+    const val = overrides[field]
+    if (Array.isArray(val) && val.length > 0) {
+      merged[field] = val
+    }
+  }
+
+  // sections[] — merge per heading
+  if (Array.isArray(overrides.sections) && overrides.sections.length > 0) {
+    const overrideMap = new Map<string, string[]>(
+      overrides.sections
+        .filter((s: any) => s?.heading && Array.isArray(s?.paragraphs))
+        .map((s: any) => [s.heading, s.paragraphs]),
+    )
+    merged.sections = base.sections.map(section => {
+      const overrideParagraphs = overrideMap.get(section.heading)
+      return overrideParagraphs ? { ...section, paragraphs: overrideParagraphs } : section
+    })
+  }
+
+  // englishSections — merge per heading key
+  if (overrides.englishSections && typeof overrides.englishSections === 'object') {
+    merged.englishSections = {
+      ...(base.englishSections ?? {}),
+      ...overrides.englishSections,
+    }
+  }
+
+  return merged
 }
 
 export function getContractDocumentDefinition(templateKey: string) {

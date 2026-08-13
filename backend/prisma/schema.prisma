@@ -197,8 +197,9 @@ model ContractTemplate {
   jobRoleId      Int?
   description    String?
   templateKey    String         @db.VarChar(100)
-  requiredFields Json?
-  isActive       Boolean        @default(true)
+  requiredFields   Json?
+  contentOverrides Json?
+  isActive         Boolean        @default(true)
   version        Int            @default(1)
   notes          String?
 

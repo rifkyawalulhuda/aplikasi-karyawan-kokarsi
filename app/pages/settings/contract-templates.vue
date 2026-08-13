@@ -146,6 +146,20 @@ async function removeTemplate(id: number, name: string) {
     },
   })
 }
+
+// --- Content editor modal state ---
+const contentModalOpen = ref(false)
+const contentModalTemplate = ref<{ id: number; name: string; templateKey: string; family: 'PKWT' | 'MITRA' } | null>(null)
+
+function openContentEditor(template: ContractTemplate) {
+  contentModalTemplate.value = {
+    id: template.id,
+    name: template.name,
+    templateKey: template.templateKey,
+    family: template.family,
+  }
+  contentModalOpen.value = true
+}
 </script>
 
 <template>
@@ -179,9 +193,18 @@ async function removeTemplate(id: number, name: string) {
                   <p class="font-semibold text-highlighted">{{ template.name }}</p>
                   <p class="text-xs text-muted">{{ template.code }}</p>
                 </div>
-                <UBadge :color="template.isActive ? 'success' : 'neutral'" variant="subtle">
-                  {{ template.isActive ? 'Aktif' : 'Nonaktif' }}
-                </UBadge>
+                <div class="flex flex-col items-end gap-1">
+                  <UBadge :color="template.isActive ? 'success' : 'neutral'" variant="subtle">
+                    {{ template.isActive ? 'Aktif' : 'Nonaktif' }}
+                  </UBadge>
+                  <UBadge
+                    v-if="template.contentOverrides && Object.keys(template.contentOverrides).length > 0"
+                    color="primary"
+                    variant="subtle"
+                    icon="i-lucide-pencil"
+                    label="Konten Dikustomisasi"
+                  />
+                </div>
               </div>
 
               <div class="space-y-1 text-sm text-muted">
@@ -194,6 +217,7 @@ async function removeTemplate(id: number, name: string) {
               <p v-if="template.description" class="text-sm text-muted leading-6">{{ template.description }}</p>
 
               <div v-if="auth.canManageMasterData" class="flex gap-2 pt-2">
+                <UButton label="Edit Konten" size="sm" color="primary" variant="ghost" icon="i-lucide-file-edit" @click="openContentEditor(template)" />
                 <UButton label="Edit" size="sm" color="neutral" variant="subtle" icon="i-lucide-pencil" @click="openEdit(template)" />
                 <UButton label="Hapus" size="sm" color="error" variant="ghost" icon="i-lucide-trash" @click="removeTemplate(template.id, template.name)" />
               </div>
@@ -256,4 +280,10 @@ async function removeTemplate(id: number, name: string) {
       </UForm>
     </template>
   </UModal>
+
+  <KontrakTemplateContentModal
+    v-model:open="contentModalOpen"
+    :template="contentModalTemplate"
+    @saved="refresh()"
+  />
 </template>

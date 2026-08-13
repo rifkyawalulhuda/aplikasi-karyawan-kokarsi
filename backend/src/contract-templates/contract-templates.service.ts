@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { ContractFamily } from '@prisma/client'
-import { CONTRACT_DOCUMENT_DEFINITIONS } from '../contracts/contract-document-definitions'
+import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 
 export interface ContractTemplatePayload {
   code: string
@@ -173,5 +173,29 @@ export class ContractTemplatesService {
     }
 
     return this.prisma.contractTemplate.delete({ where: { id } })
+  }
+
+  async getContentPreview(id: number) {
+    const template = await this.findOne(id)
+    const hardcoded = CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey]
+    if (!hardcoded) {
+      throw new BadRequestException(`Template key ${template.templateKey} tidak terdaftar di generator dokumen`)
+    }
+    const merged = mergeDefinition(hardcoded, template.contentOverrides as Record<string, any> | null)
+    return {
+      template: { id: template.id, name: template.name, templateKey: template.templateKey, family: template.family },
+      hardcoded,
+      merged,
+      hasOverrides: !!(template.contentOverrides && Object.keys(template.contentOverrides as object).length > 0),
+    }
+  }
+
+  async updateContentOverrides(id: number, overrides: Record<string, any>) {
+    await this.findOne(id) // throws if not found
+    return this.prisma.contractTemplate.update({
+      where: { id },
+      data: { contentOverrides: overrides },
+      include: this.include,
+    })
   }
 }
