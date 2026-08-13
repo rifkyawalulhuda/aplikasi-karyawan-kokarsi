@@ -50,7 +50,7 @@ const localOpen = computed({
 
 // --- Form modal state ---
 const formOpen = ref(false)
-const editingDoc = ref<EmployeeDocument | null>(null)
+const editingDoc = ref<EmployeeDocument | null | undefined>(null)
 
 function openAddForm() {
   editingDoc.value = null
@@ -90,6 +90,77 @@ const statusLabel: Record<string, string> = {
   EXPIRED: 'Expired',
 }
 
+type BadgeColor = 'error' | 'primary' | 'secondary' | 'success' | 'info' | 'warning' | 'neutral'
+
+// --- Status visual maps ---
+const statusIcon: Record<string, string> = {
+  AKTIF: 'i-lucide-shield-check',
+  AKAN_EXPIRED: 'i-lucide-alert-triangle',
+  EXPIRED: 'i-lucide-clock',
+}
+
+const statusRingClass: Record<string, string> = {
+  AKTIF: 'bg-success/10 text-success',
+  AKAN_EXPIRED: 'bg-warning/10 text-warning',
+  EXPIRED: 'bg-error/10 text-error',
+}
+
+const statusBarClass: Record<string, string> = {
+  AKTIF: 'bg-success',
+  AKAN_EXPIRED: 'bg-warning',
+  EXPIRED: 'bg-error',
+}
+
+const statusTextClass: Record<string, string> = {
+  AKTIF: 'text-success',
+  AKAN_EXPIRED: 'text-warning',
+  EXPIRED: 'text-error',
+}
+
+// --- Document type icons ---
+const docTypeIcon: Record<string, string> = {
+  KTP: 'i-lucide-id-card',
+  SIM: 'i-lucide-car',
+  NPWP: 'i-lucide-badge-percent',
+  KK: 'i-lucide-users',
+  PASPOR: 'i-lucide-book-open',
+  BPJS_TK: 'i-lucide-shield-plus',
+  BPJS_KES: 'i-lucide-heart-pulse',
+  IJAZAH: 'i-lucide-graduation-cap',
+  SERTIFIKAT: 'i-lucide-award',
+}
+
+function docIcon(doc: EmployeeDocument): string {
+  return docTypeIcon[doc.documentType?.documentType ?? ''] ?? 'i-lucide-file-text'
+}
+
+function isPdf(url: string): boolean {
+  return url.toLowerCase().includes('.pdf')
+}
+
+// --- Days until expiry ---
+function daysUntilExpiry(date: string | null | undefined): number | null {
+  if (!date) return null
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const expiry = new Date(date); expiry.setHours(0, 0, 0, 0)
+  return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function daysText(date: string | null | undefined): string {
+  const d = daysUntilExpiry(date)
+  if (d === null) return ''
+  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d === 0) return 'Expired hari ini'
+  return `Sisa ${d} hari`
+}
+
+// --- Preview state (per dokumen, toggle accordion) ---
+const previewDocId = ref<number | null>(null)
+
+function togglePreview(docId: number) {
+  previewDocId.value = previewDocId.value === docId ? null : docId
+}
+
 // --- Worst status badge (header) ---
 const worstStatusPriority: Record<string, number> = {
   EXPIRED: 3,
@@ -103,7 +174,7 @@ const worstStatus = computed(() => {
     const p = worstStatusPriority[doc.status] ?? 0
     const wp = worstStatusPriority[worst] ?? 0
     return p > wp ? doc.status : worst
-  }, documents.value[0].status)
+  }, documents.value[0]!.status)
 })
 
 // --- Fetch employee info ---
@@ -139,6 +210,10 @@ watch(() => props.employeeId, (id) => {
   fetchEmployee(id)
   if (id) refresh()
 }, { immediate: true })
+
+watch(() => props.employeeId, () => {
+  previewDocId.value = null
+})
 
 const documents = computed<EmployeeDocument[]>(() => {
   if (!docsData.value) return []
@@ -183,186 +258,301 @@ function deleteDoc(id: number) {
 </script>
 
 <template>
-  <USlideover
-    v-model:open="localOpen"
-    side="right"
-    size="lg"
-  >
+  <USlideover v-model:open="localOpen" side="right" size="lg">
+
+    <!-- HEADER -->
     <template #header>
       <div class="flex items-center gap-3 w-full min-w-0">
-        <!-- Avatar -->
+        <!-- Avatar dengan ring status -->
         <div class="shrink-0">
           <img
             v-if="employee?.fotoKaryawan"
             :src="employee.fotoKaryawan"
             :alt="employee.fullName"
-            class="size-10 rounded-full object-cover"
+            class="size-12 rounded-full object-cover ring-2 ring-offset-2 ring-default"
           />
           <div
             v-else
-            class="size-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold"
+            class="size-12 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0"
           >
             {{ employee ? getInitials(employee.fullName) : '?' }}
           </div>
         </div>
-
-        <!-- Name + ID -->
+        <!-- Nama + ID -->
         <div class="min-w-0 flex-1">
-          <p class="text-base font-semibold text-highlighted truncate">
-            {{ employee?.fullName ?? '—' }}
-          </p>
-          <p v-if="employee?.employeeNo" class="text-xs text-muted font-mono">
-            {{ employee.employeeNo }}
-          </p>
+          <p class="text-base font-semibold text-highlighted truncate">{{ employee?.fullName ?? 'Memuat...' }}</p>
+          <p v-if="employee?.employeeNo" class="text-xs text-muted font-mono">{{ employee.employeeNo }}</p>
         </div>
-
-        <!-- Worst status badge -->
-        <UBadge
+        <!-- Status ring worst (kanan header) -->
+        <div
           v-if="worstStatus"
-          :label="statusLabel[worstStatus] ?? worstStatus"
-          :color="statusColor[worstStatus] ?? 'neutral'"
-          variant="subtle"
-          size="sm"
-          class="shrink-0"
-        />
+          class="shrink-0 flex size-9 items-center justify-center rounded-full"
+          :class="statusRingClass[worstStatus]"
+        >
+          <UIcon :name="statusIcon[worstStatus] ?? 'i-lucide-file-badge'" class="size-4" />
+        </div>
       </div>
     </template>
 
+    <!-- BODY -->
     <template #body>
-      <!-- Loading state -->
-      <div v-if="loading" class="flex items-center justify-center py-16">
-        <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
-      </div>
+      <div class="space-y-5 p-4">
 
-      <!-- Error state -->
-      <div v-else-if="error" class="flex flex-col items-center gap-2 py-16 text-error">
-        <UIcon name="i-lucide-alert-circle" class="size-8" />
-        <p class="text-sm">Gagal memuat dokumen karyawan</p>
-      </div>
-
-      <div v-else class="p-4 space-y-4">
-        <!-- Summary badges -->
-        <div class="flex gap-2 flex-wrap">
-          <UBadge
-            :label="`Total: ${documents.length}`"
-            color="neutral"
-            variant="subtle"
-          />
-          <UBadge
-            :label="`Aktif: ${countAktif}`"
-            color="success"
-            variant="subtle"
-          />
-          <UBadge
-            :label="`Akan Expired: ${countAkanExpired}`"
-            color="warning"
-            variant="subtle"
-          />
-          <UBadge
-            :label="`Expired: ${countExpired}`"
-            color="error"
-            variant="subtle"
-          />
+        <!-- Loading state -->
+        <div v-if="loading" class="flex flex-col items-center justify-center py-12 gap-3 text-muted">
+          <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
+          <p class="text-sm">Memuat dokumen...</p>
         </div>
 
-        <!-- Section 1: Dokumen Pribadi -->
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-id-card" class="size-4 text-primary" />
-              <h3 class="text-sm font-semibold text-highlighted">Dokumen Pribadi</h3>
-              <UBadge :label="String(personalDocs.length)" variant="subtle" color="neutral" size="xs" />
-            </div>
-            <UButton
-              icon="i-lucide-plus"
-              size="xs"
-              label="Tambah"
-              @click="openAddForm"
-            />
-          </div>
+        <!-- Error state -->
+        <div v-else-if="error" class="flex flex-col items-center justify-center py-12 gap-3 text-muted">
+          <UIcon name="i-lucide-alert-circle" class="size-8 text-error" />
+          <p class="text-sm">Gagal memuat dokumen.</p>
+        </div>
 
-          <div v-if="personalDocs.length === 0" class="text-xs text-muted italic py-2">
-            Belum ada dokumen pribadi
-          </div>
+        <template v-else>
 
-          <div
-            v-for="doc in personalDocs"
-            :key="doc.id"
-            class="border border-default rounded-lg p-3 flex items-start gap-3"
-          >
-            <UIcon name="i-lucide-file-text" class="size-4 text-muted mt-0.5 shrink-0" />
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-highlighted truncate">{{ doc.documentType?.name ?? '—' }}</p>
-              <p v-if="doc.documentNumber" class="text-xs font-mono text-muted">{{ doc.documentNumber }}</p>
-              <p class="text-xs text-muted mt-0.5">
-                Masa berlaku:
-                <span :class="doc.expiryDate ? '' : 'italic'">
-                  {{ doc.expiryDate ? formatDate(doc.expiryDate) : 'Tidak ada masa berlaku' }}
-                </span>
-              </p>
-              <p v-if="doc.notes" class="text-xs text-muted mt-1 whitespace-pre-wrap">{{ doc.notes }}</p>
-            </div>
-            <div class="flex flex-col items-end gap-2 shrink-0">
-              <UBadge :label="statusLabel[doc.status] ?? doc.status" :color="statusColor[doc.status] ?? 'neutral'" variant="subtle" size="xs" />
-              <div class="flex gap-1">
-                <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
-                  <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
-                </a>
-                <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit" @click="openEditForm(doc)" />
-                <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="Hapus" @click="deleteDoc(doc.id)" />
+          <!-- Summary strip (4 stat grid) -->
+          <div class="rounded-xl border border-default bg-elevated/40 p-3">
+            <div class="grid grid-cols-4 gap-2 text-center">
+              <div>
+                <p class="text-lg font-bold tabular-nums text-highlighted">{{ documents.length }}</p>
+                <p class="text-xs text-muted">Total</p>
+              </div>
+              <div>
+                <p class="text-lg font-bold tabular-nums text-success">{{ countAktif }}</p>
+                <p class="text-xs text-muted">Aktif</p>
+              </div>
+              <div>
+                <p class="text-lg font-bold tabular-nums text-warning">{{ countAkanExpired }}</p>
+                <p class="text-xs text-muted">Akan Exp.</p>
+              </div>
+              <div>
+                <p class="text-lg font-bold tabular-nums text-error">{{ countExpired }}</p>
+                <p class="text-xs text-muted">Expired</p>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Divider -->
-        <USeparator v-if="sertifikasiDocs.length > 0" class="my-2" />
-
-        <!-- Section 2: Sertifikasi & Ijin (read-only, only shown if data exists) -->
-        <div v-if="sertifikasiDocs.length > 0" class="space-y-3">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-award" class="size-4 text-warning" />
-            <h3 class="text-sm font-semibold text-highlighted">Sertifikasi & Ijin</h3>
-            <UBadge :label="String(sertifikasiDocs.length)" variant="subtle" color="warning" size="xs" />
-            <UBadge label="Dari halaman Sertifikasi & Ijin" variant="subtle" color="neutral" size="xs" />
-          </div>
-
-          <div
-            v-for="doc in sertifikasiDocs"
-            :key="doc.id"
-            class="border border-default rounded-lg p-3 flex items-start gap-3"
-          >
-            <UIcon name="i-lucide-file-text" class="size-4 text-muted mt-0.5 shrink-0" />
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium text-highlighted truncate">{{ doc.documentType?.name ?? '—' }}</p>
-              <p v-if="doc.documentNumber" class="text-xs font-mono text-muted">{{ doc.documentNumber }}</p>
-              <p class="text-xs text-muted mt-0.5">
-                Masa berlaku:
-                <span :class="doc.expiryDate ? '' : 'italic'">
-                  {{ doc.expiryDate ? formatDate(doc.expiryDate) : 'Tidak ada masa berlaku' }}
-                </span>
-              </p>
-              <p v-if="doc.notes" class="text-xs text-muted mt-1 whitespace-pre-wrap">{{ doc.notes }}</p>
+          <!-- SECTION: Dokumen Pribadi -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs font-semibold text-muted uppercase tracking-wide">Dokumen Pribadi</p>
+              <UButton
+                icon="i-lucide-plus"
+                label="Tambah"
+                size="xs"
+                color="primary"
+                variant="soft"
+                @click="openAddForm"
+              />
             </div>
-            <div class="flex flex-col items-end gap-2 shrink-0">
-              <UBadge :label="statusLabel[doc.status] ?? doc.status" :color="statusColor[doc.status] ?? 'neutral'" variant="subtle" size="xs" />
-              <div class="flex gap-1">
-                <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
-                  <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
-                </a>
+
+            <!-- Empty state Pribadi -->
+            <div v-if="personalDocs.length === 0" class="rounded-xl border border-dashed border-default bg-elevated/20 p-6 text-center">
+              <UIcon name="i-lucide-folder-open" class="size-8 text-muted mx-auto mb-2 opacity-50" />
+              <p class="text-sm text-muted">Belum ada dokumen pribadi.</p>
+            </div>
+
+            <!-- Card dokumen pribadi -->
+            <div v-else class="space-y-2">
+              <div
+                v-for="doc in personalDocs"
+                :key="doc.id"
+                class="relative rounded-xl border border-default bg-default overflow-hidden"
+              >
+                <!-- Status accent bar (signature element) -->
+                <span
+                  class="absolute left-0 inset-y-0 w-1 rounded-l-xl"
+                  :class="statusBarClass[doc.status] ?? 'bg-muted'"
+                />
+
+                <div class="p-3.5 pl-5 flex items-start gap-3">
+                  <!-- Ikon dokumen spesifik -->
+                  <div class="size-9 shrink-0 rounded-lg bg-elevated/60 flex items-center justify-center mt-0.5">
+                    <UIcon :name="docIcon(doc)" class="size-4 text-muted" />
+                  </div>
+
+                  <!-- Info utama -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-highlighted truncate">{{ doc.documentType?.name ?? '—' }}</p>
+                        <p v-if="doc.documentNumber" class="text-xs font-mono text-muted truncate">{{ doc.documentNumber }}</p>
+                      </div>
+                      <UBadge
+                        :label="statusLabel[doc.status] ?? doc.status"
+                        :color="(statusColor[doc.status] ?? 'neutral') as BadgeColor"
+                        variant="subtle"
+                        size="sm"
+                        class="shrink-0"
+                      />
+                    </div>
+
+                    <!-- Expiry + sisa hari -->
+                    <div class="mt-1.5 flex items-center gap-1.5">
+                      <UIcon
+                        :name="statusIcon[doc.status] ?? 'i-lucide-calendar'"
+                        class="size-3 shrink-0"
+                        :class="doc.expiryDate ? (statusTextClass[doc.status] ?? 'text-muted') : 'text-muted'"
+                      />
+                      <p class="text-xs" :class="doc.expiryDate ? (statusTextClass[doc.status] ?? 'text-muted') : 'text-muted italic'">
+                        <template v-if="doc.expiryDate">
+                          <span class="font-medium">{{ daysText(doc.expiryDate) }}</span>
+                          <span class="text-muted"> · {{ formatDate(doc.expiryDate) }}</span>
+                        </template>
+                        <template v-else>Tidak ada masa berlaku</template>
+                      </p>
+                    </div>
+
+                    <p v-if="doc.notes" class="text-xs text-muted mt-1.5 whitespace-pre-wrap">{{ doc.notes }}</p>
+                  </div>
+
+                  <!-- Aksi: preview, unduh, edit, hapus -->
+                  <div class="flex gap-1 shrink-0">
+                    <UButton
+                      v-if="doc.fileUrl"
+                      :icon="previewDocId === doc.id ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      size="xs"
+                      color="primary"
+                      variant="ghost"
+                      :aria-label="previewDocId === doc.id ? 'Tutup Preview' : 'Preview Dokumen'"
+                      @click="togglePreview(doc.id)"
+                    />
+                    <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
+                      <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
+                    </a>
+                    <UButton icon="i-lucide-pencil" size="xs" color="neutral" variant="ghost" aria-label="Edit" @click="openEditForm(doc)" />
+                    <UButton icon="i-lucide-trash-2" size="xs" color="error" variant="ghost" aria-label="Hapus" @click="deleteDoc(doc.id)" />
+                  </div>
+                </div>
+
+                <!-- Preview inline (accordion, satu sekaligus) -->
+                <div v-if="previewDocId === doc.id && doc.fileUrl" class="border-t border-default mx-4 mb-4 pt-3">
+                  <div class="rounded-lg overflow-hidden bg-elevated/30 max-h-[400px] overflow-y-auto">
+                    <ClientOnly>
+                      <PdfViewer v-if="isPdf(doc.fileUrl)" :src="doc.fileUrl" class="w-full" />
+                      <img v-else :src="doc.fileUrl" :alt="doc.documentType?.name" class="w-full h-auto object-contain" />
+                    </ClientOnly>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+
+          <!-- SECTION: Sertifikasi & Ijin (read-only) -->
+          <div v-if="sertifikasiDocs.length > 0">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-xs font-semibold text-muted uppercase tracking-wide">Sertifikasi &amp; Ijin</p>
+              <UBadge :label="`${sertifikasiDocs.length} dokumen`" color="neutral" variant="subtle" size="xs" />
+            </div>
+
+            <div class="space-y-2">
+              <div
+                v-for="doc in sertifikasiDocs"
+                :key="doc.id"
+                class="relative rounded-xl border border-default bg-default overflow-hidden"
+              >
+                <!-- Status accent bar -->
+                <span
+                  class="absolute left-0 inset-y-0 w-1 rounded-l-xl"
+                  :class="statusBarClass[doc.status] ?? 'bg-muted'"
+                />
+
+                <div class="p-3.5 pl-5 flex items-start gap-3">
+                  <!-- Ikon dokumen -->
+                  <div class="size-9 shrink-0 rounded-lg bg-elevated/60 flex items-center justify-center mt-0.5">
+                    <UIcon :name="docIcon(doc)" class="size-4 text-muted" />
+                  </div>
+
+                  <!-- Info -->
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="min-w-0">
+                        <p class="text-sm font-medium text-highlighted truncate">{{ doc.documentType?.name ?? '—' }}</p>
+                        <p v-if="doc.documentNumber" class="text-xs font-mono text-muted truncate">{{ doc.documentNumber }}</p>
+                      </div>
+                      <UBadge
+                        :label="statusLabel[doc.status] ?? doc.status"
+                        :color="(statusColor[doc.status] ?? 'neutral') as BadgeColor"
+                        variant="subtle"
+                        size="sm"
+                        class="shrink-0"
+                      />
+                    </div>
+
+                    <div class="mt-1.5 flex items-center gap-1.5">
+                      <UIcon
+                        :name="statusIcon[doc.status] ?? 'i-lucide-calendar'"
+                        class="size-3 shrink-0"
+                        :class="doc.expiryDate ? (statusTextClass[doc.status] ?? 'text-muted') : 'text-muted'"
+                      />
+                      <p class="text-xs" :class="doc.expiryDate ? (statusTextClass[doc.status] ?? 'text-muted') : 'text-muted italic'">
+                        <template v-if="doc.expiryDate">
+                          <span class="font-medium">{{ daysText(doc.expiryDate) }}</span>
+                          <span class="text-muted"> · {{ formatDate(doc.expiryDate) }}</span>
+                        </template>
+                        <template v-else>Tidak ada masa berlaku</template>
+                      </p>
+                    </div>
+
+                    <p v-if="doc.notes" class="text-xs text-muted mt-1.5 whitespace-pre-wrap">{{ doc.notes }}</p>
+                  </div>
+
+                  <!-- Aksi: hanya preview dan unduh (read-only) -->
+                  <div class="flex gap-1 shrink-0">
+                    <UButton
+                      v-if="doc.fileUrl"
+                      :icon="previewDocId === doc.id ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                      size="xs"
+                      color="primary"
+                      variant="ghost"
+                      :aria-label="previewDocId === doc.id ? 'Tutup Preview' : 'Preview Dokumen'"
+                      @click="togglePreview(doc.id)"
+                    />
+                    <a v-if="doc.fileUrl" :href="doc.fileUrl" target="_blank">
+                      <UButton icon="i-lucide-download" size="xs" color="neutral" variant="ghost" aria-label="Unduh" />
+                    </a>
+                  </div>
+                </div>
+
+                <!-- Preview inline -->
+                <div v-if="previewDocId === doc.id && doc.fileUrl" class="border-t border-default mx-4 mb-4 pt-3">
+                  <div class="rounded-lg overflow-hidden bg-elevated/30 max-h-[400px] overflow-y-auto">
+                    <ClientOnly>
+                      <PdfViewer v-if="isPdf(doc.fileUrl)" :src="doc.fileUrl" class="w-full" />
+                      <img v-else :src="doc.fileUrl" :alt="doc.documentType?.name" class="w-full h-auto object-contain" />
+                    </ClientOnly>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Empty state total kosong -->
+          <div v-if="!loading && documents.length === 0" class="flex flex-col items-center justify-center py-12 gap-3 text-muted">
+            <UIcon name="i-lucide-folder-open" class="size-10 opacity-40" />
+            <p class="text-sm">Belum ada dokumen untuk karyawan ini.</p>
+          </div>
+
+        </template>
       </div>
     </template>
+
+    <!-- FOOTER -->
+    <template #footer>
+      <div class="flex justify-end w-full">
+        <UButton label="Tutup" color="neutral" variant="subtle" @click="localOpen = false" />
+      </div>
+    </template>
+
   </USlideover>
 
   <!-- Form modal -->
   <DokKaryawanFormModal
     v-model:open="formOpen"
     :employee-id="employeeId"
-    :doc="editingDoc"
+    :doc="editingDoc as any"
     @saved="refresh()"
   />
 </template>
