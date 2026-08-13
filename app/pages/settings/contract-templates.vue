@@ -16,6 +16,26 @@ const templates = computed(() => templatesRes.value ?? [])
 const contractTypeOptions = computed(() => (contractTypesRes.value ?? []).map(item => ({ label: item.name, value: item.id })))
 const jobRoleOptions = computed(() => (jobRolesRes.value ?? []).map(item => ({ label: item.name, value: item.id })))
 
+// --- Template Key Options (sesuai CONTRACT_DOCUMENT_DEFINITIONS di backend) ---
+const TEMPLATE_KEY_OPTIONS: Record<string, { label: string; value: string }[]> = {
+  PKWT: [
+    { label: 'PKWT_DRIVER — Driver', value: 'PKWT_DRIVER' },
+    { label: 'PKWT_KASIR — Kasir', value: 'PKWT_KASIR' },
+    { label: 'PKWT_STAFF — Staff', value: 'PKWT_STAFF' },
+    { label: 'PKWT_WAREHOUSE — Karyawan Gudang', value: 'PKWT_WAREHOUSE' },
+  ],
+  MITRA: [
+    { label: 'MITRA_DRIVER — Driver', value: 'MITRA_DRIVER' },
+    { label: 'MITRA_KOMART — Kasir Kopmart', value: 'MITRA_KOMART' },
+    { label: 'MITRA_STAFF — Staff', value: 'MITRA_STAFF' },
+    { label: 'MITRA_WAREHOUSE — Karyawan Gudang', value: 'MITRA_WAREHOUSE' },
+  ],
+}
+
+const templateKeyOptions = computed(() =>
+  TEMPLATE_KEY_OPTIONS[state.family ?? 'PKWT'] ?? []
+)
+
 const formOpen = ref(false)
 const saving = ref(false)
 const editingId = ref<number | null>(null)
@@ -24,7 +44,10 @@ const schema = z.object({
   code: z.string().min(3, 'Min. 3 karakter'),
   name: z.string().min(3, 'Min. 3 karakter'),
   family: z.enum(['MITRA', 'PKWT']),
-  templateKey: z.string().min(3, 'Min. 3 karakter'),
+  templateKey: z.enum([
+    'PKWT_DRIVER', 'PKWT_KASIR', 'PKWT_STAFF', 'PKWT_WAREHOUSE',
+    'MITRA_DRIVER', 'MITRA_KOMART', 'MITRA_STAFF', 'MITRA_WAREHOUSE',
+  ], { message: 'Pilih template key yang valid' }),
   contractTypeId: z.number().optional(),
   jobRoleId: z.number().optional(),
   description: z.string().optional(),
@@ -38,7 +61,7 @@ const state = reactive<Partial<Schema>>({
   code: '',
   name: '',
   family: 'PKWT',
-  templateKey: '',
+  templateKey: undefined,
   contractTypeId: undefined,
   jobRoleId: undefined,
   description: '',
@@ -51,13 +74,21 @@ function resetForm() {
   state.code = ''
   state.name = ''
   state.family = 'PKWT'
-  state.templateKey = ''
+  state.templateKey = undefined
   state.contractTypeId = undefined
   state.jobRoleId = undefined
   state.description = ''
   state.notes = ''
   state.isActive = true
 }
+
+// Reset templateKey jika tidak cocok dengan family yang baru dipilih
+watch(() => state.family, (newFamily) => {
+  const validKeys = (TEMPLATE_KEY_OPTIONS[newFamily ?? 'PKWT'] ?? []).map(o => o.value)
+  if (state.templateKey && !validKeys.includes(state.templateKey)) {
+    state.templateKey = undefined
+  }
+})
 
 function openCreate() {
   resetForm()
@@ -69,7 +100,7 @@ function openEdit(template: ContractTemplate) {
   state.code = template.code
   state.name = template.name
   state.family = template.family
-  state.templateKey = template.templateKey
+  state.templateKey = template.templateKey as Schema['templateKey']
   state.contractTypeId = template.contractTypeId ?? undefined
   state.jobRoleId = template.jobRoleId ?? undefined
   state.description = template.description ?? ''
@@ -181,8 +212,13 @@ async function removeTemplate(id: number) {
           <UFormField label="Keluarga" name="family" required>
             <USelect v-model="state.family" :items="[{ label: 'PKWT', value: 'PKWT' }, { label: 'MITRA', value: 'MITRA' }]" class="w-full" />
           </UFormField>
-          <UFormField label="Template Key" name="templateKey" required>
-            <UInput v-model="state.templateKey" class="w-full" />
+          <UFormField label="Template Key" name="templateKey" required hint="Menentukan konten dokumen PDF yang digenerate">
+            <USelect
+              v-model="state.templateKey"
+              :items="templateKeyOptions"
+              placeholder="Pilih template key..."
+              class="w-full"
+            />
           </UFormField>
         </div>
 
