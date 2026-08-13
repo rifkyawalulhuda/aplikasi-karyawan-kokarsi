@@ -97,6 +97,30 @@ export function useExport() {
     }))
   }
 
+  function toPDFRows(employees: Employee[]) {
+    return employees.map((e: any, i: number) => {
+      const c = resolveActiveContract(e)
+      return {
+        'No': i + 1,
+        'No. Induk': e.employeeNo ?? '-',
+        'Nama': e.fullName ?? '-',
+        'Status': employmentStatusLabel(e.employmentStatus ?? '-'),
+        'Gender': genderLabel(e.gender ?? ''),
+        'Tgl Lahir': [e.birthPlace, fmt(e.birthDate)].filter(Boolean).join(', ') || '-',
+        'Alamat': e.address ?? '-',
+        'Email': e.email ?? '-',
+        'No. HP': e.phoneNumber ?? '-',
+        'Site': e.workLocation?.name ?? '-',
+        'Dept': e.department?.name ?? '-',
+        'Pekerjaan': e.jobRole?.name ?? '-',
+        'Tgl Gabung': fmt(e.joinDate),
+        'Tgl Kontrak': fmt(c?.startDate),
+        'Sls Kontrak': fmt(c?.endDate),
+        'Status Kontrak': statusLabel(resolveContractStatus(c) ?? ''),
+      }
+    })
+  }
+
   async function fetchAllEmployees(): Promise<Employee[]> {
     const res = await $fetch<{ data: Employee[]; total: number }>('/api/employees/export')
     return res?.data ?? []
@@ -120,15 +144,23 @@ export function useExport() {
 
   async function exportPDF(filename = 'data-karyawan') {
     const employees = await fetchAllEmployees()
-    const rows = toRows(employees)
+    const rows = toPDFRows(employees)
 
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
 
+    // Title
     doc.setFontSize(14)
+    doc.setTextColor(0)
     doc.text('Data Karyawan Kokarsi PT. Sankyu', 14, 15)
+
+    // Subtitle
     doc.setFontSize(9)
     doc.setTextColor(120)
-    doc.text(`Total: ${employees.length} karyawan  |  Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}`, 14, 21)
+    doc.text(
+      `Total: ${employees.length} karyawan  |  Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}`,
+      14,
+      21,
+    )
 
     const headers = Object.keys(rows[0] ?? {})
     const body = rows.map(r => headers.map(h => String((r as any)[h] ?? '-')))
@@ -137,11 +169,59 @@ export function useExport() {
       head: [headers],
       body,
       startY: 26,
-      styles: { fontSize: 6, cellPadding: 1.5 },
-      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 6.5 },
-      alternateRowStyles: { fillColor: [245, 247, 250] },
-      margin: { left: 10, right: 10 },
+      theme: 'grid',
       tableWidth: 'auto',
+      styles: {
+        fontSize: 6.5,
+        cellPadding: 1,
+        overflow: 'ellipsize',
+        lineColor: [210, 210, 210],
+        lineWidth: 0.1,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 7,
+        halign: 'center',
+        valign: 'middle',
+      },
+      bodyStyles: {
+        valign: 'top',
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      columnStyles: {
+        0: { cellWidth: 7 },   // No
+        1: { cellWidth: 16 },  // No. Induk
+        2: { cellWidth: 30 },  // Nama
+        3: { cellWidth: 13 },  // Status
+        4: { cellWidth: 11 },  // Gender
+        5: { cellWidth: 17 },  // Tgl Lahir
+        6: { cellWidth: 35 },  // Alamat
+        7: { cellWidth: 29 },  // Email
+        8: { cellWidth: 15 },  // No. HP
+        9: { cellWidth: 15 },  // Site
+        10: { cellWidth: 15 }, // Dept
+        11: { cellWidth: 17 }, // Pekerjaan
+        12: { cellWidth: 16 }, // Tgl Gabung
+        13: { cellWidth: 16 }, // Tgl Kontrak
+        14: { cellWidth: 16 }, // Sls Kontrak
+        15: { cellWidth: 13 }, // Status Kontrak
+      },
+      margin: { left: 8, right: 8, bottom: 12 },
+      didDrawPage: (data) => {
+        const pageCount = doc.getNumberOfPages()
+        doc.setFontSize(7)
+        doc.setTextColor(150)
+        doc.text(
+          `Halaman ${data.pageNumber} dari ${pageCount}`,
+          doc.internal.pageSize.width / 2,
+          doc.internal.pageSize.height - 5,
+          { align: 'center' },
+        )
+      },
     })
 
     doc.save(`${filename}.pdf`)
