@@ -43,6 +43,15 @@ Kustomisasi halaman login:
 - Status Pajak, Tipe Kontrak
 - **Jenis Dokumen** — Tipe dokumen dengan field Kategori (Dokumen Pribadi untuk Dok. Karyawan, Sertifikasi & Ijin untuk modul Sertifikasi & Ijin)
 
+## Template Kontrak (Admin Only)
+
+**Pengaturan → Template Kontrak** untuk mengelola template dokumen PDF kontrak:
+- Tambah, edit, dan hapus template kontrak
+- Pilih Template Key sesuai posisi karyawan (PKWT/MITRA)
+- Kustomisasi narasi/teks dokumen tanpa mengubah kode sistem
+
+Lihat [Template Kontrak](/panduan-pengguna/template-kontrak) untuk panduan lengkap.
+
 ## Manajemen User (Admin Only)
 
 **Pengaturan → User** untuk:

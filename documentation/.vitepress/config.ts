@@ -50,6 +50,7 @@ export default defineConfig({
             { text: 'Dashboard', link: '/panduan-pengguna/dashboard' },
             { text: 'Data Karyawan', link: '/panduan-pengguna/data-karyawan' },
             { text: 'Kontrak Karyawan', link: '/panduan-pengguna/kontrak-karyawan' },
+            { text: 'Template Kontrak', link: '/panduan-pengguna/template-kontrak' },
             { text: 'Surat Peringatan', link: '/panduan-pengguna/surat-peringatan' },
             { text: 'Dok. Karyawan', link: '/panduan-pengguna/dok-karyawan' },
             { text: 'Sertifikasi & Ijin', link: '/panduan-pengguna/sertifikasi-ijin' },

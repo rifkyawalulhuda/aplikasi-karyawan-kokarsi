@@ -55,6 +55,11 @@ Kontrak lama akan berubah status menjadi **Sudah Diperpanjang**.
 2. Sistem akan membuat dokumen berdasarkan template
 3. Klik **Unduh PDF** untuk download
 
+::: tip Template Kontrak
+Konten dokumen PDF (judul, pasal, narasi) ditentukan oleh template yang dipilih saat membuat kontrak.
+Untuk mengkustomisasi teks pasal dan narasi template, lihat [Template Kontrak](/panduan-pengguna/template-kontrak).
+:::
+
 ## Riwayat Kontrak
 
 Klik **Lihat Riwayat** untuk melihat semua kontrak karyawan termasuk yang sudah expired atau selesai. Kontrak yang sudah diperpanjang ditandai dengan badge **Sudah Diperpanjang**.
