@@ -196,10 +196,29 @@ export class SpaceCardsService {
 
   // ── Comments ───────────────────────────────────────────────────────────────
 
-  async addComment(spaceId: number, cardId: number, dto: CreateCommentDto, userId: number, userName: string) {
+  async addComment(spaceId: number, cardId: number, dto: CreateCommentDto, userId: number, userName: string, userPhotoUrl?: string | null) {
     await this.findOne(spaceId, cardId, userId)
+
+    // Fetch photoUrl langsung dari DB berdasarkan userId
+    let photoUrl = userPhotoUrl ?? null
+    if (!photoUrl) {
+      const userAccount = await this.prisma.userAccount.findUnique({
+        where: { id: userId },
+        select: { photoUrl: true },
+      })
+      if (userAccount) {
+        photoUrl = userAccount.photoUrl ?? null
+      } else {
+        const masterAdmin = await this.prisma.masterAdmin.findUnique({
+          where: { id: userId },
+          select: { photoUrl: true },
+        })
+        photoUrl = masterAdmin?.photoUrl ?? null
+      }
+    }
+
     const comment = await this.prisma.spaceCardComment.create({
-      data: { cardId, content: dto.content, authorId: userId, authorType: 'user', authorName: userName },
+      data: { cardId, content: dto.content, authorId: userId, authorType: 'user', authorName: userName, authorPhotoUrl: photoUrl },
     })
     this.sse.broadcastToSpace(spaceId, { type: 'COMMENT_ADDED', payload: { cardId, comment }, actorId: userId, actorName: userName })
     return comment
@@ -211,7 +230,10 @@ export class SpaceCardsService {
     if (!comment) throw new NotFoundException('Komentar tidak ditemukan')
     if (comment.authorId !== userId) throw new ForbiddenException('Hanya penulis yang dapat mengedit komentar')
 
-    const updated = await this.prisma.spaceCardComment.update({ where: { id: commentId }, data: { content: dto.content } })
+    const updated = await this.prisma.spaceCardComment.update({
+      where: { id: commentId },
+      data: { content: dto.content, isEdited: true, editedAt: new Date() },
+    })
     this.sse.broadcastToSpace(spaceId, { type: 'COMMENT_UPDATED', payload: { cardId, comment: updated }, actorId: userId, actorName: userName })
     return updated
   }
@@ -222,7 +244,10 @@ export class SpaceCardsService {
     if (!comment) throw new NotFoundException('Komentar tidak ditemukan')
     if (comment.authorId !== userId) throw new ForbiddenException('Hanya penulis yang dapat menghapus komentar')
 
-    await this.prisma.spaceCardComment.delete({ where: { id: commentId } })
+    await this.prisma.spaceCardComment.update({
+      where: { id: commentId },
+      data: { isDeleted: true, deletedAt: new Date(), content: '' },
+    })
     this.sse.broadcastToSpace(spaceId, { type: 'COMMENT_DELETED', payload: { cardId, commentId }, actorId: userId, actorName: userName })
     return { deleted: true }
   }

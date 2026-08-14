@@ -181,7 +181,8 @@ export class SpaceCardsController {
     @Request() req: any,
   ) {
     const name = req.user?.fullName ?? req.user?.name ?? req.user?.username ?? 'User'
-    return this.cardsService.addComment(spaceId, cardId, dto, req.user.sub, name)
+    const photoUrl = req.user?.photoUrl ?? null
+    return this.cardsService.addComment(spaceId, cardId, dto, req.user.sub, name, photoUrl)
   }
 
   @UseGuards(AuthGuard('jwt'))

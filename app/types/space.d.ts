@@ -116,6 +116,11 @@ export interface SpaceCardComment {
   authorId: number
   authorType: string
   authorName: string
+  authorPhotoUrl?: string | null
+  isEdited?: boolean
+  editedAt?: string | null
+  isDeleted?: boolean
+  deletedAt?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -179,6 +184,11 @@ export interface SpaceCardComment {
   authorId: number
   authorType: string
   authorName: string
+  authorPhotoUrl?: string | null
+  isEdited?: boolean
+  editedAt?: string | null
+  isDeleted?: boolean
+  deletedAt?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -183,14 +183,35 @@ function getFileIcon(att: SpaceCardAttachment): string {
   return 'i-lucide-file'
 }
 
-async function deleteAtt(attId: number) {
-  await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/attachments/${attId}`, { method: 'DELETE' })
-  refresh()
+async function deleteAtt(att: SpaceCardAttachment) {
+  confirmDeleteToast({
+    title: 'Hapus Lampiran',
+    description: `Lampiran "${att.name}" akan dihapus permanen.`,
+    confirmLabel: 'Hapus',
+    onConfirm: async () => {
+      await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/attachments/${att.id}`, { method: 'DELETE' })
+      refresh()
+    },
+  })
 }
 
 // Comments
 const newComment = ref('')
 const savingComment = ref(false)
+const editingCommentId = ref<number | null>(null)
+const editCommentText = ref('')
+const savingEditComment = ref(false)
+
+const auth = useAuthStore()
+const currentUserId = computed(() => auth.admin?.id ?? null)
+
+function formatDeletedAt(dateStr: string | null | undefined): string {
+  if (!dateStr) return ''
+  return new Date(dateStr).toLocaleDateString('id-ID', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
 
 async function submitComment() {
   if (!newComment.value.trim()) return
@@ -206,9 +227,41 @@ async function submitComment() {
   }
 }
 
-async function deleteComment(cmtId: number) {
-  await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/comments/${cmtId}`, { method: 'DELETE' })
-  refresh()
+function deleteComment(cmtId: number) {
+  confirmDeleteToast({
+    title: 'Hapus Komentar',
+    description: 'Komentar ini akan dihapus. Bekas komentar tetap ditampilkan sebagai log.',
+    confirmLabel: 'Hapus',
+    onConfirm: async () => {
+      await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/comments/${cmtId}`, { method: 'DELETE' })
+      refresh()
+    },
+  })
+}
+
+function startEditComment(cmt: { id: number; content: string }) {
+  editingCommentId.value = cmt.id
+  editCommentText.value = cmt.content
+}
+
+function cancelEditComment() {
+  editingCommentId.value = null
+  editCommentText.value = ''
+}
+
+async function saveEditComment(cmtId: number) {
+  if (!editCommentText.value.trim()) return
+  savingEditComment.value = true
+  try {
+    await requestFetch(`/api/spaces/${props.spaceId}/cards/${props.card.id}/comments/${cmtId}`, {
+      method: 'PUT', body: { content: editCommentText.value.trim() }
+    })
+    editingCommentId.value = null
+    editCommentText.value = ''
+    refresh()
+  } finally {
+    savingEditComment.value = false
+  }
 }
 
 // Delete card
@@ -419,7 +472,7 @@ const currentPriority = computed(() =>
                 tag="a"
                 aria-label="Download"
               />
-              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" @click="deleteAtt(att.id)" />
+              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" @click="deleteAtt(att)" />
             </div>
           </div>
         </div>
@@ -436,17 +489,91 @@ const currentPriority = computed(() =>
               :key="cmt.id"
               class="flex gap-3"
             >
-              <div class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                {{ cmt.authorName.charAt(0).toUpperCase() }}
+              <!-- Avatar -->
+              <div
+                class="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold overflow-hidden"
+                :class="cmt.isDeleted ? 'bg-muted/30 text-muted' : 'bg-primary/10 text-primary'"
+              >
+                <img
+                  v-if="!cmt.isDeleted && cmt.authorPhotoUrl"
+                  :src="cmt.authorPhotoUrl"
+                  :alt="cmt.authorName"
+                  class="w-full h-full object-cover"
+                />
+                <span v-else>{{ cmt.authorName.charAt(0).toUpperCase() }}</span>
               </div>
-              <div class="flex-1">
+
+              <!-- KONDISI 1: Komentar dihapus (soft delete) -->
+              <div v-if="cmt.isDeleted" class="flex-1 rounded-lg bg-elevated/30 px-3 py-2">
+                <p class="text-xs italic text-muted">
+                  Komentar ini telah dihapus pada {{ formatDeletedAt(cmt.deletedAt) }}
+                </p>
+              </div>
+
+              <!-- KONDISI 2: Mode edit inline -->
+              <div v-else-if="editingCommentId === cmt.id" class="flex-1 space-y-2">
                 <div class="flex items-baseline gap-2">
                   <span class="text-sm font-medium text-highlighted">{{ cmt.authorName }}</span>
-                  <span class="text-xs text-muted">{{ new Date(cmt.createdAt).toLocaleDateString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) }}</span>
+                </div>
+                <UTextarea v-model="editCommentText" :rows="2" class="w-full text-sm" />
+                <div class="flex gap-2">
+                  <UButton
+                    label="Simpan"
+                    color="primary"
+                    size="xs"
+                    :loading="savingEditComment"
+                    @click="saveEditComment(cmt.id)"
+                  />
+                  <UButton
+                    label="Batal"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    @click="cancelEditComment"
+                  />
+                </div>
+              </div>
+
+              <!-- KONDISI 3: Komentar normal -->
+              <div v-else class="flex-1">
+                <div class="flex items-baseline gap-2">
+                  <span class="text-sm font-medium text-highlighted">{{ cmt.authorName }}</span>
+                  <span class="text-xs text-muted">
+                    {{ new Date(cmt.createdAt).toLocaleDateString('id-ID', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' }) }}
+                  </span>
+                  <UBadge
+                    v-if="cmt.isEdited"
+                    label="Diedit"
+                    color="neutral"
+                    variant="subtle"
+                    size="xs"
+                  />
                 </div>
                 <p class="mt-0.5 text-sm text-muted">{{ cmt.content }}</p>
               </div>
-              <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs" @click="deleteComment(cmt.id)" />
+
+              <!-- Tombol aksi (hanya untuk komentar milik user sendiri, kondisi normal) -->
+              <div
+                v-if="!cmt.isDeleted && editingCommentId !== cmt.id && cmt.authorId === currentUserId"
+                class="flex shrink-0 gap-1"
+              >
+                <UButton
+                  icon="i-lucide-pencil"
+                  variant="ghost"
+                  color="neutral"
+                  size="xs"
+                  aria-label="Edit komentar"
+                  @click="startEditComment(cmt)"
+                />
+                <UButton
+                  icon="i-lucide-trash-2"
+                  variant="ghost"
+                  color="error"
+                  size="xs"
+                  aria-label="Hapus komentar"
+                  @click="deleteComment(cmt.id)"
+                />
+              </div>
             </div>
           </div>
           <!-- Add comment -->
