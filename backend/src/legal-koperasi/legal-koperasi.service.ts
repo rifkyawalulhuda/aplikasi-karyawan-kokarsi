@@ -193,13 +193,6 @@ export class LegalKoperasiService {
       select: { id: true, documentName: true, publisher: true, endDate: true },
     })
 
-    if (akanBerakhir.length > 0) {
-      await this.prisma.legalKoperasi.updateMany({
-        where: { id: { in: akanBerakhir.map(d => d.id) } },
-        data: { status: 'AKAN_BERAKHIR' },
-      })
-    }
-
     const expired = await this.prisma.legalKoperasi.findMany({
       where: {
         needsRenewal: true,
@@ -209,16 +202,24 @@ export class LegalKoperasiService {
       select: { id: true, documentName: true, publisher: true, endDate: true },
     })
 
-    if (expired.length > 0) {
-      await this.prisma.legalKoperasi.updateMany({
-        where: { id: { in: expired.map(d => d.id) } },
-        data: { status: 'EXPIRED' },
-      })
-    }
-
     return {
       akanBerakhir: akanBerakhir.map(d => ({ ...d, newStatus: 'AKAN_BERAKHIR' as LegalKoperasiStatus })),
       expired: expired.map(d => ({ ...d, newStatus: 'EXPIRED' as LegalKoperasiStatus })),
+    }
+  }
+
+  async commitStatuses(akanIds: number[], expiredIds: number[]): Promise<void> {
+    if (akanIds.length > 0) {
+      await this.prisma.legalKoperasi.updateMany({
+        where: { id: { in: akanIds } },
+        data: { status: 'AKAN_BERAKHIR' },
+      })
+    }
+    if (expiredIds.length > 0) {
+      await this.prisma.legalKoperasi.updateMany({
+        where: { id: { in: expiredIds } },
+        data: { status: 'EXPIRED' },
+      })
     }
   }
 }

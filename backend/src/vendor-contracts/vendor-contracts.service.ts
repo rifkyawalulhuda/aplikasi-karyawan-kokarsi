@@ -204,13 +204,6 @@ export class VendorContractsService {
       include: { company: { select: { name: true } } },
     })
 
-    if (akanBerakhir.length > 0) {
-      await this.prisma.vendorContract.updateMany({
-        where: { id: { in: akanBerakhir.map(d => d.id) } },
-        data: { status: 'AKAN_BERAKHIR' },
-      })
-    }
-
     const expired = await this.prisma.vendorContract.findMany({
       where: {
         needsRenewal: true,
@@ -220,14 +213,22 @@ export class VendorContractsService {
       include: { company: { select: { name: true } } },
     })
 
-    if (expired.length > 0) {
+    return { akanBerakhir, expired }
+  }
+
+  async commitStatuses(akanIds: number[], expiredIds: number[]): Promise<void> {
+    if (akanIds.length > 0) {
       await this.prisma.vendorContract.updateMany({
-        where: { id: { in: expired.map(d => d.id) } },
+        where: { id: { in: akanIds } },
+        data: { status: 'AKAN_BERAKHIR' },
+      })
+    }
+    if (expiredIds.length > 0) {
+      await this.prisma.vendorContract.updateMany({
+        where: { id: { in: expiredIds } },
         data: { status: 'EXPIRED' },
       })
     }
-
-    return { akanBerakhir, expired }
   }
 
   async renewContract(id: number, dto: CreateVendorContractDto) {
