@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { WarningLetter } from '~/types'
-import { h } from 'vue'
+import { h, nextTick } from 'vue'
 
 const UBadge = resolveComponent('UBadge')
 const UIcon = resolveComponent('UIcon')
@@ -70,6 +70,28 @@ async function openDrawer(letter: WarningLetter) {
   } finally {
     drawerHistoryLoading.value = false
   }
+}
+
+// --- Context Menu (klik kanan) ---
+const contextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTarget = ref<WarningLetter | null>(null)
+
+async function openContextMenu(e: MouseEvent, letter: WarningLetter) {
+  e.preventDefault()
+  contextMenuTarget.value = letter
+  contextMenu.value = true
+  await nextTick()
+  const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
+  const menuWidth = menuEl?.offsetWidth ?? 192
+  const menuHeight = menuEl?.offsetHeight ?? 260
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+}
+
+function closeContextMenu() {
+  contextMenu.value = false
 }
 
 const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLetter[]; total: number }>('/api/warning-letters', {
@@ -389,6 +411,7 @@ const columns: TableColumn<WarningLetter>[] = [
           separator: 'h-0'
         }"
         :on-select="(_e: any, row: any) => openDrawer(row.original)"
+        :on-contextmenu="(e: any, row: any) => openContextMenu(e, row.original)"
       />
 
       <!-- Pagination -->
@@ -502,4 +525,81 @@ const columns: TableColumn<WarningLetter>[] = [
     @switch="(l) => openDrawer(l)"
     @generate-pdf="(l) => handleGeneratePDF(l)"
   />
+
+  <!-- Floating Context Menu (klik kanan) -->
+  <Teleport to="body">
+    <div
+      v-if="contextMenu"
+      class="fixed inset-0 z-50"
+      @click="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    >
+      <div
+        data-context-menu
+        class="absolute z-50 min-w-48 rounded-xl border border-default bg-default shadow-xl py-1 overflow-hidden"
+        :style="{ top: `${contextMenuY}px`, left: `${contextMenuX}px` }"
+        @click.stop
+      >
+        <!-- Lihat Detail -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openDrawer(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-eye" class="size-4 text-muted shrink-0" />
+          Lihat Detail
+        </button>
+
+        <!-- Lihat Dokumen (Preview PDF) -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openPreview(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-file-text" class="size-4 text-muted shrink-0" />
+          Lihat Dokumen
+        </button>
+
+        <!-- Generate & Unduh PDF -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="handleGeneratePDF(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-download" class="size-4 text-muted shrink-0" />
+          Unduh PDF
+        </button>
+
+        <!-- Edit -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openEdit(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-pencil" class="size-4 text-muted shrink-0" />
+          Edit
+        </button>
+
+        <!-- Unduh Dokumen Scan (kondisional) -->
+        <a
+          v-if="contextMenuTarget?.documentUrl"
+          :href="contextMenuTarget.documentUrl"
+          target="_blank"
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="closeContextMenu()"
+        >
+          <UIcon name="i-lucide-file-down" class="size-4 text-muted shrink-0" />
+          Unduh Dokumen Scan
+        </a>
+
+        <!-- Divider -->
+        <hr class="border-default my-1" />
+
+        <!-- Hapus -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="handleDelete(contextMenuTarget!.id); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-trash" class="size-4 text-error shrink-0" />
+          Hapus
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
