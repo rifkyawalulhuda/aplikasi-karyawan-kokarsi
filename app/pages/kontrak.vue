@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { Row } from '@tanstack/table-core'
 import type { Contract, ContractSummaryRow, ContractHistoryResponse, ContractStatus, ContractDocumentPreview } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -44,6 +41,28 @@ const historyContracts = ref<Contract[]>([])
 const reopenHistoryAfterEdit = ref(false)
 const reopenHistoryAfterPreview = ref(false)
 const lastHistoryEmployeeId = ref<number | null>(null)
+
+// Context Menu (klik kanan)
+const contextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTarget = ref<ContractSummaryRow | null>(null)
+
+async function openContextMenu(e: MouseEvent, row: ContractSummaryRow) {
+  e.preventDefault()
+  contextMenuTarget.value = row
+  contextMenu.value = true
+  await nextTick()
+  const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
+  const menuWidth = menuEl?.offsetWidth ?? 192
+  const menuHeight = menuEl?.offsetHeight ?? 280
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+}
+
+function closeContextMenu() {
+  contextMenu.value = false
+}
 
 // Renew modal
 const renewModal = ref(false)
@@ -379,75 +398,7 @@ const columns: TableColumn<ContractSummaryRow>[] = [
       return h('span', { class: 'text-sm text-muted' }, `${days} hari`)
     }
   },
-  {
-    id: 'actions',
-    cell: ({ row }) =>
-      h('div', { class: 'text-right' },
-        h(UDropdownMenu, {
-          content: { align: 'end' },
-          items: getRowItems(row)
-        }, () =>
-          h(UButton, {
-            icon: 'i-lucide-ellipsis-vertical',
-            color: 'neutral',
-            variant: 'ghost',
-            class: 'ml-auto'
-          })
-        )
-      )
-  }
 ]
-
-function getRowItems(row: Row<ContractSummaryRow>) {
-  const items: any[] = [
-    { type: 'label', label: 'Aksi' },
-    {
-      label: 'Riwayat Karyawan',
-      icon: 'i-lucide-history',
-      onSelect() { openHistory(row.original) }
-    },
-  ]
-
-  if (row.original.canRenew) {
-    items.push({
-      label: 'Perpanjang Kontrak',
-      icon: 'i-lucide-refresh-cw',
-      onSelect() { openRenewFromSummary(row.original) }
-    })
-  }
-
-  items.push(
-    {
-      label: 'Preview Dokumen',
-      icon: 'i-lucide-file-search',
-      onSelect() { openPreview(row.original.contractId) }
-    },
-    {
-      label: 'Generate Dokumen',
-      icon: 'i-lucide-file-cog',
-      onSelect() { generateContractDocument(row.original.contractId, row.original.contractNo) }
-    },
-    {
-      label: 'Edit Kontrak',
-      icon: 'i-lucide-pencil',
-      onSelect() { openEditFromSummary(row.original) }
-    },
-    {
-      label: 'Unduh PDF',
-      icon: 'i-lucide-download',
-      onSelect() { downloadGeneratedPdf(row.original.contractId) }
-    },
-    { type: 'separator' },
-    {
-      label: 'Hapus Kontrak',
-      icon: 'i-lucide-trash',
-      color: 'error' as const,
-      onSelect() { confirmDelete(row.original.contractId, row.original.contractNo) }
-    }
-  )
-
-  return items
-}
 
 const filteredData = computed(() => {
   let list = summaryRows.value
@@ -565,10 +516,12 @@ watch(() => pagination.value.pageSize, () => {
         :data="filteredData"
         :columns="columns"
         :loading="status === 'pending'"
+        :on-select="(_e: any, row: any) => openHistory(row.original)"
+        :on-contextmenu="(e: any, row: any) => openContextMenu(e, row.original)"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
+          tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/40 [&>tr]:transition-colors',
           th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
           td: 'border-b border-default',
           separator: 'h-0'
@@ -833,4 +786,88 @@ watch(() => pagination.value.pageSize, () => {
       </div>
     </template>
   </UModal>
+
+  <!-- Floating Context Menu (klik kanan) -->
+  <Teleport to="body">
+    <div
+      v-if="contextMenu"
+      class="fixed inset-0 z-50"
+      @click="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    >
+      <div
+        data-context-menu
+        class="absolute z-50 min-w-48 rounded-xl border border-default bg-default shadow-xl py-1 overflow-hidden"
+        :style="{ top: `${contextMenuY}px`, left: `${contextMenuX}px` }"
+        @click.stop
+      >
+        <!-- Riwayat Karyawan -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openHistory(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-history" class="size-4 text-muted shrink-0" />
+          Riwayat Karyawan
+        </button>
+
+        <!-- Perpanjang Kontrak (kondisional: canRenew) -->
+        <button
+          v-if="contextMenuTarget?.canRenew"
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openRenewFromSummary(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-refresh-cw" class="size-4 text-muted shrink-0" />
+          Perpanjang Kontrak
+        </button>
+
+        <!-- Preview Dokumen -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openPreview(contextMenuTarget!.contractId); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-file-search" class="size-4 text-muted shrink-0" />
+          Preview Dokumen
+        </button>
+
+        <!-- Generate Dokumen -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="generateContractDocument(contextMenuTarget!.contractId, contextMenuTarget!.contractNo); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-file-cog" class="size-4 text-muted shrink-0" />
+          Generate Dokumen
+        </button>
+
+        <!-- Edit Kontrak -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openEditFromSummary(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-pencil" class="size-4 text-muted shrink-0" />
+          Edit Kontrak
+        </button>
+
+        <!-- Unduh PDF -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="downloadGeneratedPdf(contextMenuTarget!.contractId); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-download" class="size-4 text-muted shrink-0" />
+          Unduh PDF
+        </button>
+
+        <!-- Divider -->
+        <hr class="border-default my-1" />
+
+        <!-- Hapus Kontrak -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="confirmDelete(contextMenuTarget!.contractId, contextMenuTarget!.contractNo); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-trash" class="size-4 text-error shrink-0" />
+          Hapus Kontrak
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
