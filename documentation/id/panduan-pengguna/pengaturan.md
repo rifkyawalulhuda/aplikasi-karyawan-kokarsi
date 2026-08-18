@@ -61,6 +61,16 @@ Lihat [Template Kontrak](/panduan-pengguna/template-kontrak) untuk panduan lengk
 
 Lihat [Peran & Akses](/referensi/peran-akses) untuk detail perbedaan hak akses.
 
+## Log Aktivitas (Admin Only)
+
+::: warning Admin Only
+Hanya **Master Admin** yang dapat mengakses halaman ini.
+:::
+
+**Pengaturan → Log Aktivitas** untuk melihat rekam jejak semua perubahan data di seluruh modul (tambah, edit, hapus) — berguna untuk keperluan audit dan pelacakan ketidaksesuaian data.
+
+Lihat [Log Aktivitas](/panduan-pengguna/log-aktivitas) untuk panduan lengkap.
+
 ## Email Config (Admin Only)
 
 Konfigurasi notifikasi email otomatis untuk semua modul (Kontrak Karyawan, Dokumen/Sertifikasi & Ijin, Kontrak Vendor/Customer, dan Legal Koperasi).

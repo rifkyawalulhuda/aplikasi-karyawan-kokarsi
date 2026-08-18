@@ -61,6 +61,7 @@ export default defineConfig({
             { text: 'Space', link: '/panduan-pengguna/space' },
             { text: 'Notifikasi', link: '/panduan-pengguna/notifikasi' },
             { text: 'Pengaturan', link: '/panduan-pengguna/pengaturan' },
+            { text: 'Log Aktivitas', link: '/panduan-pengguna/log-aktivitas' },
             { text: 'Email Config', link: '/panduan-pengguna/email-config' },
           ],
         },
