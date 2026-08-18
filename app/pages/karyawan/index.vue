@@ -21,6 +21,7 @@ const searchQuery = ref('')
 const statusFilter = ref<string[]>([])
 const locationFilter = ref<string[]>([])
 const departmentFilter = ref<string[]>([])
+const genderFilter = ref<string[]>([])
 
 const locationOptions = computed(() =>
   [...new Set(data.value.map(e => e.workLocation?.name).filter(Boolean) as string[])]
@@ -35,7 +36,7 @@ const departmentOptions = computed(() =>
 )
 
 const hasActiveFilters = computed(() =>
-  statusFilter.value.length > 0 || locationFilter.value.length > 0 || departmentFilter.value.length > 0
+  statusFilter.value.length > 0 || locationFilter.value.length > 0 || departmentFilter.value.length > 0 || genderFilter.value.length > 0
 )
 
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
@@ -361,6 +362,9 @@ const filteredData = computed(() => {
   if (departmentFilter.value.length > 0) {
     list = list.filter(e => departmentFilter.value.includes(e.department?.name ?? ''))
   }
+  if (genderFilter.value.length > 0) {
+    list = list.filter(e => genderFilter.value.includes(e.gender))
+  }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(e => getSearchTokens(e).some(token => token?.toLowerCase().includes(q)))
@@ -384,7 +388,7 @@ const filteredData = computed(() => {
   })
 })
 
-watch([statusFilter, locationFilter, departmentFilter, searchQuery], () => {
+watch([statusFilter, locationFilter, departmentFilter, genderFilter, searchQuery], () => {
   table.value?.tableApi?.setPageIndex(0)
 })
 
@@ -464,6 +468,17 @@ watch(() => pagination.value.pageSize, async () => {
             placeholder="Semua Departemen"
             class="min-w-40"
           />
+          <USelectMenu
+            v-model="genderFilter"
+            :items="[
+              { label: 'Laki-laki', value: 'MALE' },
+              { label: 'Perempuan', value: 'FEMALE' }
+            ]"
+            value-key="value"
+            multiple
+            placeholder="Semua Gender"
+            class="min-w-36"
+          />
           <UButton
             v-if="hasActiveFilters"
             label="Reset"
@@ -471,7 +486,7 @@ watch(() => pagination.value.pageSize, async () => {
             variant="ghost"
             size="sm"
             icon="i-lucide-x"
-            @click="statusFilter = []; locationFilter = []; departmentFilter = []"
+            @click="statusFilter = []; locationFilter = []; departmentFilter = []; genderFilter = []"
           />
         </div>
       </div>
