@@ -22,23 +22,39 @@ const photoFile = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const toast = useToast()
 
-// Error dari backend (konflik duplikat) — ditampilkan langsung di field
-const conflictErrors = ref<Array<{ name: string; message: string }>>([])
+// Field-level errors dari backend — di-bind langsung ke prop error UFormField
+const fieldErrors = reactive<Record<string, string | undefined>>({
+  employeeNo: undefined,
+  nik: undefined,
+  email: undefined,
+})
 
-// Peta pesan backend ke nama field UFormField
+// Peta pesan backend ke nama field
 const FIELD_ERROR_MAP: Record<string, string> = {
   'No. Induk Karyawan': 'employeeNo',
   'NIK': 'nik',
   'Email': 'email',
 }
 
-function parseConflictErrors(message: string): Array<{ name: string; message: string }> {
+function applyFieldError(message: string) {
+  // Reset semua dulu
+  fieldErrors.employeeNo = undefined
+  fieldErrors.nik = undefined
+  fieldErrors.email = undefined
+  // Cari field yang cocok
   for (const [label, fieldName] of Object.entries(FIELD_ERROR_MAP)) {
     if (message.includes(label)) {
-      return [{ name: fieldName, message }]
+      fieldErrors[fieldName] = message
+      return true
     }
   }
-  return []
+  return false
+}
+
+function clearFieldErrors() {
+  fieldErrors.employeeNo = undefined
+  fieldErrors.nik = undefined
+  fieldErrors.email = undefined
 }
 
 function resetPhotoState() {
@@ -83,7 +99,7 @@ async function uploadPhoto(employeeId: number) {
 watch(() => open.value, (val) => {
   if (!val) {
     resetPhotoState()
-    conflictErrors.value = []
+    clearFieldErrors()
   }
 })
 
@@ -145,26 +161,14 @@ const taxStatusItems = computed(() =>
   (lookups.value?.taxStatus ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
 )
 
-// Clear conflict errors saat field yang konflik diubah user
-watch(() => state.employeeNo, () => {
-  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'employeeNo')
-})
-watch(() => state.nik, () => {
-  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'nik')
-})
-watch(() => state.email, () => {
-  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'email')
-})
-
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
-  conflictErrors.value = []
+  clearFieldErrors()
   try {
     const created = await $fetch<{ id: number }>('/api/employees', {
       method: 'POST',
       body: event.data,
     })
-    // Upload foto jika ada file yang dipilih
     if (photoFile.value) {
       await uploadPhoto(created.id)
     }
@@ -176,22 +180,17 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     open.value = false
     emit('added')
   } catch (e: any) {
-    const message: string = e?.data?.message ?? e?.data?.data?.message ?? 'Terjadi kesalahan'
-    const parsed = parseConflictErrors(message)
-    if (parsed.length > 0) {
-      conflictErrors.value = parsed
-      toast.add({
-        title: 'Data sudah terdaftar',
-        description: message,
-        color: 'error',
-      })
-    } else {
-      toast.add({
-        title: 'Gagal menambahkan karyawan',
-        description: message,
-        color: 'error',
-      })
-    }
+    const message: string =
+      e?.data?.data?.message
+      ?? e?.data?.message
+      ?? e?.message
+      ?? 'Terjadi kesalahan'
+    const hasFieldError = applyFieldError(message)
+    toast.add({
+      title: hasFieldError ? 'Data sudah terdaftar' : 'Gagal menambahkan karyawan',
+      description: message,
+      color: 'error',
+    })
   } finally {
     loading.value = false
   }
@@ -199,7 +198,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
 function onClose() {
   open.value = false
-  conflictErrors.value = []
+  clearFieldErrors()
 }
 </script>
 
@@ -240,14 +239,13 @@ function onClose() {
       <UForm
         :schema="schema"
         :state="state"
-        :errors="conflictErrors"
         class="space-y-4"
         @submit="onSubmit"
       >
         <!-- Baris 1: NIK + Nama -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="No. Induk Karyawan" name="employeeNo" required>
-            <UInput v-model="state.employeeNo" placeholder="SKY-001" class="w-full" />
+          <UFormField label="No. Induk Karyawan" name="employeeNo" :error="fieldErrors.employeeNo" required>
+            <UInput v-model="state.employeeNo" placeholder="SKY-001" class="w-full" @input="fieldErrors.employeeNo = undefined" />
           </UFormField>
           <UFormField label="Nama Lengkap" name="fullName" required>
             <UInput v-model="state.fullName" placeholder="Nama lengkap karyawan" class="w-full" />
@@ -255,8 +253,8 @@ function onClose() {
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="NIK" name="nik">
-            <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" />
+          <UFormField label="NIK" name="nik" :error="fieldErrors.nik">
+            <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" @input="fieldErrors.nik = undefined" />
           </UFormField>
           <UFormField label="Tempat Lahir" name="birthPlace">
             <UInput v-model="state.birthPlace" placeholder="Bekasi" class="w-full" />
@@ -289,8 +287,8 @@ function onClose() {
 
         <!-- Baris 4: Email + No HP -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Email" name="email" required>
-            <UInput v-model="state.email" type="email" placeholder="nama@sankyu.co.id" class="w-full" />
+          <UFormField label="Email" name="email" :error="fieldErrors.email" required>
+            <UInput v-model="state.email" type="email" placeholder="nama@sankyu.co.id" class="w-full" @input="fieldErrors.email = undefined" />
           </UFormField>
           <UFormField label="Nomor Telepon" name="phoneNumber" required>
             <UInput v-model="state.phoneNumber" placeholder="08xxxxxxxxxx" class="w-full" />

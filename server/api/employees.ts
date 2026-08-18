@@ -21,9 +21,10 @@ export default eventHandler(async (event) => {
   })
 
   if (res.status >= 400) {
+    const nestMessage = (res._data as any)?.message ?? res.statusText
     throw createError({
       statusCode: res.status,
-      statusMessage: res.statusText,
+      statusMessage: nestMessage,
       data: res._data,
     })
   }
