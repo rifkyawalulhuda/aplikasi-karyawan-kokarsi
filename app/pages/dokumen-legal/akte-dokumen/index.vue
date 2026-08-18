@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Row } from '@tanstack/table-core'
 import { h } from 'vue'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -126,20 +125,26 @@ function handleExport() {
   }
 }
 
-// --- Row Actions ---
-function getRowItems(row: Row<AkteDokumen>): DropdownMenuItem[][] {
-  const doc = row.original
-  const group1: DropdownMenuItem[] = [
-    { label: 'Lihat Detail', icon: 'i-lucide-eye', onSelect: () => openDetail(doc) },
-    { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(doc) },
-  ]
-  if (doc.fileUrl) {
-    group1.push({ label: 'Unduh File', icon: 'i-lucide-download', onSelect: () => window.open(doc.fileUrl!, '_blank') })
-  }
-  return [
-    group1,
-    [{ label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => confirmDelete(doc) }],
-  ]
+// --- Context Menu (klik kanan) ---
+const contextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTarget = ref<AkteDokumen | null>(null)
+
+async function openContextMenu(e: MouseEvent, doc: AkteDokumen) {
+  e.preventDefault()
+  contextMenuTarget.value = doc
+  contextMenu.value = true
+  await nextTick()
+  const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
+  const menuWidth = menuEl?.offsetWidth ?? 192
+  const menuHeight = menuEl?.offsetHeight ?? 220
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+}
+
+function closeContextMenu() {
+  contextMenu.value = false
 }
 
 // --- Table Columns ---
@@ -182,14 +187,6 @@ const columns: TableColumn<AkteDokumen>[] = [
         class: 'inline-flex items-center gap-1 text-primary hover:underline text-xs',
       }, [h(UIcon, { name: 'i-lucide-paperclip', class: 'size-3.5' }), 'Lihat'])
     },
-  },
-  {
-    id: 'actions',
-    header: 'Aksi',
-    cell: ({ row }: { row: Row<AkteDokumen> }) =>
-      h(UDropdownMenu, { items: getRowItems(row) }, () =>
-        h(UButton, { icon: 'i-lucide-ellipsis-vertical', color: 'neutral', variant: 'ghost', size: 'xs' }),
-      ),
   },
 ]
 
@@ -287,10 +284,12 @@ watch(() => pagination.value.pageSize, () => {
         :loading="status === 'pending'"
         :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
+        :on-select="(_e: any, row: any) => openDetail(row.original)"
+        :on-contextmenu="(e: any, row: any) => openContextMenu(e, row.original)"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
+          tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/40 [&>tr]:transition-colors',
           th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
           td: 'border-b border-default',
           separator: 'h-0',
@@ -352,4 +351,66 @@ watch(() => pagination.value.pageSize, () => {
     @saved="refresh()"
     @update:open="(v: boolean) => { editModal = v; if (!v) editTarget = null }"
   />
+
+  <!-- Context Menu (klik kanan) -->
+  <Teleport to="body">
+    <div
+      v-if="contextMenu"
+      class="fixed inset-0 z-50"
+      @click="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    >
+      <div
+        data-context-menu
+        class="absolute z-50 min-w-48 rounded-xl border border-default bg-default shadow-xl py-1 overflow-hidden"
+        :style="{ top: `${contextMenuY}px`, left: `${contextMenuX}px` }"
+        @click.stop
+      >
+        <!-- Lihat Detail -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openDetail(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-eye" class="size-4 text-muted shrink-0" />
+          Lihat Detail
+        </button>
+
+        <!-- Edit -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openEdit(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-pencil" class="size-4 text-muted shrink-0" />
+          Edit
+        </button>
+
+        <!-- Unduh File (kondisional) -->
+        <template v-if="contextMenuTarget?.fileUrl">
+          <hr class="border-default my-1" />
+          <a
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors cursor-pointer"
+            :href="contextMenuTarget!.fileUrl!"
+            target="_blank"
+            rel="noopener noreferrer"
+            @click="closeContextMenu()"
+          >
+            <UIcon name="i-lucide-download" class="size-4 text-muted shrink-0" />
+            Unduh File
+          </a>
+        </template>
+
+        <!-- Divider sebelum Hapus -->
+        <hr class="border-default my-1" />
+
+        <!-- Hapus -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="confirmDelete(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-trash" class="size-4 text-error shrink-0" />
+          Hapus
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
