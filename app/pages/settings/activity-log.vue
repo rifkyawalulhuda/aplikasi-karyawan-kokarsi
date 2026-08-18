@@ -5,6 +5,7 @@ import { h } from 'vue'
 
 const auth = useAuthStore()
 const toast = useToast()
+const { exportActivityLogsExcel } = useExport()
 
 interface ActivityLog {
   id: number
@@ -28,6 +29,7 @@ const pageSizeOptions = [25, 50, 100, 200]
 
 // Data state
 const loading = ref(false)
+const exportLoading = ref(false)
 const logs = ref<ActivityLog[]>([])
 const total = ref(0)
 const modules = ref<string[]>([])
@@ -143,6 +145,36 @@ function applyFilters() {
   fetchLogs()
 }
 
+async function handleExport() {
+  exportLoading.value = true
+  try {
+    const params: Record<string, string> = { page: '1', limit: '10000' }
+    if (moduleFilter.value && moduleFilter.value !== 'all') params.module = moduleFilter.value
+    if (actionFilter.value && actionFilter.value !== 'all') params.action = actionFilter.value
+    if (performedByFilter.value) params.performedBy = performedByFilter.value
+    if (dateFrom.value) params.from = dateFrom.value
+    if (dateTo.value) params.to = dateTo.value
+
+    const res = await $fetch<{ data: any[]; total: number }>('/api/activity-logs', {
+      credentials: 'include',
+      query: params,
+    })
+
+    if (!res.data.length) {
+      toast.add({ title: 'Tidak ada data untuk diekspor', color: 'warning' })
+      return
+    }
+
+    const today = new Date().toISOString().slice(0, 10)
+    exportActivityLogsExcel(res.data, `log-aktivitas-${today}`)
+    toast.add({ title: `${res.data.length} log berhasil diekspor ke Excel`, color: 'success' })
+  } catch (e: any) {
+    toast.add({ title: 'Export gagal', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    exportLoading.value = false
+  }
+}
+
 function formatDate(ts: string) {
   return new Date(ts).toLocaleString('id-ID', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -222,6 +254,16 @@ watch(() => pagination.value.pageSize, () => {
       <UDashboardNavbar title="Log Aktivitas">
         <template #leading>
           <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <UButton
+            label="Export Excel"
+            icon="i-lucide-file-spreadsheet"
+            color="neutral"
+            variant="subtle"
+            :loading="exportLoading"
+            @click="handleExport"
+          />
         </template>
       </UDashboardNavbar>
     </template>

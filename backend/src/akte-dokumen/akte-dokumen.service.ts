@@ -67,6 +67,7 @@ export class AkteDokumenService {
       targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Notaris: ${akte.notaris} | Tgl: ${akte.tanggal ? new Date(akte.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}`,
     })
     return akte
   }
@@ -87,6 +88,7 @@ export class AkteDokumenService {
       targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Notaris: ${akte.notaris}`,
     })
     return akte
   }
@@ -101,6 +103,7 @@ export class AkteDokumenService {
       targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Tanggal: ${akte.tanggal ? new Date(akte.tanggal).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}`,
     })
     return deleted
   }

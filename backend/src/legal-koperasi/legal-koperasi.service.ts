@@ -117,6 +117,7 @@ export class LegalKoperasiService {
       targetLabel: `${doc.documentName} (${doc.documentNumber})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Kategori: ${doc.category} | Penerbit: ${doc.publisher ?? '-'} | Perlu Perpanjangan: ${doc.needsRenewal ? 'Ya' : 'Tidak'}`,
     })
     return doc
   }
@@ -150,6 +151,7 @@ export class LegalKoperasiService {
       targetLabel: `${doc.documentName} (${doc.documentNumber})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Kategori: ${doc.category}${doc.needsRenewal ? ` | Status: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
     return doc
   }
@@ -165,6 +167,7 @@ export class LegalKoperasiService {
       targetLabel,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Kategori: ${doc.category}${doc.needsRenewal ? ` | Status terakhir: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
     return deleted
   }

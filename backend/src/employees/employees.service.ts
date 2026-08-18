@@ -180,7 +180,7 @@ export class EmployeesService {
       })
       this.dashboardCache.invalidate()
       const result = await this.findOne(employee.id)
-      void this.activityLog.log({ action: 'CREATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
+      void this.activityLog.log({ action: 'CREATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, detail: `Bergabung: ${employee.joinDate ? new Date(employee.joinDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'} | Status: ${employee.employmentStatus}`, performedBy: actor.name, performedByRole: actor.role })
       return result
     } catch (err: any) {
       if (err?.code === 'P2002') {
@@ -293,7 +293,7 @@ export class EmployeesService {
       await this.recomputeEmployeeStatus(id)
       this.dashboardCache.invalidate()
       const updated = await this.findOne(employee.id)
-      void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
+      void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, detail: 'Edit data karyawan', performedBy: actor.name, performedByRole: actor.role })
       return updated
     } catch (err: any) {
       if (err?.code === 'P2002') {
@@ -366,7 +366,7 @@ export class EmployeesService {
     ])
 
     this.dashboardCache.invalidate()
-    void this.activityLog.log({ action: 'DELETE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
+    void this.activityLog.log({ action: 'DELETE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, detail: `Status terakhir: ${result.employmentStatus}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 
@@ -438,7 +438,7 @@ export class EmployeesService {
     })
 
     const result = await this.findOne(id)
-    void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, detail: `Offboarding: ${dto.terminationType}`, performedBy: actor.name ?? actor.fullName ?? 'System', performedByRole: actor.actorRole ?? actor.role ?? 'UNKNOWN' })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, detail: `Offboarding: ${dto.terminationType} | Tgl: ${dto.terminationDate ? new Date(dto.terminationDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}`, performedBy: actor.name ?? actor.fullName ?? 'System', performedByRole: actor.actorRole ?? actor.role ?? 'UNKNOWN' })
     return result
   }
 

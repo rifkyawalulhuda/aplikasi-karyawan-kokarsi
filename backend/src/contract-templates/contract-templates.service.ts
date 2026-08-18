@@ -140,6 +140,7 @@ export class ContractTemplatesService {
         targetLabel: template.name,
         performedBy: actor.name,
         performedByRole: actor.role,
+        detail: `Tipe kontrak: ${(template as any).contractType?.name ?? '-'}`,
       })
       return template
     } catch (error: any) {
@@ -174,6 +175,7 @@ export class ContractTemplatesService {
         targetLabel: template.name,
         performedBy: actor.name,
         performedByRole: actor.role,
+        detail: `Tipe kontrak: ${(template as any).contractType?.name ?? '-'}`,
       })
       return template
     } catch (error: any) {
@@ -199,6 +201,7 @@ export class ContractTemplatesService {
       targetLabel: template.name,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Nama: ${template.name}`,
     })
     return deleted
   }

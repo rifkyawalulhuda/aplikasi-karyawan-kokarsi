@@ -137,6 +137,7 @@ export class VendorContractsService {
       targetLabel: `${doc.documentName} — ${doc.company?.name ?? '-'}`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Kategori: ${doc.category} | Jenis: ${doc.documentType} | Perlu Perpanjangan: ${doc.needsRenewal ? 'Ya' : 'Tidak'}`,
     })
     return doc
   }
@@ -172,6 +173,7 @@ export class VendorContractsService {
       targetLabel: `${doc.documentName} — ${doc.company?.name ?? '-'}`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Jenis: ${doc.documentType} | Kategori: ${doc.category}${doc.needsRenewal ? ` | Status: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
     return doc
   }
@@ -187,6 +189,7 @@ export class VendorContractsService {
       targetLabel,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Jenis: ${contract.documentType} | Kategori: ${contract.category}${contract.needsRenewal ? '' : ' | Tidak perlu perpanjangan'}`,
     })
     return deleted
   }

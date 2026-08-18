@@ -106,6 +106,7 @@ export class UsersService {
         action: 'CREATE',
         module: 'User',
         targetLabel: `${user.username} (${user.role})`,
+        detail: `Role: ${user.role} | Username: ${user.username}`,
         performedBy: actor.name,
         performedByRole: actor.role,
       })
@@ -142,6 +143,7 @@ export class UsersService {
         action: 'UPDATE',
         module: 'User',
         targetLabel: `${user.username} (${user.role})`,
+        detail: `Role: ${user.role}`,
         performedBy: actor.name,
         performedByRole: actor.role,
       })
@@ -160,6 +162,7 @@ export class UsersService {
       action: 'DELETE',
       module: 'User',
       targetLabel: `${user.username} (${user.role})`,
+      detail: `Role terakhir: ${user.role} | Username: ${user.username}`,
       performedBy: actor.name,
       performedByRole: actor.role,
     })

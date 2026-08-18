@@ -320,8 +320,6 @@ export function useExport() {
     return true
   }
 
-  return { exportExcel, exportPDF, exportWarningLettersExcel, exportEmployeeDocumentsExcel, exportVendorContractsExcel, exportLegalKoperasiExcel, exportAkteDokumenExcel }
-
   function toAkteDokumenRows(docs: any[]) {
     return docs.map((d, i) => ({
       'No': i + 1,
@@ -460,5 +458,63 @@ export function useExport() {
     const suffix = year ? `-${year}` : '-semua'
     XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
     return true
+  }
+
+  function toActivityLogRows(logs: any[]) {
+    const actionLabel = (a: string) =>
+      a === 'CREATE' ? 'Buat' : a === 'UPDATE' ? 'Edit' : a === 'DELETE' ? 'Hapus' : a
+    return logs.map((l, i) => ({
+      'No': i + 1,
+      'Tanggal': l.timestamp
+        ? new Date(l.timestamp).toLocaleDateString('id-ID', {
+            day: '2-digit', month: 'short', year: 'numeric',
+          })
+        : '-',
+      'Jam': l.timestamp
+        ? new Date(l.timestamp).toLocaleTimeString('id-ID', {
+            hour: '2-digit', minute: '2-digit',
+          })
+        : '-',
+      'Aksi': actionLabel(l.action ?? ''),
+      'Modul': l.module ?? '-',
+      'Data': l.targetLabel ?? '-',
+      'Detail': l.detail ?? '-',
+      'Dilakukan Oleh': l.performedBy ?? '-',
+      'Role': l.performedByRole ?? '-',
+    }))
+  }
+
+  function exportActivityLogsExcel(logs: any[], filename = 'log-aktivitas') {
+    if (!logs.length) return false
+    const rows = toActivityLogRows(logs)
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 },  // No
+      { wch: 16 }, // Tanggal
+      { wch: 8 },  // Jam
+      { wch: 10 }, // Aksi
+      { wch: 20 }, // Modul
+      { wch: 44 }, // Data
+      { wch: 36 }, // Detail
+      { wch: 26 }, // Dilakukan Oleh
+      { wch: 22 }, // Role
+    ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    const sheetName = `Log ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
+
+  return {
+    exportExcel,
+    exportPDF,
+    exportWarningLettersExcel,
+    exportEmployeeDocumentsExcel,
+    exportAkteDokumenExcel,
+    exportLegalKoperasiExcel,
+    exportVendorContractsExcel,
+    exportActivityLogsExcel,
   }
 }

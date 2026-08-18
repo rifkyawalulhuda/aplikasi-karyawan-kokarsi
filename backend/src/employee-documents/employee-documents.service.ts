@@ -169,6 +169,7 @@ export class EmployeeDocumentsService {
       targetLabel: `${doc.documentType?.name ?? 'Dokumen'} (${doc.employee?.fullName ?? '-'})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `No. Dokumen: ${doc.documentNumber ?? '-'} | Berlaku s/d: ${doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tidak ada'}`,
     })
 
     return doc
@@ -199,6 +200,7 @@ export class EmployeeDocumentsService {
       targetLabel: `${doc.documentType?.name ?? 'Dokumen'} (${doc.employee?.fullName ?? '-'})`,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `Status: ${doc.status} | Berlaku s/d: ${doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tidak ada'}`,
     })
 
     return doc
@@ -215,6 +217,7 @@ export class EmployeeDocumentsService {
       targetLabel,
       performedBy: actor.name,
       performedByRole: actor.role,
+      detail: `No. Dokumen: ${doc.documentNumber ?? '-'}`,
     })
     return deleted
   }

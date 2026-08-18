@@ -177,7 +177,7 @@ export class WarningLettersService {
         include: this.include,
       })
       this.dashboardCache.invalidate()
-      void this.activityLog.log({ action: 'CREATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
+      void this.activityLog.log({ action: 'CREATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, detail: `Level: SP ${result.warningLevel} | Pelanggaran: ${Array.isArray(result.violationType) ? result.violationType.join(', ') : '-'}`, performedBy: actor.name, performedByRole: actor.role })
       return result
     } catch (error: any) {
       if (error?.code === 'P2002') {
@@ -249,7 +249,7 @@ export class WarningLettersService {
       include: this.include,
     })
     this.dashboardCache.invalidate()
-    void this.activityLog.log({ action: 'UPDATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, detail: `Level: SP ${result.warningLevel} | Pelanggaran: ${Array.isArray(result.violationType) ? result.violationType.join(', ') : '-'}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 
@@ -258,7 +258,7 @@ export class WarningLettersService {
     deleteUploadedFile(letter.documentUrl ?? undefined)
     const result = await this.prisma.warningLetter.delete({ where: { id } })
     this.dashboardCache.invalidate()
-    void this.activityLog.log({ action: 'DELETE', module: 'Surat Peringatan', targetLabel: `SP ${letter.warningLevel} — ${letter.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
+    void this.activityLog.log({ action: 'DELETE', module: 'Surat Peringatan', targetLabel: `SP ${letter.warningLevel} — ${letter.letterNumber}`, detail: `Level: SP ${letter.warningLevel}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 

@@ -365,7 +365,7 @@ export class ContractsService {
       this.dashboardCache.invalidate()
       this.notificationsService.generateNotifications().catch(() => {})
       const result = this.withComputedStatus(contract)
-      void this.activityLog.log({ action: 'CREATE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
+      void this.activityLog.log({ action: 'CREATE', module: 'Kontrak', targetLabel: contract.contractNo, detail: `Periode: ${contract.startDate ? new Date(contract.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'} – ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'} | Status: ${(result as any).status}`, performedBy: actor.name, performedByRole: actor.role })
       return result
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
@@ -482,7 +482,7 @@ export class ContractsService {
     this.dashboardCache.invalidate()
     this.notificationsService.generateNotifications().catch(() => {})
     const result = this.withComputedStatus(contract)
-    void this.activityLog.log({ action: 'UPDATE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Kontrak', targetLabel: contract.contractNo, detail: `Periode: ${contract.startDate ? new Date(contract.startDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'} – ${contract.endDate ? new Date(contract.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'} | Status: ${(result as any).status}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 
@@ -491,7 +491,7 @@ export class ContractsService {
     const removed = await this.prisma.contract.delete({ where: { id } })
     await this.syncEmployeeStatus(contract.employeeId)
     this.dashboardCache.invalidate()
-    void this.activityLog.log({ action: 'DELETE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
+    void this.activityLog.log({ action: 'DELETE', module: 'Kontrak', targetLabel: contract.contractNo, detail: `Status terakhir: ${(contract as any).status}`, performedBy: actor.name, performedByRole: actor.role })
     return removed
   }
 
