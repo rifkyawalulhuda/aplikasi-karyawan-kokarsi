@@ -22,6 +22,25 @@ const photoFile = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const toast = useToast()
 
+// Error dari backend (konflik duplikat) — ditampilkan langsung di field
+const conflictErrors = ref<Array<{ name: string; message: string }>>([])
+
+// Peta pesan backend ke nama field UFormField
+const FIELD_ERROR_MAP: Record<string, string> = {
+  'No. Induk Karyawan': 'employeeNo',
+  'NIK': 'nik',
+  'Email': 'email',
+}
+
+function parseConflictErrors(message: string): Array<{ name: string; message: string }> {
+  for (const [label, fieldName] of Object.entries(FIELD_ERROR_MAP)) {
+    if (message.includes(label)) {
+      return [{ name: fieldName, message }]
+    }
+  }
+  return []
+}
+
 function resetPhotoState() {
   if (photoPreview.value) {
     URL.revokeObjectURL(photoPreview.value)
@@ -64,6 +83,7 @@ async function uploadPhoto(employeeId: number) {
 watch(() => open.value, (val) => {
   if (!val) {
     resetPhotoState()
+    conflictErrors.value = []
   }
 })
 
@@ -125,8 +145,20 @@ const taxStatusItems = computed(() =>
   (lookups.value?.taxStatus ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
 )
 
+// Clear conflict errors saat field yang konflik diubah user
+watch(() => state.employeeNo, () => {
+  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'employeeNo')
+})
+watch(() => state.nik, () => {
+  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'nik')
+})
+watch(() => state.email, () => {
+  conflictErrors.value = conflictErrors.value.filter(e => e.name !== 'email')
+})
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
+  conflictErrors.value = []
   try {
     const created = await $fetch<{ id: number }>('/api/employees', {
       method: 'POST',
@@ -144,11 +176,22 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     open.value = false
     emit('added')
   } catch (e: any) {
-    toast.add({
-      title: 'Gagal menambahkan karyawan',
-      description: e?.data?.message ?? 'Terjadi kesalahan',
-      color: 'error',
-    })
+    const message: string = e?.data?.message ?? e?.data?.data?.message ?? 'Terjadi kesalahan'
+    const parsed = parseConflictErrors(message)
+    if (parsed.length > 0) {
+      conflictErrors.value = parsed
+      toast.add({
+        title: 'Data sudah terdaftar',
+        description: message,
+        color: 'error',
+      })
+    } else {
+      toast.add({
+        title: 'Gagal menambahkan karyawan',
+        description: message,
+        color: 'error',
+      })
+    }
   } finally {
     loading.value = false
   }
@@ -156,6 +199,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
 function onClose() {
   open.value = false
+  conflictErrors.value = []
 }
 </script>
 
@@ -196,6 +240,7 @@ function onClose() {
       <UForm
         :schema="schema"
         :state="state"
+        :errors="conflictErrors"
         class="space-y-4"
         @submit="onSubmit"
       >

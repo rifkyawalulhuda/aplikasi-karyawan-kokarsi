@@ -1,4 +1,4 @@
-﻿import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common'
+﻿import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
@@ -166,17 +166,32 @@ export class EmployeesService {
   }
 
   async create(dto: CreateEmployeeDto) {
-    const employee = await this.prisma.employee.create({
-      data: {
-        ...dto,
-        employmentStatus: 'KONTRAK_EXPIRED',
-        birthDate: new Date(dto.birthDate),
-        joinDate: new Date(dto.joinDate),
-      },
-      include: this.include,
-    })
-    this.dashboardCache.invalidate()
-    return this.findOne(employee.id)
+    try {
+      const employee = await this.prisma.employee.create({
+        data: {
+          ...dto,
+          employmentStatus: 'KONTRAK_EXPIRED',
+          birthDate: new Date(dto.birthDate),
+          joinDate: new Date(dto.joinDate),
+        },
+        include: this.include,
+      })
+      this.dashboardCache.invalidate()
+      return this.findOne(employee.id)
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const field = Array.isArray(err?.meta?.target) ? err.meta.target[0] : err?.meta?.target
+        const fieldLabel: Record<string, string> = {
+          employeeNo: 'No. Induk Karyawan',
+          nik: 'NIK',
+          email: 'Email',
+        }
+        throw new ConflictException(
+          `${fieldLabel[field] ?? field ?? 'Data'} sudah digunakan oleh karyawan lain`
+        )
+      }
+      throw err
+    }
   }
 
   async bulkCreate(employees: CreateEmployeeDto[]) {

@@ -13,20 +13,20 @@ export default eventHandler(async (event) => {
   if (query.includeContracts) params.set('includeContracts', String(query.includeContracts))
   const qs = params.toString() ? '?' + params.toString() : ''
 
-  try {
-    return await $fetch(`${BACKEND}/employees${qs}`, {
-      method: method as any,
-      headers: authHeader,
-      body: method !== 'GET' ? await readBody(event) : undefined,
-      ignoreResponseError: true,
-    })
-  } catch (error: any) {
+  const res = await $fetch.raw(`${BACKEND}/employees${qs}`, {
+    method: method as any,
+    headers: authHeader,
+    body: method !== 'GET' ? await readBody(event) : undefined,
+    ignoreResponseError: true,
+  })
+
+  if (res.status >= 400) {
     throw createError({
-      statusCode: error?.statusCode ?? error?.response?.status ?? 500,
-      statusMessage: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memuat data karyawan',
-      data: {
-        message: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Gagal memuat data karyawan',
-      },
+      statusCode: res.status,
+      statusMessage: res.statusText,
+      data: res._data,
     })
   }
+
+  return res._data
 })

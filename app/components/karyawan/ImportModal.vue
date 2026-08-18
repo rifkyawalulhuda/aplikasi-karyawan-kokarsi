@@ -19,6 +19,8 @@ const invalidRows = ref<InvalidImportRow[]>([])
 const totalRows = ref(0)
 const dragOver = ref(false)
 const importResult = ref<{ imported: number; errors: Array<{ row: number; message: string }> } | null>(null)
+const importErrors = ref<Array<{ row: number; message: string }>>([])
+
 
 const hasPreview = computed(() => validRows.value.length > 0 || invalidRows.value.length > 0)
 const canImport = computed(() => validRows.value.length > 0 && invalidRows.value.length === 0 && !importing.value)
@@ -36,6 +38,7 @@ function resetState() {
   invalidRows.value = []
   totalRows.value = 0
   importResult.value = null
+  importErrors.value = []
   dragOver.value = false
 }
 
@@ -174,9 +177,18 @@ async function handleImport() {
       })
     }
   } catch (e: any) {
+    const backendErrors: Array<{ row: number; message: string }> =
+      e?.data?.errors ?? e?.data?.data?.errors ?? []
+    const message: string =
+      e?.data?.message ?? e?.data?.data?.message ?? 'Terjadi kesalahan saat import'
+
+    importErrors.value = backendErrors
+
     toast.add({
       title: 'Gagal import data',
-      description: e?.data?.message ?? 'Terjadi kesalahan saat import',
+      description: backendErrors.length > 0
+        ? `${message} (${backendErrors.length} konflik ditemukan)`
+        : message,
       color: 'error',
     })
   } finally {
@@ -378,6 +390,34 @@ function resetFile() {
                 Import hanya bisa dilakukan jika semua baris valid ({{ validRows.length }}/{{ totalRows }}).
               </p>
             </div>
+          </div>
+
+          <!-- Backend import errors (duplikat DB, konflik, dll) -->
+          <div v-if="importErrors.length > 0" class="rounded-xl border border-error/40 bg-error/10 p-4 space-y-3">
+            <div class="flex items-center gap-2">
+              <UIcon name="i-lucide-x-circle" class="w-5 h-5 text-error shrink-0" />
+              <p class="text-sm font-semibold text-error">
+                Import dibatalkan — {{ importErrors.length }} data tidak dapat diimport
+              </p>
+            </div>
+            <p class="text-xs text-muted">
+              Data berikut sudah ada di database. Perbaiki file Excel Anda, lalu coba import ulang.
+            </p>
+            <div class="max-h-48 overflow-y-auto rounded-lg border border-error/20 bg-background divide-y divide-error/10">
+              <div
+                v-for="(err, idx) in importErrors"
+                :key="idx"
+                class="flex items-start gap-3 px-3 py-2.5"
+              >
+                <span class="inline-flex items-center justify-center rounded bg-error/15 text-error text-xs font-mono font-semibold px-1.5 py-0.5 shrink-0 mt-0.5">
+                  Baris {{ err.row }}
+                </span>
+                <span class="text-sm text-highlighted">{{ err.message }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-muted">
+              Pastikan No. Induk Karyawan, Email, dan NIK tidak duplikat dengan data yang sudah ada.
+            </p>
           </div>
         </div>
 
