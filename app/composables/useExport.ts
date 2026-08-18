@@ -91,7 +91,6 @@ export function useExport() {
           'Status Kontrak': statusLabel(resolveContractStatus(c) ?? ''),
         }
       })(),
-      'Foto': e.fotoKaryawan || '-',
       'Dibuat': fmt(e.createdAt),
       'Diperbarui': fmt(e.updatedAt),
     }))
@@ -130,14 +129,41 @@ export function useExport() {
     const employees = await fetchAllEmployees()
     const rows = toRows(employees, true)
     const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Karyawan')
 
-    // Auto column width
-    const cols = Object.keys(rows[0] ?? {}).map(key => ({
-      wch: Math.max(key.length, ...rows.map(r => String((r as any)[key] ?? '').length)) + 2
-    }))
-    ws['!cols'] = cols
+    // Manual column width (capped — mencegah kolom Alamat/Email terlalu lebar)
+    ws['!cols'] = [
+      { wch: 5 },  // No
+      { wch: 18 }, // No. Induk Karyawan
+      { wch: 30 }, // Nama Lengkap
+      { wch: 20 }, // NIK
+      { wch: 18 }, // Status Kepegawaian
+      { wch: 14 }, // Jenis Kelamin
+      { wch: 18 }, // Tempat Lahir
+      { wch: 14 }, // Tanggal Lahir
+      { wch: 36 }, // Alamat
+      { wch: 16 }, // Tanggal Bergabung
+      { wch: 30 }, // Email
+      { wch: 16 }, // No. HP
+      { wch: 14 }, // Pendidikan
+      { wch: 16 }, // Site
+      { wch: 24 }, // Pekerjaan
+      { wch: 16 }, // Level Jabatan
+      { wch: 20 }, // Departement
+      { wch: 18 }, // Status Pajak
+      { wch: 22 }, // No. Kontrak Aktif
+      { wch: 18 }, // Tgl. Mulai Kontrak
+      { wch: 18 }, // Tgl. Selesai Kontrak
+      { wch: 16 }, // Status Kontrak
+      { wch: 14 }, // Dibuat
+      { wch: 14 }, // Diperbarui
+    ]
+
+    // Freeze header row
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+
+    const wb = XLSX.utils.book_new()
+    const sheetName = `Karyawan ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
 
     XLSX.writeFile(wb, `${filename}.xlsx`)
   }
@@ -255,6 +281,7 @@ export function useExport() {
       { wch: 8 }, { wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 16 },
     ]
     ws['!cols'] = colWidths
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Surat Peringatan')
     const suffix = year ? `-${year}` : '-semua'
@@ -286,6 +313,7 @@ export function useExport() {
       { wch: 5 }, { wch: 30 }, { wch: 14 }, { wch: 24 }, { wch: 22 },
       { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 40 }, { wch: 16 },
     ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Sertifikasi & Ijin')
     XLSX.writeFile(wb, `${filename}.xlsx`)
@@ -315,6 +343,7 @@ export function useExport() {
       { wch: 5 }, { wch: 32 }, { wch: 20 }, { wch: 24 },
       { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
     ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Akte Dokumen')
     XLSX.writeFile(wb, `${filename}.xlsx`)
@@ -368,6 +397,7 @@ export function useExport() {
       { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
       { wch: 18 }, { wch: 20 }, { wch: 36 },
     ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Legal Koperasi')
     const suffix = year ? `-${year}` : '-semua'
@@ -424,6 +454,7 @@ export function useExport() {
       { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
       { wch: 18 }, { wch: 20 }, { wch: 36 }, { wch: 30 },
     ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Kontrak Vendor')
     const suffix = year ? `-${year}` : '-semua'
