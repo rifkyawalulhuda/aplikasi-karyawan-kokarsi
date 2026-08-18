@@ -22,39 +22,32 @@ const photoFile = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const toast = useToast()
 
-// Field-level errors dari backend — di-bind langsung ke prop error UFormField
-const fieldErrors = reactive<Record<string, string | undefined>>({
-  employeeNo: undefined,
-  nik: undefined,
-  email: undefined,
-})
+// Field-level errors dari backend — ref terpisah per field agar reaktivitas terjamin
+const errorEmployeeNo = ref<string | undefined>(undefined)
+const errorNik = ref<string | undefined>(undefined)
+const errorEmail = ref<string | undefined>(undefined)
 
-// Peta pesan backend ke nama field
-const FIELD_ERROR_MAP: Record<string, string> = {
-  'No. Induk Karyawan': 'employeeNo',
-  'NIK': 'nik',
-  'Email': 'email',
-}
-
-function applyFieldError(message: string) {
-  // Reset semua dulu
-  fieldErrors.employeeNo = undefined
-  fieldErrors.nik = undefined
-  fieldErrors.email = undefined
-  // Cari field yang cocok
-  for (const [label, fieldName] of Object.entries(FIELD_ERROR_MAP)) {
-    if (message.includes(label)) {
-      fieldErrors[fieldName] = message
-      return true
-    }
+function applyFieldError(message: string): boolean {
+  clearFieldErrors()
+  if (message.includes('No. Induk Karyawan')) {
+    errorEmployeeNo.value = message
+    return true
+  }
+  if (message.includes('NIK')) {
+    errorNik.value = message
+    return true
+  }
+  if (message.includes('Email')) {
+    errorEmail.value = message
+    return true
   }
   return false
 }
 
 function clearFieldErrors() {
-  fieldErrors.employeeNo = undefined
-  fieldErrors.nik = undefined
-  fieldErrors.email = undefined
+  errorEmployeeNo.value = undefined
+  errorNik.value = undefined
+  errorEmail.value = undefined
 }
 
 function resetPhotoState() {
@@ -244,8 +237,8 @@ function onClose() {
       >
         <!-- Baris 1: NIK + Nama -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="No. Induk Karyawan" name="employeeNo" :error="fieldErrors.employeeNo" required>
-            <UInput v-model="state.employeeNo" placeholder="SKY-001" class="w-full" @input="fieldErrors.employeeNo = undefined" />
+          <UFormField label="No. Induk Karyawan" name="employeeNo" :error="errorEmployeeNo" required>
+            <UInput v-model="state.employeeNo" placeholder="SKY-001" class="w-full" @input="errorEmployeeNo = undefined" />
           </UFormField>
           <UFormField label="Nama Lengkap" name="fullName" required>
             <UInput v-model="state.fullName" placeholder="Nama lengkap karyawan" class="w-full" />
@@ -253,8 +246,8 @@ function onClose() {
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="NIK" name="nik" :error="fieldErrors.nik">
-            <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" @input="fieldErrors.nik = undefined" />
+          <UFormField label="NIK" name="nik" :error="errorNik">
+            <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" @input="errorNik = undefined" />
           </UFormField>
           <UFormField label="Tempat Lahir" name="birthPlace">
             <UInput v-model="state.birthPlace" placeholder="Bekasi" class="w-full" />
@@ -287,8 +280,8 @@ function onClose() {
 
         <!-- Baris 4: Email + No HP -->
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Email" name="email" :error="fieldErrors.email" required>
-            <UInput v-model="state.email" type="email" placeholder="nama@sankyu.co.id" class="w-full" @input="fieldErrors.email = undefined" />
+          <UFormField label="Email" name="email" :error="errorEmail" required>
+            <UInput v-model="state.email" type="email" placeholder="nama@sankyu.co.id" class="w-full" @input="errorEmail = undefined" />
           </UFormField>
           <UFormField label="Nomor Telepon" name="phoneNumber" required>
             <UInput v-model="state.phoneNumber" placeholder="08xxxxxxxxxx" class="w-full" />

@@ -276,18 +276,33 @@ export class EmployeesService {
 
   async update(id: number, dto: UpdateEmployeeDto) {
     await this.findOne(id)
-    const employee = await this.prisma.employee.update({
-      where: { id },
-      data: {
-        ...dto,
-        birthDate: new Date(dto.birthDate),
-        joinDate: new Date(dto.joinDate),
-      },
-      include: this.include,
-    })
-    await this.recomputeEmployeeStatus(id)
-    this.dashboardCache.invalidate()
-    return this.findOne(employee.id)
+    try {
+      const employee = await this.prisma.employee.update({
+        where: { id },
+        data: {
+          ...dto,
+          birthDate: new Date(dto.birthDate),
+          joinDate: new Date(dto.joinDate),
+        },
+        include: this.include,
+      })
+      await this.recomputeEmployeeStatus(id)
+      this.dashboardCache.invalidate()
+      return this.findOne(employee.id)
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        const field = Array.isArray(err?.meta?.target) ? err.meta.target[0] : err?.meta?.target
+        const fieldLabel: Record<string, string> = {
+          employeeNo: 'No. Induk Karyawan',
+          nik: 'NIK',
+          email: 'Email',
+        }
+        throw new ConflictException(
+          `${fieldLabel[field] ?? field ?? 'Data'} sudah digunakan oleh karyawan lain`
+        )
+      }
+      throw err
+    }
   }
 
   async updatePhoto(id: number, fotoKaryawan: string) {
