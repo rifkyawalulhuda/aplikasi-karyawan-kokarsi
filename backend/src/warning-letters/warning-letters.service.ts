@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsInt, IsArray, IsDateString, IsNotEmpty } from 'class-validator'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
@@ -62,6 +63,7 @@ export class WarningLettersService {
   constructor(
     private prisma: PrismaService,
     private dashboardCache: DashboardCacheService,
+    private activityLog: ActivityLogService,
   ) {}
 
   private include = {
@@ -145,7 +147,7 @@ export class WarningLettersService {
     return buildDocumentNumber(existing.map(l => l.letterNumber), 'SP', refDate)
   }
 
-  async create(dto: CreateWarningLetterDto) {
+  async create(dto: CreateWarningLetterDto, actor: { name: string; role: string }) {
     // Enforce escalation rules server-side (source of truth)
     const status = await this.getEscalationStatus(dto.employeeId)
     if (status.blocked) {
@@ -175,6 +177,7 @@ export class WarningLettersService {
         include: this.include,
       })
       this.dashboardCache.invalidate()
+      void this.activityLog.log({ action: 'CREATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
       return result
     } catch (error: any) {
       if (error?.code === 'P2002') {
@@ -228,7 +231,7 @@ export class WarningLettersService {
     return letter
   }
 
-  async update(id: number, dto: UpdateWarningLetterDto) {
+  async update(id: number, dto: UpdateWarningLetterDto, actor: { name: string; role: string }) {
     await this.findOne(id)
 
     const result = await this.prisma.warningLetter.update({
@@ -246,14 +249,16 @@ export class WarningLettersService {
       include: this.include,
     })
     this.dashboardCache.invalidate()
+    void this.activityLog.log({ action: 'UPDATE', module: 'Surat Peringatan', targetLabel: `SP ${result.warningLevel} — ${result.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const letter = await this.findOne(id)
     deleteUploadedFile(letter.documentUrl ?? undefined)
     const result = await this.prisma.warningLetter.delete({ where: { id } })
     this.dashboardCache.invalidate()
+    void this.activityLog.log({ action: 'DELETE', module: 'Surat Peringatan', targetLabel: `SP ${letter.warningLevel} — ${letter.letterNumber}`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 

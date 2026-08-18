@@ -22,6 +22,7 @@ import { EmailNotificationConfigModule } from './email-notification-config/email
 import { CalendarModule } from './calendar/calendar.module'
 import { SpacesModule } from './spaces/spaces.module'
 import { HolidaysModule } from './holidays/holidays.module'
+import { ActivityLogModule } from './activity-log/activity-log.module'
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { HolidaysModule } from './holidays/holidays.module'
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
     PrismaModule,
     AuthModule,
+    ActivityLogModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,

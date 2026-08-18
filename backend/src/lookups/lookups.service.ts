@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { IsNotEmpty, IsOptional, IsString, IsEmail } from 'class-validator'
 import { DocCategory } from '@prisma/client'
 import * as XLSX from 'xlsx'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 export class CreateDocumentTypeDto {
   @IsString() @IsNotEmpty() name: string
@@ -20,7 +21,10 @@ export class CreateCompanyDto {
 
 @Injectable()
 export class LookupsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   private readonly defaultContractTypes = ['MITRA', 'PKWT', 'PKWTT', 'Magang'] as const
 
@@ -102,43 +106,83 @@ export class LookupsService {
   }
 
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
-  createWorkLocation(name: string) { return this.prisma.workLocation.create({ data: { name } }) }
-  updateWorkLocation(id: number, name: string) { return this.prisma.workLocation.update({ where: { id }, data: { name } }) }
-  deleteWorkLocation(id: number) {
-    return this.prisma.workLocation.delete({ where: { id } }).catch((e) => {
+  async createWorkLocation(name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.workLocation.create({ data: { name } })
+    void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `work-locations: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async updateWorkLocation(id: number, name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.workLocation.update({ where: { id }, data: { name } })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `work-locations: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async deleteWorkLocation(id: number, actor: { name: string; role: string }) {
+    const item = await this.prisma.workLocation.delete({ where: { id } }).catch((e) => {
       if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('lokasi kerja')
       throw e
     })
+    void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `work-locations: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
   getJobRoles() { return this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }) }
-  createJobRole(name: string) { return this.prisma.jobRole.create({ data: { name } }) }
-  updateJobRole(id: number, name: string) { return this.prisma.jobRole.update({ where: { id }, data: { name } }) }
-  deleteJobRole(id: number) {
-    return this.prisma.jobRole.delete({ where: { id } }).catch((e) => {
+  async createJobRole(name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobRole.create({ data: { name } })
+    void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `job-roles: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async updateJobRole(id: number, name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobRole.update({ where: { id }, data: { name } })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `job-roles: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async deleteJobRole(id: number, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobRole.delete({ where: { id } }).catch((e) => {
       if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('jabatan')
       throw e
     })
+    void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `job-roles: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
   getJobLevels() { return this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }) }
-  createJobLevel(name: string) { return this.prisma.jobLevel.create({ data: { name } }) }
-  updateJobLevel(id: number, name: string) { return this.prisma.jobLevel.update({ where: { id }, data: { name } }) }
-  deleteJobLevel(id: number) {
-    return this.prisma.jobLevel.delete({ where: { id } }).catch((e) => {
+  async createJobLevel(name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobLevel.create({ data: { name } })
+    void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `job-levels: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async updateJobLevel(id: number, name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobLevel.update({ where: { id }, data: { name } })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `job-levels: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async deleteJobLevel(id: number, actor: { name: string; role: string }) {
+    const item = await this.prisma.jobLevel.delete({ where: { id } }).catch((e) => {
       if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('level jabatan')
       throw e
     })
+    void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `job-levels: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
   getTaxStatus() { return this.prisma.taxStatus.findMany({ orderBy: { name: 'asc' } }) }
-  createTaxStatus(name: string) { return this.prisma.taxStatus.create({ data: { name } }) }
-  updateTaxStatus(id: number, name: string) { return this.prisma.taxStatus.update({ where: { id }, data: { name } }) }
-  deleteTaxStatus(id: number) {
-    return this.prisma.taxStatus.delete({ where: { id } }).catch((e) => {
+  async createTaxStatus(name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.taxStatus.create({ data: { name } })
+    void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `tax-status: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async updateTaxStatus(id: number, name: string, actor: { name: string; role: string }) {
+    const item = await this.prisma.taxStatus.update({ where: { id }, data: { name } })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `tax-status: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
+  }
+  async deleteTaxStatus(id: number, actor: { name: string; role: string }) {
+    const item = await this.prisma.taxStatus.delete({ where: { id } }).catch((e) => {
       if (this.isForeignKeyViolation(e)) throw this.foreignKeyError('status pajak')
       throw e
     })
+    void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `tax-status: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
   getContractTypes() {
@@ -154,22 +198,31 @@ export class LookupsService {
       })
   }
 
-  createContractType(name: string) {
-    return this.prisma.contractType.create({ data: { name } }).catch((error) => {
+  createContractType(name: string, actor: { name: string; role: string }) {
+    return this.prisma.contractType.create({ data: { name } }).then((item) => {
+      void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `contract-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingContractTypesTable(error)) throw this.contractTypesMigrationError()
       throw error
     })
   }
 
-  updateContractType(id: number, name: string) {
-    return this.prisma.contractType.update({ where: { id }, data: { name } }).catch((error) => {
+  updateContractType(id: number, name: string, actor: { name: string; role: string }) {
+    return this.prisma.contractType.update({ where: { id }, data: { name } }).then((item) => {
+      void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `contract-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingContractTypesTable(error)) throw this.contractTypesMigrationError()
       throw error
     })
   }
 
-  deleteContractType(id: number) {
-    return this.prisma.contractType.delete({ where: { id } }).catch((error) => {
+  deleteContractType(id: number, actor: { name: string; role: string }) {
+    return this.prisma.contractType.delete({ where: { id } }).then((item) => {
+      void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `contract-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingContractTypesTable(error)) throw this.contractTypesMigrationError()
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('tipe kontrak')
       throw error
@@ -183,22 +236,31 @@ export class LookupsService {
     })
   }
 
-  createDepartment(name: string) {
-    return this.prisma.department.create({ data: { name } }).catch((error) => {
+  createDepartment(name: string, actor: { name: string; role: string }) {
+    return this.prisma.department.create({ data: { name } }).then((item) => {
+      void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `departments: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
       throw error
     })
   }
 
-  updateDepartment(id: number, name: string) {
-    return this.prisma.department.update({ where: { id }, data: { name } }).catch((error) => {
+  updateDepartment(id: number, name: string, actor: { name: string; role: string }) {
+    return this.prisma.department.update({ where: { id }, data: { name } }).then((item) => {
+      void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `departments: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
       throw error
     })
   }
 
-  deleteDepartment(id: number) {
-    return this.prisma.department.delete({ where: { id } }).catch((error) => {
+  deleteDepartment(id: number, actor: { name: string; role: string }) {
+    return this.prisma.department.delete({ where: { id } }).then((item) => {
+      void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `departments: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingDepartmentsTable(error)) throw this.departmentsMigrationError()
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('departemen')
       throw error
@@ -211,31 +273,37 @@ export class LookupsService {
     return this.prisma.documentType.findMany({ where, orderBy: { name: 'asc' } })
   }
 
-  async createDocumentType(dto: CreateDocumentTypeDto) {
-    return this.prisma.documentType.create({
+  async createDocumentType(dto: CreateDocumentTypeDto, actor: { name: string; role: string }) {
+    const item = await this.prisma.documentType.create({
       data: {
         ...dto,
         ...(dto.category && { category: dto.category as DocCategory }),
       },
     })
+    void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `document-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
-  async updateDocumentType(id: number, dto: CreateDocumentTypeDto) {
+  async updateDocumentType(id: number, dto: CreateDocumentTypeDto, actor: { name: string; role: string }) {
     const existing = await this.prisma.documentType.findUnique({ where: { id } })
     if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
-    return this.prisma.documentType.update({
+    const item = await this.prisma.documentType.update({
       where: { id },
       data: {
         ...dto,
         ...(dto.category && { category: dto.category as DocCategory }),
       },
     })
+    void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `document-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
-  async deleteDocumentType(id: number) {
+  async deleteDocumentType(id: number, actor: { name: string; role: string }) {
     const existing = await this.prisma.documentType.findUnique({ where: { id } })
     if (!existing) throw new NotFoundException('Tipe dokumen tidak ditemukan')
-    return this.prisma.documentType.delete({ where: { id } })
+    const item = await this.prisma.documentType.delete({ where: { id } })
+    void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `document-types: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+    return item
   }
 
   getCompanies() {
@@ -245,22 +313,31 @@ export class LookupsService {
     })
   }
 
-  createCompany(dto: CreateCompanyDto) {
-    return this.prisma.company.create({ data: dto }).catch((error) => {
+  createCompany(dto: CreateCompanyDto, actor: { name: string; role: string }) {
+    return this.prisma.company.create({ data: dto }).then((item) => {
+      void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `companies: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
       throw error
     })
   }
 
-  updateCompany(id: number, dto: CreateCompanyDto) {
-    return this.prisma.company.update({ where: { id }, data: dto }).catch((error) => {
+  updateCompany(id: number, dto: CreateCompanyDto, actor: { name: string; role: string }) {
+    return this.prisma.company.update({ where: { id }, data: dto }).then((item) => {
+      void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `companies: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
       throw error
     })
   }
 
-  deleteCompany(id: number) {
-    return this.prisma.company.delete({ where: { id } }).catch((error) => {
+  deleteCompany(id: number, actor: { name: string; role: string }) {
+    return this.prisma.company.delete({ where: { id } }).then((item) => {
+      void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `companies: ${item.name}`, performedBy: actor.name, performedByRole: actor.role })
+      return item
+    }).catch((error) => {
       if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('perusahaan')
       throw error

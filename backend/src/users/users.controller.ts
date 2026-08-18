@@ -82,18 +82,18 @@ export class UsersController {
   @Post()
   create(@Request() req: any, @Body() dto: CreateUserDto) {
     this.ensureAdmin(req.user?.role)
-    return this.service.create(dto)
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put(':id')
   update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
     this.ensureAdmin(req.user?.role)
-    return this.service.update(id, dto)
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete(':id')
   remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureAdmin(req.user?.role)
-    return this.service.delete(id)
+    return this.service.delete(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 }

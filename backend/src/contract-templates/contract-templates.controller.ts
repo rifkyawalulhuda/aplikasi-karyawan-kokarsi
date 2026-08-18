@@ -64,13 +64,13 @@ export class ContractTemplatesController {
   @Post()
   create(@Request() req: any, @Body() dto: UpsertContractTemplateDto) {
     this.service.ensureAdmin(req.user?.role)
-    return this.service.create(dto)
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put(':id')
   update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpsertContractTemplateDto) {
     this.service.ensureAdmin(req.user?.role)
-    return this.service.update(id, dto)
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get(':id/content-preview')
@@ -91,6 +91,6 @@ export class ContractTemplatesController {
   @Delete(':id')
   remove(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.service.ensureAdmin(req.user?.role)
-    return this.service.remove(id)
+    return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 }

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { IsString, IsOptional, IsNotEmpty, IsDateString } from 'class-validator'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 export class CreateAkteDokumenDto {
   @IsDateString() tanggal: string
@@ -17,7 +18,10 @@ export class UpdateAkteDokumenDto extends CreateAkteDokumenDto {}
 
 @Injectable()
 export class AkteDokumenService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   async findAll(params: { page?: number; limit?: number; search?: string }) {
     const { page = 1, limit = 10, search } = params
@@ -49,19 +53,27 @@ export class AkteDokumenService {
     return akte
   }
 
-  async create(dto: CreateAkteDokumenDto) {
-    return this.prisma.akteDokumen.create({
+  async create(dto: CreateAkteDokumenDto, actor: { name: string; role: string }) {
+    const akte = await this.prisma.akteDokumen.create({
       data: {
         ...dto,
         tanggal: new Date(dto.tanggal),
         tanggalSk: dto.tanggalSk ? new Date(dto.tanggalSk) : null,
       },
     })
+    void this.activityLog.log({
+      action: 'CREATE',
+      module: 'Akte Dokumen',
+      targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return akte
   }
 
-  async update(id: number, dto: UpdateAkteDokumenDto) {
+  async update(id: number, dto: UpdateAkteDokumenDto, actor: { name: string; role: string }) {
     await this.findOne(id)
-    return this.prisma.akteDokumen.update({
+    const akte = await this.prisma.akteDokumen.update({
       where: { id },
       data: {
         ...dto,
@@ -69,12 +81,28 @@ export class AkteDokumenService {
         tanggalSk: dto.tanggalSk ? new Date(dto.tanggalSk) : null,
       },
     })
+    void this.activityLog.log({
+      action: 'UPDATE',
+      module: 'Akte Dokumen',
+      targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return akte
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const akte = await this.findOne(id)
     deleteUploadedFile(akte.fileUrl)
-    return this.prisma.akteDokumen.delete({ where: { id } })
+    const deleted = await this.prisma.akteDokumen.delete({ where: { id } })
+    void this.activityLog.log({
+      action: 'DELETE',
+      module: 'Akte Dokumen',
+      targetLabel: `${akte.judulAkte} (${akte.nomorAkte})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return deleted
   }
 
   async updateFileUrl(id: number, fileUrl: string) {

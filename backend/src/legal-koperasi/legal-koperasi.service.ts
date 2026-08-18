@@ -6,6 +6,7 @@ import {
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { LegalKoperasiCategory, LegalKoperasiStatus } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 export class CreateLegalKoperasiDto {
   @IsEnum(LegalKoperasiCategory) category: LegalKoperasiCategory
@@ -22,7 +23,10 @@ export class CreateLegalKoperasiDto {
 
 @Injectable()
 export class LegalKoperasiService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   private include = {
     renewedFrom: {
@@ -86,12 +90,12 @@ export class LegalKoperasiService {
     return doc
   }
 
-  async create(dto: CreateLegalKoperasiDto) {
+  async create(dto: CreateLegalKoperasiDto, actor: { name: string; role: string }) {
     const status = this.computeStatus(
       dto.needsRenewal,
       dto.endDate ? new Date(dto.endDate) : null,
     )
-    return this.prisma.legalKoperasi.create({
+    const doc = await this.prisma.legalKoperasi.create({
       data: {
         category: dto.category,
         documentName: dto.documentName,
@@ -107,15 +111,23 @@ export class LegalKoperasiService {
       },
       include: this.include,
     })
+    void this.activityLog.log({
+      module: 'Legal Koperasi',
+      action: 'CREATE',
+      targetLabel: `${doc.documentName} (${doc.documentNumber})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return doc
   }
 
-  async update(id: number, dto: CreateLegalKoperasiDto) {
+  async update(id: number, dto: CreateLegalKoperasiDto, actor: { name: string; role: string }) {
     await this.findOne(id)
     const status = this.computeStatus(
       dto.needsRenewal,
       dto.endDate ? new Date(dto.endDate) : null,
     )
-    return this.prisma.legalKoperasi.update({
+    const doc = await this.prisma.legalKoperasi.update({
       where: { id },
       data: {
         category: dto.category,
@@ -132,12 +144,29 @@ export class LegalKoperasiService {
       },
       include: this.include,
     })
+    void this.activityLog.log({
+      module: 'Legal Koperasi',
+      action: 'UPDATE',
+      targetLabel: `${doc.documentName} (${doc.documentNumber})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return doc
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const doc = await this.findOne(id)
+    const targetLabel = `${doc.documentName} (${doc.documentNumber})`
     deleteUploadedFile(doc.fileUrl)
-    return this.prisma.legalKoperasi.delete({ where: { id } })
+    const deleted = await this.prisma.legalKoperasi.delete({ where: { id } })
+    void this.activityLog.log({
+      module: 'Legal Koperasi',
+      action: 'DELETE',
+      targetLabel,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return deleted
   }
 
   async updateFileUrl(id: number, fileUrl: string) {

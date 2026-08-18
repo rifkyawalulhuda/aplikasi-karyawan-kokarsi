@@ -33,19 +33,19 @@ export class LookupsController {
   @Post('work-locations')
   createWorkLocation(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createWorkLocation(dto.name)
+    return this.service.createWorkLocation(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('work-locations/:id')
   updateWorkLocation(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateWorkLocation(id, dto.name)
+    return this.service.updateWorkLocation(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('work-locations/:id')
   deleteWorkLocation(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteWorkLocation(id)
+    return this.service.deleteWorkLocation(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('job-roles')
@@ -54,19 +54,19 @@ export class LookupsController {
   @Post('job-roles')
   createJobRole(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createJobRole(dto.name)
+    return this.service.createJobRole(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('job-roles/:id')
   updateJobRole(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateJobRole(id, dto.name)
+    return this.service.updateJobRole(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('job-roles/:id')
   deleteJobRole(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteJobRole(id)
+    return this.service.deleteJobRole(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('job-levels')
@@ -75,19 +75,19 @@ export class LookupsController {
   @Post('job-levels')
   createJobLevel(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createJobLevel(dto.name)
+    return this.service.createJobLevel(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('job-levels/:id')
   updateJobLevel(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateJobLevel(id, dto.name)
+    return this.service.updateJobLevel(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('job-levels/:id')
   deleteJobLevel(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteJobLevel(id)
+    return this.service.deleteJobLevel(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('tax-status')
@@ -96,19 +96,19 @@ export class LookupsController {
   @Post('tax-status')
   createTaxStatus(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createTaxStatus(dto.name)
+    return this.service.createTaxStatus(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('tax-status/:id')
   updateTaxStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateTaxStatus(id, dto.name)
+    return this.service.updateTaxStatus(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('tax-status/:id')
   deleteTaxStatus(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteTaxStatus(id)
+    return this.service.deleteTaxStatus(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('departments')
@@ -117,19 +117,19 @@ export class LookupsController {
   @Post('departments')
   createDepartment(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createDepartment(dto.name)
+    return this.service.createDepartment(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('departments/:id')
   updateDepartment(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateDepartment(id, dto.name)
+    return this.service.updateDepartment(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('departments/:id')
   deleteDepartment(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteDepartment(id)
+    return this.service.deleteDepartment(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('contract-types')
@@ -138,19 +138,19 @@ export class LookupsController {
   @Post('contract-types')
   createContractType(@Request() req: any, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createContractType(dto.name)
+    return this.service.createContractType(dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('contract-types/:id')
   updateContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateLookupDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateContractType(id, dto.name)
+    return this.service.updateContractType(id, dto.name, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('contract-types/:id')
   deleteContractType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteContractType(id)
+    return this.service.deleteContractType(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get('document-types')
@@ -161,19 +161,19 @@ export class LookupsController {
   @Post('document-types')
   createDocumentType(@Request() req: any, @Body() dto: CreateDocumentTypeDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createDocumentType(dto)
+    return this.service.createDocumentType(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('document-types/:id')
   updateDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateDocumentTypeDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateDocumentType(id, dto)
+    return this.service.updateDocumentType(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('document-types/:id')
   deleteDocumentType(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteDocumentType(id)
+    return this.service.deleteDocumentType(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   // ── Company endpoints ────────────────────────────────────────────────
@@ -216,18 +216,18 @@ export class LookupsController {
   @Post('companies')
   createCompany(@Request() req: any, @Body() dto: CreateCompanyDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.createCompany(dto)
+    return this.service.createCompany(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put('companies/:id')
   updateCompany(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateCompanyDto) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.updateCompany(id, dto)
+    return this.service.updateCompany(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete('companies/:id')
   deleteCompany(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
-    return this.service.deleteCompany(id)
+    return this.service.deleteCompany(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 }

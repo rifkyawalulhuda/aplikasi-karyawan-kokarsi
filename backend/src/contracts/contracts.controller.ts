@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res, UseInterceptors, UploadedFile } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, Res, UseInterceptors, UploadedFile, Request } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
@@ -113,8 +113,8 @@ export class ContractsController {
   }
 
   @Post()
-  create(@Body() dto: CreateContractDto) {
-    return this.service.create(dto)
+  create(@Body() dto: CreateContractDto, @Request() req: any) {
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/renew')
@@ -123,13 +123,13 @@ export class ContractsController {
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContractDto) {
-    return this.service.update(id, dto)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateContractDto, @Request() req: any) {
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id)
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/document')

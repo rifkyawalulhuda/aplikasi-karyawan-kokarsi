@@ -300,6 +300,13 @@ const links = computed<NavigationMenuItem[]>(() => [
             onSelect: () => { open.value = false },
           }
         : null,
+      auth.canManageMasterData
+        ? {
+            label: 'Log Aktivitas',
+            to: '/settings/activity-log',
+            onSelect: () => { open.value = false },
+          }
+        : null,
       {
         label: 'Keamanan',
         to: '/settings/security',

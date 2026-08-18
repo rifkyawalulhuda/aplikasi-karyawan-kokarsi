@@ -4,6 +4,7 @@ import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'clas
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 import { deleteUploadedFiles } from '../shared/file-cleanup.util'
 import ExcelJS from 'exceljs'
 
@@ -40,6 +41,7 @@ export class EmployeesService {
   constructor(
     private prisma: PrismaService,
     private dashboardCache: DashboardCacheService,
+    private activityLog: ActivityLogService,
   ) {}
 
   private include = {
@@ -165,7 +167,7 @@ export class EmployeesService {
     return this.mapEmployee(emp)
   }
 
-  async create(dto: CreateEmployeeDto) {
+  async create(dto: CreateEmployeeDto, actor: { name: string; role: string }) {
     try {
       const employee = await this.prisma.employee.create({
         data: {
@@ -177,7 +179,9 @@ export class EmployeesService {
         include: this.include,
       })
       this.dashboardCache.invalidate()
-      return this.findOne(employee.id)
+      const result = await this.findOne(employee.id)
+      void this.activityLog.log({ action: 'CREATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
+      return result
     } catch (err: any) {
       if (err?.code === 'P2002') {
         const field = Array.isArray(err?.meta?.target) ? err.meta.target[0] : err?.meta?.target
@@ -274,7 +278,7 @@ export class EmployeesService {
     }
   }
 
-  async update(id: number, dto: UpdateEmployeeDto) {
+  async update(id: number, dto: UpdateEmployeeDto, actor: { name: string; role: string }) {
     await this.findOne(id)
     try {
       const employee = await this.prisma.employee.update({
@@ -288,7 +292,9 @@ export class EmployeesService {
       })
       await this.recomputeEmployeeStatus(id)
       this.dashboardCache.invalidate()
-      return this.findOne(employee.id)
+      const updated = await this.findOne(employee.id)
+      void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${employee.fullName} (${employee.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
+      return updated
     } catch (err: any) {
       if (err?.code === 'P2002') {
         const field = Array.isArray(err?.meta?.target) ? err.meta.target[0] : err?.meta?.target
@@ -315,7 +321,7 @@ export class EmployeesService {
     return this.mapEmployee(employee)
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     await this.findOne(id)
 
     const [warningLetterCount, contractCount] = await Promise.all([
@@ -360,10 +366,11 @@ export class EmployeesService {
     ])
 
     this.dashboardCache.invalidate()
+    void this.activityLog.log({ action: 'DELETE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, performedBy: actor.name, performedByRole: actor.role })
     return result
   }
 
-  async offboard(id: number, dto: OffboardingDto, actor: { sub: number; fullName?: string; role?: string; kind?: string }) {
+  async offboard(id: number, dto: OffboardingDto, actor: { sub: number; fullName?: string; role?: string; kind?: string; name?: string; actorRole?: string }) {
     const employee = await this.prisma.employee.findUnique({
       where: { id },
       include: {
@@ -430,7 +437,9 @@ export class EmployeesService {
       })
     })
 
-    return this.findOne(id)
+    const result = await this.findOne(id)
+    void this.activityLog.log({ action: 'UPDATE', module: 'Karyawan', targetLabel: `${result.fullName} (${result.employeeNo})`, detail: `Offboarding: ${dto.terminationType}`, performedBy: actor.name ?? actor.fullName ?? 'System', performedByRole: actor.actorRole ?? actor.role ?? 'UNKNOWN' })
+    return result
   }
 
   async getDashboardStats() {

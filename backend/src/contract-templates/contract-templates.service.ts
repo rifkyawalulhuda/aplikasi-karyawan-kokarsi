@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from '../prisma/prisma.service'
 import { ContractFamily } from '@prisma/client'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 export interface ContractTemplatePayload {
   code: string
@@ -19,7 +20,10 @@ export interface ContractTemplatePayload {
 
 @Injectable()
 export class ContractTemplatesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   private readonly defaultTemplateSeeds = [
     { code: 'MITRA_DRIVER', name: 'Mitra Driver', family: 'MITRA' as const, templateKey: 'MITRA_DRIVER', contractTypeName: 'MITRA', jobRoleName: 'Driver' },
@@ -115,9 +119,9 @@ export class ContractTemplatesService {
     return template
   }
 
-  async create(payload: ContractTemplatePayload) {
+  async create(payload: ContractTemplatePayload, actor: { name: string; role: string }) {
     try {
-      return await this.prisma.contractTemplate.create({
+      const template = await this.prisma.contractTemplate.create({
         data: {
           ...payload,
           contractTypeId: payload.contractTypeId ?? null,
@@ -130,6 +134,14 @@ export class ContractTemplatesService {
         },
         include: this.include,
       })
+      void this.activityLog.log({
+        action: 'CREATE',
+        module: 'Template Kontrak',
+        targetLabel: template.name,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+      })
+      return template
     } catch (error: any) {
       if (error?.code === 'P2002') {
         throw new ConflictException('Kode template kontrak sudah digunakan')
@@ -138,11 +150,11 @@ export class ContractTemplatesService {
     }
   }
 
-  async update(id: number, payload: ContractTemplatePayload) {
+  async update(id: number, payload: ContractTemplatePayload, actor: { name: string; role: string }) {
     await this.findOne(id)
 
     try {
-      return await this.prisma.contractTemplate.update({
+      const template = await this.prisma.contractTemplate.update({
         where: { id },
         data: {
           ...payload,
@@ -156,6 +168,14 @@ export class ContractTemplatesService {
         },
         include: this.include,
       })
+      void this.activityLog.log({
+        action: 'UPDATE',
+        module: 'Template Kontrak',
+        targetLabel: template.name,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+      })
+      return template
     } catch (error: any) {
       if (error?.code === 'P2002') {
         throw new ConflictException('Kode template kontrak sudah digunakan')
@@ -164,7 +184,7 @@ export class ContractTemplatesService {
     }
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const template = await this.findOne(id)
     const usageCount = await this.prisma.contract.count({ where: { templateId: id } })
 
@@ -172,7 +192,15 @@ export class ContractTemplatesService {
       throw new BadRequestException(`Template ${template.name} sedang dipakai oleh ${usageCount} kontrak`)
     }
 
-    return this.prisma.contractTemplate.delete({ where: { id } })
+    const deleted = await this.prisma.contractTemplate.delete({ where: { id } })
+    void this.activityLog.log({
+      action: 'DELETE',
+      module: 'Template Kontrak',
+      targetLabel: template.name,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return deleted
   }
 
   async getContentPreview(id: number) {

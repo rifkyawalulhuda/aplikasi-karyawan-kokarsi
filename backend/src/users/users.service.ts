@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bcrypt = require('bcrypt')
@@ -20,7 +21,10 @@ interface UpdateUserInput extends Partial<CreateUserInput> {}
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   private readonly userSelect = {
     id: true,
@@ -84,10 +88,10 @@ export class UsersService {
     })
   }
 
-  async create(data: CreateUserInput) {
+  async create(data: CreateUserInput, actor: { name: string; role: string }) {
     const password = await this.hashPassword(data.password)
     try {
-      return await this.prisma.userAccount.create({
+      const user = await this.prisma.userAccount.create({
         data: {
           name: data.name,
           nik: data.nik,
@@ -98,12 +102,20 @@ export class UsersService {
         },
         select: this.userSelect,
       })
+      void this.activityLog.log({
+        action: 'CREATE',
+        module: 'User',
+        targetLabel: `${user.username} (${user.role})`,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+      })
+      return user
     } catch (error: any) {
       this.handleUniqueError(error)
     }
   }
 
-  async update(id: number, data: UpdateUserInput) {
+  async update(id: number, data: UpdateUserInput, actor: { name: string; role: string }) {
     const updateData: Record<string, any> = {
       name: data.name,
       nik: data.nik,
@@ -121,21 +133,37 @@ export class UsersService {
     })
 
     try {
-      return await this.prisma.userAccount.update({
+      const user = await this.prisma.userAccount.update({
         where: { id },
         data: updateData,
         select: this.userSelect,
       })
+      void this.activityLog.log({
+        action: 'UPDATE',
+        module: 'User',
+        targetLabel: `${user.username} (${user.role})`,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+      })
+      return user
     } catch (error: any) {
       this.handleUniqueError(error)
     }
   }
 
-  delete(id: number) {
-    return this.prisma.userAccount.delete({
+  async delete(id: number, actor: { name: string; role: string }) {
+    const user = await this.prisma.userAccount.delete({
       where: { id },
       select: this.userSelect,
     })
+    void this.activityLog.log({
+      action: 'DELETE',
+      module: 'User',
+      targetLabel: `${user.username} (${user.role})`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return user
   }
 
   guardAdmin(role?: string) {

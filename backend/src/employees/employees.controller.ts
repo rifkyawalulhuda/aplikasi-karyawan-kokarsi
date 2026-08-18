@@ -47,8 +47,8 @@ export class EmployeesController {
   }
 
   @Post()
-  create(@Body() dto: CreateEmployeeDto) {
-    return this.service.create(dto)
+  create(@Body() dto: CreateEmployeeDto, @Request() req: any) {
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post('bulk-import')
@@ -66,18 +66,18 @@ export class EmployeesController {
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDto) {
-    return this.service.update(id, dto)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDto, @Request() req: any) {
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/offboarding')
   offboard(@Param('id', ParseIntPipe) id: number, @Body() dto: OffboardingDto, @Request() req: any) {
-    return this.service.offboard(id, dto, req.user)
+    return this.service.offboard(id, dto, { ...req.user, name: req.user?.fullName ?? req.user?.name ?? 'System', actorRole: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id)
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/photo')

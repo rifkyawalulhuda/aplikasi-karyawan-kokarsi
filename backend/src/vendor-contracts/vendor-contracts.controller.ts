@@ -62,18 +62,18 @@ export class VendorContractsController {
   }
 
   @Post()
-  create(@Body() dto: CreateVendorContractDto) {
-    return this.service.create(dto)
+  create(@Body() dto: CreateVendorContractDto, @Request() req: any) {
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateVendorContractDto) {
-    return this.service.update(id, dto)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateVendorContractDto, @Request() req: any) {
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id)
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/file')

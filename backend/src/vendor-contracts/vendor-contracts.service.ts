@@ -6,6 +6,7 @@ import {
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { VendorContractCategory, VendorContractStatus, VendorDocType } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 export class CreateVendorContractDto {
   @IsEnum(VendorContractCategory) category: VendorContractCategory
@@ -24,7 +25,10 @@ export class CreateVendorContractDto {
 
 @Injectable()
 export class VendorContractsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   private include = {
     company: { select: { id: true, name: true } },
@@ -104,12 +108,12 @@ export class VendorContractsService {
     return doc
   }
 
-  async create(dto: CreateVendorContractDto) {
+  async create(dto: CreateVendorContractDto, actor: { name: string; role: string }) {
     const status = this.computeStatus(
       dto.needsRenewal,
       dto.endDate ? new Date(dto.endDate) : null,
     )
-    return this.prisma.vendorContract.create({
+    const doc = await this.prisma.vendorContract.create({
       data: {
         category: dto.category,
         companyId: dto.companyId,
@@ -127,15 +131,23 @@ export class VendorContractsService {
       },
       include: this.include,
     })
+    void this.activityLog.log({
+      module: 'Kontrak Vendor',
+      action: 'CREATE',
+      targetLabel: `${doc.documentName} — ${doc.company?.name ?? '-'}`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return doc
   }
 
-  async update(id: number, dto: CreateVendorContractDto) {
+  async update(id: number, dto: CreateVendorContractDto, actor: { name: string; role: string }) {
     await this.findOne(id)
     const status = this.computeStatus(
       dto.needsRenewal,
       dto.endDate ? new Date(dto.endDate) : null,
     )
-    return this.prisma.vendorContract.update({
+    const doc = await this.prisma.vendorContract.update({
       where: { id },
       data: {
         category: dto.category,
@@ -154,12 +166,29 @@ export class VendorContractsService {
       },
       include: this.include,
     })
+    void this.activityLog.log({
+      module: 'Kontrak Vendor',
+      action: 'UPDATE',
+      targetLabel: `${doc.documentName} — ${doc.company?.name ?? '-'}`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return doc
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const contract = await this.findOne(id)
+    const targetLabel = `${contract.documentName} — ${contract.company?.name ?? '-'}`
     deleteUploadedFile(contract.fileUrl)
-    return this.prisma.vendorContract.delete({ where: { id } })
+    const deleted = await this.prisma.vendorContract.delete({ where: { id } })
+    void this.activityLog.log({
+      module: 'Kontrak Vendor',
+      action: 'DELETE',
+      targetLabel,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+    return deleted
   }
 
   async updateFileUrl(id: number, fileUrl: string) {

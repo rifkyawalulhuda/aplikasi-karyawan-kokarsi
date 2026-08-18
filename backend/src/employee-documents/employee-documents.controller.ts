@@ -12,6 +12,7 @@ import {
   UploadedFile,
   ParseIntPipe,
   BadRequestException,
+  Request,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
@@ -64,18 +65,18 @@ export class EmployeeDocumentsController {
   }
 
   @Post()
-  create(@Body() dto: CreateEmployeeDocumentDto) {
-    return this.service.create(dto)
+  create(@Body() dto: CreateEmployeeDocumentDto, @Request() req: any) {
+    return this.service.create(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDocumentDto) {
-    return this.service.update(id, dto)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateEmployeeDocumentDto, @Request() req: any) {
+    return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.service.remove(id)
+  remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Post(':id/file')

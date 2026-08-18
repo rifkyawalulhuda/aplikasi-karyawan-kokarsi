@@ -6,6 +6,7 @@ import { resolveContractStatus, resolveEmploymentStatus } from '../employees/emp
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { NotificationsService } from '../notifications/notifications.service'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 
 function calculateDaysRemaining(endDate: Date): number {
@@ -66,6 +67,7 @@ export class ContractsService {
     private prisma: PrismaService,
     private dashboardCache: DashboardCacheService,
     private notificationsService: NotificationsService,
+    private activityLog: ActivityLogService,
   ) {}
 
   private include = {
@@ -321,7 +323,7 @@ export class ContractsService {
     }
   }
 
-  async create(dto: CreateContractDto) {
+  async create(dto: CreateContractDto, actor: { name: string; role: string }) {
     await this.checkTerminationLockout(dto.employeeId)
     await this.checkSp3Lockout(dto.employeeId)
 
@@ -362,7 +364,9 @@ export class ContractsService {
       await this.syncEmployeeStatus(dto.employeeId)
       this.dashboardCache.invalidate()
       this.notificationsService.generateNotifications().catch(() => {})
-      return this.withComputedStatus(contract)
+      const result = this.withComputedStatus(contract)
+      void this.activityLog.log({ action: 'CREATE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
+      return result
     } catch (error: any) {
       if (error?.code === 'P2002' && error?.meta?.constraint?.fields?.includes('"contractNo"')) {
         throw new ConflictException(`Nomor kontrak sudah digunakan. Silakan coba lagi.`)
@@ -439,7 +443,7 @@ export class ContractsService {
     }
   }
 
-  async update(id: number, dto: UpdateContractDto) {
+  async update(id: number, dto: UpdateContractDto, actor: { name: string; role: string }) {
     const existing = await this.findOne(id)
 
     if (existing.documentUrl) {
@@ -477,14 +481,17 @@ export class ContractsService {
     }
     this.dashboardCache.invalidate()
     this.notificationsService.generateNotifications().catch(() => {})
-    return this.withComputedStatus(contract)
+    const result = this.withComputedStatus(contract)
+    void this.activityLog.log({ action: 'UPDATE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
+    return result
   }
 
-  async remove(id: number) {
+  async remove(id: number, actor: { name: string; role: string }) {
     const contract = await this.findOne(id)
     const removed = await this.prisma.contract.delete({ where: { id } })
     await this.syncEmployeeStatus(contract.employeeId)
     this.dashboardCache.invalidate()
+    void this.activityLog.log({ action: 'DELETE', module: 'Kontrak', targetLabel: contract.contractNo, performedBy: actor.name, performedByRole: actor.role })
     return removed
   }
 
