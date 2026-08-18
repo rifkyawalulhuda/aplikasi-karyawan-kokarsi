@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { Row } from '@tanstack/table-core'
 import type { Contract, Employee, EmploymentStatus } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UCheckbox = resolveComponent('UCheckbox')
 const UIcon = resolveComponent('UIcon')
 
@@ -259,48 +257,26 @@ async function doDelete(employee: Employee) {
   }
 }
 
-function getRowItems(row: Row<Employee>) {
-  return [
-    { type: 'label', label: 'Aksi' },
-    {
-      label: 'Lihat Detail',
-      icon: 'i-lucide-eye',
-      onSelect() {
-        navigateTo(`/karyawan/${row.original.id}`)
-      }
-    },
-    {
-      label: 'Riwayat Kontrak',
-      icon: 'i-lucide-history',
-      onSelect() {
-        openHistory(row.original)
-      }
-    },
-    {
-      label: 'Edit Data',
-      icon: 'i-lucide-pencil',
-      onSelect() {
-        openEdit(row.original)
-      }
-    },
-    {
-      label: 'Offboarding',
-      icon: 'i-lucide-user-x',
-      disabled: row.original.employmentStatus === 'RESIGN' || row.original.employmentStatus === 'PHK',
-      onSelect() {
-        openOffboarding(row.original)
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Hapus',
-      icon: 'i-lucide-trash',
-      color: 'error',
-      onSelect() {
-        confirmDelete(row.original)
-      }
-    }
-  ]
+// Context Menu (klik kanan)
+const contextMenu = ref(false)
+const contextMenuX = ref(0)
+const contextMenuY = ref(0)
+const contextMenuTarget = ref<Employee | null>(null)
+
+async function openContextMenu(e: MouseEvent, employee: Employee) {
+  e.preventDefault()
+  contextMenuTarget.value = employee
+  contextMenu.value = true
+  await nextTick()
+  const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
+  const menuWidth = menuEl?.offsetWidth ?? 192
+  const menuHeight = menuEl?.offsetHeight ?? 240
+  contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+  contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+}
+
+function closeContextMenu() {
+  contextMenu.value = false
 }
 
 const columns: TableColumn<Employee>[] = [
@@ -369,23 +345,6 @@ const columns: TableColumn<Employee>[] = [
         d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
       )
     }
-  },
-  {
-    id: 'actions',
-    cell: ({ row }) =>
-      h('div', { class: 'text-right' },
-        h(UDropdownMenu, {
-          content: { align: 'end' },
-          items: getRowItems(row)
-        }, () =>
-          h(UButton, {
-            icon: 'i-lucide-ellipsis-vertical',
-            color: 'neutral',
-            variant: 'ghost',
-            class: 'ml-auto'
-          })
-        )
-      )
   }
 ]
 
@@ -526,10 +485,12 @@ watch(() => pagination.value.pageSize, async () => {
         :data="filteredData"
         :columns="columns"
         :loading="status === 'pending'"
+        :on-select="(_e: any, row: any) => navigateTo(`/karyawan/${row.original.id}`)"
+        :on-contextmenu="(e: any, row: any) => openContextMenu(e, row.original)"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
+          tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/40 [&>tr]:transition-colors',
           th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
           td: 'border-b border-default',
           separator: 'h-0'
@@ -664,4 +625,73 @@ watch(() => pagination.value.pageSize, async () => {
     v-model:open="importModal"
     @imported="refresh()"
   />
+
+  <!-- Context Menu (klik kanan) -->
+  <Teleport to="body">
+    <div
+      v-if="contextMenu"
+      class="fixed inset-0 z-50"
+      @click="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    >
+      <div
+        data-context-menu
+        class="absolute z-50 min-w-48 rounded-xl border border-default bg-default shadow-xl py-1 overflow-hidden"
+        :style="{ top: `${contextMenuY}px`, left: `${contextMenuX}px` }"
+        @click.stop
+      >
+        <!-- Lihat Detail -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="navigateTo(`/karyawan/${contextMenuTarget!.id}`); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-eye" class="size-4 text-muted shrink-0" />
+          Lihat Detail
+        </button>
+
+        <!-- Riwayat Kontrak -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openHistory(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-history" class="size-4 text-muted shrink-0" />
+          Riwayat Kontrak
+        </button>
+
+        <!-- Edit Data -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+          @click="openEdit(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-pencil" class="size-4 text-muted shrink-0" />
+          Edit Data
+        </button>
+
+        <!-- Offboarding -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm transition-colors"
+          :class="contextMenuTarget?.employmentStatus === 'RESIGN' || contextMenuTarget?.employmentStatus === 'PHK'
+            ? 'text-muted cursor-not-allowed opacity-50'
+            : 'text-highlighted hover:bg-elevated/60'"
+          :disabled="contextMenuTarget?.employmentStatus === 'RESIGN' || contextMenuTarget?.employmentStatus === 'PHK'"
+          @click="contextMenuTarget?.employmentStatus !== 'RESIGN' && contextMenuTarget?.employmentStatus !== 'PHK' && (openOffboarding(contextMenuTarget!), closeContextMenu())"
+        >
+          <UIcon name="i-lucide-user-x" class="size-4 text-muted shrink-0" />
+          Offboarding
+        </button>
+
+        <!-- Divider -->
+        <hr class="border-default my-1" />
+
+        <!-- Hapus -->
+        <button
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
+          @click="confirmDelete(contextMenuTarget!); closeContextMenu()"
+        >
+          <UIcon name="i-lucide-trash" class="size-4 text-error shrink-0" />
+          Hapus Karyawan
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
