@@ -83,14 +83,49 @@ if (Test-Path $UploadsSource) {
   Write-Log "Uploads folder not found, skipping: $UploadsSource" "WARN"
 }
 
-# ── 3. Tulis metadata backup ──────────────────────────────────────────────────
+# ── 3. Backup file konfigurasi (.env + cloudflared) ──────────────────────────
+Write-Log "Backing up config files..."
+
+$configCount = 0
+$ConfigDest  = Join-Path $BackupPath "config"
+New-Item -ItemType Directory -Path $ConfigDest -Force | Out-Null
+
+# .env files
+$envFiles = @(
+  @{ src = (Join-Path $Root "backend\.env"); dest = "backend.env" },
+  @{ src = (Join-Path $Root ".env");         dest = "root.env"    }
+)
+foreach ($f in $envFiles) {
+  if (Test-Path $f.src) {
+    Copy-Item $f.src -Destination (Join-Path $ConfigDest $f.dest) -Force
+    Write-Log "Config backup OK: $($f.dest)"
+    $configCount++
+  } else {
+    Write-Log "Config file not found, skipping: $($f.src)" "WARN"
+  }
+}
+
+# Cloudflare Tunnel config
+$cloudflaredConfig = Join-Path $env:USERPROFILE ".cloudflared\config.yml"
+if (Test-Path $cloudflaredConfig) {
+  Copy-Item $cloudflaredConfig -Destination (Join-Path $ConfigDest "cloudflared-config.yml") -Force
+  Write-Log "Cloudflared config backup OK"
+  $configCount++
+} else {
+  Write-Log "Cloudflared config not found, skipping: $cloudflaredConfig" "WARN"
+}
+
+Write-Log "Config backup complete: $configCount file(s) copied"
+
+# ── 4. Tulis metadata backup ──────────────────────────────────────────────────
 $meta = @{
-  timestamp  = $Timestamp
-  hostname   = $env:COMPUTERNAME
-  mode       = $Mode
-  dbName     = $PgDb
-  dbSize     = "$sizeMB MB"
-  fileCount  = $fileCount
+  timestamp   = $Timestamp
+  hostname    = $env:COMPUTERNAME
+  mode        = $Mode
+  dbName      = $PgDb
+  dbSize      = "$sizeMB MB"
+  fileCount   = $fileCount
+  configCount = $configCount
 } | ConvertTo-Json
 $meta | Out-File -FilePath (Join-Path $BackupPath "backup-info.json") -Encoding UTF8
 

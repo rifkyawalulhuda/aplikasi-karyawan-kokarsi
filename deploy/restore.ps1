@@ -180,6 +180,58 @@ if (Test-Path $UploadsSrc) {
   Write-Log "Uploads backup not found, skipping: $UploadsSrc" "WARN"
 }
 
+# ── 3. Restore Config Files (.env + cloudflared) ─────────────────────────────
+$ConfigSrc = Join-Path $BackupPath "config"
+
+if (Test-Path $ConfigSrc) {
+  Write-Log "Restoring config files..."
+
+  # .env files
+  $envRestoreMap = @(
+    @{ src = (Join-Path $ConfigSrc "backend.env"); dest = (Join-Path $Root "backend\.env"); label = "backend\.env" },
+    @{ src = (Join-Path $ConfigSrc "root.env");    dest = (Join-Path $Root ".env");         label = ".env (root)"  }
+  )
+  foreach ($f in $envRestoreMap) {
+    if (Test-Path $f.src) {
+      if (Test-Path $f.dest) {
+        # .env sudah ada — tanya konfirmasi sebelum timpa
+        $overwrite = Read-Host "$($f.label) sudah ada. Timpa? (y/N)"
+        if ($overwrite -ne 'y' -and $overwrite -ne 'Y') {
+          Write-Log "Skipped: $($f.label) (tidak ditimpa)"
+          continue
+        }
+      }
+      Copy-Item $f.src -Destination $f.dest -Force
+      Write-Log "Config restore OK: $($f.label)"
+    } else {
+      Write-Log "Config backup not found, skipping: $($f.src)" "WARN"
+    }
+  }
+
+  # Cloudflare Tunnel config
+  $cloudflaredSrc  = Join-Path $ConfigSrc "cloudflared-config.yml"
+  $cloudflaredDest = Join-Path $env:USERPROFILE ".cloudflared\config.yml"
+  if (Test-Path $cloudflaredSrc) {
+    if (Test-Path $cloudflaredDest) {
+      $overwrite = Read-Host "~\.cloudflared\config.yml sudah ada. Timpa? (y/N)"
+      if ($overwrite -ne 'y' -and $overwrite -ne 'Y') {
+        Write-Log "Skipped: cloudflared config (tidak ditimpa)"
+      } else {
+        Copy-Item $cloudflaredSrc -Destination $cloudflaredDest -Force
+        Write-Log "Cloudflared config restore OK"
+      }
+    } else {
+      New-Item -ItemType Directory -Path (Split-Path $cloudflaredDest -Parent) -Force | Out-Null
+      Copy-Item $cloudflaredSrc -Destination $cloudflaredDest -Force
+      Write-Log "Cloudflared config restore OK"
+    }
+  } else {
+    Write-Log "Cloudflared config backup not found, skipping" "WARN"
+  }
+} else {
+  Write-Log "Config backup folder not found, skipping: $ConfigSrc" "WARN"
+}
+
 Write-Log "===== Restore completed from: $BackupName ====="
 Write-Host ""
-Write-Host "Restore selesai! Restart backend agar perubahan uploads ter-load." -ForegroundColor Green
+Write-Host "Restore selesai! Restart backend agar perubahan ter-load." -ForegroundColor Green
