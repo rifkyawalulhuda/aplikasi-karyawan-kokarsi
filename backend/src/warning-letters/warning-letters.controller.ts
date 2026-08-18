@@ -21,11 +21,13 @@ export class WarningLettersController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('employeeId') employeeId?: string,
   ) {
     return this.service.findAll(
       page ? +page : 1,
       limit ? +limit : 10,
       search,
+      employeeId ? +employeeId : undefined,
     )
   }
 

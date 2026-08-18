@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
   if (query.search) params.set('search', String(query.search))
   if (query.limit) params.set('limit', String(query.limit))
   if (query.page) params.set('page', String(query.page))
+  if (query.employeeId) params.set('employeeId', String(query.employeeId))
   const qs = params.toString() ? `?${params.toString()}` : ''
 
   const body = method !== 'GET' ? await readBody(event) : undefined

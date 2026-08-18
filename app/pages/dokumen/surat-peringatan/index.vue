@@ -1,13 +1,10 @@
 <script setup lang="ts">
-import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
-import type { Row } from '@tanstack/table-core'
 import type { WarningLetter } from '~/types'
 import { h } from 'vue'
 
 const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -51,6 +48,29 @@ const previewModal = ref(false)
 const previewTarget = ref<WarningLetter | null>(null)
 const previewLoading = ref(false)
 const previewPdfSrc = ref('')
+
+// Detail Drawer state
+const drawerOpen = ref(false)
+const drawerTarget = ref<WarningLetter | null>(null)
+const drawerHistory = ref<WarningLetter[]>([])
+const drawerHistoryLoading = ref(false)
+
+async function openDrawer(letter: WarningLetter) {
+  drawerTarget.value = letter
+  drawerOpen.value = true
+  drawerHistoryLoading.value = true
+  try {
+    const res = await $fetch<{ data: WarningLetter[] }>('/api/warning-letters', {
+      query: { employeeId: letter.employeeId, limit: 999 },
+      credentials: 'include',
+    })
+    drawerHistory.value = res.data ?? []
+  } catch {
+    drawerHistory.value = []
+  } finally {
+    drawerHistoryLoading.value = false
+  }
+}
 
 const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLetter[]; total: number }>('/api/warning-letters', {
   query: { limit: 999 },
@@ -250,27 +270,6 @@ async function handleGeneratePDF(letter: WarningLetter) {
   }
 }
 
-function getRowItems(row: Row<WarningLetter>): DropdownMenuItem[][] {
-  const group1: DropdownMenuItem[] = [
-    { label: 'Lihat Dokumen', icon: 'i-lucide-eye', onSelect: () => openPreview(row.original) },
-    { label: 'Unduh PDF', icon: 'i-lucide-download', onSelect: () => handleGeneratePDF(row.original) },
-    { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(row.original) },
-  ]
-
-  if (row.original.documentUrl) {
-    group1.push({
-      label: 'Unduh Dokumen',
-      icon: 'i-lucide-file-down',
-      onSelect: () => window.open(row.original.documentUrl!, '_blank'),
-    })
-  }
-
-  return [
-    group1,
-    [{ label: 'Hapus', icon: 'i-lucide-trash', color: 'error', onSelect: () => handleDelete(row.original.id) }],
-  ]
-}
-
 watch([searchQuery, levelFilter], () => {
   pagination.value.pageIndex = 0
 })
@@ -316,15 +315,6 @@ const columns: TableColumn<WarningLetter>[] = [
     accessorKey: 'processedByName',
     header: () => sortableHeader('Pengurus Koperasi', 'processedByName'),
     cell: ({ row }) => h('span', { class: 'text-sm text-highlighted' }, row.original.processedByName || '-'),
-  },
-  {
-    id: 'actions',
-    header: 'Aksi',
-    cell: ({ row }) => h('div', { class: 'flex justify-end' }, [
-      h(UDropdownMenu, {
-        items: getRowItems(row),
-      }, () => h(UButton, { icon: 'i-lucide-ellipsis', variant: 'ghost', color: 'neutral' })),
-    ]),
   },
 ]
 </script>
@@ -393,11 +383,12 @@ const columns: TableColumn<WarningLetter>[] = [
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
           thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
+          tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/40 [&>tr]:transition-colors',
           th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
           td: 'border-b border-default',
           separator: 'h-0'
         }"
+        :on-select="(_e: any, row: any) => openDrawer(row.original)"
       />
 
       <!-- Pagination -->
@@ -498,4 +489,17 @@ const columns: TableColumn<WarningLetter>[] = [
       </div>
     </template>
   </UModal>
+
+  <!-- Detail Drawer -->
+  <WarningLettersDetailDrawer
+    :open="drawerOpen"
+    :letter="drawerTarget"
+    :history="drawerHistory"
+    :history-loading="drawerHistoryLoading"
+    @update:open="drawerOpen = $event"
+    @edit="(l) => { openEdit(l); drawerOpen = false }"
+    @delete="(id) => { handleDelete(id); drawerOpen = false }"
+    @switch="(l) => openDrawer(l)"
+    @generate-pdf="(l) => handleGeneratePDF(l)"
+  />
 </template>

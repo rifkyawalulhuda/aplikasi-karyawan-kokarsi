@@ -184,15 +184,19 @@ export class WarningLettersService {
     }
   }
 
-  async findAll(page = 1, limit = 10, search?: string) {
-    const where: any = search
-      ? {
-          OR: [
-            { letterNumber: { contains: search, mode: 'insensitive' as const } },
-            { employee: { fullName: { contains: search, mode: 'insensitive' as const } } },
-          ],
-        }
-      : {}
+  async findAll(page = 1, limit = 10, search?: string, employeeId?: number) {
+    const where: any = {}
+
+    if (search) {
+      where.OR = [
+        { letterNumber: { contains: search, mode: 'insensitive' as const } },
+        { employee: { fullName: { contains: search, mode: 'insensitive' as const } } },
+      ]
+    }
+
+    if (employeeId) {
+      where.employeeId = employeeId
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.warningLetter.findMany({
