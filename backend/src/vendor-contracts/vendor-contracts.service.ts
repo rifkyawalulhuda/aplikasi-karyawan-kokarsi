@@ -191,14 +191,14 @@ export class VendorContractsService {
     })
   }
 
-  async syncExpiredStatuses() {
+  async syncExpiredStatuses(maxDays: number = 30) {
     const now = new Date()
-    const in30Days = new Date(now.getTime() + 30 * DAY_MS)
+    const inMaxDays = new Date(now.getTime() + maxDays * DAY_MS)
 
     const akanBerakhir = await this.prisma.vendorContract.findMany({
       where: {
         needsRenewal: true,
-        endDate: { gte: now, lte: in30Days },
+        endDate: { gte: now, lte: inMaxDays },
         status: { not: 'AKAN_BERAKHIR' },
       },
       include: { company: { select: { name: true } } },

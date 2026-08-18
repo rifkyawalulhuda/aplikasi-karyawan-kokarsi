@@ -124,12 +124,17 @@ const selectedCount = computed(() => form.recipientUserIds.length)
       :class="{ 'opacity-50 pointer-events-none': !form.isEnabled }"
     >
       <template #header>
-        <span class="font-semibold">Hari Pengiriman</span>
+        <span class="font-semibold">Hari Pengiriman (Semua Modul)</span>
       </template>
       <div class="flex flex-col gap-4">
-        <p class="text-sm text-muted">
-          Email akan dikirim N hari sebelum kontrak/sertifikasi habis
-        </p>
+        <div class="flex flex-col gap-1">
+          <p class="text-sm text-muted">
+            Tentukan berapa hari sebelum masa berlaku habis sistem akan mengirim email pengingat. Misalnya, isi angka 30 agar email dikirim 30 hari sebelum jatuh tempo.
+          </p>
+          <p class="text-xs text-muted">
+            Berlaku untuk: Kontrak Karyawan, Dokumen/Sertifikasi & Ijin, Kontrak Vendor/Customer, dan Legal Koperasi.
+          </p>
+        </div>
 
         <!-- Current windows as badges -->
         <div class="flex flex-wrap gap-2">

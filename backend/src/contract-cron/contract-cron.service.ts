@@ -196,12 +196,13 @@ export class ContractCronService {
     this.logger.debug('Starting employee document status synchronization...')
 
     const todayStart = startOfDay(now)
-    const in30Days = new Date(todayStart.getTime() + 30 * DAY_MS)
+    const maxWindow = triggerWindows.length > 0 ? Math.max(...triggerWindows) : 30
+    const inMaxDays = new Date(todayStart.getTime() + maxWindow * DAY_MS)
 
-    // 1. Dokumen yang akan expired dalam 30 hari (belum berstatus AKAN_EXPIRED)
+    // 1. Dokumen yang akan expired dalam maxWindow hari (belum berstatus AKAN_EXPIRED)
     const expiringSoon = await this.prisma.employeeDocument.findMany({
       where: {
-        expiryDate: { gte: todayStart, lte: in30Days },
+        expiryDate: { gte: todayStart, lte: inMaxDays },
         status: { not: 'AKAN_EXPIRED' },
       },
       include: {
@@ -211,13 +212,6 @@ export class ContractCronService {
     })
 
     if (expiringSoon.length > 0) {
-      // Filter yang belum pernah dikirim email (dedup via sentinel -1)
-      const unsent: typeof expiringSoon = []
-      for (const d of expiringSoon) {
-        const alreadySent = await this.emailConfig.hasSent('employee_document', d.id, -1)
-        if (!alreadySent) unsent.push(d)
-      }
-
       // Commit status SELALU dijalankan agar status tetap ter-sync meski email nonaktif
       await this.prisma.employeeDocument.updateMany({
         where: { id: { in: expiringSoon.map(d => d.id) } },
@@ -225,21 +219,40 @@ export class ContractCronService {
       })
       this.logger.log(`${expiringSoon.length} document(s) marked as AKAN_EXPIRED.`)
 
-      if (unsent.length > 0 && emailEnabled && recipients.length > 0) {
-        const docNotifyAkan = unsent.map(d => ({
-          documentName: d.documentType?.name ?? 'Dokumen',
-          employeeName: d.employee.fullName,
-          expiryDate: d.expiryDate,
-          newStatus: 'AKAN_EXPIRED' as const,
-        }))
+      // Kirim email per trigger window (multi-window, dedup via triggerDay=window)
+      if (emailEnabled && recipients.length > 0) {
+        for (const window of triggerWindows) {
+          const targetStart = startOfDay(new Date(todayStart.getTime() + window * DAY_MS))
+          const targetEnd = new Date(targetStart.getTime() + DAY_MS)
 
-        const sent = await this.maileroo
-          .sendDocumentStatusNotification(docNotifyAkan, recipients)
-          .catch(err => { this.logger.error(`Document email notification failed: ${err?.message}`); return false })
+          const unsentForWindow = []
+          for (const d of expiringSoon) {
+            if (!d.expiryDate) continue
+            const exp = startOfDay(d.expiryDate).getTime()
+            if (exp >= targetStart.getTime() && exp < targetEnd.getTime()) {
+              const alreadySent = await this.emailConfig.hasSent('employee_document', d.id, window)
+              if (!alreadySent) unsentForWindow.push(d)
+            }
+          }
 
-        if (sent) {
-          for (const d of unsent) {
-            await this.emailConfig.recordSent('employee_document', d.id, -1)
+          if (unsentForWindow.length > 0) {
+            this.logger.log(`Sending document email for window=${window}d: ${unsentForWindow.length} document(s)`)
+            const docNotifyAkan = unsentForWindow.map(d => ({
+              documentName: d.documentType?.name ?? 'Dokumen',
+              employeeName: d.employee.fullName,
+              expiryDate: d.expiryDate,
+              newStatus: 'AKAN_EXPIRED' as const,
+            }))
+
+            const sent = await this.maileroo
+              .sendDocumentStatusNotification(docNotifyAkan, recipients)
+              .catch(err => { this.logger.error(`Document email notification failed: ${err?.message}`); return false })
+
+            if (sent) {
+              for (const d of unsentForWindow) {
+                await this.emailConfig.recordSent('employee_document', d.id, window)
+              }
+            }
           }
         }
       }
@@ -258,11 +271,11 @@ export class ContractCronService {
     })
 
     if (expiredDocs.length > 0) {
-      // Filter yang belum pernah dikirim email (dedup via sentinel -1)
-      const unsent: typeof expiredDocs = []
+      // Filter yang belum pernah dikirim email expired (dedup via sentinel -1)
+      const unsentExpired = []
       for (const d of expiredDocs) {
         const alreadySent = await this.emailConfig.hasSent('employee_document', d.id, -1)
-        if (!alreadySent) unsent.push(d)
+        if (!alreadySent) unsentExpired.push(d)
       }
 
       // Commit status SELALU dijalankan agar status tetap ter-sync meski email nonaktif
@@ -272,8 +285,8 @@ export class ContractCronService {
       })
       this.logger.log(`${expiredDocs.length} document(s) marked as EXPIRED.`)
 
-      if (unsent.length > 0 && emailEnabled && recipients.length > 0) {
-        const docNotifyExpired = unsent.map(d => ({
+      if (unsentExpired.length > 0 && emailEnabled && recipients.length > 0) {
+        const docNotifyExpired = unsentExpired.map(d => ({
           documentName: d.documentType?.name ?? 'Dokumen',
           employeeName: d.employee.fullName,
           expiryDate: d.expiryDate,
@@ -285,7 +298,7 @@ export class ContractCronService {
           .catch(err => { this.logger.error(`Document email notification failed: ${err?.message}`); return false })
 
         if (sent) {
-          for (const d of unsent) {
+          for (const d of unsentExpired) {
             await this.emailConfig.recordSent('employee_document', d.id, -1)
           }
         }
@@ -296,34 +309,7 @@ export class ContractCronService {
 
     // ── VendorContract status sync ──────────────────────────────────────
     this.logger.debug('Syncing vendor contract statuses...')
-    const { akanBerakhir: vcAkan, expired: vcExpired } = await this.vendorContractsService.syncExpiredStatuses()
-
-    // Filter yang belum pernah dikirim email (dedup via sentinel -1)
-    const vcUnsentAkan: any[] = []
-    for (const vc of vcAkan) {
-      if (!(await this.emailConfig.hasSent('vendor_contract', vc.id, -1))) vcUnsentAkan.push(vc)
-    }
-    const vcUnsentExpired: any[] = []
-    for (const vc of vcExpired) {
-      if (!(await this.emailConfig.hasSent('vendor_contract', vc.id, -1))) vcUnsentExpired.push(vc)
-    }
-
-    const vcChanges = [
-      ...vcUnsentAkan.map((vc: any) => ({
-        documentName: vc.documentName,
-        documentNumber: vc.documentNumber,
-        companyName: vc.company?.name ?? '-',
-        endDate: vc.endDate!,
-        newStatus: 'AKAN_BERAKHIR' as const,
-      })),
-      ...vcUnsentExpired.map((vc: any) => ({
-        documentName: vc.documentName,
-        documentNumber: vc.documentNumber,
-        companyName: vc.company?.name ?? '-',
-        endDate: vc.endDate!,
-        newStatus: 'EXPIRED' as const,
-      })),
-    ]
+    const { akanBerakhir: vcAkan, expired: vcExpired } = await this.vendorContractsService.syncExpiredStatuses(maxWindow)
 
     // Commit status SELALU dijalankan agar status tetap ter-sync meski email nonaktif
     await this.vendorContractsService.commitStatuses(
@@ -331,44 +317,69 @@ export class ContractCronService {
       vcExpired.map((vc: any) => vc.id),
     )
 
-    if (vcChanges.length > 0 && emailEnabled && recipients.length > 0) {
-      const sent = await this.maileroo.sendVendorContractNotification(vcChanges, recipients)
-        .catch(err => { this.logger.error(`Vendor contract notification failed: ${err?.message}`); return false })
+    if (emailEnabled && recipients.length > 0) {
+      // AKAN_BERAKHIR: kirim per trigger window (multi-window, dedup via triggerDay=window)
+      for (const window of triggerWindows) {
+        const targetStart = startOfDay(new Date(todayStart.getTime() + window * DAY_MS))
+        const targetEnd = new Date(targetStart.getTime() + DAY_MS)
 
-      if (sent) {
-        for (const vc of vcUnsentAkan) await this.emailConfig.recordSent('vendor_contract', vc.id, -1)
-        for (const vc of vcUnsentExpired) await this.emailConfig.recordSent('vendor_contract', vc.id, -1)
+        const unsentForWindow: any[] = []
+        for (const vc of vcAkan) {
+          if (!vc.endDate) continue
+          const end = startOfDay(vc.endDate).getTime()
+          if (end >= targetStart.getTime() && end < targetEnd.getTime()) {
+            const alreadySent = await this.emailConfig.hasSent('vendor_contract', vc.id, window)
+            if (!alreadySent) unsentForWindow.push(vc)
+          }
+        }
+
+        if (unsentForWindow.length > 0) {
+          this.logger.log(`Sending vendor contract email for window=${window}d: ${unsentForWindow.length} contract(s)`)
+          const vcChangesForWindow = unsentForWindow.map((vc: any) => ({
+            documentName: vc.documentName,
+            documentNumber: vc.documentNumber,
+            companyName: vc.company?.name ?? '-',
+            endDate: vc.endDate!,
+            newStatus: 'AKAN_BERAKHIR' as const,
+          }))
+
+          const sent = await this.maileroo.sendVendorContractNotification(vcChangesForWindow, recipients)
+            .catch(err => { this.logger.error(`Vendor contract notification failed: ${err?.message}`); return false })
+
+          if (sent) {
+            for (const vc of unsentForWindow) await this.emailConfig.recordSent('vendor_contract', vc.id, window)
+          }
+        }
+      }
+
+      // EXPIRED: sentinel -1, kirim sekali per kontrak
+      const vcExpiredUnsent: any[] = []
+      for (const vc of vcExpired) {
+        const alreadySent = await this.emailConfig.hasSent('vendor_contract', vc.id, -1)
+        if (!alreadySent) vcExpiredUnsent.push(vc)
+      }
+      if (vcExpiredUnsent.length > 0) {
+        this.logger.log(`Sending expired vendor contract email: ${vcExpiredUnsent.length} contract(s)`)
+        const vcExpiredChanges = vcExpiredUnsent.map((vc: any) => ({
+          documentName: vc.documentName,
+          documentNumber: vc.documentNumber,
+          companyName: vc.company?.name ?? '-',
+          endDate: vc.endDate!,
+          newStatus: 'EXPIRED' as const,
+        }))
+
+        const sent = await this.maileroo.sendVendorContractNotification(vcExpiredChanges, recipients)
+          .catch(err => { this.logger.error(`Vendor contract notification failed: ${err?.message}`); return false })
+
+        if (sent) {
+          for (const vc of vcExpiredUnsent) await this.emailConfig.recordSent('vendor_contract', vc.id, -1)
+        }
       }
     }
 
     // ── LegalKoperasi status sync ──────────────────────────────────────
     this.logger.debug('Syncing legal koperasi statuses...')
-    const { akanBerakhir: lkAkan, expired: lkExpired } = await this.legalKoperasiService.syncExpiredStatuses()
-
-    // Filter yang belum pernah dikirim email (dedup via sentinel -1)
-    const lkUnsentAkan: any[] = []
-    for (const lk of lkAkan) {
-      if (!(await this.emailConfig.hasSent('legal_koperasi', lk.id, -1))) lkUnsentAkan.push(lk)
-    }
-    const lkUnsentExpired: any[] = []
-    for (const lk of lkExpired) {
-      if (!(await this.emailConfig.hasSent('legal_koperasi', lk.id, -1))) lkUnsentExpired.push(lk)
-    }
-
-    const lkChanges = [
-      ...lkUnsentAkan.map((lk: any) => ({
-        documentName: lk.documentName,
-        publisher: lk.publisher,
-        endDate: lk.endDate!,
-        newStatus: 'AKAN_BERAKHIR' as const,
-      })),
-      ...lkUnsentExpired.map((lk: any) => ({
-        documentName: lk.documentName,
-        publisher: lk.publisher,
-        endDate: lk.endDate!,
-        newStatus: 'EXPIRED' as const,
-      })),
-    ]
+    const { akanBerakhir: lkAkan, expired: lkExpired } = await this.legalKoperasiService.syncExpiredStatuses(maxWindow)
 
     // Commit status SELALU dijalankan agar status tetap ter-sync meski email nonaktif
     await this.legalKoperasiService.commitStatuses(
@@ -376,13 +387,61 @@ export class ContractCronService {
       lkExpired.map((lk: any) => lk.id),
     )
 
-    if (lkChanges.length > 0 && emailEnabled && recipients.length > 0) {
-      const sent = await this.maileroo.sendLegalKoperasiNotification(lkChanges, recipients)
-        .catch(err => { this.logger.error(`Legal koperasi notification failed: ${err?.message}`); return false })
+    if (emailEnabled && recipients.length > 0) {
+      // AKAN_BERAKHIR: kirim per trigger window (multi-window, dedup via triggerDay=window)
+      for (const window of triggerWindows) {
+        const targetStart = startOfDay(new Date(todayStart.getTime() + window * DAY_MS))
+        const targetEnd = new Date(targetStart.getTime() + DAY_MS)
 
-      if (sent) {
-        for (const lk of lkUnsentAkan) await this.emailConfig.recordSent('legal_koperasi', lk.id, -1)
-        for (const lk of lkUnsentExpired) await this.emailConfig.recordSent('legal_koperasi', lk.id, -1)
+        const unsentForWindow: any[] = []
+        for (const lk of lkAkan) {
+          if (!lk.endDate) continue
+          const end = startOfDay(lk.endDate).getTime()
+          if (end >= targetStart.getTime() && end < targetEnd.getTime()) {
+            const alreadySent = await this.emailConfig.hasSent('legal_koperasi', lk.id, window)
+            if (!alreadySent) unsentForWindow.push(lk)
+          }
+        }
+
+        if (unsentForWindow.length > 0) {
+          this.logger.log(`Sending legal koperasi email for window=${window}d: ${unsentForWindow.length} document(s)`)
+          const lkChangesForWindow = unsentForWindow.map((lk: any) => ({
+            documentName: lk.documentName,
+            publisher: lk.publisher,
+            endDate: lk.endDate!,
+            newStatus: 'AKAN_BERAKHIR' as const,
+          }))
+
+          const sent = await this.maileroo.sendLegalKoperasiNotification(lkChangesForWindow, recipients)
+            .catch(err => { this.logger.error(`Legal koperasi notification failed: ${err?.message}`); return false })
+
+          if (sent) {
+            for (const lk of unsentForWindow) await this.emailConfig.recordSent('legal_koperasi', lk.id, window)
+          }
+        }
+      }
+
+      // EXPIRED: sentinel -1, kirim sekali per dokumen
+      const lkExpiredUnsent: any[] = []
+      for (const lk of lkExpired) {
+        const alreadySent = await this.emailConfig.hasSent('legal_koperasi', lk.id, -1)
+        if (!alreadySent) lkExpiredUnsent.push(lk)
+      }
+      if (lkExpiredUnsent.length > 0) {
+        this.logger.log(`Sending expired legal koperasi email: ${lkExpiredUnsent.length} document(s)`)
+        const lkExpiredChanges = lkExpiredUnsent.map((lk: any) => ({
+          documentName: lk.documentName,
+          publisher: lk.publisher,
+          endDate: lk.endDate!,
+          newStatus: 'EXPIRED' as const,
+        }))
+
+        const sent = await this.maileroo.sendLegalKoperasiNotification(lkExpiredChanges, recipients)
+          .catch(err => { this.logger.error(`Legal koperasi notification failed: ${err?.message}`); return false })
+
+        if (sent) {
+          for (const lk of lkExpiredUnsent) await this.emailConfig.recordSent('legal_koperasi', lk.id, -1)
+        }
       }
     }
 
