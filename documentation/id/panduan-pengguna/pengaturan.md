@@ -60,3 +60,9 @@ Lihat [Template Kontrak](/panduan-pengguna/template-kontrak) untuk panduan lengk
 - Reset password, hapus akun
 
 Lihat [Peran & Akses](/referensi/peran-akses) untuk detail perbedaan hak akses.
+
+## Email Config (Admin Only)
+
+Konfigurasi notifikasi email otomatis untuk semua modul (Kontrak Karyawan, Dokumen/Sertifikasi & Ijin, Kontrak Vendor/Customer, dan Legal Koperasi).
+
+Lihat [Email Config](/panduan-pengguna/email-config) untuk panduan lengkap.
