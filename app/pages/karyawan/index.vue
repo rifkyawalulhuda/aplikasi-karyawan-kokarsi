@@ -20,7 +20,25 @@ const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
 
 // Filter state
 const searchQuery = ref('')
-const statusFilter = ref('all')
+const statusFilter = ref<string[]>([])
+const locationFilter = ref<string[]>([])
+const departmentFilter = ref<string[]>([])
+
+const locationOptions = computed(() =>
+  [...new Set(data.value.map(e => e.workLocation?.name).filter(Boolean) as string[])]
+    .sort()
+    .map(name => ({ label: name, value: name }))
+)
+
+const departmentOptions = computed(() =>
+  [...new Set(data.value.map(e => e.department?.name).filter(Boolean) as string[])]
+    .sort()
+    .map(name => ({ label: name, value: name }))
+)
+
+const hasActiveFilters = computed(() =>
+  statusFilter.value.length > 0 || locationFilter.value.length > 0 || departmentFilter.value.length > 0
+)
 
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
@@ -374,12 +392,19 @@ const columns: TableColumn<Employee>[] = [
 // Filter computed
 const filteredData = computed(() => {
   let list = data.value ?? []
-  if (statusFilter.value !== 'all') {
-    list = list.filter(e => e.employmentStatus === statusFilter.value)
+
+  if (statusFilter.value.length > 0) {
+    list = list.filter(e => statusFilter.value.includes(e.employmentStatus))
+  }
+  if (locationFilter.value.length > 0) {
+    list = list.filter(e => locationFilter.value.includes(e.workLocation?.name ?? ''))
+  }
+  if (departmentFilter.value.length > 0) {
+    list = list.filter(e => departmentFilter.value.includes(e.department?.name ?? ''))
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
-    list = list.filter(e => getSearchTokens(e).some(token => token.includes(q)))
+    list = list.filter(e => getSearchTokens(e).some(token => token?.toLowerCase().includes(q)))
   }
 
   const sort = sorting.value
@@ -400,7 +425,7 @@ const filteredData = computed(() => {
   })
 })
 
-watch([statusFilter, searchQuery], () => {
+watch([statusFilter, locationFilter, departmentFilter, searchQuery], () => {
   pagination.value.pageIndex = 0
 })
 
@@ -449,18 +474,44 @@ watch(() => pagination.value.pageSize, () => {
           placeholder="Cari nama, NIK, email..."
         />
 
-        <div class="flex items-center gap-2">
-          <USelect
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu
             v-model="statusFilter"
             :items="[
-              { label: 'Semua Status', value: 'all' },
               { label: 'Aktif', value: 'AKTIF' },
               { label: 'Kontrak Expired', value: 'KONTRAK_EXPIRED' },
               { label: 'Resign', value: 'RESIGN' },
               { label: 'PHK', value: 'PHK' }
             ]"
-            placeholder="Filter status"
+            value-key="value"
+            multiple
+            placeholder="Semua Status"
             class="min-w-36"
+          />
+          <USelectMenu
+            v-model="locationFilter"
+            :items="locationOptions"
+            value-key="value"
+            multiple
+            placeholder="Semua Lokasi"
+            class="min-w-36"
+          />
+          <USelectMenu
+            v-model="departmentFilter"
+            :items="departmentOptions"
+            value-key="value"
+            multiple
+            placeholder="Semua Departemen"
+            class="min-w-40"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-x"
+            @click="statusFilter = []; locationFilter = []; departmentFilter = []"
           />
         </div>
       </div>
