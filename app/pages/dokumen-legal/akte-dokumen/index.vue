@@ -318,8 +318,9 @@ watch(() => pagination.value.pageSize, () => {
           />
         </div>
         <UPagination
-          :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-          :items-per-page="table?.tableApi?.getState().pagination.pageSize"
+          :key="`pagination-${pagination.pageSize}`"
+          :page="pagination.pageIndex + 1"
+          :items-per-page="pagination.pageSize"
           :total="filteredData.length"
           @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
         />
