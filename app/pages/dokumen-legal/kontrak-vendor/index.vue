@@ -116,8 +116,9 @@ watch([searchQuery, categoryFilter, statusFilter, documentTypeFilter], () => {
   pagination.value.pageIndex = 0
 })
 
-watch(() => pagination.value.pageSize, () => {
-  pagination.value.pageIndex = 0
+watch(() => pagination.value.pageSize, async () => {
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
 
 // Client-side sort applied on top of filtered data
@@ -556,6 +557,8 @@ onMounted(async () => {
       <!-- Table -->
       <UTable
         ref="table"
+        v-model:pagination="pagination"
+        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
         :data="sortedContracts"
         :columns="columns"
