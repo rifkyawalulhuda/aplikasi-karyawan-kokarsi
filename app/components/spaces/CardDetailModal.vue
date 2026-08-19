@@ -19,6 +19,12 @@ const { confirmDeleteToast } = useConfirmDeleteToast()
 const requestFetch = useRequestFetch()
 const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
 
+// Load full card detail — MUST be before any watch that references cardDetail
+const { data: cardDetail, refresh } = await useFetch<SpaceCard>(
+  () => `/api/spaces/${props.spaceId}/cards/${props.card.id}`,
+  { credentials: 'include' }
+)
+
 // ── DatePicker CalendarDate refs ─────────────────────────────────────────────
 const dueDateCal = shallowRef<CalendarDate | null>(null)
 // Sync dueDateCal saat cardDetail berubah
@@ -33,12 +39,6 @@ watch(dueDateCal, (val) => {
     setDueDate(newVal)
   }
 })
-
-// Load full card detail
-const { data: cardDetail, refresh } = await useFetch<SpaceCard>(
-  () => `/api/spaces/${props.spaceId}/cards/${props.card.id}`,
-  { credentials: 'include' }
-)
 
 // Edit title
 const editingTitle = ref(false)

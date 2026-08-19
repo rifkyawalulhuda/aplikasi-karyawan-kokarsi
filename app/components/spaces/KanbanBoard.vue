@@ -260,6 +260,26 @@ async function saveColName() {
   await renameColumn(editingColId.value, editColName.value.trim())
   editingColId.value = null
 }
+
+// ── Click vs drag detection ───────────────────────────────────────────────────
+// Chrome suppresses click events on draggable="true" elements.
+// We use mousedown/mouseup + movement threshold to detect intentional clicks.
+const CLICK_THRESHOLD = 5 // pixels
+let mouseDownX = 0
+let mouseDownY = 0
+
+function onCardMouseDown(e: MouseEvent) {
+  mouseDownX = e.clientX
+  mouseDownY = e.clientY
+}
+
+function onCardMouseUp(e: MouseEvent, card: SpaceCard) {
+  const dx = Math.abs(e.clientX - mouseDownX)
+  const dy = Math.abs(e.clientY - mouseDownY)
+  if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
+    emit('cardClick', card)
+  }
+}
 </script>
 
 <template>
@@ -332,12 +352,13 @@ async function saveColName() {
           :class="dragCardId === card.id ? 'opacity-40 ring-2 ring-primary/30 rounded-lg' : ''"
           @dragstart="onDragStart($event, col.id, idx, card.id)"
           @dragend="onDragEnd"
+          @mousedown="onCardMouseDown"
+          @mouseup="onCardMouseUp($event, card)"
         >
           <SpacesKanbanCard
             :card="card"
             :space-id="space.id"
             :member-map="memberMap"
-            @click="emit('cardClick', card)"
           />
         </div>
 
