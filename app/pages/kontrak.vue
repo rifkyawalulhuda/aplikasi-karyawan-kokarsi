@@ -16,11 +16,24 @@ const { data: summaryRes, status, refresh } = await useFetch<ContractSummaryRow[
 
 const summaryRows = computed<ContractSummaryRow[]>(() => summaryRes.value ?? [])
 
-const statusFilter = ref('all')
+const statusFilter = ref<string[]>([])
+const contractTypeFilter = ref<string[]>([])
 const searchQuery = ref('')
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+
+const contractTypeOptions = computed(() =>
+  [...new Set(summaryRows.value
+    .map(r => r.contractType?.name)
+    .filter(Boolean) as string[])]
+    .sort()
+    .map(name => ({ label: name, value: name }))
+)
+
+const hasActiveFilters = computed(() =>
+  statusFilter.value.length > 0 || contractTypeFilter.value.length > 0
+)
 
 // Modal state
 const addModal = ref(false)
@@ -402,8 +415,13 @@ const columns: TableColumn<ContractSummaryRow>[] = [
 
 const filteredData = computed(() => {
   let list = summaryRows.value
-  if (statusFilter.value !== 'all') {
-    list = list.filter(c => c.status === statusFilter.value)
+  if (statusFilter.value.length > 0) {
+    list = list.filter(c => statusFilter.value.includes(c.status))
+  }
+  if (contractTypeFilter.value.length > 0) {
+    list = list.filter(c =>
+      contractTypeFilter.value.includes(c.contractType?.name ?? '')
+    )
   }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
@@ -445,7 +463,7 @@ const counts = computed(() => {
   }
 })
 
-watch([statusFilter, searchQuery], () => {
+watch([statusFilter, contractTypeFilter, searchQuery], () => {
   table.value?.tableApi?.setPageIndex(0)
 })
 
@@ -494,19 +512,40 @@ watch(() => pagination.value.pageSize, async () => {
           icon="i-lucide-search"
           placeholder="Cari nama karyawan atau no. kontrak..."
         />
-        <USelect
-          v-model="statusFilter"
-          :items="[
-            { label: 'Semua Status', value: 'all' },
-            { label: 'Aktif', value: 'AKTIF' },
-            { label: 'Akan Habis', value: 'AKAN_HABIS' },
-            { label: 'Expired', value: 'EXPIRED' },
-            { label: 'Selesai', value: 'SELESAI' },
-            { label: 'Dibatalkan', value: 'DIBATALKAN' }
-          ]"
-          placeholder="Filter status"
-          class="min-w-40"
-        />
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu
+            v-model="statusFilter"
+            :items="[
+              { label: 'Aktif', value: 'AKTIF' },
+              { label: 'Akan Habis', value: 'AKAN_HABIS' },
+              { label: 'Expired', value: 'EXPIRED' },
+              { label: 'Selesai', value: 'SELESAI' },
+              { label: 'Dibatalkan', value: 'DIBATALKAN' },
+              { label: 'Draft', value: 'DRAFT' },
+            ]"
+            value-key="value"
+            multiple
+            placeholder="Semua Status"
+            class="min-w-36"
+          />
+          <USelectMenu
+            v-model="contractTypeFilter"
+            :items="contractTypeOptions"
+            value-key="value"
+            multiple
+            placeholder="Semua Tipe"
+            class="min-w-36"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-x"
+            @click="statusFilter = []; contractTypeFilter = []"
+          />
+        </div>
       </div>
 
       <UTable
