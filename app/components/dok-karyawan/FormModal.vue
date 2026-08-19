@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { CalendarDate } from '@internationalized/date'
 
 interface DocumentType {
   id: number
@@ -32,6 +33,11 @@ const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const fileError = ref<string | null>(null)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const expiryDateCal = shallowRef<CalendarDate | null>(null)
+watch(expiryDateCal, val => { state.expiryDate = fromCalDate(val) })
 
 // --- Fetch document types ---
 const { data: documentTypesRes } = useFetch<DocumentType[]>('/api/lookups/document-types', {
@@ -112,12 +118,14 @@ watch(
       state.documentTypeId = props.doc.documentTypeId
       state.documentNumber = props.doc.documentNumber
       state.expiryDate = props.doc.expiryDate ? props.doc.expiryDate.slice(0, 10) : ''
+      expiryDateCal.value = toCalDate(props.doc.expiryDate ?? null)
       state.notes = props.doc.notes ?? ''
     }
     else {
       state.documentTypeId = undefined
       state.documentNumber = ''
       state.expiryDate = ''
+      expiryDateCal.value = null
       state.notes = ''
     }
     selectedFile.value = null
@@ -270,11 +278,30 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <!-- Masa Berlaku -->
         <UFormField label="Masa Berlaku (opsional)" name="expiryDate">
-          <UInput
-            v-model="state.expiryDate"
-            type="date"
-            class="w-full"
-          />
+          <div class="flex items-center gap-2">
+            <UPopover class="flex-1">
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!expiryDateCal && 'text-muted'"
+              >
+                {{ expiryDateCal ? formatDisplay(expiryDateCal) : 'Pilih tanggal (opsional)' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="expiryDateCal" class="p-2" />
+              </template>
+            </UPopover>
+            <UButton
+              v-if="expiryDateCal"
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="expiryDateCal = null"
+            />
+          </div>
           <template #hint>
             <span class="text-xs text-muted">Kosongkan untuk dokumen tanpa masa berlaku (KTP, NPWP, dll)</span>
           </template>

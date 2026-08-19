@@ -2,6 +2,7 @@
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Employee, UserAccount } from '~/types'
+import { CalendarDate } from '@internationalized/date'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -13,6 +14,11 @@ const toast = useToast()
 const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const letterDateCal = shallowRef<CalendarDate | null>(null)
+watch(letterDateCal, val => { state.letterDate = fromCalDate(val) })
 
 const previewLetterNumber = ref('')
 const loadingLetterPreview = ref(false)
@@ -360,15 +366,25 @@ function resetForm() {
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Surat" name="letterDate" required>
-            <UInput v-model="state.letterDate" type="date" class="w-full" />
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!letterDateCal && 'text-muted'"
+              >
+                {{ letterDateCal ? formatDisplay(letterDateCal) : 'Pilih tanggal surat' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="letterDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
           <UFormField label="Berlaku Sampai (6 bulan)" name="validUntil">
-            <UInput
-              :model-value="state.validUntil"
-              type="date"
-              readonly
-              class="w-full opacity-60"
-            />
+            <div class="flex h-8 items-center rounded-md border border-default bg-elevated/50 px-3 text-sm text-muted opacity-60">
+              {{ state.validUntil ? state.validUntil : 'Dihitung otomatis' }}
+            </div>
           </UFormField>
         </div>
 
