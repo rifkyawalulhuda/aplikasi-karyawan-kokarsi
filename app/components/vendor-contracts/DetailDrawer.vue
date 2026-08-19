@@ -234,6 +234,10 @@ const displayStatus = computed(() => {
               <p class="text-xs font-medium text-muted mb-0.5">Tanggal Dibuat</p>
               <p class="text-sm text-highlighted">{{ formatDate(contract.createdDate) }}</p>
             </div>
+            <div v-if="contract.needsRenewal && contract.startDate">
+              <p class="text-xs font-medium text-muted mb-0.5">Tanggal Mulai</p>
+              <p class="text-sm text-highlighted">{{ formatDate(contract.startDate) }}</p>
+            </div>
           </div>
           <div class="rounded-xl border border-default bg-default p-4 space-y-3">
             <p class="text-xs font-medium text-muted uppercase tracking-wide">Perusahaan</p>

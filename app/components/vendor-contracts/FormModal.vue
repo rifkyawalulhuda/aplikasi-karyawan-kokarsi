@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { CalendarDate } from '@internationalized/date'
 
 interface VendorContract {
   id: number
@@ -52,6 +53,16 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const replaceFile = ref(false)
 const renewedFromContractId = ref<number | undefined>(undefined)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const createdDateCal = shallowRef<CalendarDate | null>(null)
+const startDateCal   = shallowRef<CalendarDate | null>(null)
+const endDateCal     = shallowRef<CalendarDate | null>(null)
+
+watch(createdDateCal, val => { state.createdDate = fromCalDate(val) })
+watch(startDateCal,   val => { state.startDate   = fromCalDate(val) })
+watch(endDateCal,     val => { state.endDate     = fromCalDate(val) })
 
 // --- Fetch companies ---
 const { data: companiesRes } = useFetch<{ id: number; name: string }[]>('/api/lookups/companies', {
@@ -164,6 +175,9 @@ watch(
       state.needsRenewal = d.needsRenewal
       state.startDate = d.startDate ? d.startDate.slice(0, 10) : ''
       state.endDate = d.endDate ? d.endDate.slice(0, 10) : ''
+      createdDateCal.value = toCalDate(d.createdDate ?? null)
+      startDateCal.value   = toCalDate(d.startDate ?? null)
+      endDateCal.value     = toCalDate(d.endDate ?? null)
       state.motherAgreementId = d.motherAgreementId ?? undefined
       state.location = d.location ?? ''
       state.notes = d.notes ?? ''
@@ -179,6 +193,9 @@ watch(
       state.needsRenewal = true
       state.startDate = ''
       state.endDate = ''
+      createdDateCal.value = toCalDate(new Date().toISOString().slice(0, 10))
+      startDateCal.value   = null
+      endDateCal.value     = null
       state.location = d.location ?? ''
       state.notes = ''
       renewedFromContractId.value = d.id
@@ -194,6 +211,9 @@ watch(
       state.needsRenewal = false
       state.startDate = ''
       state.endDate = ''
+      createdDateCal.value = null
+      startDateCal.value   = null
+      endDateCal.value     = null
       state.motherAgreementId = undefined
       state.location = ''
       state.notes = ''
@@ -420,11 +440,20 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
 
         <!-- Tanggal Dibuat -->
         <UFormField label="Tanggal Dibuat" name="createdDate" required>
-          <UInput
-            v-model="state.createdDate"
-            type="date"
-            class="w-full"
-          />
+          <UPopover>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-calendar"
+              class="w-full justify-start font-normal"
+              :class="!createdDateCal && 'text-muted'"
+            >
+              {{ createdDateCal ? formatDisplay(createdDateCal) : 'Pilih tanggal dibuat' }}
+            </UButton>
+            <template #content>
+              <CalendarPicker v-model="createdDateCal" class="p-2" />
+            </template>
+          </UPopover>
         </UFormField>
 
         <!-- Butuh Perpanjang -->
@@ -440,18 +469,56 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
         <template v-if="state.needsRenewal">
           <div class="grid grid-cols-2 gap-3">
             <UFormField label="Tanggal Mulai" name="startDate" required>
-              <UInput
-                v-model="state.startDate"
-                type="date"
-                class="w-full"
-              />
+              <div class="flex items-center gap-2">
+                <UPopover class="flex-1">
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    icon="i-lucide-calendar"
+                    class="w-full justify-start font-normal"
+                    :class="!startDateCal && 'text-muted'"
+                  >
+                    {{ startDateCal ? formatDisplay(startDateCal) : 'Pilih tanggal mulai' }}
+                  </UButton>
+                  <template #content>
+                    <CalendarPicker v-model="startDateCal" class="p-2" />
+                  </template>
+                </UPopover>
+                <UButton
+                  v-if="startDateCal"
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="startDateCal = null"
+                />
+              </div>
             </UFormField>
             <UFormField label="Tanggal Berakhir" name="endDate" required>
-              <UInput
-                v-model="state.endDate"
-                type="date"
-                class="w-full"
-              />
+              <div class="flex items-center gap-2">
+                <UPopover class="flex-1">
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    icon="i-lucide-calendar"
+                    class="w-full justify-start font-normal"
+                    :class="!endDateCal && 'text-muted'"
+                  >
+                    {{ endDateCal ? formatDisplay(endDateCal) : 'Pilih tanggal berakhir' }}
+                  </UButton>
+                  <template #content>
+                    <CalendarPicker v-model="endDateCal" class="p-2" />
+                  </template>
+                </UPopover>
+                <UButton
+                  v-if="endDateCal"
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="endDateCal = null"
+                />
+              </div>
             </UFormField>
           </div>
         </template>
