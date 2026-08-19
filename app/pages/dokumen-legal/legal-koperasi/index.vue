@@ -36,11 +36,16 @@ interface LegalKoperasi {
 
 // --- State ---
 const searchQuery = ref('')
-const categoryFilter = ref('all')
-const statusFilter = ref('all')
+const categoryFilter = ref<string[]>([])
+const statusFilter = ref<string[]>([])
+const needsRenewalFilter = ref<string>('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
+
+const hasActiveFilters = computed(() =>
+  categoryFilter.value.length > 0 || statusFilter.value.length > 0 || needsRenewalFilter.value !== 'all'
+)
 
 const addModal = ref(false)
 const editModal = ref(false)
@@ -57,15 +62,8 @@ const fetchStatus = ref<'pending' | 'success' | 'error'>('pending')
 async function fetchDocuments() {
   fetchStatus.value = 'pending'
   try {
-    const params: Record<string, string> = {
-      page: String(pagination.value.pageIndex + 1),
-      limit: String(pagination.value.pageSize),
-    }
-    if (searchQuery.value) params.search = searchQuery.value
-    if (categoryFilter.value !== 'all') params.category = categoryFilter.value
-    if (statusFilter.value !== 'all') params.status = statusFilter.value
     res.value = await $fetch<{ data: LegalKoperasi[]; total: number }>('/api/legal-koperasi', {
-      query: params,
+      query: { limit: 10000 },
       credentials: 'include',
     })
     fetchStatus.value = 'success'
@@ -81,25 +79,49 @@ function refresh() {
   fetchDocuments()
 }
 
-watch([searchQuery, categoryFilter, statusFilter], () => {
+watch([searchQuery, categoryFilter, statusFilter, needsRenewalFilter], () => {
   pagination.value.pageIndex = 0
-  fetchDocuments()
 })
 
 watch(() => pagination.value.pageSize, () => {
   pagination.value.pageIndex = 0
-  fetchDocuments()
 })
 
 const documents = computed<LegalKoperasi[]>(() => res.value?.data ?? [])
-const totalDocuments = computed(() => res.value?.total ?? 0)
 
-// Client-side sort applied on top of server-fetched page
+// --- Client-side filter ---
+const filteredDocuments = computed(() => {
+  let list = documents.value
+
+  if (categoryFilter.value.length > 0) {
+    list = list.filter(d => categoryFilter.value.includes(d.category))
+  }
+  if (statusFilter.value.length > 0) {
+    list = list.filter(d => statusFilter.value.includes(d.status))
+  }
+  if (needsRenewalFilter.value !== 'all') {
+    list = list.filter(d => d.needsRenewal === (needsRenewalFilter.value === 'true'))
+  }
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase()
+    list = list.filter(d =>
+      d.documentName?.toLowerCase().includes(q) ||
+      d.documentNumber?.toLowerCase().includes(q) ||
+      d.publisher?.toLowerCase().includes(q)
+    )
+  }
+
+  return list
+})
+
+const totalDocuments = computed(() => filteredDocuments.value.length)
+
+// Client-side sort applied on top of filtered data
 const sortedDocuments = computed<LegalKoperasi[]>(() => {
   const sort = sorting.value
-  if (!sort) return documents.value
+  if (!sort) return filteredDocuments.value
 
-  return [...documents.value].sort((a, b) => {
+  return [...filteredDocuments.value].sort((a, b) => {
     let aVal: any
     let bVal: any
 
@@ -146,7 +168,7 @@ const sortedDocuments = computed<LegalKoperasi[]>(() => {
 })
 
 const counts = computed(() => ({
-  total: totalDocuments.value,
+  total: documents.value.length,
   aktif: documents.value.filter(d => d.status === 'AKTIF').length,
   akanBerakhir: documents.value.filter(d => d.status === 'AKAN_BERAKHIR').length,
   expired: documents.value.filter(d => d.status === 'EXPIRED').length,
@@ -170,23 +192,10 @@ const exportYearOptions = computed(() => [
   ...availableYears.value.map(y => ({ label: String(y), value: y })),
 ])
 
-async function fetchAllForExport() {
-  const params: Record<string, string> = { page: '1', limit: '10000' }
-  if (searchQuery.value) params.search = searchQuery.value
-  if (categoryFilter.value !== 'all') params.category = categoryFilter.value
-  if (statusFilter.value !== 'all') params.status = statusFilter.value
-  const res = await $fetch<{ data: LegalKoperasi[]; total: number }>('/api/legal-koperasi', {
-    query: params,
-    credentials: 'include',
-  })
-  return res?.data ?? []
-}
-
 async function handleExport() {
   try {
-    const all = await fetchAllForExport()
     const year = exportYear.value === 'all' ? undefined : exportYear.value
-    const ok = exportLegalKoperasiExcel(all, year)
+    const ok = exportLegalKoperasiExcel(documents.value, year)
     if (ok) {
       toast.add({ title: 'Export berhasil', description: `Data legal koperasi${year ? ` tahun ${year}` : ''} berhasil diekspor.`, color: 'success' })
       exportModal.value = false
@@ -475,11 +484,10 @@ onMounted(async () => {
           icon="i-lucide-search"
           placeholder="Cari nama atau nomor dokumen..."
         />
-        <div class="flex flex-wrap gap-2">
-          <USelect
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu
             v-model="categoryFilter"
             :items="[
-              { label: 'Semua Kategori', value: 'all' },
               { label: 'Izin', value: 'IZIN' },
               { label: 'Sertifikat', value: 'SERTIFIKAT' },
               { label: 'Kebijakan', value: 'KEBIJAKAN' },
@@ -487,20 +495,41 @@ onMounted(async () => {
               { label: 'Dok. B3', value: 'DOKUMEN_B3' },
               { label: 'Lain-lain', value: 'LAIN_LAIN' },
             ]"
-            placeholder="Filter kategori"
-            class="min-w-44"
+            value-key="value"
+            multiple
+            placeholder="Semua Kategori"
+            class="min-w-40"
           />
-          <USelect
+          <USelectMenu
             v-model="statusFilter"
             :items="[
-              { label: 'Semua Status', value: 'all' },
               { label: 'Aktif', value: 'AKTIF' },
               { label: 'Akan Berakhir', value: 'AKAN_BERAKHIR' },
               { label: 'Expired', value: 'EXPIRED' },
               { label: 'Tidak Aktif', value: 'TIDAK_AKTIF' },
             ]"
-            placeholder="Filter status"
+            value-key="value"
+            multiple
+            placeholder="Semua Status"
+            class="min-w-40"
+          />
+          <USelect
+            v-model="needsRenewalFilter"
+            :items="[
+              { label: 'Semua', value: 'all' },
+              { label: 'Perlu Perpanjangan', value: 'true' },
+              { label: 'Tidak Perlu', value: 'false' },
+            ]"
             class="min-w-44"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-x"
+            @click="categoryFilter = []; statusFilter = []; needsRenewalFilter = 'all'"
           />
         </div>
       </div>
@@ -535,7 +564,7 @@ onMounted(async () => {
       <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
         <div class="flex items-center gap-3">
           <div class="text-sm text-muted">
-            Menampilkan {{ documents.length }} dari {{ totalDocuments }} dokumen
+            {{ totalDocuments }} dokumen
           </div>
           <USelect
             v-model="pagination.pageSize"
@@ -548,7 +577,7 @@ onMounted(async () => {
           :page="pagination.pageIndex + 1"
           :items-per-page="pagination.pageSize"
           :total="totalDocuments"
-          @update:page="(p: number) => { pagination.pageIndex = p - 1; fetchDocuments() }"
+          @update:page="(p: number) => { pagination.pageIndex = p - 1 }"
         />
       </div>
     </template>
