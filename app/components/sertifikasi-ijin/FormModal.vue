@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { CalendarDate } from '@internationalized/date'
 
 interface EmployeeDocument {
   id: number
@@ -51,6 +52,11 @@ const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const replaceFile = ref(false)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const expiryDateCal = shallowRef<CalendarDate | null>(null)
+watch(expiryDateCal, val => { state.expiryDate = fromCalDate(val) })
 
 // --- Fetch employees ---
 const { data: employeesRes } = useFetch<{ data: { id: number; fullName: string; employeeNo: string }[] }>('/api/employees', {
@@ -115,6 +121,8 @@ watch(
       state.documentTypeId = d.documentTypeId
       state.documentNumber = d.documentNumber
       state.expiryDate = d.expiryDate ? d.expiryDate.slice(0, 10) : ''
+      expiryDateCal.value = toCalDate(d.expiryDate ?? null)
+      expiryDateCal.value = toCalDate(d.expiryDate ?? null)
       state.notes = d.notes ?? ''
       jenisLabel.value = d.documentType?.documentType ?? ''
       issuerLabel.value = d.documentType?.issuer ?? ''
@@ -123,6 +131,7 @@ watch(
       state.documentTypeId = undefined
       state.documentNumber = ''
       state.expiryDate = ''
+      expiryDateCal.value = null
       state.notes = ''
       jenisLabel.value = ''
       issuerLabel.value = ''
@@ -315,11 +324,20 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
 
         <!-- Masa Berlaku -->
         <UFormField label="Masa Berlaku" name="expiryDate" required>
-          <UInput
-            v-model="state.expiryDate"
-            type="date"
-            class="w-full"
-          />
+          <UPopover>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-calendar"
+              class="w-full justify-start font-normal"
+              :class="!expiryDateCal && 'text-muted'"
+            >
+              {{ expiryDateCal ? formatDisplay(expiryDateCal) : 'Pilih masa berlaku' }}
+            </UButton>
+            <template #content>
+              <CalendarPicker v-model="expiryDateCal" class="p-2" />
+            </template>
+          </UPopover>
         </UFormField>
 
         <!-- Catatan -->
