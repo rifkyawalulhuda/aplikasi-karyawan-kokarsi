@@ -2,6 +2,7 @@
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Employee, TerminationType } from '~/types'
+import { CalendarDate } from '@internationalized/date'
 
 const props = defineProps<{ employee: Employee | null }>()
 const emit = defineEmits<{ saved: [] }>()
@@ -9,6 +10,13 @@ const emit = defineEmits<{ saved: [] }>()
 const open = defineModel<boolean>({ default: false })
 const loading = ref(false)
 const toast = useToast()
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const terminationDateCal = shallowRef<CalendarDate | null>(
+  toCalDate(new Date().toISOString().slice(0, 10))
+)
+watch(terminationDateCal, val => { state.terminationDate = fromCalDate(val) })
 
 const schema = z.object({
   terminationType: z.enum(['RESIGN', 'PHK']),
@@ -29,6 +37,7 @@ watch(() => open.value, (isOpen) => {
     state.terminationType = 'RESIGN'
     state.terminationDate = new Date().toISOString().slice(0, 10)
     state.reason = ''
+    terminationDateCal.value = toCalDate(new Date().toISOString().slice(0, 10))
   }
 })
 
@@ -92,7 +101,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
 
           <UFormField label="Tanggal Efektif" name="terminationDate" required>
-            <UInput v-model="state.terminationDate" type="date" class="w-full" />
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!terminationDateCal && 'text-muted'"
+              >
+                {{ terminationDateCal ? formatDisplay(terminationDateCal) : 'Pilih tanggal efektif' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="terminationDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
 
           <UFormField label="Catatan" name="reason">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SpaceCard, SpaceCardChecklist, SpaceCardComment, SpaceCardAttachment, CardPriority } from '~/types/space'
+import { CalendarDate } from '@internationalized/date'
 
 const props = defineProps<{
   open: boolean
@@ -16,6 +17,22 @@ const emit = defineEmits<{
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const requestFetch = useRequestFetch()
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const dueDateCal = shallowRef<CalendarDate | null>(null)
+// Sync dueDateCal saat cardDetail berubah
+watch(() => cardDetail.value?.dueDate, (val) => {
+  dueDateCal.value = toCalDate(val ?? null)
+}, { immediate: true })
+// Set due date via API saat picker berubah
+watch(dueDateCal, (val) => {
+  const newVal = fromCalDate(val)
+  const currentVal = cardDetail.value?.dueDate?.slice(0, 10) ?? ''
+  if (newVal !== currentVal) {
+    setDueDate(newVal)
+  }
+})
 
 // Load full card detail
 const { data: cardDetail, refresh } = await useFetch<SpaceCard>(
@@ -328,13 +345,31 @@ const currentPriority = computed(() =>
           </UDropdownMenu>
 
           <!-- Due date -->
-          <UInput
-            :model-value="cardDetail.dueDate?.slice(0, 10) ?? ''"
-            type="date"
-            size="sm"
-            class="w-40"
-            @change="(e: any) => setDueDate(e.target.value)"
-          />
+          <div class="flex items-center gap-1">
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                size="sm"
+                icon="i-lucide-calendar"
+                class="justify-start font-normal"
+                :class="!dueDateCal && 'text-muted'"
+              >
+                {{ dueDateCal ? formatDisplay(dueDateCal) : 'Due date' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="dueDateCal" class="p-2" />
+              </template>
+            </UPopover>
+            <UButton
+              v-if="dueDateCal"
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              @click="dueDateCal = null"
+            />
+          </div>
         </div>
 
         <!-- Description -->

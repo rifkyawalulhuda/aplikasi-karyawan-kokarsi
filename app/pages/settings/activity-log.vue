@@ -2,10 +2,21 @@
 import type { TableColumn } from '@nuxt/ui'
 import { getPaginationRowModel } from '@tanstack/table-core'
 import { h } from 'vue'
+import { CalendarDate } from '@internationalized/date'
 
 const auth = useAuthStore()
 const toast = useToast()
 const { exportActivityLogsExcel } = useExport()
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs untuk filter dan purge ───────────────────────
+const dateFromCal  = shallowRef<CalendarDate | null>(null)
+const dateToCal    = shallowRef<CalendarDate | null>(null)
+const purgeDateCal = shallowRef<CalendarDate | null>(null)
+
+watch(dateFromCal,  val => { dateFrom.value  = fromCalDate(val) })
+watch(dateToCal,    val => { dateTo.value    = fromCalDate(val) })
+watch(purgeDateCal, val => { purgeDate.value = fromCalDate(val) })
 
 interface ActivityLog {
   id: number
@@ -132,6 +143,8 @@ function resetFilters() {
   performedByFilter.value = ''
   dateFrom.value = ''
   dateTo.value = ''
+  dateFromCal.value = null
+  dateToCal.value = null
   pagination.value.pageIndex = 0
   fetchLogs()
 }
@@ -299,17 +312,55 @@ watch(() => pagination.value.pageSize, () => {
           icon="i-lucide-user"
           class="min-w-40"
         />
-        <UInput
-          v-model="dateFrom"
-          type="date"
-          class="min-w-36"
-        />
+        <div class="flex items-center gap-2">
+          <UPopover>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-calendar"
+              class="min-w-36 justify-start font-normal"
+              :class="!dateFromCal && 'text-muted'"
+            >
+              {{ dateFromCal ? formatDisplay(dateFromCal) : 'Dari tanggal' }}
+            </UButton>
+            <template #content>
+              <CalendarPicker v-model="dateFromCal" class="p-2" />
+            </template>
+          </UPopover>
+          <UButton
+            v-if="dateFromCal"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="dateFromCal = null"
+          />
+        </div>
         <span class="text-sm text-muted self-center">s/d</span>
-        <UInput
-          v-model="dateTo"
-          type="date"
-          class="min-w-36"
-        />
+        <div class="flex items-center gap-2">
+          <UPopover>
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-calendar"
+              class="min-w-36 justify-start font-normal"
+              :class="!dateToCal && 'text-muted'"
+            >
+              {{ dateToCal ? formatDisplay(dateToCal) : 'Sampai tanggal' }}
+            </UButton>
+            <template #content>
+              <CalendarPicker v-model="dateToCal" class="p-2" />
+            </template>
+          </UPopover>
+          <UButton
+            v-if="dateToCal"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="dateToCal = null"
+          />
+        </div>
         <UButton
           label="Terapkan"
           icon="i-lucide-search"
@@ -408,11 +459,30 @@ watch(() => pagination.value.pageSize, () => {
           <p class="text-xs text-muted mb-3">Hapus semua log aktivitas sebelum tanggal tertentu. Tindakan ini permanen dan tidak bisa dibatalkan.</p>
           <div class="flex flex-wrap items-end gap-3">
             <UFormField label="Hapus log sebelum">
-              <UInput
-                v-model="purgeDate"
-                type="date"
-                class="min-w-40"
-              />
+              <div class="flex items-center gap-2">
+                <UPopover>
+                  <UButton
+                    color="neutral"
+                    variant="outline"
+                    icon="i-lucide-calendar"
+                    class="min-w-40 justify-start font-normal"
+                    :class="!purgeDateCal && 'text-muted'"
+                  >
+                    {{ purgeDateCal ? formatDisplay(purgeDateCal) : 'Pilih tanggal' }}
+                  </UButton>
+                  <template #content>
+                    <CalendarPicker v-model="purgeDateCal" class="p-2" />
+                  </template>
+                </UPopover>
+                <UButton
+                  v-if="purgeDateCal"
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  size="sm"
+                  @click="purgeDateCal = null"
+                />
+              </div>
             </UFormField>
             <UButton
               :label="purgeDate ? `Hapus Log Sebelum ${purgeDateLabel}` : 'Pilih tanggal dulu'"
