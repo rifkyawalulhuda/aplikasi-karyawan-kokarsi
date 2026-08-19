@@ -224,8 +224,9 @@ onMounted(() => {
   }
 })
 
-watch(() => pagination.value.pageSize, () => {
-  pagination.value.pageIndex = 0
+watch(() => pagination.value.pageSize, async () => {
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
 </script>
 

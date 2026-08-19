@@ -83,8 +83,9 @@ watch([searchQuery, categoryFilter, statusFilter, needsRenewalFilter], () => {
   pagination.value.pageIndex = 0
 })
 
-watch(() => pagination.value.pageSize, () => {
-  pagination.value.pageIndex = 0
+watch(() => pagination.value.pageSize, async () => {
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
 
 const documents = computed<LegalKoperasi[]>(() => res.value?.data ?? [])
@@ -537,6 +538,8 @@ onMounted(async () => {
       <!-- Table -->
       <UTable
         ref="table"
+        v-model:pagination="pagination"
+        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
         :data="sortedDocuments"
         :columns="columns"
