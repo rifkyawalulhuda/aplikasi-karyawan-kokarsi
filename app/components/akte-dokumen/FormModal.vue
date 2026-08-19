@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { CalendarDate } from '@internationalized/date'
 
 interface AkteDokumen {
   id: number
@@ -31,6 +32,14 @@ const toast = useToast()
 const loading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const tanggalCal   = shallowRef<CalendarDate | null>(null)
+const tanggalSkCal = shallowRef<CalendarDate | null>(null)
+
+watch(tanggalCal,   val => { state.tanggal   = fromCalDate(val) })
+watch(tanggalSkCal, val => { state.tanggalSk = fromCalDate(val) })
 
 const schema = z.object({
   tanggal: z.string().min(1, 'Tanggal wajib diisi'),
@@ -71,6 +80,8 @@ watch(
       state.nomorSk = d.nomorSk ?? ''
       state.tanggalSk = d.tanggalSk ? d.tanggalSk.slice(0, 10) : ''
       state.keterangan = d.keterangan ?? ''
+      tanggalCal.value   = toCalDate(d.tanggal ?? null)
+      tanggalSkCal.value = toCalDate(d.tanggalSk ?? null)
     } else {
       state.tanggal = ''
       state.notaris = ''
@@ -79,6 +90,8 @@ watch(
       state.nomorSk = ''
       state.tanggalSk = ''
       state.keterangan = ''
+      tanggalCal.value   = null
+      tanggalSkCal.value = null
     }
     selectedFile.value = null
   },
@@ -178,7 +191,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <!-- Tanggal -->
           <UFormField label="Tanggal" name="tanggal" required>
-            <UInput v-model="state.tanggal" type="date" class="w-full" />
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!tanggalCal && 'text-muted'"
+              >
+                {{ tanggalCal ? formatDisplay(tanggalCal) : 'Pilih tanggal' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="tanggalCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
 
           <!-- Nomor Akte -->
@@ -205,7 +231,30 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
           <!-- Tanggal SK -->
           <UFormField label="Tanggal SK" name="tanggalSk">
-            <UInput v-model="state.tanggalSk" type="date" class="w-full" />
+            <div class="flex items-center gap-2">
+              <UPopover class="flex-1">
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-calendar"
+                  class="w-full justify-start font-normal"
+                  :class="!tanggalSkCal && 'text-muted'"
+                >
+                  {{ tanggalSkCal ? formatDisplay(tanggalSkCal) : 'Pilih tanggal SK (opsional)' }}
+                </UButton>
+                <template #content>
+                  <CalendarPicker v-model="tanggalSkCal" class="p-2" />
+                </template>
+              </UPopover>
+              <UButton
+                v-if="tanggalSkCal"
+                icon="i-lucide-x"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                @click="tanggalSkCal = null"
+              />
+            </div>
           </UFormField>
         </div>
 
