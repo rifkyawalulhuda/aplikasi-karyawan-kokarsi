@@ -23,6 +23,7 @@ const unreadCount = ref(0)
 const isLoading = ref(false)
 let intervalId: ReturnType<typeof setInterval> | null = null // kept for reference, unused
 let eventSource: EventSource | null = null
+let previousCount: number | null = null // untuk skip fetch jika count tidak berubah
 
 export function useNotifications() {
   // Identitas user login untuk filter per-user
@@ -131,8 +132,10 @@ export function useNotifications() {
       try {
         const payload = JSON.parse(e.data) as { count: number }
         if (typeof payload.count === 'number') {
+          const changed = payload.count !== previousCount
+          previousCount = payload.count
           unreadCount.value = payload.count
-          if (payload.count > 0) {
+          if (payload.count > 0 && changed) {
             await fetchNotifications()
           }
         }
