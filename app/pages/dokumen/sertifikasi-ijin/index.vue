@@ -48,10 +48,23 @@ interface EmployeeDocument {
 
 // --- State ---
 const searchQuery = ref('')
-const statusFilter = ref('all')
+const statusFilter = ref<string[]>([])
+const documentTypeFilter = ref<string[]>([])
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
+
+const documentTypeOptions = computed(() =>
+  [...new Set(documents.value
+    .map(d => d.documentType?.name)
+    .filter(Boolean) as string[])]
+    .sort()
+    .map(name => ({ label: name, value: name }))
+)
+
+const hasActiveFilters = computed(() =>
+  statusFilter.value.length > 0 || documentTypeFilter.value.length > 0
+)
 
 const addModal = ref(false)
 const editModal = ref(false)
@@ -131,8 +144,14 @@ const filteredData = computed(() => {
     result = result.filter(doc => getSearchText(doc).includes(q))
   }
 
-  if (statusFilter.value !== 'all') {
-    result = result.filter(doc => doc.status === statusFilter.value)
+  if (statusFilter.value.length > 0) {
+    result = result.filter(doc => statusFilter.value.includes(doc.status))
+  }
+
+  if (documentTypeFilter.value.length > 0) {
+    result = result.filter(doc =>
+      documentTypeFilter.value.includes(doc.documentType?.name ?? '')
+    )
   }
 
   const sort = sorting.value
@@ -334,7 +353,7 @@ function openRenew(doc: EmployeeDocument) {
   renewModal.value = true
 }
 
-watch([searchQuery, statusFilter], () => {
+watch([searchQuery, statusFilter, documentTypeFilter], () => {
   table.value?.tableApi?.setPageIndex(0)
 })
 
@@ -406,17 +425,37 @@ onMounted(() => {
           icon="i-lucide-search"
           placeholder="Cari karyawan atau nomor dokumen..."
         />
-        <USelect
-          v-model="statusFilter"
-          :items="[
-            { label: 'Semua Status', value: 'all' },
-            { label: 'Aktif', value: 'AKTIF' },
-            { label: 'Akan Expired', value: 'AKAN_EXPIRED' },
-            { label: 'Expired', value: 'EXPIRED' },
-          ]"
-          placeholder="Filter status"
-          class="min-w-44"
-        />
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu
+            v-model="statusFilter"
+            :items="[
+              { label: 'Aktif', value: 'AKTIF' },
+              { label: 'Akan Expired', value: 'AKAN_EXPIRED' },
+              { label: 'Expired', value: 'EXPIRED' },
+            ]"
+            value-key="value"
+            multiple
+            placeholder="Semua Status"
+            class="min-w-36"
+          />
+          <USelectMenu
+            v-model="documentTypeFilter"
+            :items="documentTypeOptions"
+            value-key="value"
+            multiple
+            placeholder="Semua Jenis"
+            class="min-w-36"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-x"
+            @click="statusFilter = []; documentTypeFilter = []"
+          />
+        </div>
       </div>
 
       <!-- Table -->
