@@ -577,10 +577,11 @@ onMounted(async () => {
           />
         </div>
         <UPagination
+          :key="`pagination-${pagination.pageSize}`"
           :page="pagination.pageIndex + 1"
           :items-per-page="pagination.pageSize"
           :total="totalDocuments"
-          @update:page="(p: number) => { pagination.pageIndex = p - 1 }"
+          @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
         />
       </div>
     </template>
