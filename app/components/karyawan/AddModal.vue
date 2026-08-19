@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { CalendarDate } from '@internationalized/date'
 
 interface LookupItem { id: number; name: string }
 interface LookupsResponse {
@@ -21,6 +22,14 @@ const uploadLoading = ref(false)
 const photoFile = ref<File | null>(null)
 const photoPreview = ref<string | null>(null)
 const toast = useToast()
+const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
+
+// ── DatePicker CalendarDate refs ─────────────────────────────────────────────
+const birthDateCal = shallowRef<CalendarDate | null>(null)
+const joinDateCal  = shallowRef<CalendarDate | null>(null)
+
+watch(birthDateCal, val => { state.birthDate = fromCalDate(val) })
+watch(joinDateCal,  val => { state.joinDate  = fromCalDate(val) })
 
 // Field-level errors dari backend — ref terpisah per field agar reaktivitas terjamin
 const errorEmployeeNo = ref<string | undefined>(undefined)
@@ -271,10 +280,36 @@ function onClose() {
         <!-- Baris 3: Tgl Lahir + Tgl Bergabung -->
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="Tanggal Lahir" name="birthDate" required>
-            <UInput v-model="state.birthDate" type="date" class="w-full" />
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!birthDateCal && 'text-muted'"
+              >
+                {{ birthDateCal ? formatDisplay(birthDateCal) : 'Pilih tanggal lahir' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="birthDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
           <UFormField label="Tanggal Bergabung" name="joinDate" required>
-            <UInput v-model="state.joinDate" type="date" class="w-full" />
+            <UPopover>
+              <UButton
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-calendar"
+                class="w-full justify-start font-normal"
+                :class="!joinDateCal && 'text-muted'"
+              >
+                {{ joinDateCal ? formatDisplay(joinDateCal) : 'Pilih tanggal bergabung' }}
+              </UButton>
+              <template #content>
+                <CalendarPicker v-model="joinDateCal" class="p-2" />
+              </template>
+            </UPopover>
           </UFormField>
         </div>
 
