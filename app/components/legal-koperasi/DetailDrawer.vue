@@ -305,6 +305,10 @@ const displayStatus = computed(() => {
               <p class="text-xs font-medium text-muted mb-0.5">Tanggal Dokumen</p>
               <p class="text-sm text-highlighted">{{ formatDate(document.documentDate) }}</p>
             </div>
+            <div v-if="document.needsRenewal && document.startDate">
+              <p class="text-xs font-medium text-muted mb-0.5">Tanggal Mulai</p>
+              <p class="text-sm text-highlighted">{{ formatDate(document.startDate) }}</p>
+            </div>
             <div v-if="document.location">
               <p class="text-xs font-medium text-muted mb-0.5">Lokasi</p>
               <p class="text-sm text-highlighted">{{ document.location }}</p>
