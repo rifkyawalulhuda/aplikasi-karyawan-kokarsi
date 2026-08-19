@@ -39,8 +39,21 @@ function handleExport() {
 }
 
 const searchQuery = ref('')
-const levelFilter = ref('all')
+const levelFilter = ref<number[]>([])
+const jobRoleFilter = ref<string[]>([])
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+
+const jobRoleOptions = computed(() =>
+  [...new Set(letters.value
+    .map(l => l.employee?.jobRole?.name)
+    .filter(Boolean) as string[])]
+    .sort()
+    .map(name => ({ label: name, value: name }))
+)
+
+const hasActiveFilters = computed(() =>
+  levelFilter.value.length > 0 || jobRoleFilter.value.length > 0
+)
 const addModal = ref(false)
 const editModal = ref(false)
 const editTarget = ref<WarningLetter | null>(null)
@@ -198,8 +211,14 @@ const filteredData = computed(() => {
     result = result.filter(letter => getSearchText(letter).includes(q))
   }
 
-  if (levelFilter.value !== 'all') {
-    result = result.filter(letter => letter.warningLevel === +levelFilter.value)
+  if (levelFilter.value.length > 0) {
+    result = result.filter(letter => levelFilter.value.includes(letter.warningLevel))
+  }
+
+  if (jobRoleFilter.value.length > 0) {
+    result = result.filter(letter =>
+      jobRoleFilter.value.includes(letter.employee?.jobRole?.name ?? '')
+    )
   }
 
   const sort = sorting.value
@@ -340,6 +359,10 @@ const columns: TableColumn<WarningLetter>[] = [
     cell: ({ row }) => h('span', { class: 'text-sm text-highlighted' }, row.original.processedByName || '-'),
   },
 ]
+
+watch([levelFilter, jobRoleFilter, searchQuery], () => {
+  table.value?.tableApi?.setPageIndex(0)
+})
 </script>
 
 <template>
@@ -381,17 +404,37 @@ const columns: TableColumn<WarningLetter>[] = [
           icon="i-lucide-search"
           placeholder="Cari nomor surat atau karyawan..."
         />
-        <USelect
-          v-model="levelFilter"
-          :items="[
-            { label: 'Semua Level', value: 'all' },
-            { label: 'SP 1', value: '1' },
-            { label: 'SP 2', value: '2' },
-            { label: 'SP 3', value: '3' },
-          ]"
-          placeholder="Filter level"
-          class="min-w-40"
-        />
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelectMenu
+            v-model="levelFilter"
+            :items="[
+              { label: 'SP 1', value: 1 },
+              { label: 'SP 2', value: 2 },
+              { label: 'SP 3', value: 3 },
+            ]"
+            value-key="value"
+            multiple
+            placeholder="Semua Level"
+            class="min-w-36"
+          />
+          <USelectMenu
+            v-model="jobRoleFilter"
+            :items="jobRoleOptions"
+            value-key="value"
+            multiple
+            placeholder="Semua Jabatan"
+            class="min-w-36"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            icon="i-lucide-x"
+            @click="levelFilter = []; jobRoleFilter = []"
+          />
+        </div>
       </div>
 
       <!-- Table -->
