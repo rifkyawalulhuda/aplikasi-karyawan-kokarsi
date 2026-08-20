@@ -218,10 +218,15 @@ function confirmDelete(doc: AkteDokumen) {
 const route = useRoute()
 onMounted(() => {
   const openId = route.query.openId
-  if (openId) {
-    const doc = documents.value.find(d => d.id === Number(openId))
-    if (doc) openDetail(doc)
-  }
+  if (!openId) return
+  const unwatch = watch(documents, (val) => {
+    if (!val.length) return
+    const doc = val.find(d => d.id === Number(openId))
+    if (doc) {
+      openDetail(doc)
+      unwatch()
+    }
+  }, { immediate: true })
 })
 
 watch(() => pagination.value.pageSize, async () => {
