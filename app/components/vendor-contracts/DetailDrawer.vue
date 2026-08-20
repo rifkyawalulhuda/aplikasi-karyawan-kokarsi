@@ -34,6 +34,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'edit': [contract: VendorContract]
+  'renew': [contract: VendorContract]
   'open-contract': [id: number]
 }>()
 
@@ -398,7 +399,17 @@ const displayStatus = computed(() => {
     <template #footer>
       <div class="flex items-center justify-between gap-2 w-full">
         <UButton label="Tutup" color="neutral" variant="ghost" @click="emit('update:open', false)" />
-        <UButton v-if="contract" label="Edit" icon="i-lucide-pencil" color="primary" @click="emit('edit', contract)" />
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="contract?.needsRenewal && (contract?.status === 'AKAN_BERAKHIR' || contract?.status === 'EXPIRED') && !contract?.renewedTo"
+            label="Perpanjang"
+            icon="i-lucide-refresh-cw"
+            color="warning"
+            variant="outline"
+            @click="emit('renew', contract)"
+          />
+          <UButton v-if="contract" label="Edit" icon="i-lucide-pencil" color="primary" @click="emit('edit', contract)" />
+        </div>
       </div>
     </template>
   </USlideover>

@@ -280,6 +280,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   try {
     let contractId: number
 
+    // Validasi mode renew: tanggal mulai tidak boleh sebelum tanggal berakhir kontrak lama
+    if (props.mode === 'renew' && props.initialData?.endDate && state.startDate) {
+      const parentEnd = props.initialData.endDate.split('T')[0]!
+      if (state.startDate < parentEnd) {
+        loading.value = false
+        toast.add({
+          title: 'Tanggal mulai tidak valid',
+          description: 'Tanggal mulai kontrak baru tidak boleh lebih kecil dari tanggal berakhir kontrak sebelumnya.',
+          color: 'error',
+        })
+        return
+      }
+    }
+
     // Strip empty strings to undefined so backend @IsOptional validators pass
     const payload = {
       ...event.data,

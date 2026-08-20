@@ -683,6 +683,7 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
     :contract="detailTarget"
     @update:open="(v: boolean) => { detailDrawer = v; if (!v) detailTarget = null }"
     @edit="(doc) => { detailDrawer = false; openEdit(doc) }"
+    @renew="(doc) => { detailDrawer = false; openRenew(doc) }"
     @open-contract="openContractById"
   />
 

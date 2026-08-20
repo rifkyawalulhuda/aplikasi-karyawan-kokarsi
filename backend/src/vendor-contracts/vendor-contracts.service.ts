@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common'
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import {
   IsString, IsInt, IsOptional, IsNotEmpty, IsBoolean, IsDateString, IsEnum,
@@ -274,6 +274,11 @@ export class VendorContractsService {
     // Check if already renewed (renewedTo means someone already renewed this contract)
     if ((existing as any).renewedTo) {
       throw new ConflictException('Kontrak ini sudah pernah diperpanjang')
+    }
+
+    // Hanya kontrak berstatus AKAN_BERAKHIR atau EXPIRED yang dapat diperpanjang
+    if (existing.status !== 'AKAN_BERAKHIR' && existing.status !== 'EXPIRED') {
+      throw new BadRequestException('Hanya kontrak dengan status Akan Berakhir atau Expired yang dapat diperpanjang')
     }
 
     const status = this.computeStatus(
