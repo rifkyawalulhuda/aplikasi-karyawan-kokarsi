@@ -108,13 +108,13 @@ const totalDays = computed(() => {
   return total > 0 ? total : 1
 })
 const progressPercent = computed(() => {
-  if (daysUntilExpiry.value === null) return 0
+  if (daysUntilExpiry.value === null || daysUntilExpiry.value < 0) return 0
   return Math.min(100, Math.max(0, (daysUntilExpiry.value / totalDays.value) * 100))
 })
 function daysText(): string {
   const d = daysUntilExpiry.value
   if (d === null) return ''
-  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d < 0) return 'Masa berlaku telah berakhir'
   if (d === 0) return 'Expired hari ini'
   return `Sisa ${d} hari`
 }
@@ -205,7 +205,17 @@ const displayStatus = computed(() => {
               </div>
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-semibold text-highlighted">{{ statusLabel[contract.status] ?? contract.status }}</p>
-                <p v-if="daysUntilExpiry !== null" class="text-lg font-bold tabular-nums leading-tight" :class="statusTextClass[contract.status] ?? 'text-highlighted'">{{ daysText() }}</p>
+                <p
+                  v-if="contract.status === 'EXPIRED'"
+                  class="text-lg font-bold tabular-nums leading-tight text-error"
+                >
+                  Masa berlaku telah berakhir
+                </p>
+                <p
+                  v-else-if="daysUntilExpiry !== null"
+                  class="text-lg font-bold tabular-nums leading-tight"
+                  :class="statusTextClass[contract.status] ?? 'text-highlighted'"
+                >{{ daysText() }}</p>
               </div>
             </div>
             <div v-if="daysUntilExpiry !== null" class="mt-3">

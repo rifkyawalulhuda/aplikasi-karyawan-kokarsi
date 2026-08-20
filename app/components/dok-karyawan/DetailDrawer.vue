@@ -149,7 +149,7 @@ function daysUntilExpiry(date: string | null | undefined): number | null {
 function daysText(date: string | null | undefined): string {
   const d = daysUntilExpiry(date)
   if (d === null) return ''
-  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d < 0) return 'Masa berlaku telah berakhir'
   if (d === 0) return 'Expired hari ini'
   return `Sisa ${d} hari`
 }
