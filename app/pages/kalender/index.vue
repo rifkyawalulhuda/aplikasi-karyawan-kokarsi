@@ -518,6 +518,31 @@ function switchToDayView(date: Date) {
   activeView.value = 'day'
 }
 
+// ── Month/Year Quick-Jump Picker ────────────────────────────────────────────
+const pickerOpen = ref(false)
+const pickerYear = ref(displayedMonth.value.getFullYear())
+
+const MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
+
+function isActiveMonth(month: number) {
+  return displayedMonth.value.getMonth() === month && pickerYear.value === displayedMonth.value.getFullYear()
+}
+
+function isTodayMonth(month: number) {
+  return today.getMonth() === month && pickerYear.value === today.getFullYear()
+}
+
+function jumpToMonth(month: number) {
+  displayedMonth.value = new Date(pickerYear.value, month, 1)
+  selectedDate.value = null
+  pickerOpen.value = false
+}
+
+function openPicker() {
+  pickerYear.value = displayedMonth.value.getFullYear()
+  pickerOpen.value = true
+}
+
 // ── Header label per view ────────────────────────────────────────────────────
 const headerLabel = computed(() => {
   if (activeView.value === 'month') return monthLabel.value
@@ -633,7 +658,65 @@ function openItem(item: CalendarItem) {
       <div class="space-y-4">
         <div class="flex flex-col gap-3 border-b border-default pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 class="text-xl font-semibold capitalize text-highlighted">
+            <!-- Month View: clickable header untuk month/year picker -->
+            <UPopover v-if="activeView === 'month'" v-model:open="pickerOpen" :content="{ side: 'bottom', align: 'start' }">
+              <button
+                type="button"
+                class="group flex items-center gap-1.5 text-left"
+                @click="openPicker"
+              >
+                <h2 class="text-xl font-semibold capitalize text-highlighted group-hover:text-primary transition-colors">
+                  {{ monthLabel }}
+                </h2>
+                <UIcon
+                  name="i-lucide-chevron-down"
+                  class="size-4 text-muted group-hover:text-primary transition-all duration-200"
+                  :class="pickerOpen ? 'rotate-180 text-primary' : ''"
+                />
+              </button>
+              <template #content>
+                <div class="w-60 p-3 select-none">
+                  <!-- Year navigation -->
+                  <div class="flex items-center justify-between mb-3">
+                    <button
+                      type="button"
+                      class="flex size-7 items-center justify-center rounded-md hover:bg-elevated transition-colors text-muted hover:text-highlighted"
+                      @click="pickerYear--"
+                    >
+                      <UIcon name="i-lucide-chevron-left" class="size-4" />
+                    </button>
+                    <span class="text-sm font-semibold text-highlighted tabular-nums">{{ pickerYear }}</span>
+                    <button
+                      type="button"
+                      class="flex size-7 items-center justify-center rounded-md hover:bg-elevated transition-colors text-muted hover:text-highlighted"
+                      @click="pickerYear++"
+                    >
+                      <UIcon name="i-lucide-chevron-right" class="size-4" />
+                    </button>
+                  </div>
+                  <!-- Month grid 4x3 -->
+                  <div class="grid grid-cols-4 gap-1">
+                    <button
+                      v-for="(m, i) in MONTHS_ID"
+                      :key="i"
+                      type="button"
+                      class="rounded-md px-1 py-1.5 text-xs font-medium transition-colors"
+                      :class="[
+                        isActiveMonth(i)
+                          ? 'bg-primary text-inverted'
+                          : isTodayMonth(i)
+                            ? 'ring-1 ring-primary/60 text-primary hover:bg-primary/10'
+                            : 'text-muted hover:bg-elevated hover:text-highlighted'
+                      ]"
+                      @click="jumpToMonth(i)"
+                    >{{ m }}</button>
+                  </div>
+                </div>
+              </template>
+            </UPopover>
+
+            <!-- Week/Day View: header biasa (non-clickable) -->
+            <h2 v-else class="text-xl font-semibold capitalize text-highlighted">
               {{ headerLabel }}
             </h2>
             <p class="text-sm text-muted">
