@@ -471,6 +471,20 @@ watch(() => pagination.value.pageSize, async () => {
   await nextTick()
   table.value?.tableApi?.setPageIndex(0)
 })
+
+// --- Deep-link: ?openId=<contractId> ---
+const route = useRoute()
+onMounted(async () => {
+  const openId = route.query.openId
+  if (!openId) return
+  try {
+    const contract = await $fetch<{ employeeId: number }>(`/api/contracts/${openId}`, {
+      credentials: 'include',
+    })
+    await openHistoryById(contract.employeeId)
+  }
+  catch { /* silent */ }
+})
 </script>
 
 <template>

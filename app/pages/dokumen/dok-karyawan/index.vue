@@ -118,6 +118,20 @@ watch(searchQuery, () => {
   page.value = 1
 })
 
+// --- Deep-link: ?openId=<id> ---
+const route = useRoute()
+onMounted(async () => {
+  const openId = route.query.openId
+  if (!openId) return
+  try {
+    const doc = await $fetch<{ employeeId: number }>(`/api/employee-documents/${openId}`, {
+      credentials: 'include',
+    })
+    if (doc?.employeeId) openDrawer(doc.employeeId)
+  }
+  catch { /* silent */ }
+})
+
 // --- Reset page on limit change ---
 watch(limit, () => {
   page.value = 1

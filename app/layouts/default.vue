@@ -69,7 +69,7 @@ async function fetchGroups(query: string) {
           label: c.contractNo,
           suffix: `${c.employee?.fullName ?? '-'} · ${contractStatusLabel(c.status)}`,
           icon: 'i-lucide-file-text',
-          to: '/kontrak',
+          to: `/kontrak?openId=${c.id}`,
         })),
       })
     }
@@ -84,7 +84,7 @@ async function fetchGroups(query: string) {
           label: l.letterNumber,
           suffix: `${l.employee?.fullName ?? '-'} · SP ${l.warningLevel}`,
           icon: 'i-lucide-alert-triangle',
-          to: '/dokumen/surat-peringatan',
+          to: `/dokumen/surat-peringatan?openId=${l.id}`,
         })),
       })
     }
@@ -99,7 +99,7 @@ async function fetchGroups(query: string) {
           label: `${doc.documentType?.name ?? 'Dokumen'}`,
           suffix: `${doc.employee?.fullName ?? ''}`,
           icon: 'i-lucide-file-badge',
-          to: '/dokumen/sertifikasi-ijin',
+          to: `/dokumen/sertifikasi-ijin?openId=${doc.id}`,
         })),
       })
     }
@@ -114,7 +114,7 @@ async function fetchGroups(query: string) {
           label: `${doc.documentType?.name ?? 'Dokumen'}`,
           suffix: `${doc.employee?.fullName ?? ''} · ${doc.documentNumber ?? ''}`.replace(/\s·\s$/, ''),
           icon: 'i-lucide-id-card',
-          to: '/dokumen/dok-karyawan',
+          to: `/dokumen/dok-karyawan?openId=${doc.id}`,
         })),
       })
     }

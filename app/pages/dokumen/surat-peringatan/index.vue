@@ -115,6 +115,21 @@ const { data: lettersRes, status, refresh } = await useFetch<{ data: WarningLett
 
 const letters = computed<WarningLetter[]>(() => lettersRes.value?.data ?? [])
 
+// --- Deep-link: ?openId=<id> ---
+const route = useRoute()
+onMounted(() => {
+  const openId = route.query.openId
+  if (!openId) return
+  const unwatch = watch(letters, (val) => {
+    if (!val.length) return
+    const letter = val.find(l => l.id === Number(openId))
+    if (letter) {
+      openDrawer(letter)
+      unwatch()
+    }
+  }, { immediate: true })
+})
+
 const counts = computed(() => ({
   total: letters.value.length,
   sp1: letters.value.filter(l => l.warningLevel === 1).length,
