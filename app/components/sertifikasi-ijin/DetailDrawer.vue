@@ -120,7 +120,7 @@ const totalDays = computed(() => {
 
 // Progress 0-100; expired -> 0
 const progressPercent = computed(() => {
-  if (daysUntilExpiry.value === null) return 0
+  if (daysUntilExpiry.value === null || daysUntilExpiry.value < 0) return 0
   const raw = (daysUntilExpiry.value / totalDays.value) * 100
   return Math.min(100, Math.max(0, raw))
 })
@@ -128,7 +128,7 @@ const progressPercent = computed(() => {
 function daysText(): string {
   const d = daysUntilExpiry.value
   if (d === null) return ''
-  if (d < 0) return `Expired ${Math.abs(d)} hari lalu`
+  if (d < 0) return 'Masa berlaku telah berakhir'
   if (d === 0) return 'Expired hari ini'
   return `Sisa ${d} hari`
 }
@@ -195,7 +195,13 @@ function daysText(): string {
                 {{ statusLabel[document.status] ?? document.status }}
               </p>
               <p
-                v-if="daysUntilExpiry !== null"
+                v-if="document.status === 'EXPIRED'"
+                class="text-lg font-bold tabular-nums leading-tight text-error"
+              >
+                Masa berlaku telah berakhir
+              </p>
+              <p
+                v-else-if="daysUntilExpiry !== null"
                 class="text-lg font-bold tabular-nums leading-tight"
                 :class="statusTextClass[document.status] ?? 'text-highlighted'"
               >
