@@ -7,6 +7,7 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToast()
 const { confirmActionToast } = useConfirmActionToast()
+const { exportDocPdf } = useExportDocPdf()
 
 // Route params: [id]-docs-[docId] -> params.id dan params.docId
 const spaceId = computed(() => Number(route.params.id))
@@ -38,6 +39,7 @@ type DocStatus = 'idle' | 'dirty' | 'saving' | 'saved'
 const docStatus = ref<DocStatus>('idle')
 const lastSavedAt = ref<Date | null>(null)
 const isHydrating = ref(false)
+const isDownloadingPdf = ref(false)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -107,6 +109,23 @@ function saveNow() {
   if (!hasUnsavedChanges.value) return
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   saveDoc()
+}
+
+// Download PDF — simpan dulu jika dirty, lalu generate PDF
+async function downloadPdf() {
+  if (isDownloadingPdf.value) return
+  isDownloadingPdf.value = true
+  try {
+    if (hasUnsavedChanges.value) {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+      await saveDoc()
+    }
+    await exportDocPdf(title.value || 'Untitled', emoji.value, content.value)
+  } catch {
+    toast.add({ title: 'Gagal mengunduh PDF', color: 'error' })
+  } finally {
+    isDownloadingPdf.value = false
+  }
 }
 
 // Keyboard shortcut Ctrl/Cmd+S
@@ -200,6 +219,17 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
             </div>
 
             <!-- Save button -->
+            <UButton
+              icon="i-lucide-file-down"
+              label="Download PDF"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :loading="isDownloadingPdf"
+              :disabled="isSaving"
+              title="Download dokumen sebagai PDF"
+              @click="downloadPdf"
+            />
             <UButton
               label="Simpan"
               icon="i-lucide-save"

@@ -9,6 +9,7 @@ const router = useRouter()
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const { confirmActionToast } = useConfirmActionToast()
+const { exportDocPdf } = useExportDocPdf()
 
 const { data: docs, refresh, pending } = useFetch<SpaceDocument[]>(
   () => `/api/spaces/${props.spaceId}/documents`,
@@ -78,6 +79,7 @@ const docStatus = ref<DocStatus>('idle')
 const lastSavedAt = ref<Date | null>(null)
 const isHydrating = ref(false)
 const isNavigatingToFullPage = ref(false)
+const isDownloadingPdf = ref(false)
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -92,6 +94,24 @@ const isSaving = computed(() => docStatus.value === 'saving')
 function formatTime(date: Date | null): string {
   if (!date) return ''
   return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+}
+
+// Download PDF — simpan dulu jika dirty, lalu generate PDF
+async function downloadPdf() {
+  if (isDownloadingPdf.value) return
+  isDownloadingPdf.value = true
+  try {
+    // Simpan dulu jika ada perubahan
+    if (hasUnsavedChanges.value) {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+      await saveDoc()
+    }
+    await exportDocPdf(editorTitle.value || 'Untitled', editorEmoji.value, editorContent.value)
+  } catch {
+    toast.add({ title: 'Gagal mengunduh PDF', color: 'error' })
+  } finally {
+    isDownloadingPdf.value = false
+  }
 }
 
 async function openDoc(doc: SpaceDocument) {
@@ -418,6 +438,17 @@ function formatDate(d: string) {
 
         <!-- Right: Actions -->
         <div class="flex items-center gap-2">
+          <UButton
+            icon="i-lucide-file-down"
+            label="Download PDF"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :loading="isDownloadingPdf"
+            :disabled="isSaving"
+            title="Download dokumen sebagai PDF"
+            @click="downloadPdf"
+          />
           <UButton
             label="Batal"
             color="neutral"
