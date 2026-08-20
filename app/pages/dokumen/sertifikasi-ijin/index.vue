@@ -362,10 +362,10 @@ watch(() => pagination.value.pageSize, async () => {
   table.value?.tableApi?.setPageIndex(0)
 })
 
-// --- Deep-link: ?openId=<id> dari pencarian global ---
+// --- Deep-link: ?openId=<id> ---
 const route = useRoute()
-onMounted(() => {
-  const openId = route.query.openId
+
+async function handleOpenId(openId: string | string[] | undefined) {
   if (!openId) return
   const unwatch = watch(documents, (val) => {
     if (!val.length) return
@@ -375,7 +375,10 @@ onMounted(() => {
       unwatch()
     }
   }, { immediate: true })
-})
+}
+
+onMounted(() => handleOpenId(route.query.openId))
+watch(() => route.query.openId, (newId) => handleOpenId(newId))
 </script>
 
 <template>

@@ -448,12 +448,14 @@ async function openContractById(id: number) {
 
 // --- Deep-link: ?openId=<id> ---
 const route = useRoute()
-onMounted(async () => {
-  const openId = route.query.openId
-  if (openId) {
-    await openContractById(Number(openId))
-  }
-})
+
+async function handleOpenId(openId: string | string[] | undefined) {
+  if (!openId) return
+  await openContractById(Number(openId))
+}
+
+onMounted(() => handleOpenId(route.query.openId))
+watch(() => route.query.openId, (newId) => handleOpenId(newId))
 </script>
 
 <template>

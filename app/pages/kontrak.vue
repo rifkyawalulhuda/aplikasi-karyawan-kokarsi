@@ -474,8 +474,8 @@ watch(() => pagination.value.pageSize, async () => {
 
 // --- Deep-link: ?openId=<contractId> ---
 const route = useRoute()
-onMounted(async () => {
-  const openId = route.query.openId
+
+async function handleOpenId(openId: string | string[] | undefined) {
   if (!openId) return
   try {
     const contract = await $fetch<{ employeeId: number }>(`/api/contracts/${openId}`, {
@@ -484,7 +484,10 @@ onMounted(async () => {
     await openHistoryById(contract.employeeId)
   }
   catch { /* silent */ }
-})
+}
+
+onMounted(() => handleOpenId(route.query.openId))
+watch(() => route.query.openId, (newId) => handleOpenId(newId))
 </script>
 
 <template>
