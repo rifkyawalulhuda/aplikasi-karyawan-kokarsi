@@ -417,7 +417,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                 <Transition name="tt">
                   <div
                     v-if="tooltipDonut"
-                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                     :style="{ left: tooltipDonut.x + 'px', top: tooltipDonut.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                   >
                     <div class="font-semibold text-highlighted">{{ tooltipDonut.label }}</div>
@@ -573,7 +573,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                 <Transition name="tt">
                   <div
                     v-if="tooltipSp"
-                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                     :style="{ left: tooltipSp.x + 'px', top: tooltipSp.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                   >
                     <div class="font-semibold text-highlighted">{{ tooltipSp.label }}</div>
@@ -628,7 +628,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                   <Transition name="tt">
                     <div
                       v-if="tooltipKontrak"
-                      class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                      class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                       :style="{ left: tooltipKontrak.x + 'px', top: tooltipKontrak.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                     >
                       <div class="font-semibold text-highlighted">{{ tooltipKontrak.label }}</div>
@@ -695,7 +695,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                   <Transition name="tt">
                     <div
                       v-if="tooltipGender"
-                      class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                      class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                       :style="{ left: tooltipGender.x + 'px', top: tooltipGender.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                     >
                       <div class="font-semibold text-highlighted">{{ tooltipGender.label }}</div>
@@ -910,7 +910,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                 <Transition name="tt">
                   <div
                     v-if="tooltipRekrutmen"
-                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                     :style="{ left: tooltipRekrutmen.x + 'px', top: tooltipRekrutmen.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                   >
                     <div class="font-semibold text-highlighted">{{ tooltipRekrutmen.label }}</div>
@@ -1057,7 +1057,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                 <Transition name="tt">
                   <div
                     v-if="tooltipOffboard"
-                    class="absolute z-50 pointer-events-none bg-background border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
+                    class="absolute z-50 pointer-events-none bg-white dark:bg-neutral-900 border border-default rounded-lg shadow-lg px-2.5 py-1.5 text-xs whitespace-nowrap"
                     :style="{ left: tooltipOffboard.x + 'px', top: tooltipOffboard.y + 'px', transform: 'translate(-50%, calc(-100% - 8px))' }"
                   >
                     <div class="font-semibold text-highlighted">{{ tooltipOffboard.label }}</div>
