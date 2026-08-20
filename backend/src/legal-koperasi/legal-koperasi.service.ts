@@ -7,6 +7,7 @@ import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { LegalKoperasiCategory, LegalKoperasiStatus } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { ActivityLogService } from '../activity-log/activity-log.service'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 
 export class CreateLegalKoperasiDto {
   @IsEnum(LegalKoperasiCategory) category: LegalKoperasiCategory
@@ -26,6 +27,7 @@ export class LegalKoperasiService {
   constructor(
     private prisma: PrismaService,
     private activityLog: ActivityLogService,
+    private dashboardCache: DashboardCacheService,
   ) {}
 
   private include = {
@@ -119,6 +121,7 @@ export class LegalKoperasiService {
       performedByRole: actor.role,
       detail: `Kategori: ${doc.category} | Penerbit: ${doc.publisher ?? '-'} | Perlu Perpanjangan: ${doc.needsRenewal ? 'Ya' : 'Tidak'}`,
     })
+    this.dashboardCache.invalidate()
     return doc
   }
 
@@ -153,6 +156,7 @@ export class LegalKoperasiService {
       performedByRole: actor.role,
       detail: `Kategori: ${doc.category}${doc.needsRenewal ? ` | Status: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
+    this.dashboardCache.invalidate()
     return doc
   }
 
@@ -169,6 +173,7 @@ export class LegalKoperasiService {
       performedByRole: actor.role,
       detail: `Kategori: ${doc.category}${doc.needsRenewal ? ` | Status terakhir: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
+    this.dashboardCache.invalidate()
     return deleted
   }
 

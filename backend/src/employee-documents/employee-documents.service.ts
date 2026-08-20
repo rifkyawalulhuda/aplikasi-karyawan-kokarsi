@@ -4,6 +4,7 @@ import { IsString, IsInt, IsDateString, IsOptional, IsNotEmpty } from 'class-val
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { ActivityLogService } from '../activity-log/activity-log.service'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 
 export class CreateEmployeeDocumentDto {
   @IsInt()
@@ -53,6 +54,7 @@ export class EmployeeDocumentsService {
   constructor(
     private prisma: PrismaService,
     private activityLog: ActivityLogService,
+    private dashboardCache: DashboardCacheService,
   ) {}
 
   private include = {
@@ -171,6 +173,7 @@ export class EmployeeDocumentsService {
       performedByRole: actor.role,
       detail: `No. Dokumen: ${doc.documentNumber ?? '-'} | Berlaku s/d: ${doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tidak ada'}`,
     })
+    this.dashboardCache.invalidate()
 
     return doc
   }
@@ -202,6 +205,7 @@ export class EmployeeDocumentsService {
       performedByRole: actor.role,
       detail: `Status: ${doc.status} | Berlaku s/d: ${doc.expiryDate ? new Date(doc.expiryDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tidak ada'}`,
     })
+    this.dashboardCache.invalidate()
 
     return doc
   }
@@ -219,6 +223,7 @@ export class EmployeeDocumentsService {
       performedByRole: actor.role,
       detail: `No. Dokumen: ${doc.documentNumber ?? '-'}`,
     })
+    this.dashboardCache.invalidate()
     return deleted
   }
 

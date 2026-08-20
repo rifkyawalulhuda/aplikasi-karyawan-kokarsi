@@ -455,6 +455,9 @@ export class EmployeesService {
       total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
       spGroups, genderGroups, educationGroups, deptData, mitraCount, pkwtCount,
       recruitTrend, offboardTrend,
+      expiringContractItems, expiringVendorContracts, expiringVendorItems,
+      expiringLegalKoperasi, expiringLegalItems, expiringCertifications, expiringCertItems,
+      activeWarnings,
     ] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { employmentStatus: 'AKTIF' } }),
@@ -505,6 +508,73 @@ export class EmployeesService {
       this.prisma.employeeOffboarding.findMany({
         where: { terminationDate: { gte: new Date(`${currentYear - 4}-01-01`) } },
         select: { terminationDate: true, terminationType: true },
+      }),
+      // ── Data "Perlu Perhatian" (expiring soon) ─────────────────────────────
+      // Top 5 kontrak karyawan yang akan habis dalam 30 hari
+      this.prisma.contract.findMany({
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: { notIn: ['DIBATALKAN', 'SELESAI'] },
+        },
+        select: { id: true, contractNo: true, endDate: true, employee: { select: { fullName: true } } },
+        orderBy: { endDate: 'asc' },
+        take: 5,
+      }),
+      this.prisma.vendorContract.count({
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: { not: 'TIDAK_AKTIF' },
+          needsRenewal: true,
+          renewedTo: null,
+        },
+      }),
+      this.prisma.vendorContract.findMany({
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: { not: 'TIDAK_AKTIF' },
+          needsRenewal: true,
+          renewedTo: null,
+        },
+        select: { id: true, documentName: true, endDate: true, company: { select: { name: true } } },
+        orderBy: { endDate: 'asc' },
+        take: 5,
+      }),
+      this.prisma.legalKoperasi.count({
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: 'AKAN_BERAKHIR',
+          needsRenewal: true,
+          renewedTo: null,
+        },
+      }),
+      this.prisma.legalKoperasi.findMany({
+        where: {
+          endDate: { gte: now, lte: in30Days },
+          status: 'AKAN_BERAKHIR',
+          needsRenewal: true,
+          renewedTo: null,
+        },
+        select: { id: true, documentName: true, endDate: true, publisher: true },
+        orderBy: { endDate: 'asc' },
+        take: 5,
+      }),
+      this.prisma.employeeDocument.count({
+        where: {
+          expiryDate: { gte: now, lte: in30Days },
+          status: 'AKAN_EXPIRED',
+        },
+      }),
+      this.prisma.employeeDocument.findMany({
+        where: {
+          expiryDate: { gte: now, lte: in30Days },
+          status: 'AKAN_EXPIRED',
+        },
+        select: { id: true, expiryDate: true, documentType: { select: { name: true } }, employee: { select: { fullName: true } } },
+        orderBy: { expiryDate: 'asc' },
+        take: 5,
+      }),
+      this.prisma.warningLetter.count({
+        where: { validUntil: { gte: now } },
       }),
     ])
 
@@ -569,6 +639,45 @@ export class EmployeesService {
         .map(d => ({ name: d.name, count: d._count.employees })),
       recruitmentTrend,
       offboardingTrend,
+      expiringSoon: {
+        contracts: {
+          count: expiringContracts,
+          items: expiringContractItems.map(c => ({
+            id: c.id,
+            label: c.contractNo,
+            suffix: c.employee?.fullName ?? '',
+            endDate: c.endDate,
+          })),
+        },
+        vendorContracts: {
+          count: expiringVendorContracts,
+          items: expiringVendorItems.map(v => ({
+            id: v.id,
+            label: v.documentName,
+            suffix: v.company?.name ?? '',
+            endDate: v.endDate,
+          })),
+        },
+        legalKoperasi: {
+          count: expiringLegalKoperasi,
+          items: expiringLegalItems.map(l => ({
+            id: l.id,
+            label: l.documentName,
+            suffix: l.publisher ?? '',
+            endDate: l.endDate,
+          })),
+        },
+        certifications: {
+          count: expiringCertifications,
+          items: expiringCertItems.map(d => ({
+            id: d.id,
+            label: d.documentType?.name ?? 'Dokumen',
+            suffix: d.employee?.fullName ?? '',
+            endDate: d.expiryDate,
+          })),
+        },
+        activeWarnings,
+      },
     }
 
     this.dashboardCache.set(stats)

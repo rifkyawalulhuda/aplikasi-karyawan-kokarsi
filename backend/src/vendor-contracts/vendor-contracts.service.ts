@@ -7,6 +7,7 @@ import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { VendorContractCategory, VendorContractStatus, VendorDocType } from '@prisma/client'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
 import { ActivityLogService } from '../activity-log/activity-log.service'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 
 export class CreateVendorContractDto {
   @IsEnum(VendorContractCategory) category: VendorContractCategory
@@ -28,6 +29,7 @@ export class VendorContractsService {
   constructor(
     private prisma: PrismaService,
     private activityLog: ActivityLogService,
+    private dashboardCache: DashboardCacheService,
   ) {}
 
   private include = {
@@ -139,6 +141,7 @@ export class VendorContractsService {
       performedByRole: actor.role,
       detail: `Kategori: ${doc.category} | Jenis: ${doc.documentType} | Perlu Perpanjangan: ${doc.needsRenewal ? 'Ya' : 'Tidak'}`,
     })
+    this.dashboardCache.invalidate()
     return doc
   }
 
@@ -175,6 +178,7 @@ export class VendorContractsService {
       performedByRole: actor.role,
       detail: `Jenis: ${doc.documentType} | Kategori: ${doc.category}${doc.needsRenewal ? ` | Status: ${({ AKTIF: 'Aktif', AKAN_BERAKHIR: 'Akan Berakhir', EXPIRED: 'Expired', TIDAK_AKTIF: 'Tidak Aktif' } as Record<string, string>)[doc.status] ?? doc.status}` : ' | Tidak perlu perpanjangan'}`,
     })
+    this.dashboardCache.invalidate()
     return doc
   }
 
@@ -191,6 +195,7 @@ export class VendorContractsService {
       performedByRole: actor.role,
       detail: `Jenis: ${contract.documentType} | Kategori: ${contract.category}${contract.needsRenewal ? '' : ' | Tidak perlu perpanjangan'}`,
     })
+    this.dashboardCache.invalidate()
     return deleted
   }
 

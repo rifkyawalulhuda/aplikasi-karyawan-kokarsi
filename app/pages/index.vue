@@ -1,4 +1,6 @@
 <script setup lang="ts">
+interface ExpiringItem { id: number; label: string; suffix: string; endDate: string | null }
+
 interface DashboardStats {
   total: number
   aktif: number
@@ -15,20 +17,51 @@ interface DashboardStats {
   byDepartment: { name: string; count: number }[]
   recruitmentTrend: { year: number; count: number }[]
   offboardingTrend: { year: number; resign: number; phk: number }[]
+  expiringSoon: {
+    contracts: { count: number; items: ExpiringItem[] }
+    vendorContracts: { count: number; items: ExpiringItem[] }
+    legalKoperasi: { count: number; items: ExpiringItem[] }
+    certifications: { count: number; items: ExpiringItem[] }
+    activeWarnings: number
+  }
 }
 
 const auth = useAuthStore()
 const { data: stats, pending: statsLoading, error: statsError } = await useFetch<DashboardStats>('/api/dashboard-stats', { lazy: true })
+const { unreadCount } = useNotifications()
+
+// Agenda hari ini (untuk header Today Snapshot)
+const today = new Date()
+const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+const { data: todayAgenda } = await useFetch<any[]>('/api/calendar', {
+  query: { start: todayStr, end: todayStr },
+  lazy: true,
+  credentials: 'include',
+})
+const todayAgendaCount = computed(() => todayAgenda.value?.length ?? 0)
+
+// Total item yang perlu perhatian (untuk badge di header section)
+const totalAttentionCount = computed(() => {
+  const es = stats.value?.expiringSoon
+  if (!es) return 0
+  return (es.contracts?.count ?? 0)
+    + (es.vendorContracts?.count ?? 0)
+    + (es.legalKoperasi?.count ?? 0)
+    + (es.certifications?.count ?? 0)
+    + (es.activeWarnings ?? 0)
+    + unreadCount.value
+})
 
 // --- Collapsible section state (persisted ke localStorage) ---
 const sectionKpi        = useLocalStorage('dashboard-section-kpi', true)
+const sectionPerhatian  = useLocalStorage('dashboard-section-perhatian', true)
 const sectionCharts     = useLocalStorage('dashboard-section-charts', true)
 const sectionDemografi  = useLocalStorage('dashboard-section-demografi', false)
 const sectionDistribusi = useLocalStorage('dashboard-section-distribusi', false)
 const sectionTrend      = useLocalStorage('dashboard-section-trend', false)
 const sectionAksiCepat  = useLocalStorage('dashboard-section-aksi-cepat', true)
 
-const allSections = [sectionKpi, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
+const allSections = [sectionKpi, sectionPerhatian, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
 const allExpanded = computed(() => allSections.every(s => s.value === true))
 function toggleAll() {
   const next = !allExpanded.value
@@ -89,6 +122,24 @@ const statCards = computed(() => [
     color: 'text-red-500',
     bg: 'bg-red-500/10',
     ring: 'ring-red-500/20'
+  },
+  {
+    title: 'Sertifikasi Akan Expired',
+    icon: 'i-lucide-file-badge',
+    value: stats.value?.expiringSoon?.certifications?.count ?? 0,
+    description: 'Dalam 30 hari ke depan',
+    color: 'text-orange-500',
+    bg: 'bg-orange-500/10',
+    ring: 'ring-orange-500/20'
+  },
+  {
+    title: 'SP Aktif',
+    icon: 'i-lucide-alert-triangle',
+    value: stats.value?.expiringSoon?.activeWarnings ?? 0,
+    description: 'Surat peringatan masih berlaku',
+    color: 'text-purple-500',
+    bg: 'bg-purple-500/10',
+    ring: 'ring-purple-500/20'
   }
 ])
 
@@ -251,9 +302,19 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <span class="text-xs text-muted hidden sm:block">
-            {{ new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
-          </span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted hidden sm:block">
+              {{ new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}
+            </span>
+            <NuxtLink
+              v-if="todayAgendaCount > 0"
+              to="/kalender"
+              class="hidden md:inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+            >
+              <UIcon name="i-lucide-calendar-days" class="size-3.5" />
+              {{ todayAgendaCount }} agenda hari ini
+            </NuxtLink>
+          </div>
         </template>
       </UDashboardNavbar>
     </template>
@@ -345,6 +406,98 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
           </template>
         </div>
         </div><!-- end v-show sectionKpi -->
+
+        <!-- Section: Perlu Perhatian -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionPerhatian = !sectionPerhatian"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-bell-ring" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Perlu Perhatian</span>
+            <span
+              v-if="!statsLoading && totalAttentionCount > 0"
+              class="inline-flex items-center rounded-full bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-500"
+            >{{ totalAttentionCount }}</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionPerhatian }"
+          />
+        </button>
+
+        <div v-show="sectionPerhatian">
+        <!-- Attention cards grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          <template v-if="statsLoading">
+            <UCard v-for="i in 4" :key="`att-skel-${i}`" :ui="{ body: 'p-4' }">
+              <div class="space-y-2">
+                <div class="h-4 bg-accented rounded w-1/2 animate-pulse" />
+                <div class="h-3 bg-accented rounded w-3/4 animate-pulse" />
+                <div class="h-3 bg-accented rounded w-2/3 animate-pulse" />
+              </div>
+            </UCard>
+          </template>
+          <template v-else>
+            <!-- Kontrak Karyawan -->
+            <DashboardAttentionCard
+              title="Kontrak Akan Habis"
+              :count="stats?.expiringSoon?.contracts?.count ?? 0"
+              :items="stats?.expiringSoon?.contracts?.items ?? []"
+              icon="i-lucide-file-text"
+              color-class="text-red-500 bg-red-500/10"
+              to="/kontrak"
+            />
+            <!-- Kontrak Vendor -->
+            <DashboardAttentionCard
+              title="Kontrak Vendor"
+              :count="stats?.expiringSoon?.vendorContracts?.count ?? 0"
+              :items="stats?.expiringSoon?.vendorContracts?.items ?? []"
+              icon="i-lucide-building-2"
+              color-class="text-orange-500 bg-orange-500/10"
+              to="/dokumen-legal/kontrak-vendor"
+            />
+            <!-- Legal Koperasi -->
+            <DashboardAttentionCard
+              title="Legal Koperasi"
+              :count="stats?.expiringSoon?.legalKoperasi?.count ?? 0"
+              :items="stats?.expiringSoon?.legalKoperasi?.items ?? []"
+              icon="i-lucide-file-signature"
+              color-class="text-amber-500 bg-amber-500/10"
+              to="/dokumen-legal/legal-koperasi"
+            />
+            <!-- Sertifikasi & Ijin -->
+            <DashboardAttentionCard
+              title="Sertifikasi Akan Expired"
+              :count="stats?.expiringSoon?.certifications?.count ?? 0"
+              :items="stats?.expiringSoon?.certifications?.items ?? []"
+              icon="i-lucide-file-badge"
+              color-class="text-sky-500 bg-sky-500/10"
+              to="/dokumen/sertifikasi-ijin"
+            />
+            <!-- Surat Peringatan -->
+            <DashboardAttentionCard
+              title="Surat Peringatan Aktif"
+              :count="stats?.expiringSoon?.activeWarnings ?? 0"
+              :items="[]"
+              icon="i-lucide-alert-triangle"
+              color-class="text-purple-500 bg-purple-500/10"
+              to="/dokumen/surat-peringatan"
+            />
+            <!-- Notifikasi -->
+            <DashboardAttentionCard
+              title="Notifikasi"
+              :count="unreadCount"
+              :items="[]"
+              icon="i-lucide-bell"
+              color-class="text-green-500 bg-green-500/10"
+              to="/notifications"
+            />
+          </template>
+        </div>
+        </div><!-- end v-show sectionPerhatian -->
 
         <!-- Section: Distribusi & Status -->
         <button
