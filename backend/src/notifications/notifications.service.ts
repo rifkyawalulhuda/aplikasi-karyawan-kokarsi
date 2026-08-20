@@ -266,7 +266,7 @@ export class NotificationsService {
                 sourceType,
                 sourceId: c.id,
                 triggerDay,
-                deeplink: `/karyawan/${c.employee.id}`,
+                deeplink: `/kontrak?openId=${c.id}`,
                 expiryDate: c.endDate,
                 userId: r.userId,
                 userType: r.userType,
@@ -304,10 +304,7 @@ export class NotificationsService {
                 sourceType,
                 sourceId: d.id,
                 triggerDay,
-                deeplink:
-                  triggerDay === 0
-                    ? '/dokumen/dok-karyawan?status=EXPIRED'
-                    : '/dokumen/dok-karyawan?status=AKAN_EXPIRED',
+                deeplink: `/dokumen/sertifikasi-ijin?openId=${d.id}`,
                 expiryDate: d.expiryDate!,
                 userId: r.userId,
                 userType: r.userType,
@@ -344,10 +341,7 @@ export class NotificationsService {
                 sourceType,
                 sourceId: v.id,
                 triggerDay,
-                deeplink:
-                  triggerDay === 0
-                    ? '/dokumen-legal/kontrak-vendor?status=EXPIRED'
-                    : '/dokumen-legal/kontrak-vendor?status=AKAN_BERAKHIR',
+                deeplink: `/dokumen-legal/kontrak-vendor?openId=${v.id}`,
                 expiryDate: v.endDate!,
                 userId: r.userId,
                 userType: r.userType,
@@ -383,10 +377,7 @@ export class NotificationsService {
                 sourceType,
                 sourceId: lk.id,
                 triggerDay,
-                deeplink:
-                  triggerDay === 0
-                    ? '/dokumen-legal/legal-koperasi?status=EXPIRED'
-                    : '/dokumen-legal/legal-koperasi?status=AKAN_BERAKHIR',
+                deeplink: `/dokumen-legal/legal-koperasi?openId=${lk.id}`,
                 expiryDate: lk.endDate!,
                 userId: r.userId,
                 userType: r.userType,
@@ -429,7 +420,7 @@ export class NotificationsService {
               sourceType,
               sourceId: d.id,
               triggerDay: CATCHALL_DAY,
-              deeplink: '/dokumen/dok-karyawan?status=AKAN_EXPIRED',
+              deeplink: `/dokumen/sertifikasi-ijin?openId=${d.id}`,
               expiryDate: d.expiryDate!,
               userId: r.userId,
               userType: r.userType,
@@ -465,7 +456,7 @@ export class NotificationsService {
           sourceType,
           sourceId: c.id,
           triggerDay: CATCHALL_DAY,
-          deeplink: `/karyawan/${c.employee.id}`,
+          deeplink: `/kontrak?openId=${c.id}`,
           expiryDate: c.endDate,
           userId: r.userId,
           userType: r.userType,
@@ -510,7 +501,7 @@ export class NotificationsService {
               sourceType,
               sourceId: v.id,
               triggerDay: CATCHALL_DAY,
-              deeplink: '/dokumen-legal/kontrak-vendor?status=AKAN_BERAKHIR',
+              deeplink: `/dokumen-legal/kontrak-vendor?openId=${v.id}`,
               expiryDate: v.endDate!,
               userId: r.userId,
               userType: r.userType,
@@ -547,7 +538,7 @@ export class NotificationsService {
               sourceType,
               sourceId: lk.id,
               triggerDay: CATCHALL_DAY,
-              deeplink: '/dokumen-legal/legal-koperasi?status=AKAN_BERAKHIR',
+              deeplink: `/dokumen-legal/legal-koperasi?openId=${lk.id}`,
               expiryDate: lk.endDate!,
               userId: r.userId,
               userType: r.userType,
