@@ -44,12 +44,13 @@ const searchQuery = ref('')
 const categoryFilter = ref<string[]>([])
 const statusFilter = ref<string[]>([])
 const documentTypeFilter = ref<string[]>([])
+const needsRenewalFilter = ref<string>('all')
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
 
 const hasActiveFilters = computed(() =>
-  categoryFilter.value.length > 0 || statusFilter.value.length > 0 || documentTypeFilter.value.length > 0
+  categoryFilter.value.length > 0 || statusFilter.value.length > 0 || documentTypeFilter.value.length > 0 || needsRenewalFilter.value !== 'all'
 )
 
 const addModal = ref(false)
@@ -100,6 +101,9 @@ const filteredContracts = computed(() => {
   if (documentTypeFilter.value.length > 0) {
     list = list.filter(c => documentTypeFilter.value.includes(c.documentType))
   }
+  if (needsRenewalFilter.value !== 'all') {
+    list = list.filter(c => c.needsRenewal === (needsRenewalFilter.value === 'true'))
+  }
   if (searchQuery.value.trim()) {
     const q = searchQuery.value.toLowerCase()
     list = list.filter(c =>
@@ -112,7 +116,7 @@ const filteredContracts = computed(() => {
   return list
 })
 
-watch([searchQuery, categoryFilter, statusFilter, documentTypeFilter], () => {
+watch([searchQuery, categoryFilter, statusFilter, documentTypeFilter, needsRenewalFilter], () => {
   pagination.value.pageIndex = 0
 })
 
@@ -542,6 +546,15 @@ onMounted(async () => {
             placeholder="Semua Jenis"
             class="min-w-36"
           />
+          <USelect
+            v-model="needsRenewalFilter"
+            :items="[
+              { label: 'Semua', value: 'all' },
+              { label: 'Perlu Perpanjangan', value: 'true' },
+              { label: 'Tidak Perlu', value: 'false' },
+            ]"
+            class="min-w-44"
+          />
           <UButton
             v-if="hasActiveFilters"
             label="Reset"
@@ -549,7 +562,7 @@ onMounted(async () => {
             variant="ghost"
             size="sm"
             icon="i-lucide-x"
-            @click="categoryFilter = []; statusFilter = []; documentTypeFilter = []"
+            @click="categoryFilter = []; statusFilter = []; documentTypeFilter = []; needsRenewalFilter = 'all'"
           />
         </div>
       </div>
