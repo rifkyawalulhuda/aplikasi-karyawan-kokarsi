@@ -47,6 +47,12 @@ const documentDateCal = shallowRef<CalendarDate | null>(null)
 const startDateCal    = shallowRef<CalendarDate | null>(null)
 const endDateCal      = shallowRef<CalendarDate | null>(null)
 
+// Tanggal minimum untuk datepicker startDate saat mode renew — mengikuti endDate dokumen lama
+const minStartDateCal = computed(() => {
+  if (props.mode !== 'renew' || !props.initialData?.endDate) return null
+  return toCalDate(props.initialData.endDate.split('T')[0])
+})
+
 watch(documentDateCal, val => { state.documentDate = fromCalDate(val) })
 watch(startDateCal,    val => { state.startDate    = fromCalDate(val) })
 watch(endDateCal,      val => { state.endDate      = fromCalDate(val) })
@@ -209,6 +215,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
     let docId: number
+
+    // Validasi mode renew: tanggal mulai tidak boleh sebelum tanggal berakhir dokumen lama
+    if (props.mode === 'renew' && props.initialData?.endDate && state.startDate) {
+      const parentEnd = props.initialData.endDate.split('T')[0]!
+      if (state.startDate < parentEnd) {
+        loading.value = false
+        toast.add({
+          title: 'Tanggal mulai tidak valid',
+          description: 'Tanggal mulai dokumen baru tidak boleh lebih kecil dari tanggal berakhir dokumen sebelumnya.',
+          color: 'error',
+        })
+        return
+      }
+    }
 
     // Strip empty strings to undefined so backend @IsOptional validators pass
     const payload = {
@@ -399,7 +419,7 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
                     {{ startDateCal ? formatDisplay(startDateCal) : 'Pilih tanggal mulai' }}
                   </UButton>
                   <template #content>
-                    <CalendarPicker v-model="startDateCal" class="p-2" />
+                    <CalendarPicker v-model="startDateCal" :min-date="minStartDateCal" class="p-2" />
                   </template>
                 </UPopover>
                 <UButton

@@ -29,6 +29,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'edit': [document: LegalKoperasi]
+  'renew': [document: LegalKoperasi]
   'open-document': [id: number]
 }>()
 
@@ -479,13 +480,23 @@ const displayStatus = computed(() => {
           variant="subtle"
           @click="emit('update:open', false)"
         />
-        <UButton
-          v-if="document"
-          label="Edit"
-          icon="i-lucide-pencil"
-          color="primary"
-          @click="emit('edit', document)"
-        />
+        <div class="flex items-center gap-2">
+          <UButton
+            v-if="document?.needsRenewal && (document?.status === 'AKAN_BERAKHIR' || document?.status === 'EXPIRED') && !document?.renewedTo"
+            label="Perpanjang"
+            icon="i-lucide-refresh-cw"
+            color="warning"
+            variant="outline"
+            @click="emit('renew', document)"
+          />
+          <UButton
+            v-if="document"
+            label="Edit"
+            icon="i-lucide-pencil"
+            color="primary"
+            @click="emit('edit', document)"
+          />
+        </div>
       </div>
     </template>
   </USlideover>
