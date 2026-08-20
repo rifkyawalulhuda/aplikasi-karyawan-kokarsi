@@ -92,6 +92,11 @@ const daysUntilExpiry = computed(() => {
   return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 })
 
+const isExpired = computed(() => {
+  if (!props.letter?.validUntil) return false
+  return new Date(props.letter.validUntil) < new Date()
+})
+
 const totalDays = computed(() => {
   const l = props.letter
   if (!l?.letterDate || !l?.validUntil) return 1
@@ -104,7 +109,7 @@ const totalDays = computed(() => {
 })
 
 const progressPercent = computed(() => {
-  if (daysUntilExpiry.value === null) return 0
+  if (daysUntilExpiry.value === null || daysUntilExpiry.value < 0) return 0
   const raw = (daysUntilExpiry.value / totalDays.value) * 100
   return Math.min(100, Math.max(0, raw))
 })
@@ -112,7 +117,7 @@ const progressPercent = computed(() => {
 function daysText(): string {
   const d = daysUntilExpiry.value
   if (d === null) return ''
-  if (d < 0) return `Berakhir ${Math.abs(d)} hari lalu`
+  if (isExpired.value) return 'Masa berlaku telah selesai'
   if (d === 0) return 'Berakhir hari ini'
   return `Sisa ${d} hari berlaku`
 }
@@ -308,13 +313,19 @@ function handleDelete() {
               <UIcon name="i-lucide-clock" class="size-5" />
             </div>
             <div class="flex-1">
-              <p
-                class="text-2xl font-bold tabular-nums leading-tight"
-                :class="daysUntilExpiry !== null && daysUntilExpiry < 0 ? 'text-muted' : levelTextClass[letter.warningLevel]"
-              >
-                {{ daysUntilExpiry !== null ? (daysUntilExpiry < 0 ? Math.abs(daysUntilExpiry) : daysUntilExpiry) : '-' }}
-                <span class="text-sm font-normal text-muted">hari</span>
-              </p>
+              <div class="flex items-center gap-2">
+                <p
+                  class="text-2xl font-bold tabular-nums leading-tight"
+                  :class="isExpired ? 'text-muted' : levelTextClass[letter.warningLevel]"
+                >
+                  <span v-if="isExpired">Selesai</span>
+                  <template v-else>
+                    {{ daysUntilExpiry !== null ? daysUntilExpiry : '-' }}
+                    <span class="text-sm font-normal text-muted">hari</span>
+                  </template>
+                </p>
+                <UBadge v-if="isExpired" color="neutral" variant="subtle" size="sm">Selesai</UBadge>
+              </div>
               <p class="text-sm text-muted">{{ daysText() }}</p>
             </div>
           </div>
@@ -323,8 +334,8 @@ function handleDelete() {
           <div class="relative h-2 rounded-full bg-elevated overflow-hidden mb-2">
             <div
               class="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-              :class="levelBarClass[letter.warningLevel]"
-              :style="{ width: `${progressPercent}%`, opacity: daysUntilExpiry !== null && daysUntilExpiry < 0 ? 0.3 : 1 }"
+              :class="isExpired ? 'bg-muted' : levelBarClass[letter.warningLevel]"
+              :style="{ width: `${progressPercent}%`, opacity: isExpired ? 0.3 : 1 }"
             />
           </div>
 
