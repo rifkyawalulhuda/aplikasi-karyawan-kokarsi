@@ -362,7 +362,16 @@ export class ContractDocumentService {
       })
     }
 
-    // Do NOT include closing paragraphs here - they will be rendered separately outside the bordered columns
+    // Closing paragraph (Indonesia) — dirender di dalam kolom, setelah pasal terakhir
+    blocks.push({
+      text: payload.definition.closingParagraphs.join('\n'),
+      font: 'Times-Roman',
+      fontSize: 10,
+      align: 'justify',
+      gapBefore: 12,
+      gapAfter: 8,
+    })
+
     return blocks
   }
 
@@ -455,8 +464,16 @@ export class ContractDocumentService {
       })
     }
 
-    // English closing paragraph - used in renderSignaturePage, NOT inside columns
-    // (removed from here, now rendered in renderSignaturePage as bilingual two-column outside borders)
+    // Closing paragraph (English) — dirender di dalam kolom, setelah article terakhir
+    blocks.push({
+      text: 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.',
+      font: 'Times-Roman',
+      fontSize: 10,
+      align: 'justify',
+      gapBefore: 12,
+      gapAfter: 8,
+    })
+
     return blocks
   }
 
@@ -815,28 +832,11 @@ export class ContractDocumentService {
     const pageBottom = doc.page.height - 50
     let y = startY + 20
     
-    // Check if there's enough space for closing + signature, if not add new page
-    if (y + 250 > pageBottom) {
+    // Check if there's enough space for signature, if not add new page
+    if (y + 150 > pageBottom) {
       doc.addPage()
       y = 40
     }
-    
-    // === BILINGUAL CLOSING PARAGRAPHS (two columns, no borders) ===
-    const closingTextId = payload.definition.closingParagraphs.join('\n')
-    const closingTextEn = 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.'
-    const columnWidth = 252
-    const leftX = 34
-    const rightX = 310
-    
-    doc.font('Times-Roman').fontSize(10)
-    doc.text(closingTextId, leftX, y, { width: columnWidth, align: 'justify', lineGap: 2 })
-    doc.text(closingTextEn, rightX, y, { width: columnWidth, align: 'justify', lineGap: 2 })
-    
-    const closingHeight = Math.max(
-      doc.heightOfString(closingTextId, { width: columnWidth, lineGap: 2 }),
-      doc.heightOfString(closingTextEn, { width: columnWidth, lineGap: 2 })
-    )
-    y += closingHeight + 25
     
     // === STANDALONE FULL-WIDTH SIGNATURE BLOCK ===
     
