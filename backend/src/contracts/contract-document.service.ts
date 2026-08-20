@@ -208,8 +208,8 @@ export class ContractDocumentService {
       endDate: this.formatDate(contract.endDate),
       endDateEn: this.formatEnglishDate(contract.endDate),
       compensation: this.formatRupiah(contract.baseCompensation),
-      locationLabel: contract.workLocationLabel ?? employee.workLocation?.name ?? '-',
-      positionLabel: contract.positionLabel ?? employee.jobRole?.name ?? definition.roleLabel,
+      locationLabel: employee.workLocation?.name ?? '-',
+      positionLabel: employee.jobRole?.name ?? definition.roleLabel,
       cooperativeChairmanName: '',
     }
 

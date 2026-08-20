@@ -166,8 +166,6 @@ model Contract {
   templateId     Int?
   status         ContractStatus @default(AKTIF)
   signedDate     DateTime?      @db.Date
-  positionLabel  String?        @db.VarChar(255)
-  workLocationLabel String?     @db.VarChar(255)
   baseCompensation Int?
   templateData   Json?
   documentUrl    String?

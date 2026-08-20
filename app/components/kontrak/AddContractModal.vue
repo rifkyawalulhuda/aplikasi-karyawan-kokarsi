@@ -71,8 +71,6 @@ const schema = z.object({
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
   templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
   signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
-  positionLabel: z.string().optional(),
-  workLocationLabel: z.string().optional(),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
 })
 
@@ -85,8 +83,6 @@ const state = reactive<Partial<Schema>>({
   contractTypeId: undefined,
   templateId: undefined,
   signedDate: '',
-  positionLabel: '',
-  workLocationLabel: '',
   baseCompensation: undefined,
 })
 
@@ -190,8 +186,6 @@ function resetForm() {
   state.contractTypeId = undefined
   state.templateId = undefined
   state.signedDate = ''
-  state.positionLabel = ''
-  state.workLocationLabel = ''
   state.baseCompensation = undefined
   employeeContractStatus.value = null
   employeeLatestContract.value = null
@@ -346,15 +340,6 @@ watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
           </UFormField>
           <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
             <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
-          </UFormField>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <UFormField label="Label Posisi di Dokumen" name="positionLabel">
-            <UInput v-model="state.positionLabel" placeholder="Staff Admin" class="w-full" />
-          </UFormField>
-          <UFormField label="Label Lokasi Kerja di Dokumen" name="workLocationLabel">
-            <UInput v-model="state.workLocationLabel" placeholder="Head Office Jakarta" class="w-full" />
           </UFormField>
         </div>
 

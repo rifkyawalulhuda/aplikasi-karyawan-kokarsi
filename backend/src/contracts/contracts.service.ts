@@ -23,8 +23,6 @@ export class CreateContractDto {
   @IsOptional() @IsInt() templateId?: number
   @IsOptional() @IsEnum(ContractStatus) status?: ContractStatus
   @IsOptional() @IsDateString() signedDate?: string
-  @IsOptional() @IsString() positionLabel?: string
-  @IsOptional() @IsString() workLocationLabel?: string
   @IsOptional() @IsNumber() baseCompensation?: number
   @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
@@ -39,8 +37,6 @@ export class RenewContractDto {
   @IsOptional() @IsInt() contractTypeId?: number
   @IsOptional() @IsInt() templateId?: number
   @IsOptional() @IsDateString() signedDate?: string
-  @IsOptional() @IsString() positionLabel?: string
-  @IsOptional() @IsString() workLocationLabel?: string
   @IsOptional() @IsNumber() baseCompensation?: number
   @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
@@ -422,8 +418,6 @@ export class ContractsService {
           contractTypeId: dto.contractTypeId,
           templateId: dto.templateId,
           signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
-          positionLabel: dto.positionLabel,
-          workLocationLabel: dto.workLocationLabel,
           baseCompensation: dto.baseCompensation,
           templateData: dto.templateData as any,
           documentUrl: dto.documentUrl,

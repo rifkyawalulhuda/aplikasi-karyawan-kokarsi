@@ -84,8 +84,6 @@ const schema = z.object({
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
   templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
   signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
-  positionLabel: z.string().optional(),
-  workLocationLabel: z.string().optional(),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
 })
 
@@ -98,8 +96,6 @@ const state = reactive<Partial<Schema> & { documentUrl?: string }>({
   contractTypeId: undefined,
   templateId: undefined,
   signedDate: '',
-  positionLabel: '',
-  workLocationLabel: '',
   baseCompensation: undefined,
   documentUrl: '',
 })
@@ -112,8 +108,6 @@ function fillState(c: Contract | null) {
   state.contractTypeId = c.contractTypeId ?? undefined
   state.templateId = c.templateId ?? undefined
   state.signedDate = c.signedDate ? c.signedDate.slice(0, 10) : c.startDate ? c.startDate.slice(0, 10) : ''
-  state.positionLabel = c.positionLabel ?? ''
-  state.workLocationLabel = c.workLocationLabel ?? ''
   state.baseCompensation = c.baseCompensation ?? undefined
   state.documentUrl = c.documentUrl ?? ''
   // Sync CalendarDate refs
@@ -231,15 +225,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </UFormField>
           <UFormField label="Nominal Kompensasi" name="baseCompensation" required>
             <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
-          </UFormField>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <UFormField label="Label Posisi di Dokumen" name="positionLabel">
-            <UInput v-model="state.positionLabel" placeholder="Staff Admin" class="w-full" />
-          </UFormField>
-          <UFormField label="Label Lokasi Kerja di Dokumen" name="workLocationLabel">
-            <UInput v-model="state.workLocationLabel" placeholder="Head Office Jakarta" class="w-full" />
           </UFormField>
         </div>
 
