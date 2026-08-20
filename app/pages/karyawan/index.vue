@@ -264,6 +264,11 @@ const contextMenuX = ref(0)
 const contextMenuY = ref(0)
 const contextMenuTarget = ref<Employee | null>(null)
 
+// Photo preview
+const photoPreview = ref(false)
+const photoPreviewUrl = ref('')
+const photoPreviewName = ref('')
+
 async function openContextMenu(e: MouseEvent, employee: Employee) {
   e.preventDefault()
   contextMenuTarget.value = employee
@@ -292,11 +297,22 @@ const columns: TableColumn<Employee>[] = [
     cell: ({ row }) =>
       h('div', { class: 'flex items-center gap-3' }, [
         row.original.fotoKaryawan
-          ? h('img', {
-              src: row.original.fotoKaryawan,
-              alt: row.original.fullName,
-              class: 'size-8 rounded-full object-cover ring ring-primary/25 shrink-0'
-            })
+          ? h('button', {
+              type: 'button',
+              class: 'shrink-0 cursor-zoom-in',
+              onClick: (e: MouseEvent) => {
+                e.stopPropagation()
+                photoPreviewUrl.value = row.original.fotoKaryawan!
+                photoPreviewName.value = row.original.fullName
+                photoPreview.value = true
+              }
+            }, [
+              h('img', {
+                src: row.original.fotoKaryawan,
+                alt: row.original.fullName,
+                class: 'size-8 rounded-full object-cover ring ring-primary/25 hover:ring-2 hover:ring-primary transition-all'
+              })
+            ])
           : h('div', {
               class: 'size-8 rounded-full bg-primary/10 ring ring-primary/25 flex items-center justify-center shrink-0'
             }, [
@@ -640,6 +656,25 @@ watch(() => pagination.value.pageSize, async () => {
     v-model:open="importModal"
     @imported="refresh()"
   />
+
+  <!-- Photo Preview Modal -->
+  <UModal v-model:open="photoPreview" :ui="{ content: 'sm:max-w-sm w-full' }">
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="i-lucide-user-circle" class="size-5 text-muted" />
+        <span class="font-medium text-sm">{{ photoPreviewName }}</span>
+      </div>
+    </template>
+    <template #body>
+      <div class="flex items-center justify-center p-2">
+        <img
+          :src="photoPreviewUrl"
+          :alt="photoPreviewName"
+          class="w-full rounded-xl object-contain max-h-[70vh]"
+        />
+      </div>
+    </template>
+  </UModal>
 
   <!-- Context Menu (klik kanan) -->
   <Teleport to="body">

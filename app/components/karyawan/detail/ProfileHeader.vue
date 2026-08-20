@@ -31,18 +31,27 @@ const canOffboard = computed(() =>
 const initials = computed(() =>
   (props.employee?.fullName ?? '').split(' ').map((n: string) => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()
 )
+
+// Photo preview
+const photoPreview = ref(false)
 </script>
 
 <template>
   <div class="flex flex-col sm:flex-row items-start sm:items-center gap-5 p-6 bg-default rounded-xl border border-default">
     <!-- Avatar -->
     <div class="w-20 h-20 rounded-full overflow-hidden bg-elevated flex items-center justify-center shrink-0 ring-2 ring-primary/20">
-      <img
+      <button
         v-if="employee.fotoKaryawan"
-        :src="employee.fotoKaryawan"
-        :alt="employee.fullName"
-        class="w-full h-full object-cover"
-      />
+        type="button"
+        class="w-full h-full cursor-zoom-in"
+        @click="photoPreview = true"
+      >
+        <img
+          :src="employee.fotoKaryawan"
+          :alt="employee.fullName"
+          class="w-full h-full object-cover hover:opacity-90 transition-opacity"
+        />
+      </button>
       <span v-else class="text-2xl font-bold text-primary">{{ initials }}</span>
     </div>
 
@@ -100,4 +109,23 @@ const initials = computed(() =>
       />
     </div>
   </div>
+
+  <!-- Photo Preview Modal -->
+  <UModal v-model:open="photoPreview" :ui="{ content: 'sm:max-w-sm w-full' }">
+    <template #header>
+      <div class="flex items-center gap-2">
+        <UIcon name="i-lucide-user-circle" class="size-5 text-muted" />
+        <span class="font-medium text-sm">{{ employee.fullName }}</span>
+      </div>
+    </template>
+    <template #body>
+      <div class="flex items-center justify-center p-2">
+        <img
+          :src="employee.fotoKaryawan!"
+          :alt="employee.fullName"
+          class="w-full rounded-xl object-contain max-h-[70vh]"
+        />
+      </div>
+    </template>
+  </UModal>
 </template>
