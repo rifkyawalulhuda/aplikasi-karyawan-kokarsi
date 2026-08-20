@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import type { TableColumn } from '@nuxt/ui'
+import { getPaginationRowModel } from '@tanstack/table-core'
+import { h } from 'vue'
+
 interface LookupItem { id: number, name: string }
 
 interface DocumentTypeItem {
@@ -37,6 +41,7 @@ const companies = ref<CompanyItem[]>([])
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const UIcon = resolveComponent('UIcon')
 
 // ── Generic CRUD state ──────────────────────────────────────────────
 type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments' | 'document-types' | 'companies'
@@ -55,6 +60,117 @@ const addLoading = ref(false)
 const activeTab = ref<ResourceKey>('work-locations')
 const searchQuery = ref('')
 const deleteLoading = ref<number | null>(null)
+
+// ── Table state ──────────────────────────────────────────────────────
+const table = useTemplateRef('table')
+const loading = ref(false)
+const pagination = ref({ pageIndex: 0, pageSize: 15 })
+const pageSizeOptions = [15, 30, 50, 100]
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+
+function toggleSort(key: string) {
+  if (sorting.value?.key !== key) {
+    sorting.value = { key, direction: 'asc' }
+    return
+  }
+  if (sorting.value.direction === 'asc') {
+    sorting.value = { key, direction: 'desc' }
+    return
+  }
+  sorting.value = null
+}
+
+function sortableHeader(label: string, key: string) {
+  const isActive = sorting.value?.key === key
+  const icon = !isActive
+    ? 'i-lucide-arrow-up-down'
+    : sorting.value?.direction === 'asc'
+      ? 'i-lucide-arrow-up'
+      : 'i-lucide-arrow-down'
+
+  return h('button', {
+    type: 'button',
+    class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
+    onClick: () => toggleSort(key),
+    title: `Urutkan ${label}`,
+  }, [
+    h('span', label),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+  ])
+}
+
+type MasterRow = LookupItem | DocumentTypeItem | CompanyItem
+
+const filteredData = computed(() => {
+  let list: MasterRow[] = []
+
+  if (activeTab.value === 'work-locations') list = workLocations.value
+  else if (activeTab.value === 'job-roles') list = jobRoles.value
+  else if (activeTab.value === 'job-levels') list = jobLevels.value
+  else if (activeTab.value === 'tax-status') list = taxStatuses.value
+  else if (activeTab.value === 'contract-types') list = contractTypes.value
+  else if (activeTab.value === 'departments') list = departments.value
+  else if (activeTab.value === 'document-types') list = documentTypes.value as unknown as MasterRow[]
+  else if (activeTab.value === 'companies') list = companies.value as unknown as MasterRow[]
+
+  // Search filter
+  if (searchQuery.value.trim()) {
+    const q = searchQuery.value.toLowerCase().trim()
+    list = list.filter(item => {
+      if (activeTab.value === 'companies') {
+        const c = item as CompanyItem
+        return (
+          c.name.toLowerCase().includes(q) ||
+          (c.email ?? '').toLowerCase().includes(q) ||
+          (c.phone ?? '').toLowerCase().includes(q) ||
+          (c.address ?? '').toLowerCase().includes(q)
+        )
+      }
+      if (activeTab.value === 'document-types') {
+        const d = item as DocumentTypeItem
+        return (
+          d.name.toLowerCase().includes(q) ||
+          d.documentType.toLowerCase().includes(q) ||
+          (d.issuer ?? '').toLowerCase().includes(q) ||
+          d.category.toLowerCase().includes(q)
+        )
+      }
+      return (item as LookupItem).name.toLowerCase().includes(q)
+    })
+  }
+
+  // Sorting
+  const sort = sorting.value
+  if (sort) {
+    list = [...list].sort((a, b) => {
+      let aVal = ''
+      let bVal = ''
+
+      if (sort.key === 'name') {
+        aVal = (a as LookupItem).name ?? ''
+        bVal = (b as LookupItem).name ?? ''
+      } else if (sort.key === 'issuer' && activeTab.value === 'document-types') {
+        aVal = (a as DocumentTypeItem).issuer ?? ''
+        bVal = (b as DocumentTypeItem).issuer ?? ''
+      } else {
+        return 0
+      }
+
+      const cmp = aVal.localeCompare(bVal, 'id', { sensitivity: 'base' })
+      return sort.direction === 'asc' ? cmp : -cmp
+    })
+  }
+
+  return list
+})
+
+// Watchers to reset pagination
+watch([activeTab, searchQuery], () => {
+  pagination.value.pageIndex = 0
+})
+watch(() => pagination.value.pageSize, () => {
+  pagination.value.pageIndex = 0
+})
 
 const resourceLabelMap: Record<ResourceKey, string> = {
   'work-locations': 'Site',
@@ -100,45 +216,31 @@ const tabs = computed(() => [
   { key: 'companies' as ResourceKey, label: 'Perusahaan', icon: 'i-lucide-building-2', count: companies.value.length }
 ])
 
-const currentItems = computed<LookupItem[]>(() => {
-  let items: LookupItem[] = []
-  if (activeTab.value === 'work-locations') items = workLocations.value
-  else if (activeTab.value === 'job-roles') items = jobRoles.value
-  else if (activeTab.value === 'job-levels') items = jobLevels.value
-  else if (activeTab.value === 'tax-status') items = taxStatuses.value
-  else if (activeTab.value === 'contract-types') items = contractTypes.value
-  else if (activeTab.value === 'departments') items = departments.value
-  else if (activeTab.value === 'document-types') items = documentTypes.value as unknown as LookupItem[]
-  else if (activeTab.value === 'companies') return companies.value as any[]
-
-  if (!searchQuery.value) return items
-  return items.filter(i => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-})
-
-const currentDocumentTypes = computed<DocumentTypeItem[]>(() => {
-  if (activeTab.value !== 'document-types') return []
-  if (!searchQuery.value) return documentTypes.value
-  return documentTypes.value.filter(i => i.name.toLowerCase().includes(searchQuery.value.toLowerCase()))
-})
-
 const totalCount = computed(() =>
   workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length + documentTypes.value.length + companies.value.length
 )
 
 async function loadAllLookups() {
-  const [data, docTypes, comp] = await Promise.all([
-    $fetch<LookupsResponse>('/api/lookups'),
-    $fetch<DocumentTypeItem[]>('/api/lookups/document-types').catch(() => []),
-    $fetch<CompanyItem[]>('/api/lookups/companies').catch(() => [])
-  ])
-  workLocations.value = data.workLocations ?? []
-  jobRoles.value = data.jobRoles ?? []
-  jobLevels.value = data.jobLevels ?? []
-  taxStatuses.value = data.taxStatus ?? []
-  contractTypes.value = data.contractTypes ?? []
-  departments.value = data.departments ?? []
-  documentTypes.value = docTypes
-  companies.value = comp
+  loading.value = true
+  try {
+    const [data, docTypes, comp] = await Promise.all([
+      $fetch<LookupsResponse>('/api/lookups'),
+      $fetch<DocumentTypeItem[]>('/api/lookups/document-types').catch(() => []),
+      $fetch<CompanyItem[]>('/api/lookups/companies').catch(() => [])
+    ])
+    workLocations.value = data.workLocations ?? []
+    jobRoles.value = data.jobRoles ?? []
+    jobLevels.value = data.jobLevels ?? []
+    taxStatuses.value = data.taxStatus ?? []
+    contractTypes.value = data.contractTypes ?? []
+    departments.value = data.departments ?? []
+    documentTypes.value = docTypes
+    companies.value = comp
+  } catch (error) {
+    console.error('Gagal memuat master data', error)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadResource(resource: ResourceKey) {
@@ -153,11 +255,7 @@ async function loadResource(resource: ResourceKey) {
 }
 
 onMounted(async () => {
-  try {
-    await loadAllLookups()
-  } catch (error) {
-    console.error('Gagal memuat master data', error)
-  }
+  await loadAllLookups()
 })
 
 function openEdit(item: LookupItem) {
@@ -229,7 +327,203 @@ function onTabChange(key: ResourceKey) {
   activeTab.value = key
   searchQuery.value = ''
   addOpen.value = false
+  sorting.value = null
+  pagination.value.pageIndex = 0
 }
+
+// ── Table columns ──────────────────────────────────────────────────────
+const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
+
+function openEditFor(row: MasterRow) {
+  if (activeTab.value === 'document-types') openEditDoc(row as DocumentTypeItem)
+  else if (activeTab.value === 'companies') openEditCompany(row as CompanyItem)
+  else openEdit(row as LookupItem)
+}
+
+function getRowNumber(index: number): string {
+  return String(pagination.value.pageIndex * pagination.value.pageSize + index + 1).padStart(2, '0')
+}
+
+const documentTypeBadgeColor: Record<string, string> = {
+  SERTIFIKAT: 'info',
+  LISENSI: 'success',
+  IZIN: 'warning',
+  RAHASIA: 'error',
+  LAINNYA: 'neutral'
+}
+
+const simpleColumns = computed<TableColumn<MasterRow>[]>(() => [
+  {
+    accessorKey: 'no',
+    header: () => h('th', { class: 'w-10 text-center' }, '#'),
+    cell: ({ row }) => h('td', { class: 'text-center text-xs font-medium text-dimmed tabular-nums' }, getRowNumber(row.index)),
+  },
+  {
+    accessorKey: 'name',
+    header: () => sortableHeader('Nama', 'name'),
+    cell: ({ row }) => h('td', { class: 'font-medium text-highlighted truncate max-w-xs' }, (row.original as LookupItem).name),
+  },
+  {
+    accessorKey: 'actions',
+    header: () => h('th', { class: 'w-24 text-right' }, 'Aksi'),
+    cell: ({ row }) => h('td', { class: 'text-right' }, [
+      h(UButton, {
+        icon: 'i-lucide-pencil',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'neutral',
+        class: 'mr-1',
+        onClick: () => openEditFor(row.original),
+      }),
+      h(UButton, {
+        icon: 'i-lucide-trash',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'error',
+        loading: deleteLoading.value === row.original.id,
+        onClick: () => doDelete(row.original.id),
+      }),
+    ]),
+  },
+])
+
+const docColumns = computed<TableColumn<MasterRow>[]>(() => [
+  {
+    accessorKey: 'no',
+    header: () => h('th', { class: 'w-10 text-center' }, '#'),
+    cell: ({ row }) => h('td', { class: 'text-center text-xs font-medium text-dimmed tabular-nums' }, getRowNumber(row.index)),
+  },
+  {
+    accessorKey: 'name',
+    header: () => sortableHeader('Nama Dokumen', 'name'),
+    cell: ({ row }) => h('td', { class: 'font-medium text-highlighted truncate max-w-xs' }, (row.original as DocumentTypeItem).name),
+  },
+  {
+    accessorKey: 'documentType',
+    header: () => sortableHeader('Tipe', 'documentType'),
+    cell: ({ row }) => {
+      const d = row.original as DocumentTypeItem
+      return h('td', { class: 'whitespace-nowrap' }, [
+        h(UBadge, {
+          label: d.documentType,
+          color: (documentTypeBadgeColor[d.documentType] as any) ?? 'neutral',
+          variant: 'subtle',
+          size: 'xs',
+        }),
+      ])
+    },
+  },
+  {
+    accessorKey: 'issuer',
+    header: () => sortableHeader('Penerbit', 'issuer'),
+    cell: ({ row }) => h('td', { class: 'text-muted truncate max-w-xs' }, (row.original as DocumentTypeItem).issuer ?? '-'),
+  },
+  {
+    accessorKey: 'category',
+    header: () => sortableHeader('Kategori', 'category'),
+    cell: ({ row }) => {
+      const d = row.original as DocumentTypeItem
+      return h('td', { class: 'whitespace-nowrap' }, [
+        h(UBadge, {
+          label: d.category === 'PERSONAL' ? 'Dokumen Pribadi' : 'Sertifikasi & Ijin',
+          color: d.category === 'PERSONAL' ? 'primary' : 'warning',
+          variant: 'subtle',
+          size: 'xs',
+        }),
+      ])
+    },
+  },
+  {
+    accessorKey: 'actions',
+    header: () => h('th', { class: 'w-24 text-right' }, 'Aksi'),
+    cell: ({ row }) => h('td', { class: 'text-right' }, [
+      h(UButton, {
+        icon: 'i-lucide-pencil',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'neutral',
+        class: 'mr-1',
+        onClick: () => openEditFor(row.original),
+      }),
+      h(UButton, {
+        icon: 'i-lucide-trash',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'error',
+        loading: deleteLoading.value === row.original.id,
+        onClick: () => doDelete(row.original.id),
+      }),
+    ]),
+  },
+])
+
+const companyColumns = computed<TableColumn<MasterRow>[]>(() => [
+  {
+    accessorKey: 'no',
+    header: () => h('th', { class: 'w-10 text-center' }, '#'),
+    cell: ({ row }) => h('td', { class: 'text-center text-xs font-medium text-dimmed tabular-nums' }, getRowNumber(row.index)),
+  },
+  {
+    accessorKey: 'name',
+    header: () => sortableHeader('Nama Perusahaan', 'name'),
+    cell: ({ row }) => h('td', { class: 'font-semibold text-highlighted truncate max-w-xs' }, (row.original as CompanyItem).name),
+  },
+  {
+    accessorKey: 'contact',
+    header: () => sortableHeader('Kontak', 'contact'),
+    cell: ({ row }) => {
+      const c = row.original as CompanyItem
+      return h('td', { class: 'text-sm' }, [
+        c.email && h('div', { class: 'text-muted truncate' }, [
+          h(UIcon, { name: 'i-lucide-mail', class: 'size-3 inline mr-1' }),
+          c.email,
+        ]),
+        c.phone && h('div', { class: 'text-muted truncate' }, [
+          h(UIcon, { name: 'i-lucide-phone', class: 'size-3 inline mr-1' }),
+          c.phone,
+        ]),
+        !c.email && !c.phone && h('span', { class: 'text-dimmed text-xs' }, '-'),
+      ])
+    },
+  },
+  {
+    accessorKey: 'address',
+    header: () => sortableHeader('Alamat', 'address'),
+    cell: ({ row }) => {
+      const c = row.original as CompanyItem
+      return h('td', { class: 'text-muted text-xs truncate max-w-md', title: c.address ?? '' }, c.address ?? '-')
+    },
+  },
+  {
+    accessorKey: 'actions',
+    header: () => h('th', { class: 'w-24 text-right' }, 'Aksi'),
+    cell: ({ row }) => h('td', { class: 'text-right' }, [
+      h(UButton, {
+        icon: 'i-lucide-pencil',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'neutral',
+        class: 'mr-1',
+        onClick: () => openEditFor(row.original),
+      }),
+      h(UButton, {
+        icon: 'i-lucide-trash',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'error',
+        loading: deleteLoading.value === row.original.id,
+        onClick: () => doDelete(row.original.id),
+      }),
+    ]),
+  },
+])
+
+const columns = computed<TableColumn<MasterRow>[]>(() => {
+  if (activeTab.value === 'document-types') return docColumns.value
+  if (activeTab.value === 'companies') return companyColumns.value
+  return simpleColumns.value
+})
 
 // ── Document Types CRUD state ────────────────────────────────────────
 const newDocName = ref('')
@@ -251,14 +545,6 @@ const documentTypeOptions = [
   { label: 'Rahasia', value: 'RAHASIA' },
   { label: 'Lainnya', value: 'LAINNYA' }
 ]
-
-const documentTypeBadgeColor: Record<string, string> = {
-  SERTIFIKAT: 'blue',
-  LISENSI: 'green',
-  IZIN: 'yellow',
-  RAHASIA: 'red',
-  LAINNYA: 'neutral'
-}
 
 function openEditDoc(item: DocumentTypeItem) {
   editState.id = item.id
@@ -436,17 +722,19 @@ async function saveEditCompany() {
           </div>
         </div>
 
-        <!-- Tabs -->
+        <!-- Tabs (polished: horizontal scroll on mobile, no wrap) -->
         <div class="mb-6 border-b border-default">
-          <div class="flex flex-wrap gap-1 -mb-px">
+          <div class="flex gap-1 -mb-px overflow-x-auto pb-1" role="tablist">
             <button
               v-for="tab in tabs"
               :key="tab.key"
-              class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer"
+              class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors cursor-pointer shrink-0 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               :class="activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted hover:text-highlighted hover:bg-elevated/50'"
               @click="onTabChange(tab.key)"
+              role="tab"
+              :aria-selected="activeTab === tab.key"
             >
               <UIcon :name="tab.icon" class="size-4" />
               <span>{{ tab.label }}</span>
@@ -460,341 +748,258 @@ async function saveEditCompany() {
           </div>
         </div>
 
-        <!-- Content area -->
-        <div class="max-w-3xl">
-          <!-- Toolbar: search + add -->
-          <div class="mb-4 flex flex-wrap items-center gap-3">
-            <div class="relative flex-1 min-w-[200px]">
-              <UIcon name="i-lucide-search" class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted pointer-events-none" />
-              <UInput
-                v-model="searchQuery"
-                :placeholder="`Cari ${resourceLabelMap[activeTab]}...`"
-                size="sm"
-                class="w-full"
-                :ui="{ base: 'pl-9' }"
-              />
-            </div>
-            <UButton
-              v-if="!addOpen"
-              label="Tambah"
-              icon="i-lucide-plus"
-              size="sm"
-              color="primary"
-              variant="subtle"
-              @click="addOpen = true"
-            />
-          </div>
-
-          <!-- Inline add form -->
-          <Transition
-            enter-active-class="transition duration-200 ease-out"
-            enter-from-class="opacity-0 -translate-y-2"
-            enter-to-class="opacity-100 translate-y-0"
-            leave-active-class="transition duration-150 ease-in"
-            leave-from-class="opacity-100"
-            leave-to-class="opacity-0"
-          >
-            <div
-              v-if="addOpen"
-              class="mb-4 rounded-lg border border-primary/30 bg-primary/5 p-4"
-            >
-              <div class="flex items-center gap-2 mb-3">
-                <UIcon :name="resourceIconMap[activeTab]" class="size-4 text-primary" />
-                <span class="text-sm font-medium text-highlighted">
-                  Tambah {{ resourceLabelMap[activeTab] }}
-                </span>
-              </div>
-              <!-- Form: regular resources -->
-              <div v-if="activeTab !== 'document-types' && activeTab !== 'companies'" class="flex gap-2">
-                <UInput
-                  v-model="addName"
-                  :placeholder="`Nama ${resourceLabelMap[activeTab]}...`"
-                  size="sm"
-                  class="flex-1"
-                  @keyup.enter="doAdd()"
-                />
-                <UButton
-                  label="Simpan"
-                  size="sm"
-                  color="primary"
-                  :loading="addLoading"
-                  @click="doAdd()"
-                />
-                <UButton
-                  icon="i-lucide-x"
-                  size="sm"
-                  color="neutral"
-                  variant="ghost"
-                  @click="addOpen = false; addName = ''"
-                />
-              </div>
-
-              <!-- Form: companies (4 fields) -->
-              <div v-else-if="activeTab === 'companies'" class="flex flex-col gap-2">
-                <UInput
-                  v-model="newCompanyName"
-                  placeholder="Nama Perusahaan"
-                  size="sm"
-                  class="w-full"
-                />
-                <UTextarea
-                  v-model="newCompanyAddress"
-                  placeholder="Alamat"
-                  :rows="2"
-                  size="sm"
-                  class="w-full"
-                />
-                <div class="flex gap-2">
-                  <UInput
-                    v-model="newCompanyEmail"
-                    type="email"
-                    placeholder="Email"
-                    size="sm"
-                    class="flex-1"
-                  />
-                  <UInput
-                    v-model="newCompanyPhone"
-                    type="tel"
-                    placeholder="No. Kontak"
-                    size="sm"
-                    class="flex-1"
-                  />
-                </div>
-                <div class="flex gap-2 justify-end">
-                  <UButton
-                    label="Simpan"
-                    size="sm"
-                    color="primary"
-                    :loading="addCompanyLoading"
-                    @click="doAddCompany()"
-                  />
-                  <UButton
-                    icon="i-lucide-x"
-                    size="sm"
-                    color="neutral"
-                    variant="ghost"
-                    @click="addOpen = false; newCompanyName = ''; newCompanyAddress = ''; newCompanyEmail = ''; newCompanyPhone = ''"
-                  />
-                </div>
-              </div>
-
-              <!-- Form: document-types (3 fields) -->
-              <div v-else class="flex flex-col gap-2">
-                <div class="flex gap-2">
-                  <UInput
-                    v-model="newDocName"
-                    placeholder="Nama Dokumen"
-                    size="sm"
-                    class="flex-1"
-                  />
-                  <USelect
-                    v-model="newDocType"
-                    :items="documentTypeOptions"
-                    placeholder="Tipe Dokumen"
-                    size="sm"
-                    class="flex-1"
-                  />
-                </div>
-                <div class="flex gap-2">
-                  <UInput
-                    v-model="newDocIssuer"
-                    placeholder="Penerbit"
-                    size="sm"
-                    class="flex-1"
-                  />
-                  <USelect
-                    v-model="newDocCategory"
-                    :items="[
-                      { label: 'Dokumen Pribadi (KTP, SIM, NPWP, dll)', value: 'PERSONAL' },
-                      { label: 'Sertifikasi & Ijin', value: 'CERTIFICATION' },
-                    ]"
-                    placeholder="Pilih kategori..."
-                    size="sm"
-                    class="flex-1"
-                  />
-                </div>
-                <div class="flex gap-2 justify-end">
-                  <UButton
-                    label="Simpan"
-                    size="sm"
-                    color="primary"
-                    :loading="addDocLoading"
-                    @click="doAddDoc()"
-                  />
-                  <UButton
-                    icon="i-lucide-x"
-                    size="sm"
-                    color="neutral"
-                    variant="ghost"
-                    @click="addOpen = false; newDocName = ''; newDocType = ''; newDocIssuer = ''; newDocCategory = 'CERTIFICATION'"
-                  />
-                </div>
-              </div>
-            </div>
-          </Transition>
-
-          <!-- List -->
+        <!-- Content area (full width for table) -->
+        <div class="space-y-4">
+          <!-- UCard wrapper with header + toolbar + UTable + pagination -->
           <UCard :ui="{ body: 'p-0', header: 'p-0' }">
-            <!-- List header -->
-            <div class="flex items-center justify-between px-4 py-2.5 border-b border-default bg-elevated/30">
-              <span class="text-xs font-medium uppercase tracking-wider text-muted">
-                {{ resourceDescMap[activeTab] }}
-              </span>
-              <span class="text-xs text-muted tabular-nums">
-                {{ currentItems.length }} dari {{ tabs.find(t => t.key === activeTab)?.count ?? 0 }}
-              </span>
+            <!-- Card header: title + description + add button -->
+            <template #header>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3">
+                <div>
+                  <h2 class="text-sm font-semibold text-highlighted">{{ resourceLabelMap[activeTab] }}</h2>
+                  <p class="mt-1 text-xs text-muted">{{ resourceDescMap[activeTab] }}</p>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs text-muted tabular-nums">
+                    {{ filteredData.length }} dari {{ tabs.find(t => t.key === activeTab)?.count ?? 0 }}
+                  </span>
+                  <UButton
+                    label="Tambah"
+                    icon="i-lucide-plus"
+                    color="primary"
+                    size="sm"
+                    @click="addOpen = true"
+                  />
+                </div>
+              </div>
+            </template>
+
+            <!-- Toolbar row (search) -->
+            <div class="px-4 py-3 border-b border-default bg-elevated/30">
+              <div class="relative max-w-md">
+                <UIcon name="i-lucide-search" class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted pointer-events-none" />
+                <UInput
+                  v-model="searchQuery"
+                  :placeholder="`Cari ${resourceLabelMap[activeTab]}...`"
+                  size="sm"
+                  class="w-full"
+                  :ui="{ base: 'pl-9' }"
+                />
+              </div>
             </div>
 
-            <!-- Empty state -->
-            <div
-              v-if="activeTab !== 'document-types' ? currentItems.length === 0 : currentDocumentTypes.length === 0"
-              class="flex flex-col items-center justify-center py-12 px-4 text-center"
+            <!-- Inline add form -->
+            <Transition
+              enter-active-class="transition duration-200 ease-out"
+              enter-from-class="opacity-0 -translate-y-2"
+              enter-to-class="opacity-100 translate-y-0"
+              leave-active-class="transition duration-150 ease-in"
+              leave-from-class="opacity-100"
+              leave-to-class="opacity-0"
             >
-              <div class="flex size-12 items-center justify-center rounded-full bg-elevated mb-3">
-                <UIcon :name="resourceIconMap[activeTab]" class="size-5 text-muted" />
+              <div
+                v-if="addOpen"
+                class="px-4 py-3 border-b border-primary/20 bg-primary/5"
+              >
+                <div class="flex items-center gap-2 mb-3">
+                  <UIcon :name="resourceIconMap[activeTab]" class="size-4 text-primary" />
+                  <span class="text-sm font-medium text-highlighted">
+                    Tambah {{ resourceLabelMap[activeTab] }}
+                  </span>
+                </div>
+                <!-- Form: regular resources -->
+                <div v-if="activeTab !== 'document-types' && activeTab !== 'companies'" class="flex gap-2">
+                  <UInput
+                    v-model="addName"
+                    :placeholder="`Nama ${resourceLabelMap[activeTab]}...`"
+                    size="sm"
+                    class="flex-1"
+                    @keyup.enter="doAdd()"
+                  />
+                  <UButton
+                    label="Simpan"
+                    size="sm"
+                    color="primary"
+                    :loading="addLoading"
+                    @click="doAdd()"
+                  />
+                  <UButton
+                    icon="i-lucide-x"
+                    size="sm"
+                    color="neutral"
+                    variant="ghost"
+                    @click="addOpen = false; addName = ''"
+                  />
+                </div>
+
+                <!-- Form: companies (4 fields) -->
+                <div v-else-if="activeTab === 'companies'" class="flex flex-col gap-2">
+                  <UInput
+                    v-model="newCompanyName"
+                    placeholder="Nama Perusahaan"
+                    size="sm"
+                    class="w-full"
+                  />
+                  <UTextarea
+                    v-model="newCompanyAddress"
+                    placeholder="Alamat"
+                    :rows="2"
+                    size="sm"
+                    class="w-full"
+                  />
+                  <div class="flex gap-2">
+                    <UInput
+                      v-model="newCompanyEmail"
+                      type="email"
+                      placeholder="Email"
+                      size="sm"
+                      class="flex-1"
+                    />
+                    <UInput
+                      v-model="newCompanyPhone"
+                      type="tel"
+                      placeholder="No. Kontak"
+                      size="sm"
+                      class="flex-1"
+                    />
+                  </div>
+                  <div class="flex gap-2 justify-end">
+                    <UButton
+                      label="Simpan"
+                      size="sm"
+                      color="primary"
+                      :loading="addCompanyLoading"
+                      @click="doAddCompany()"
+                    />
+                    <UButton
+                      icon="i-lucide-x"
+                      size="sm"
+                      color="neutral"
+                      variant="ghost"
+                      @click="addOpen = false; newCompanyName = ''; newCompanyAddress = ''; newCompanyEmail = ''; newCompanyPhone = ''"
+                    />
+                  </div>
+                </div>
+
+                <!-- Form: document-types (3 fields) -->
+                <div v-else class="flex flex-col gap-2">
+                  <div class="flex gap-2">
+                    <UInput
+                      v-model="newDocName"
+                      placeholder="Nama Dokumen"
+                      size="sm"
+                      class="flex-1"
+                    />
+                    <USelect
+                      v-model="newDocType"
+                      :items="documentTypeOptions"
+                      placeholder="Tipe Dokumen"
+                      size="sm"
+                      class="flex-1"
+                    />
+                  </div>
+                  <div class="flex gap-2">
+                    <UInput
+                      v-model="newDocIssuer"
+                      placeholder="Penerbit"
+                      size="sm"
+                      class="flex-1"
+                    />
+                    <USelect
+                      v-model="newDocCategory"
+                      :items="[
+                        { label: 'Dokumen Pribadi (KTP, SIM, NPWP, dll)', value: 'PERSONAL' },
+                        { label: 'Sertifikasi & Ijin', value: 'CERTIFICATION' },
+                      ]"
+                      placeholder="Pilih kategori..."
+                      size="sm"
+                      class="flex-1"
+                    />
+                  </div>
+                  <div class="flex gap-2 justify-end">
+                    <UButton
+                      label="Simpan"
+                      size="sm"
+                      color="primary"
+                      :loading="addDocLoading"
+                      @click="doAddDoc()"
+                    />
+                    <UButton
+                      icon="i-lucide-x"
+                      size="sm"
+                      color="neutral"
+                      variant="ghost"
+                      @click="addOpen = false; newDocName = ''; newDocType = ''; newDocIssuer = ''; newDocCategory = 'CERTIFICATION'"
+                    />
+                  </div>
+                </div>
               </div>
-              <p class="text-sm font-medium text-highlighted">
-                {{ searchQuery ? 'Tidak ditemukan' : 'Belum ada data' }}
-              </p>
-              <p class="mt-1 text-xs text-muted">
-                {{ searchQuery ? `Tidak ada ${resourceLabelMap[activeTab]} yang cocok dengan "${searchQuery}"` : `Tambahkan ${resourceLabelMap[activeTab]} pertama Anda` }}
-              </p>
-              <UButton
-                v-if="!searchQuery"
-                label="Tambah Data"
-                icon="i-lucide-plus"
-                size="xs"
-                color="primary"
-                variant="subtle"
-                class="mt-4"
-                @click="addOpen = true"
+            </Transition>
+
+            <!-- UTable -->
+            <UTable
+              ref="table"
+              v-model:pagination="pagination"
+              :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
+              class="shrink-0"
+              :data="filteredData"
+              :columns="columns"
+              :loading="loading"
+              :ui="{
+                base: 'table-fixed border-separate border-spacing-0',
+                thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
+                tbody: '[&>tr]:last:[&>td]:border-b-0 [&>tr]:cursor-pointer [&>tr]:hover:bg-elevated/40 [&>tr]:transition-colors',
+                th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
+                td: 'border-b border-default',
+                separator: 'h-0'
+              }"
+            >
+              <template #empty>
+                <div class="flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <div class="flex size-12 items-center justify-center rounded-full bg-elevated mb-3">
+                    <UIcon :name="resourceIconMap[activeTab]" class="size-5 text-muted" />
+                  </div>
+                  <p class="text-sm font-medium text-highlighted">
+                    {{ searchQuery ? 'Tidak ditemukan' : 'Belum ada data' }}
+                  </p>
+                  <p class="mt-1 text-xs text-muted">
+                    {{ searchQuery ? `Tidak ada ${resourceLabelMap[activeTab]} yang cocok dengan "${searchQuery}"` : `Tambahkan ${resourceLabelMap[activeTab]} pertama Anda` }}
+                  </p>
+                  <UButton
+                    v-if="!searchQuery"
+                    label="Tambah Data"
+                    icon="i-lucide-plus"
+                    size="xs"
+                    color="primary"
+                    variant="subtle"
+                    class="mt-4"
+                    @click="addOpen = true"
+                  />
+                </div>
+              </template>
+            </UTable>
+
+            <!-- Pagination footer -->
+            <div class="flex items-center justify-between gap-3 border-t border-default px-4 py-4 mt-auto">
+              <div class="flex items-center gap-3">
+                <div class="text-sm text-muted">
+                  Menampilkan {{ filteredData.length }} {{ resourceLabelMap[activeTab] }}
+                </div>
+                <USelect
+                  v-model="pagination.pageSize"
+                  :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
+                  class="w-20"
+                  aria-label="Jumlah baris per halaman"
+                />
+              </div>
+              <UPagination
+                :key="`pagination-${pagination.pageSize}`"
+                :page="pagination.pageIndex + 1"
+                :items-per-page="pagination.pageSize"
+                :total="filteredData.length"
+                @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
               />
             </div>
-
-            <!-- Items list: regular resources -->
-            <ul v-else-if="activeTab !== 'document-types' && activeTab !== 'companies'" class="divide-y divide-default">
-              <li
-                v-for="(item, index) in currentItems"
-                :key="item.id"
-                class="flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-elevated/40 group"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="text-xs font-medium text-dimmed tabular-nums w-6 shrink-0">
-                    {{ String(index + 1).padStart(2, '0') }}
-                  </span>
-                  <span class="text-sm text-highlighted truncate">{{ item.name }}</span>
-                </div>
-                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <UButton
-                    icon="i-lucide-pencil"
-                    size="xs"
-                    variant="ghost"
-                    color="neutral"
-                    @click="openEdit(item)"
-                  />
-                  <UButton
-                    icon="i-lucide-trash"
-                    size="xs"
-                    variant="ghost"
-                    color="error"
-                    :loading="deleteLoading === item.id"
-                    @click="doDelete(item.id)"
-                  />
-                </div>
-              </li>
-            </ul>
-
-            <!-- Items list: companies -->
-            <ul v-else-if="activeTab === 'companies'" class="divide-y divide-default">
-              <li
-                v-for="(item, index) in (currentItems as CompanyItem[])"
-                :key="item.id"
-                class="flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-elevated/40 group"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="text-xs font-medium text-dimmed tabular-nums w-6 shrink-0">
-                    {{ String(index + 1).padStart(2, '0') }}
-                  </span>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium text-highlighted truncate">{{ item.name }}</span>
-                    <div v-if="item.email || item.phone" class="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                      <span v-if="item.email" class="truncate">{{ item.email }}</span>
-                      <span v-if="item.email && item.phone">·</span>
-                      <span v-if="item.phone" class="truncate">{{ item.phone }}</span>
-                    </div>
-                    <span v-if="item.address" class="text-xs text-muted truncate mt-0.5">{{ item.address }}</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <UButton
-                    icon="i-lucide-pencil"
-                    size="xs"
-                    variant="ghost"
-                    color="neutral"
-                    @click="openEditCompany(item)"
-                  />
-                  <UButton
-                    icon="i-lucide-trash"
-                    size="xs"
-                    variant="ghost"
-                    color="error"
-                    :loading="deleteLoading === item.id"
-                    @click="doDelete(item.id)"
-                  />
-                </div>
-              </li>
-            </ul>
-
-            <!-- Items list: document-types -->
-            <ul v-else class="divide-y divide-default">
-              <li
-                v-for="(item, index) in currentDocumentTypes"
-                :key="item.id"
-                class="flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-elevated/40 group"
-              >
-                <div class="flex items-center gap-3 min-w-0">
-                  <span class="text-xs font-medium text-dimmed tabular-nums w-6 shrink-0">
-                    {{ String(index + 1).padStart(2, '0') }}
-                  </span>
-                  <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium text-highlighted truncate">{{ item.name }}</span>
-                    <div class="flex items-center gap-2 mt-0.5">
-                      <UBadge
-                        :label="item.documentType"
-                        :color="(documentTypeBadgeColor[item.documentType] as any) ?? 'neutral'"
-                        variant="subtle"
-                        size="xs"
-                      />
-                      <span v-if="item.issuer" class="text-xs text-muted truncate">{{ item.issuer }}</span>
-                      <UBadge
-                        :label="item.category === 'PERSONAL' ? 'Dokumen Pribadi' : 'Sertifikasi & Ijin'"
-                        :color="item.category === 'PERSONAL' ? 'primary' : 'warning'"
-                        variant="subtle"
-                        size="xs"
-                        class="mt-0.5 self-start"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <UButton
-                    icon="i-lucide-pencil"
-                    size="xs"
-                    variant="ghost"
-                    color="neutral"
-                    @click="openEditDoc(item)"
-                  />
-                  <UButton
-                    icon="i-lucide-trash"
-                    size="xs"
-                    variant="ghost"
-                    color="error"
-                    :loading="deleteLoading === item.id"
-                    @click="doDelete(item.id)"
-                  />
-                </div>
-              </li>
-            </ul>
           </UCard>
         </div>
       </div>
