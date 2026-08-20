@@ -60,6 +60,12 @@ const createdDateCal = shallowRef<CalendarDate | null>(null)
 const startDateCal   = shallowRef<CalendarDate | null>(null)
 const endDateCal     = shallowRef<CalendarDate | null>(null)
 
+// Tanggal minimum untuk datepicker startDate saat mode renew — mengikuti endDate kontrak lama
+const minStartDateCal = computed(() => {
+  if (props.mode !== 'renew' || !props.initialData?.endDate) return null
+  return toCalDate(props.initialData.endDate.split('T')[0])
+})
+
 watch(createdDateCal, val => { state.createdDate = fromCalDate(val) })
 watch(startDateCal,   val => { state.startDate   = fromCalDate(val) })
 watch(endDateCal,     val => { state.endDate     = fromCalDate(val) })
@@ -495,7 +501,7 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
                     {{ startDateCal ? formatDisplay(startDateCal) : 'Pilih tanggal mulai' }}
                   </UButton>
                   <template #content>
-                    <CalendarPicker v-model="startDateCal" class="p-2" />
+                    <CalendarPicker v-model="startDateCal" :min-date="minStartDateCal" class="p-2" />
                   </template>
                 </UPopover>
                 <UButton
