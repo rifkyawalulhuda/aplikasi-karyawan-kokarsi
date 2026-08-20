@@ -362,7 +362,16 @@ export class ContractDocumentService {
       })
     }
 
-    // Do NOT include closing paragraphs here - they will be rendered separately outside the bordered columns
+    // Closing paragraph (Indonesia) — dirender di dalam kolom, setelah pasal terakhir
+    blocks.push({
+      text: payload.definition.closingParagraphs.join('\n'),
+      font: 'Times-Roman',
+      fontSize: 10,
+      align: 'justify',
+      gapBefore: 12,
+      gapAfter: 8,
+    })
+
     return blocks
   }
 
@@ -455,8 +464,16 @@ export class ContractDocumentService {
       })
     }
 
-    // English closing paragraph - used in renderSignaturePage, NOT inside columns
-    // (removed from here, now rendered in renderSignaturePage as bilingual two-column outside borders)
+    // Closing paragraph (English) — dirender di dalam kolom, setelah article terakhir
+    blocks.push({
+      text: 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.',
+      font: 'Times-Roman',
+      fontSize: 10,
+      align: 'justify',
+      gapBefore: 12,
+      gapAfter: 8,
+    })
+
     return blocks
   }
 
@@ -695,86 +712,75 @@ export class ContractDocumentService {
     return effectiveY + height + (block.gapAfter ?? 0)
   }
 
+  private computeBlockHeight(doc: any, block: TextBlock, columnWidth: number): number {
+    const gapBefore = block.gapBefore ?? 0
+    const gapAfter = block.gapAfter ?? 0
+    const anyBlock = block as any
+    if (anyBlock.partyII) return gapBefore + (14 * 4 + 6 + 14) + gapAfter
+    doc.font(block.font).fontSize(block.fontSize)
+    return gapBefore + doc.heightOfString(block.text, { width: columnWidth, align: block.align ?? 'left', lineGap: 2 }) + gapAfter
+  }
+
   private renderParallelColumns(
     doc: any,
     payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>
   ) {
     const leftBlocks = this.buildPkwtIndonesianBlocks(payload)
     const rightBlocks = this.buildPkwtEnglishBlocks(payload)
-    let leftIndex = 0
-    let rightIndex = 0
+    // Pasangkan blok Indonesia (kiri) dengan blok Inggris (kanan) secara berurutan
+    const pairs = leftBlocks.map((left, i) => ({ left, right: rightBlocks[i] ?? left }))
+    let pairIndex = 0
     let firstPage = true
 
-    while (leftIndex < leftBlocks.length || rightIndex < rightBlocks.length) {
+    while (pairIndex < pairs.length) {
       if (!firstPage) {
         doc.addPage()
       }
-      
+
       let headerBottomY = 0
       // Corporate header only on first page
       if (firstPage) {
         headerBottomY = this.drawCorporateHeader(doc, 'PKWT')
         this.drawTitleBlock(doc, payload, headerBottomY)
       }
-      
+
       const layout = this.buildLayoutContext(doc, headerBottomY, firstPage, firstPage)
 
       let leftY = layout.topY
-      while (leftIndex < leftBlocks.length) {
-        const block = leftBlocks[leftIndex]
-        const testY = leftY + (block.gapBefore ?? 0)
-        doc.font(block.font).fontSize(block.fontSize)
-        // Special height estimation for partyII tabular block
-        const anyBlock = block as any
-        let height: number
-        if (anyBlock.partyII) {
-          height = 14 * 4 + 6 + 14 // 4 rows + gap + "Selanjutnya" line
-        } else {
-          height = doc.heightOfString(block.text, {
-            width: layout.columnWidth,
-            align: block.align ?? 'left',
-            lineGap: 2,
-          })
-        }
-        if (testY + height > layout.bottomY) break
-        leftY = this.renderBlockInColumn(doc, block, layout.leftX, leftY, layout.columnWidth)
-        leftIndex += 1
+      let rightY = layout.topY
+
+      // Render tiap pasangan (ID | EN) pada posisi Y yang SAMA agar sejajar
+      while (pairIndex < pairs.length) {
+        const { left, right } = pairs[pairIndex]
+        const leftH = this.computeBlockHeight(doc, left, layout.columnWidth)
+        const rightH = this.computeBlockHeight(doc, right, layout.columnWidth)
+        const maxH = Math.max(leftH, rightH)
+
+        if (Math.max(leftY, rightY) + maxH > layout.bottomY) break
+
+        leftY = this.renderBlockInColumn(doc, left, layout.leftX, leftY, layout.columnWidth)
+        rightY = this.renderBlockInColumn(doc, right, layout.rightX, rightY, layout.columnWidth)
+
+        // Sinkronkan posisi kedua kolom agar pasal berikutnya sejajar
+        const syncedY = Math.max(leftY, rightY)
+        leftY = syncedY
+        rightY = syncedY
+        pairIndex += 1
       }
 
-      let rightY = layout.topY
-      while (rightIndex < rightBlocks.length) {
-        const block = rightBlocks[rightIndex]
-        const testY = rightY + (block.gapBefore ?? 0)
-        doc.font(block.font).fontSize(block.fontSize)
-        const anyRBlock = block as any
-        let height: number
-        if (anyRBlock.partyII) {
-          height = 14 * 4 + 6 + 14
-        } else {
-          height = doc.heightOfString(block.text, {
-            width: layout.columnWidth,
-            align: block.align ?? 'left',
-            lineGap: 2,
-          })
-        }
-        if (testY + height > layout.bottomY) break
-        rightY = this.renderBlockInColumn(doc, block, layout.rightX, rightY, layout.columnWidth)
-        rightIndex += 1
-      }
-      
       // Draw borders ONLY to where content actually ends (not full page height)
       const maxContentY = Math.max(leftY, rightY) + 5
       doc.rect(layout.leftX - 10, layout.topY - 10, layout.columnWidth + 20, maxContentY - layout.topY + 15).lineWidth(1).stroke()
       doc.rect(layout.rightX - 10, layout.topY - 10, layout.columnWidth + 20, maxContentY - layout.topY + 15).lineWidth(1).stroke()
-      
+
       // Set doc.y to just below the borders so signature renders outside
       doc.y = maxContentY + 10
-      
+
       // On the LAST page (all blocks rendered), render closing + signature below the borders
-      if (leftIndex >= leftBlocks.length && rightIndex >= rightBlocks.length) {
+      if (pairIndex >= pairs.length) {
         this.renderClosingAndSignature(doc, payload, maxContentY + 15)
       }
-      
+
       firstPage = false
     }
   }
@@ -826,28 +832,11 @@ export class ContractDocumentService {
     const pageBottom = doc.page.height - 50
     let y = startY + 20
     
-    // Check if there's enough space for closing + signature, if not add new page
-    if (y + 250 > pageBottom) {
+    // Check if there's enough space for signature, if not add new page
+    if (y + 150 > pageBottom) {
       doc.addPage()
       y = 40
     }
-    
-    // === BILINGUAL CLOSING PARAGRAPHS (two columns, no borders) ===
-    const closingTextId = payload.definition.closingParagraphs.join('\n')
-    const closingTextEn = 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.'
-    const columnWidth = 252
-    const leftX = 34
-    const rightX = 310
-    
-    doc.font('Times-Roman').fontSize(10)
-    doc.text(closingTextId, leftX, y, { width: columnWidth, align: 'justify', lineGap: 2 })
-    doc.text(closingTextEn, rightX, y, { width: columnWidth, align: 'justify', lineGap: 2 })
-    
-    const closingHeight = Math.max(
-      doc.heightOfString(closingTextId, { width: columnWidth, lineGap: 2 }),
-      doc.heightOfString(closingTextEn, { width: columnWidth, lineGap: 2 })
-    )
-    y += closingHeight + 25
     
     // === STANDALONE FULL-WIDTH SIGNATURE BLOCK ===
     
