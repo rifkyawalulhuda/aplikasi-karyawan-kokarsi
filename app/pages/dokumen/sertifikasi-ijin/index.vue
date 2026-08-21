@@ -377,7 +377,10 @@ async function handleOpenId(openId: string | null | (string | null)[] | undefine
   }, { immediate: true })
 }
 
-onMounted(() => handleOpenId(route.query.openId))
+onMounted(() => {
+  if (route.query.search) searchQuery.value = String(route.query.search)
+  handleOpenId(route.query.openId)
+})
 watch(() => route.query.openId, (newId) => handleOpenId(newId))
 </script>
 

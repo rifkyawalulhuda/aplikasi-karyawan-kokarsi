@@ -16,6 +16,7 @@ interface EmployeeDocument {
 
 const props = defineProps<{
   documents: EmployeeDocument[]
+  employeeName?: string
 }>()
 
 function formatDate(val: string | undefined) {
@@ -63,7 +64,8 @@ const sorted = computed(() =>
         <span class="ml-1 text-sm font-normal text-muted">({{ documents.length }})</span>
       </h2>
       <NuxtLink
-        to="/dokumen/sertifikasi-ijin"
+        v-if="employeeName"
+        :to="`/dokumen/sertifikasi-ijin?search=${encodeURIComponent(employeeName)}`"
         class="text-xs text-primary hover:underline flex items-center gap-1"
       >
         Lihat Semua

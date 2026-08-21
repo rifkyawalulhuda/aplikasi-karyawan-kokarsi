@@ -3,6 +3,7 @@ import type { WarningLetter } from '~/types'
 
 const props = defineProps<{
   letters: WarningLetter[]
+  employeeName?: string
 }>()
 
 function formatDate(val: string | undefined) {
@@ -39,10 +40,20 @@ const sorted = computed(() =>
 
 <template>
   <div>
-    <h2 class="text-base font-semibold text-highlighted mb-3">
-      Riwayat Surat Peringatan
-      <span class="ml-1 text-sm font-normal text-muted">({{ letters.length }})</span>
-    </h2>
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base font-semibold text-highlighted">
+        Riwayat Surat Peringatan
+        <span class="ml-1 text-sm font-normal text-muted">({{ letters.length }})</span>
+      </h2>
+      <NuxtLink
+        v-if="employeeName"
+        :to="`/dokumen/surat-peringatan?search=${encodeURIComponent(employeeName)}`"
+        class="text-xs text-primary hover:underline flex items-center gap-1"
+      >
+        Lihat Semua
+        <UIcon name="i-lucide-arrow-right" class="w-3 h-3" />
+      </NuxtLink>
+    </div>
 
     <div v-if="sorted.length === 0" class="text-sm text-muted py-4 text-center">
       Belum ada riwayat surat peringatan.

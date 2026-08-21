@@ -130,16 +130,19 @@ useHead({
               <!-- D. Riwayat Kontrak -->
               <KaryawanDetailContractTimeline
                 :contracts="employee.contracts ?? []"
+                :employee-name="employee?.fullName"
               />
 
               <!-- F. Riwayat Surat Peringatan -->
               <KaryawanDetailWarningLetterList
                 :letters="employee.warningLetters ?? []"
+                :employee-name="employee?.fullName"
               />
 
               <!-- G. Sertifikasi & Ijin -->
               <KaryawanDetailEmployeeDocumentList
                 :documents="employeeDocs"
+                :employee-name="employee?.fullName"
               />
             </div>
           </div>
