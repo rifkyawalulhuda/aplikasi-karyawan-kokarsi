@@ -8,6 +8,7 @@ const UButton = resolveComponent('UButton')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
+const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 
@@ -919,10 +920,11 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
         </button>
 
         <!-- Divider -->
-        <hr class="border-default my-1" />
+        <hr v-if="auth.canDelete" class="border-default my-1" />
 
         <!-- Hapus Kontrak -->
         <button
+          v-if="auth.canDelete"
           class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-error hover:bg-error/10 transition-colors"
           @click="confirmDelete(contextMenuTarget!.contractId, contextMenuTarget!.contractNo); closeContextMenu()"
         >

@@ -6,6 +6,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!token.value)
   const canManageMasterData = computed(() => admin.value?.role === 'ADMIN')
+  const canDelete = computed(() => admin.value?.role === 'ADMIN')
 
   async function login(employeeNo: string, password: string) {
     const res = await $fetch<{ access_token: string; admin: { id: number; employeeNo: string; fullName: string; role: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } }>('/api/auth/login', {
@@ -39,5 +40,5 @@ export const useAuthStore = defineStore('auth', () => {
     return { Authorization: `Bearer ${token.value}` }
   }
 
-  return { token, admin, isLoggedIn, canManageMasterData, login, logout, getAuthHeader, setPhotoUrl }
+  return { token, admin, isLoggedIn, canManageMasterData, canDelete, login, logout, getAuthHeader, setPhotoUrl }
 })

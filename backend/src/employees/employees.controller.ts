@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException, Request, Res } from '@nestjs/common'
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, ParseIntPipe, UploadedFile, UseInterceptors, BadRequestException, ForbiddenException, Request, Res } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
@@ -77,6 +77,9 @@ export class EmployeesController {
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Hanya ADMIN yang dapat menghapus data karyawan')
+    }
     return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 

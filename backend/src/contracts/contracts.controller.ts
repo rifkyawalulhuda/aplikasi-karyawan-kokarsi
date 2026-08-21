@@ -129,6 +129,9 @@ export class ContractsController {
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Hanya ADMIN yang dapat menghapus data kontrak')
+    }
     return this.service.remove(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
