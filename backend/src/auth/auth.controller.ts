@@ -8,6 +8,7 @@ import { extname, join } from 'path'
 import { existsSync, unlinkSync } from 'fs'
 import { IsString, MinLength } from 'class-validator'
 import { validateImageOrSvgBuffer } from '../shared/file-validation.util'
+import { ActivityLogService } from '../activity-log/activity-log.service'
 
 class LoginDto {
   @IsString() employeeNo: string
@@ -31,7 +32,10 @@ function profilePhotoDir() {
 @SkipThrottle()
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(
+    private auth: AuthService,
+    private activityLog: ActivityLogService,
+  ) {}
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
@@ -43,10 +47,26 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Put('change-password')
   async changePassword(@Request() req: any, @Body() dto: ChangePasswordDto) {
+    const name = req.user?.fullName ?? req.user?.name ?? req.user?.employeeNo ?? 'User'
+    const role = req.user?.role ?? 'UNKNOWN'
+
+    let result: any
     if (req.user.kind === 'user_account') {
-      return this.auth.changeUserPassword(req.user.sub, dto.oldPassword, dto.newPassword)
+      result = await this.auth.changeUserPassword(req.user.sub, dto.oldPassword, dto.newPassword)
+    } else {
+      result = await this.auth.changePassword(req.user.sub, dto.oldPassword, dto.newPassword)
     }
-    return this.auth.changePassword(req.user.sub, dto.oldPassword, dto.newPassword)
+
+    void this.activityLog.log({
+      action: 'UPDATE',
+      module: 'Keamanan',
+      targetLabel: `Ubah Password — ${name}`,
+      performedBy: name,
+      performedByRole: role,
+      detail: 'Password akun berhasil diubah',
+    })
+
+    return result
   }
 
   @UseGuards(AuthGuard('jwt'))
