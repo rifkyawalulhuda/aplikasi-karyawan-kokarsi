@@ -188,7 +188,7 @@ export class NotificationsService {
             sourceType,
             sourceId: agendaId,
             triggerDay: 0,
-            deeplink: '/kalender',
+            deeplink: `/kalender?openId=${agendaId}`,
             expiryDate: new Date(startDate),
             userId,
             userType: 'user_account',
@@ -214,7 +214,7 @@ export class NotificationsService {
     return this.prisma.notification.findMany({
       where,
       orderBy: [
-        { severity: 'desc' }, // CRITICAL > WARNING (alphabetically desc)
+        { isRead: 'asc' }, // unread (false) first
         { createdAt: 'desc' },
       ],
       take: limit,

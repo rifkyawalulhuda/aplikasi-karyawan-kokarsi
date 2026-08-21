@@ -5,6 +5,7 @@ import type { CalendarEventInput, CalendarItem } from '~/types'
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const router = useRouter()
+const route = useRoute()
 const requestFetch = useRequestFetch()
 const today = new Date()
 
@@ -645,6 +646,25 @@ function openItem(item: CalendarItem) {
   if (item.readOnly && item.deeplink) router.push(item.deeplink)
   else openEdit(item)
 }
+
+// ── Open agenda from notification deeplink (?openId=X) ───────────────────
+function handleOpenId(openId: string | null | (string | null)[] | undefined) {
+  if (!openId) return
+  const id = Number(openId)
+  if (isNaN(id)) return
+
+  const unwatch = watch(items, (val) => {
+    if (!val.length) return
+    const item = val.find(i => i.sourceId === id && i.type === 'agenda')
+    if (item) {
+      openItem(item)
+      unwatch()
+    }
+  }, { immediate: true })
+}
+
+onMounted(() => handleOpenId(route.query.openId))
+watch(() => route.query.openId, (newId) => handleOpenId(newId))
 </script>
 
 <template>
