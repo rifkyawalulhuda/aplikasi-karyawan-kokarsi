@@ -160,6 +160,29 @@ function openContentEditor(template: ContractTemplate) {
   }
   contentModalOpen.value = true
 }
+
+// --- Grouping & family config ---
+const templatesByFamily = computed(() => ({
+  PKWT: templates.value.filter(t => t.family === 'PKWT'),
+  MITRA: templates.value.filter(t => t.family === 'MITRA'),
+}))
+
+const familyConfig = {
+  PKWT: {
+    label: 'PKWT',
+    fullName: 'Kesepakatan Kerja Waktu Tertentu',
+    icon: 'i-lucide-file-check',
+    ringClass: 'bg-primary/10 text-primary',
+    borderClass: 'border-l-primary',
+  },
+  MITRA: {
+    label: 'MITRA',
+    fullName: 'Perjanjian Kemitraan',
+    icon: 'i-lucide-handshake',
+    ringClass: 'bg-warning/10 text-warning',
+    borderClass: 'border-l-warning',
+  },
+} as const
 </script>
 
 <template>
@@ -176,54 +199,158 @@ function openContentEditor(template: ContractTemplate) {
     </template>
 
     <template #body>
-      <div class="space-y-4">
-        <UAlert
-          color="neutral"
-          variant="subtle"
-          icon="i-lucide-file-text"
-          title="Master Template Kontrak"
-          description="Template ini dipakai di halaman kontrak untuk menentukan struktur dokumen legal yang akan digenerate otomatis."
-        />
+      <div class="space-y-8 p-4 sm:p-6">
 
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <UCard v-for="template in templates" :key="template.id">
-            <div class="space-y-3">
-              <div class="flex items-start justify-between gap-3">
-                <div>
-                  <p class="font-semibold text-highlighted">{{ template.name }}</p>
-                  <p class="text-xs text-muted">{{ template.code }}</p>
+        <!-- Info bar -->
+        <div class="flex items-start gap-3 rounded-xl border border-info/20 bg-info/5 px-4 py-3">
+          <UIcon name="i-lucide-info" class="size-4 text-info mt-0.5 shrink-0" />
+          <p class="text-sm text-muted">
+            Template kontrak menentukan <strong class="text-highlighted">format dan konten dokumen PDF</strong> yang digenerate saat membuat kontrak karyawan.
+            Setiap template terikat pada satu <strong class="text-highlighted">Template Key</strong> yang menentukan struktur pasal dan role karyawan.
+          </p>
+        </div>
+
+        <!-- Empty state -->
+        <div v-if="templates.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
+          <div class="flex size-16 items-center justify-center rounded-full bg-elevated mb-4">
+            <UIcon name="i-lucide-file-x" class="size-7 text-muted" />
+          </div>
+          <p class="text-base font-medium text-highlighted">Belum ada template kontrak</p>
+          <p class="text-sm text-muted mt-1 mb-5">Tambahkan template pertama untuk mulai meng-generate dokumen PDF kontrak karyawan.</p>
+          <UButton
+            v-if="auth.canManageMasterData"
+            label="Tambah Template Pertama"
+            icon="i-lucide-plus"
+            color="primary"
+            @click="openCreate"
+          />
+        </div>
+
+        <!-- Family sections -->
+        <template v-else>
+          <div
+            v-for="familyKey in (['PKWT', 'MITRA'] as const)"
+            :key="familyKey"
+            class="space-y-4"
+          >
+            <!-- Section header -->
+            <div class="flex items-center gap-3">
+              <div
+                class="flex size-9 shrink-0 items-center justify-center rounded-lg"
+                :class="familyConfig[familyKey].ringClass"
+              >
+                <UIcon :name="familyConfig[familyKey].icon" class="size-5" />
+              </div>
+              <div class="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+                <h2 class="font-semibold text-highlighted">{{ familyConfig[familyKey].label }}</h2>
+                <span class="text-sm text-muted hidden sm:inline">— {{ familyConfig[familyKey].fullName }}</span>
+                <UBadge color="neutral" variant="subtle" size="xs">
+                  {{ templatesByFamily[familyKey].length }} template
+                </UBadge>
+              </div>
+              <div class="h-px flex-1 bg-border hidden sm:block" />
+            </div>
+
+            <!-- Empty family state -->
+            <div
+              v-if="templatesByFamily[familyKey].length === 0"
+              class="rounded-xl border border-dashed border-default bg-elevated/30 px-6 py-8 text-center"
+            >
+              <UIcon name="i-lucide-file-plus" class="size-8 text-muted mx-auto mb-2" />
+              <p class="text-sm text-muted">Belum ada template {{ familyConfig[familyKey].label }}</p>
+            </div>
+
+            <!-- Cards grid -->
+            <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div
+                v-for="template in templatesByFamily[familyKey]"
+                :key="template.id"
+                class="rounded-xl border border-default bg-default overflow-hidden flex flex-col transition-shadow hover:shadow-md border-l-4"
+                :class="template.isActive ? familyConfig[familyKey].borderClass : 'border-l-muted'"
+              >
+                <!-- Card header -->
+                <div class="px-5 pt-5 pb-3">
+                  <div class="flex items-start justify-between gap-3 mb-1">
+                    <div class="min-w-0">
+                      <p class="font-semibold text-highlighted truncate">{{ template.name }}</p>
+                      <p class="font-mono text-xs text-muted mt-0.5">{{ template.code }}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <UBadge
+                        v-if="template.contentOverrides && Object.keys(template.contentOverrides).length > 0"
+                        color="primary"
+                        variant="subtle"
+                        size="xs"
+                        icon="i-lucide-pencil"
+                        label="Dikustomisasi"
+                      />
+                      <UBadge
+                        :color="template.isActive ? 'success' : 'neutral'"
+                        variant="subtle"
+                        size="xs"
+                      >
+                        {{ template.isActive ? 'Aktif' : 'Nonaktif' }}
+                      </UBadge>
+                    </div>
+                  </div>
                 </div>
-                <div class="flex flex-col items-end gap-1">
-                  <UBadge :color="template.isActive ? 'success' : 'neutral'" variant="subtle">
-                    {{ template.isActive ? 'Aktif' : 'Nonaktif' }}
-                  </UBadge>
-                  <UBadge
-                    v-if="template.contentOverrides && Object.keys(template.contentOverrides).length > 0"
+
+                <!-- Metadata grid -->
+                <div class="px-5 pb-4 grid grid-cols-2 gap-x-4 gap-y-3 flex-1">
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-dimmed mb-0.5">Template Key</p>
+                    <p class="text-xs font-mono text-highlighted">{{ template.templateKey }}</p>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-dimmed mb-0.5">Tipe Kontrak</p>
+                    <p class="text-xs text-highlighted">{{ template.contractType?.name ?? '—' }}</p>
+                  </div>
+                  <div v-if="template.jobRole?.name" class="col-span-2">
+                    <p class="text-[10px] font-semibold uppercase tracking-wider text-dimmed mb-0.5">Jabatan</p>
+                    <p class="text-xs text-highlighted">{{ template.jobRole.name }}</p>
+                  </div>
+                  <div v-if="template.description" class="col-span-2">
+                    <p class="text-xs text-muted italic line-clamp-2">{{ template.description }}</p>
+                  </div>
+                </div>
+
+                <!-- Actions footer -->
+                <div class="border-t border-default bg-elevated/30 px-4 py-3">
+                  <!-- Primary action -->
+                  <UButton
+                    label="Edit Konten"
+                    icon="i-lucide-file-edit"
                     color="primary"
                     variant="subtle"
-                    icon="i-lucide-pencil"
-                    label="Konten Dikustomisasi"
+                    class="w-full mb-2"
+                    @click="openContentEditor(template)"
                   />
+                  <!-- Secondary actions -->
+                  <div v-if="auth.canManageMasterData" class="flex items-center gap-2">
+                    <UButton
+                      label="Edit"
+                      icon="i-lucide-pencil"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      class="flex-1"
+                      @click="openEdit(template)"
+                    />
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      color="error"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Hapus template"
+                      @click="removeTemplate(template.id, template.name)"
+                    />
+                  </div>
                 </div>
               </div>
-
-              <div class="space-y-1 text-sm text-muted">
-                <p>Keluarga: <span class="text-highlighted">{{ template.family }}</span></p>
-                <p>Tipe Kontrak: <span class="text-highlighted">{{ template.contractType?.name ?? '-' }}</span></p>
-                <p>Jabatan: <span class="text-highlighted">{{ template.jobRole?.name ?? '-' }}</span></p>
-                <p>Template Key: <span class="font-mono text-highlighted">{{ template.templateKey }}</span></p>
-              </div>
-
-              <p v-if="template.description" class="text-sm text-muted leading-6">{{ template.description }}</p>
-
-              <div v-if="auth.canManageMasterData" class="flex gap-2 pt-2">
-                <UButton label="Edit Konten" size="sm" color="primary" variant="ghost" icon="i-lucide-file-edit" @click="openContentEditor(template)" />
-                <UButton label="Edit" size="sm" color="neutral" variant="subtle" icon="i-lucide-pencil" @click="openEdit(template)" />
-                <UButton label="Hapus" size="sm" color="error" variant="ghost" icon="i-lucide-trash" @click="removeTemplate(template.id, template.name)" />
-              </div>
             </div>
-          </UCard>
-        </div>
+          </div>
+        </template>
+
       </div>
     </template>
   </UDashboardPanel>
