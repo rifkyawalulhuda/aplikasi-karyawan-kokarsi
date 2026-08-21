@@ -50,7 +50,7 @@ function openDrawer(employeeId: number) {
 const addDocModal = ref(false)
 const addDocEmployeeId = ref<number | null>(null)
 
-const { data: employeesRes } = await useFetch('/api/employees', {
+const { data: employeesRes } = await useFetch<{ data: { id: number; fullName: string; employeeNo: string }[] }>('/api/employees', {
   query: { limit: 999 },
   lazy: true,
   credentials: 'include',
@@ -121,7 +121,7 @@ watch(searchQuery, () => {
 // --- Deep-link: ?openId=<id> ---
 const route = useRoute()
 
-async function handleOpenId(openId: string | string[] | undefined) {
+async function handleOpenId(openId: string | null | (string | null)[] | undefined) {
   if (!openId) return
   try {
     const doc = await $fetch<{ employeeId: number }>(`/api/employee-documents/${openId}`, {

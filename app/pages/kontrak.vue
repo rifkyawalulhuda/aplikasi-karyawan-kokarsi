@@ -4,6 +4,7 @@ import { getPaginationRowModel } from '@tanstack/table-core'
 import type { Contract, ContractSummaryRow, ContractHistoryResponse, ContractStatus, ContractDocumentPreview } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
+const UButton = resolveComponent('UButton')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -107,7 +108,7 @@ watch(previewModal, async (isOpen) => {
   }
 })
 
-const statusColorMap: Record<ContractStatus, string> = {
+const statusColorMap: Record<string, string> = {
   DRAFT: 'neutral',
   AKTIF: 'success',
   AKAN_HABIS: 'warning',
@@ -115,7 +116,7 @@ const statusColorMap: Record<ContractStatus, string> = {
   SELESAI: 'info',
   DIBATALKAN: 'neutral',
   SUDAH_DIPERPANJANG: 'info',
-} as Record<string, string>
+}
 
 const statusLabelMap: Record<string, string> = {
   DRAFT: 'Draft',
@@ -475,7 +476,7 @@ watch(() => pagination.value.pageSize, async () => {
 // --- Deep-link: ?openId=<contractId> ---
 const route = useRoute()
 
-async function handleOpenId(openId: string | string[] | undefined) {
+async function handleOpenId(openId: string | null | (string | null)[] | undefined) {
   if (!openId) return
   try {
     const contract = await $fetch<{ employeeId: number }>(`/api/contracts/${openId}`, {

@@ -9,8 +9,8 @@ interface EmployeeDocument {
   documentTypeId: number
   documentNumber: string
   expiryDate: string
-  notes?: string
-  fileUrl?: string
+  notes?: string | null
+  fileUrl?: string | null
   status: 'AKTIF' | 'AKAN_EXPIRED' | 'EXPIRED'
   employee: { id: number; employeeNo: string; fullName: string }
   documentType: { id: number; name: string; documentType: string; issuer: string }
@@ -117,11 +117,11 @@ watch(
     if (!isOpen) return
     if (props.mode === 'edit' || props.mode === 'renew') {
       const d = props.initialData
+      if (!d) return
       state.employeeId = d.employeeId
       state.documentTypeId = d.documentTypeId
       state.documentNumber = d.documentNumber
       state.expiryDate = d.expiryDate ? d.expiryDate.slice(0, 10) : ''
-      expiryDateCal.value = toCalDate(d.expiryDate ?? null)
       expiryDateCal.value = toCalDate(d.expiryDate ?? null)
       state.notes = d.notes ?? ''
       jenisLabel.value = d.documentType?.documentType ?? ''
@@ -358,7 +358,7 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
               <UIcon name="i-lucide-paperclip" class="size-4 shrink-0 text-muted" />
               <span class="min-w-0 flex-1 truncate text-muted">File sudah ada</span>
               <a
-                :href="initialData!.fileUrl"
+                :href="initialData!.fileUrl ?? ''"
                 target="_blank"
                 class="shrink-0 text-primary hover:underline"
               >

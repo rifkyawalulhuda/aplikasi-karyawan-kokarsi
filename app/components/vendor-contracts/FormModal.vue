@@ -397,7 +397,7 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
             <div class="flex items-center gap-2 py-1.5">
               <UBadge
                 :label="state.category === 'CUSTOMER' ? 'Customer' : 'Vendor'"
-                :color="state.category === 'CUSTOMER' ? 'blue' : 'green'"
+                :color="state.category === 'CUSTOMER' ? 'info' : 'success'"
                 variant="subtle"
               />
               <span class="text-xs text-muted">(tidak dapat diubah saat perpanjang)</span>

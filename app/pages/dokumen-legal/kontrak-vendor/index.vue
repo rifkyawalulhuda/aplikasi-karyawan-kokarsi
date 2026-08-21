@@ -449,7 +449,7 @@ async function openContractById(id: number) {
 // --- Deep-link: ?openId=<id> ---
 const route = useRoute()
 
-async function handleOpenId(openId: string | string[] | undefined) {
+async function handleOpenId(openId: string | null | (string | null)[] | undefined) {
   if (!openId) return
   await openContractById(Number(openId))
 }

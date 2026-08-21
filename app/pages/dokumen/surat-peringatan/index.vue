@@ -118,7 +118,7 @@ const letters = computed<WarningLetter[]>(() => lettersRes.value?.data ?? [])
 // --- Deep-link: ?openId=<id> ---
 const route = useRoute()
 
-async function handleOpenId(openId: string | string[] | undefined) {
+async function handleOpenId(openId: string | null | (string | null)[] | undefined) {
   if (!openId) return
   const unwatch = watch(letters, (val) => {
     if (!val.length) return

@@ -37,8 +37,8 @@ interface EmployeeDocument {
   documentTypeId: number
   documentNumber: string
   expiryDate: string
-  notes?: string
-  fileUrl?: string
+  notes?: string | null
+  fileUrl?: string | null
   status: 'AKTIF' | 'AKAN_EXPIRED' | 'EXPIRED'
   employee: { id: number; employeeNo: string; fullName: string }
   documentType: { id: number; name: string; documentType: string; issuer: string }
@@ -365,7 +365,7 @@ watch(() => pagination.value.pageSize, async () => {
 // --- Deep-link: ?openId=<id> ---
 const route = useRoute()
 
-async function handleOpenId(openId: string | string[] | undefined) {
+async function handleOpenId(openId: string | null | (string | null)[] | undefined) {
   if (!openId) return
   const unwatch = watch(documents, (val) => {
     if (!val.length) return
