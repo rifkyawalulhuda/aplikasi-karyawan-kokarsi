@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service'
 import { CreateSpaceDto } from './dto/create-space.dto'
 import { SpaceSseService } from './space-sse.service'
+import { SpaceNotificationService } from './space-notification.service'
 
 const COLUMN_TEMPLATES: Record<string, { name: string; color: string }[]> = {
   simple: [
@@ -37,6 +38,7 @@ export class SpacesService {
   constructor(
     private prisma: PrismaService,
     private sse: SpaceSseService,
+    private spaceNotification: SpaceNotificationService,
   ) {}
 
   async findAll(userId: number) {
@@ -101,6 +103,14 @@ export class SpacesService {
       },
       include: { columns: { orderBy: { position: 'asc' } } },
     })
+
+    // Kirim notifikasi ke member yang ditambahkan saat create (fire-and-forget)
+    if (dto.memberIds?.length) {
+      for (const memberId of dto.memberIds) {
+        this.spaceNotification.notifyMemberAdded(space.id, dto.name, memberId, userName).catch(() => {})
+      }
+    }
+
     return space
   }
 
@@ -124,7 +134,7 @@ export class SpacesService {
     return this.prisma.space.delete({ where: { id } })
   }
 
-  async addMember(spaceId: number, memberId: number, userId: number) {
+  async addMember(spaceId: number, memberId: number, userId: number, actorName: string) {
     const space = await this.findOne(spaceId, userId)
     this.checkOwner(space, userId)
     const memberIdInt = Number(memberId)
@@ -144,8 +154,10 @@ export class SpacesService {
       type: 'MEMBER_ADDED',
       payload: { memberId: memberIdInt },
       actorId: userId,
-      actorName: '',
+      actorName,
     })
+    // Kirim notifikasi bell ke member baru (fire-and-forget)
+    this.spaceNotification.notifyMemberAdded(spaceId, space.name, memberIdInt, actorName).catch(() => {})
     return updated
   }
 

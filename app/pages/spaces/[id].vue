@@ -6,6 +6,7 @@ definePageMeta({ layout: 'default' })
 const route = useRoute()
 const router = useRouter()
 const toast = useToast()
+const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 
 const spaceId = computed(() => Number(route.params.id))
@@ -47,10 +48,15 @@ function openMemberModal() {
   memberModalOpen.value = true
 }
 
+// Only creator can delete the space
+const isOwner = computed(() => space.value?.createdById === auth.admin?.id)
+
 // Dropdown menu items
 const menuItems = computed(() => [[
   { label: 'Kelola Member', icon: 'i-lucide-users', onSelect: openMemberModal },
-  { label: 'Hapus Space', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: deleteSpace },
+  ...(isOwner.value
+    ? [{ label: 'Hapus Space', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: deleteSpace }]
+    : []),
 ]])
 
 // Delete space

@@ -5,6 +5,15 @@ const emit = defineEmits<{ 'update:open': [boolean]; created: [] }>()
 const toast = useToast()
 const loading = ref(false)
 
+// Fetch daftar user pengurus untuk multi-select member
+const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
+  credentials: 'include',
+  lazy: true,
+})
+const userOptions = computed(() =>
+  (usersRes.value ?? []).map(u => ({ label: u.name, value: u.id }))
+)
+
 const COLORS = [
   { value: 'blue', bg: 'bg-blue-500' }, { value: 'sky', bg: 'bg-sky-500' },
   { value: 'teal', bg: 'bg-teal-500' }, { value: 'green', bg: 'bg-green-500' },
@@ -29,6 +38,7 @@ const form = reactive({
   icon: '📋',
   color: 'blue',
   template: 'simple',
+  memberIds: [] as number[],
 })
 
 function reset() {
@@ -37,6 +47,7 @@ function reset() {
   form.icon = '📋'
   form.color = 'blue'
   form.template = 'simple'
+  form.memberIds = []
 }
 
 async function onSubmit() {
@@ -93,6 +104,20 @@ async function onSubmit() {
         <!-- Description -->
         <UFormField label="Deskripsi">
           <UTextarea v-model="form.description" :rows="2" class="w-full" placeholder="Opsional — jelaskan tujuan Space ini" />
+        </UFormField>
+
+        <!-- Members (opsional) -->
+        <UFormField label="Anggota">
+          <USelectMenu
+            v-model="form.memberIds"
+            :items="userOptions"
+            value-key="value"
+            multiple
+            placeholder="Pilih anggota... (opsional)"
+            :search-input="{ placeholder: 'Cari nama user...' }"
+            class="w-full"
+          />
+          <p class="mt-1 text-xs text-muted">Opsional — anggota dapat diedit setelah Space dibuat.</p>
         </UFormField>
 
         <!-- Color -->

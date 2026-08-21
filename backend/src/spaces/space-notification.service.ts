@@ -16,6 +16,30 @@ export class SpaceNotificationService {
     return new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
   }
 
+  // Dipanggil saat user baru ditambahkan sebagai member Space
+  async notifyMemberAdded(spaceId: number, spaceName: string, memberId: number, actorName: string) {
+    try {
+      await (this.notificationsService as any).prisma.notification.create({
+        data: {
+          category: 'SPACE',
+          severity: 'WARNING',
+          title: 'Ditambahkan ke Space',
+          message: `${actorName} menambahkan kamu ke Space "${spaceName}"`,
+          sourceType: `space_member_added_${spaceId}_${memberId}`,
+          sourceId: spaceId,
+          triggerDay: 0,
+          deeplink: `/spaces/${spaceId}`,
+          expiryDate: this.getExpiryDate(),
+          userId: memberId,
+          userType: 'user_account',
+        },
+      })
+      await this.notificationsService.broadcastUnreadToClients()
+    } catch (e: any) {
+      if (e.code !== 'P2002') this.logger.error(`notifyMemberAdded failed for user ${memberId}: ${e.message}`)
+    }
+  }
+
   // Dipanggil saat card di-assign ke user baru
   async notifyAssigned(spaceId: number, cardId: number, cardTitle: string, newAssigneeIds: number[], actorName: string) {
     for (const userId of newAssigneeIds) {

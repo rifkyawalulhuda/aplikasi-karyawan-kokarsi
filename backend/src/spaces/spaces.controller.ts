@@ -46,7 +46,8 @@ export class SpacesController {
 
   @Post(':id/members')
   addMember(@Param('id', ParseIntPipe) id: number, @Body() body: AddMemberDto, @Request() req: any) {
-    return this.service.addMember(id, body.memberId, req.user.sub)
+    const actorName = req.user?.fullName ?? req.user?.name ?? req.user?.username ?? 'User'
+    return this.service.addMember(id, body.memberId, req.user.sub, actorName)
   }
 
   @Delete(':id/members/:userId')
