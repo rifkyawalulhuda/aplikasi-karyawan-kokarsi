@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { TableColumn } from '@nuxt/ui'
-import { getPaginationRowModel } from '@tanstack/table-core'
 import { h } from 'vue'
 import { CalendarDate } from '@internationalized/date'
 
@@ -380,11 +379,9 @@ watch(() => pagination.value.pageSize, () => {
       <!-- Table -->
       <UTable
         ref="table"
-        v-model:pagination="pagination"
         :data="logs"
         :columns="columns"
         :loading="loading"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
         class="shrink-0"
         :ui="{
           base: 'table-fixed border-separate border-spacing-0',
