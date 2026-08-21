@@ -249,7 +249,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   <UModal
     :open="open"
     :title="title"
-    :ui="{ container: 'items-start sm:items-center', panel: 'w-full max-w-2xl' }"
+    :ui="{ wrapper: 'items-start sm:items-center', content: 'w-full max-w-2xl' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>

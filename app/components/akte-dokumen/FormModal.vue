@@ -185,7 +185,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 </script>
 
 <template>
-  <UModal :open="open" :title="title" :ui="{ width: 'sm:max-w-lg' }" @update:open="emit('update:open', $event)">
+  <UModal :open="open" :title="title" :ui="{ content: 'sm:max-w-lg' }" @update:open="emit('update:open', $event)">
     <template #body>
       <UForm :schema="schema" :state="state" class="space-y-4" @submit="onSubmit">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

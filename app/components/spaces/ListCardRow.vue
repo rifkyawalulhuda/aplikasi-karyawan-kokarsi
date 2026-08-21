@@ -46,7 +46,7 @@ const isDueSoon = computed(() => {
   return diff >= 0 && diff <= 2
 })
 
-const priority = computed(() => PRIORITY_CONFIG[props.card.priority])
+const priority = computed(() => PRIORITY_CONFIG[props.card.priority] ?? { label: '—', pillClass: '' })
 
 const checklistProgress = computed(() => {
   if (!props.card.checklists?.length) return null

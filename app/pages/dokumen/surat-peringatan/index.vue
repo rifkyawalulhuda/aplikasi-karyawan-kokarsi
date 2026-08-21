@@ -501,7 +501,7 @@ watch([levelFilter, jobRoleFilter, searchQuery], () => {
   </UDashboardPanel>
 
   <!-- Modal Export -->
-  <UModal v-model:open="exportModal" title="Export Surat Peringatan" :ui="{ width: 'sm:max-w-sm' }">
+  <UModal v-model:open="exportModal" title="Export Surat Peringatan" :ui="{ content: 'sm:max-w-sm' }">
     <template #body>
       <div class="space-y-4 py-2">
         <UFormField label="Pilih Tahun">

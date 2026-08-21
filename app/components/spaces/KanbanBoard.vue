@@ -64,6 +64,7 @@ function handleSpaceEvent(event: SpaceEvent) {
         const cardIdx = fromCol.cards?.findIndex(c => c.id === cardId) ?? -1
         if (cardIdx !== -1 && fromCol.cards) {
           const [card] = fromCol.cards.splice(cardIdx, 1)
+          if (!card) break
           if (!toCol.cards) toCol.cards = []
           toCol.cards.splice(position, 0, { ...card, columnId: toColumnId })
         }
@@ -149,12 +150,13 @@ async function onColumnDrop(e: DragEvent, toColId: number) {
   const toCol = columns.value.find(c => c.id === toColId)
   if (fromCol && toCol) {
     const cardIdx = fromCol.cards?.findIndex(c => c.id === cardId) ?? -1
-    if (cardIdx !== -1 && fromCol.cards) {
-      const [card] = fromCol.cards.splice(cardIdx, 1)
-      if (!toCol.cards) toCol.cards = []
-      const adjustedIdx = fromColId === toColId && toIdx > cardIdx ? toIdx - 1 : toIdx
-      toCol.cards.splice(adjustedIdx, 0, { ...card, columnId: toColId })
-    }
+      if (cardIdx !== -1 && fromCol.cards) {
+        const [card] = fromCol.cards.splice(cardIdx, 1)
+        if (!card) return
+        if (!toCol.cards) toCol.cards = []
+        const adjustedIdx = fromColId === toColId && toIdx > cardIdx ? toIdx - 1 : toIdx
+        toCol.cards.splice(adjustedIdx, 0, { ...card, columnId: toColId })
+      }
   }
 
   onDragEnd()

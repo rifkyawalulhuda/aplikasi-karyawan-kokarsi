@@ -259,7 +259,7 @@ const hasExistingFile = computed(() => !!props.initialData?.fileUrl)
   <UModal
     :open="open"
     :title="title"
-    :ui="{ container: 'items-start sm:items-center', panel: 'w-full max-w-lg' }"
+    :ui="{ wrapper: 'items-start sm:items-center', content: 'w-full max-w-lg' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>

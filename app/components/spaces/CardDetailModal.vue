@@ -296,7 +296,7 @@ function deleteCard() {
 }
 
 const currentPriority = computed(() =>
-  PRIORITY_OPTIONS.find(p => p.value === cardDetail.value?.priority) ?? PRIORITY_OPTIONS[0]
+  PRIORITY_OPTIONS.find(p => p.value === cardDetail.value?.priority) ?? PRIORITY_OPTIONS[0]!
 )
 </script>
 

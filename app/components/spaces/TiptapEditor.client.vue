@@ -149,7 +149,7 @@ async function handleDrop(event: DragEvent) {
   if (!files?.length) return
 
   const file = files[0]
-  if (!file.type.startsWith('image/')) return
+  if (!file || !file.type.startsWith('image/')) return
 
   event.preventDefault()
   event.stopPropagation()
@@ -161,7 +161,8 @@ async function handleDrop(event: DragEvent) {
 }
 
 // Handle paste event (for clipboard images)
-async function handlePaste(view: any, event: ClipboardEvent) {
+// Returns boolean synchronously (tiptap requirement), uploads async fire-and-forget
+function handlePaste(_view: any, event: ClipboardEvent): boolean {
   const items = event.clipboardData?.items
   if (!items) return false
 
@@ -170,10 +171,9 @@ async function handlePaste(view: any, event: ClipboardEvent) {
       event.preventDefault()
       const file = item.getAsFile()
       if (file) {
-        const url = await uploadImage(file)
-        if (url) {
-          insertImage(url)
-        }
+        uploadImage(file).then(url => {
+          if (url) insertImage(url)
+        })
       }
       return true
     }
@@ -204,7 +204,7 @@ onMounted(() => {
     onCreate: () => {
       const ed = editor.value
       if (ed && props.modelValue) {
-        ed.commands.setContent(parseContent(props.modelValue), false)
+        ed.commands.setContent(parseContent(props.modelValue), { emitUpdate: false })
       }
     },
     onUpdate: ({ editor }) => {
@@ -236,7 +236,7 @@ watch(() => props.modelValue, (val) => {
   if (!ed) return
   const current = JSON.stringify(ed.getJSON())
   if (current !== val) {
-    ed.commands.setContent(parseContent(val), false)
+    ed.commands.setContent(parseContent(val), { emitUpdate: false })
   }
 })
 

@@ -50,7 +50,7 @@ const LABEL_COLORS = [
 
 function labelColor(label: string): string {
   const idx = label.charCodeAt(0) % LABEL_COLORS.length
-  return LABEL_COLORS[idx]
+  return LABEL_COLORS[idx] ?? LABEL_COLORS[0]!
 }
 
 // ── Cover color ──────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ const AVATAR_COLORS = [
 ]
 
 function assigneeColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length]
+  return AVATAR_COLORS[id % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!
 }
 
 function assigneeName(id: number): string {

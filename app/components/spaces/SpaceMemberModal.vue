@@ -32,7 +32,7 @@ const currentMembers = computed(() =>
   allUsers.value.filter(u => memberIds.value.includes(u.id))
 )
 
-const addingMemberId = ref<number | null>(null)
+const addingMemberId = ref<number | undefined>(undefined)
 const loadingAdd = ref(false)
 const loadingRemove = ref<number | null>(null)
 
@@ -45,7 +45,7 @@ async function addMember() {
       body: { memberId: addingMemberId.value },
       credentials: 'include',
     })
-    addingMemberId.value = null
+    addingMemberId.value = undefined
     emit('updated')
     toast.add({ title: 'Member berhasil ditambahkan', color: 'success' })
   } catch (e: any) {

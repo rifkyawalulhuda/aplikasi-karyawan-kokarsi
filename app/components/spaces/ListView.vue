@@ -114,7 +114,7 @@ const AVATAR_COLORS = [
 ]
 
 function assigneeColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length]
+  return AVATAR_COLORS[id % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!
 }
 
 function formatDate(d: string) {

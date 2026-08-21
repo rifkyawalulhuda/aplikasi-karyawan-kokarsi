@@ -14,6 +14,7 @@ const dfLong = new DateFormatter('id-ID', { dateStyle: 'long' })
 function toCalDate(s: string): CalendarDate | null {
   if (!s) return null
   const [y, m, d] = s.split('-').map(Number)
+  if (!y || !m || !d) return null
   return new CalendarDate(y, m, d)
 }
 
@@ -76,6 +77,15 @@ const displayedDay = ref<Date>(new Date(today.getFullYear(), today.getMonth(), t
 const tooltipItem = ref<CalendarItem | null>(null)
 const tooltipAnchor = ref<{ x: number; y: number } | null>(null)
 const timeGridRef = ref<HTMLElement | null>(null)
+
+const tooltipStyle = computed(() => {
+  if (!tooltipAnchor.value) return ''
+  const maxH = typeof window !== 'undefined' ? window.innerHeight : 800
+  const maxW = typeof window !== 'undefined' ? window.innerWidth : 1200
+  const top = Math.min(tooltipAnchor.value.y, maxH - 320)
+  const left = Math.min(tooltipAnchor.value.x + 8, maxW - 300)
+  return `top: ${top}px; left: ${left}px`
+})
 
 // Month View modal detail
 const selectedDate = ref<string | null>(null)
@@ -153,6 +163,7 @@ const weekDays = computed(() => {
 const weekLabel = computed(() => {
   const start = weekDays.value[0]
   const end = weekDays.value[6]
+  if (!start || !end) return ''
   if (start.getMonth() === end.getMonth()) {
     return `${start.toLocaleDateString('id-ID', { day: 'numeric' })}–${end.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`
   }
@@ -1228,7 +1239,7 @@ function openItem(item: CalendarItem) {
       <div
         v-if="tooltipItem"
         class="fixed z-50 w-72 rounded-xl border border-default bg-default shadow-xl"
-        :style="tooltipAnchor ? `top: ${Math.min(tooltipAnchor.y, (typeof window !== 'undefined' ? window.innerHeight : 800) - 320)}px; left: ${Math.min(tooltipAnchor.x + 8, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 300)}px` : ''"
+        :style="tooltipStyle"
         @click.stop
       >
         <!-- Color stripe + judul -->
