@@ -4,16 +4,41 @@ const toast = useToast()
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+const loading = ref(false)
 
-function onSave() {
-  if (newPassword.value !== confirmPassword.value) {
-    toast.add({ title: 'Password tidak cocok', color: 'error' })
+async function onSave() {
+  if (!currentPassword.value) {
+    toast.add({ title: 'Password saat ini wajib diisi', color: 'error' })
     return
   }
-  toast.add({ title: 'Password berhasil diubah', color: 'success' })
-  currentPassword.value = ''
-  newPassword.value = ''
-  confirmPassword.value = ''
+  if (!newPassword.value) {
+    toast.add({ title: 'Password baru wajib diisi', color: 'error' })
+    return
+  }
+  if (newPassword.value !== confirmPassword.value) {
+    toast.add({ title: 'Konfirmasi password tidak cocok', color: 'error' })
+    return
+  }
+  loading.value = true
+  try {
+    await $fetch('/api/auth/change-password', {
+      method: 'PUT',
+      body: { oldPassword: currentPassword.value, newPassword: newPassword.value },
+      credentials: 'include',
+    })
+    toast.add({ title: 'Password berhasil diubah', color: 'success' })
+    currentPassword.value = ''
+    newPassword.value = ''
+    confirmPassword.value = ''
+  } catch (e: any) {
+    toast.add({
+      title: 'Gagal mengubah password',
+      description: e?.data?.message ?? 'Password saat ini tidak sesuai',
+      color: 'error',
+    })
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -47,7 +72,7 @@ function onSave() {
               <UInput v-model="confirmPassword" type="password" class="w-full" placeholder="••••••••" />
             </UFormField>
             <div class="flex justify-end">
-              <UButton label="Simpan Password" color="primary" @click="onSave" />
+              <UButton label="Simpan Password" color="primary" :loading="loading" @click="onSave" />
             </div>
           </div>
         </UCard>
