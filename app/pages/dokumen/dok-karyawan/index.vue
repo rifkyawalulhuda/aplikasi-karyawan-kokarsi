@@ -7,6 +7,14 @@ import { h } from 'vue'
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
 const UIcon = resolveComponent('UIcon')
+const UTooltip = resolveComponent('UTooltip')
+
+// Tipe dokumen PERSONAL yang fix — digunakan untuk tampilkan slot kosong
+const PERSONAL_DOC_CODES = ['KTP', 'SIM', 'NPWP', 'KK', 'PASPOR', 'BPJS_TK', 'BPJS_KES', 'IJAZAH', 'SERTIFIKAT']
+
+function formatDocDate(val: string) {
+  return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 // --- Types ---
 interface EmployeeSummary {
@@ -202,12 +210,6 @@ const sortedRows = computed<EmployeeSummary[]>(() => {
       case 'employee':
         compare = (a.employee.fullName ?? '').localeCompare(b.employee.fullName ?? '', 'id')
         break
-      case 'totalDocs':
-        compare = a.totalDocs - b.totalDocs
-        break
-      case 'worstStatus':
-        compare = (statusPriority[a.worstStatus] ?? 99) - (statusPriority[b.worstStatus] ?? 99)
-        break
       default:
         compare = 0
     }
@@ -242,27 +244,74 @@ const columns: TableColumn<EmployeeSummary>[] = [
     },
   },
   {
-    accessorKey: 'totalDocs',
-    header: () => sortableHeader('Jumlah Dokumen', 'totalDocs'),
-    cell: ({ row }: { row: Row<EmployeeSummary> }) =>
-      h(UBadge, {
-        label: String(row.original.totalDocs),
-        color: 'neutral',
-        variant: 'subtle',
-        size: 'sm',
-      }),
-  },
-  {
-    accessorKey: 'worstStatus',
-    header: () => sortableHeader('Status', 'worstStatus'),
+    accessorKey: 'documents',
+    header: 'Kelengkapan Dokumen',
     cell: ({ row }: { row: Row<EmployeeSummary> }) => {
-      const s = row.original.worstStatus
-      return h(UBadge, {
-        label: statusLabel[s] ?? s,
-        color: statusColor[s] ?? 'neutral',
-        variant: 'subtle',
-        size: 'sm',
+      const docs = row.original.documents as any[]
+      const chips: any[] = []
+
+      // Slot PERSONAL (9 kode fix) — isi berwarna, kosong outline abu
+      for (const code of PERSONAL_DOC_CODES) {
+        const doc = docs.find((d: any) => d.documentType?.documentType === code)
+        if (doc) {
+          const tooltipText = [
+            doc.documentType?.name,
+            doc.documentNumber,
+            doc.expiryDate ? `s/d ${formatDocDate(doc.expiryDate)}` : null,
+          ].filter(Boolean).join(' · ')
+
+          chips.push(
+            h(UTooltip, { text: tooltipText, delay: 200 }, () =>
+              h(UBadge, {
+                label: code,
+                color: (statusColor[doc.status] ?? 'neutral') as any,
+                variant: 'subtle',
+                size: 'xs',
+                class: 'cursor-default',
+              })
+            )
+          )
+        } else {
+          chips.push(
+            h(UTooltip, { text: `${code} belum diinput`, delay: 200 }, () =>
+              h('span', {
+                class: 'inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded border border-dashed border-default text-dimmed leading-none',
+              }, code)
+            )
+          )
+        }
+      }
+
+      // Chip CERTIFICATION yang sudah diinput (max 3 + overflow)
+      const certDocs = docs.filter((d: any) =>
+        !PERSONAL_DOC_CODES.includes(d.documentType?.documentType ?? '')
+      )
+      certDocs.slice(0, 3).forEach((doc: any) => {
+        const label = (doc.documentType?.name ?? '').slice(0, 10)
+        const tooltipText = [
+          doc.documentType?.name,
+          doc.documentNumber,
+          doc.expiryDate ? `s/d ${formatDocDate(doc.expiryDate)}` : null,
+        ].filter(Boolean).join(' · ')
+        chips.push(
+          h(UTooltip, { text: tooltipText, delay: 200 }, () =>
+            h(UBadge, {
+              label,
+              color: (statusColor[doc.status] ?? 'neutral') as any,
+              variant: 'subtle',
+              size: 'xs',
+              class: 'cursor-default',
+            })
+          )
+        )
       })
+      if (certDocs.length > 3) {
+        chips.push(
+          h('span', { class: 'text-xs text-muted self-center' }, `+${certDocs.length - 3} lainnya`)
+        )
+      }
+
+      return h('div', { class: 'flex flex-wrap gap-1 py-1 max-w-lg' }, chips)
     },
   },
   {
