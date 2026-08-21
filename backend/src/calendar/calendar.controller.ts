@@ -20,8 +20,9 @@ export class CalendarController {
   }
 
   @Put(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CalendarEventDto) {
-    return this.service.update(id, dto)
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: CalendarEventDto, @Request() req: any) {
+    const updatedByName = req.user?.fullName ?? req.user?.name ?? req.user?.username ?? 'User'
+    return this.service.update(id, dto, updatedByName)
   }
 
   @Delete(':id')

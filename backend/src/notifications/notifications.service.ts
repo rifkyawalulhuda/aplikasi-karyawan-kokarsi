@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { Subject, Observable } from 'rxjs'
 import { finalize } from 'rxjs/operators'
 import { PrismaService } from '../prisma/prisma.service'
@@ -163,6 +163,46 @@ export class NotificationsService {
     return { created }
   }
 
+  /**
+   * Dipanggil saat agenda baru dibuat/diupdate dengan assigned users.
+   * Membuat notifikasi per-user dan broadcast via SSE untuk real-time update.
+   */
+  async generateAgendaCreatedNotifications(
+    agendaId: number,
+    title: string,
+    startDate: string,
+    startTime: string | null,
+    assignedUserIds: number[],
+    createdByName: string,
+  ): Promise<{ created: number }> {
+    let created = 0
+    for (const userId of assignedUserIds) {
+      const sourceType = `agenda_created_${agendaId}_${userId}`
+      try {
+        await this.prisma.notification.create({
+          data: {
+            category: 'AGENDA',
+            severity: 'WARNING',
+            title: 'Agenda Baru Ditugaskan',
+            message: `${createdByName} menugaskan agenda "${title}" — ${startDate}${startTime ? ' pukul ' + startTime : ''}`,
+            sourceType,
+            sourceId: agendaId,
+            triggerDay: 0,
+            deeplink: '/kalender',
+            expiryDate: new Date(startDate),
+            userId,
+            userType: 'user_account',
+          },
+        })
+        created++
+      } catch (e: any) {
+        if (e.code !== 'P2002') throw e
+      }
+    }
+    if (created > 0) await this.broadcastUnreadCount()
+    return { created }
+  }
+
   // ── Per-user queries ─────────────────────────────────────────────────────────
 
   async findAll(limit = 10, userId?: number, userType?: string) {
@@ -196,22 +236,27 @@ export class NotificationsService {
       where.userId = userId
       where.userType = userType
     }
-    return this.prisma.notification.updateMany({
+    const result = await this.prisma.notification.updateMany({
       where,
       data: { isRead: true, readAt: new Date() },
     })
+    await this.broadcastUnreadCount()
+    return result
   }
 
   async markOneRead(id: number, userId?: number, userType?: string) {
-    const where: any = { id }
     if (userId !== undefined && userType) {
-      where.userId = userId
-      where.userType = userType
+      const existing = await this.prisma.notification.findFirst({
+        where: { id, userId, userType },
+      })
+      if (!existing) throw new NotFoundException('Notification not found')
     }
-    return this.prisma.notification.update({
+    const result = await this.prisma.notification.update({
       where: { id },
       data: { isRead: true, readAt: new Date() },
     })
+    await this.broadcastUnreadCount()
+    return result
   }
 
   async deleteAll(userId?: number, userType?: string) {
@@ -467,7 +512,7 @@ export class NotificationsService {
         if (existing) {
           await this.prisma.notification.update({
             where: { id: existing.id },
-            data: { ...notifData, resolvedAt: null, isRead: false, readAt: null },
+            data: { ...notifData, resolvedAt: null },
           })
         } else {
           await this.prisma.notification.create({ data: notifData })

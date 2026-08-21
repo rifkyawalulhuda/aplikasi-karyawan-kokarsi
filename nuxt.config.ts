@@ -28,6 +28,7 @@ export default defineNuxtConfig({
 
   routeRules: {
     '/api/**': {
+      // @ts-expect-error Nitro routeRules cors accepts object at runtime, but types only declare boolean
       cors: {
         origin: process.env.NUXT_ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
         credentials: true,

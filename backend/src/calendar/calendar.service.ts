@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { CalendarEventDto } from './dto/calendar-event.dto'
 
 export type CalendarItemType = 'agenda' | 'employee_contract' | 'employee_document' | 'vendor_contract' | 'legal_koperasi'
@@ -27,7 +28,10 @@ const DEFAULT_COLOR = 'blue'
 
 @Injectable()
 export class CalendarService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   private dateOnly(value: Date | string): string {
     return value instanceof Date ? value.toISOString().slice(0, 10) : value.slice(0, 10)
@@ -152,7 +156,7 @@ export class CalendarService {
 
   async create(dto: CalendarEventDto, createdByName: string) {
     if (dto.endDate < dto.startDate) throw new BadRequestException('Tanggal selesai tidak boleh sebelum tanggal mulai')
-    return this.prisma.calendarEvent.create({
+    const event = await this.prisma.calendarEvent.create({
       data: {
         title: dto.title.trim(),
         description: dto.description?.trim() || null,
@@ -166,12 +170,31 @@ export class CalendarService {
         assignedUserIds: dto.assignedUserIds ?? [],
       },
     })
+
+    // Generate real-time notification untuk assigned users
+    if (dto.assignedUserIds?.length) {
+      this.notificationsService.generateAgendaCreatedNotifications(
+        event.id,
+        dto.title.trim(),
+        dto.startDate,
+        dto.startTime,
+        dto.assignedUserIds,
+        createdByName,
+      ).catch(() => {})
+    }
+
+    return event
   }
 
-  async update(id: number, dto: CalendarEventDto) {
+  async update(id: number, dto: CalendarEventDto, updatedByName: string) {
     if (dto.endDate < dto.startDate) throw new BadRequestException('Tanggal selesai tidak boleh sebelum tanggal mulai')
-    await this.findOne(id)
-    return this.prisma.calendarEvent.update({
+    const existing = await this.findOne(id)
+
+    const oldAssigned = (existing.assignedUserIds ?? []) as number[]
+    const newAssigned = dto.assignedUserIds ?? []
+    const newlyAssigned = newAssigned.filter(uid => !oldAssigned.includes(uid))
+
+    const event = await this.prisma.calendarEvent.update({
       where: { id },
       data: {
         title: dto.title.trim(),
@@ -182,12 +205,26 @@ export class CalendarService {
         startTime: dto.startTime,
         endTime: dto.endTime || null,
         color: dto.color,
-        assignedUserIds: dto.assignedUserIds ?? [],
+        assignedUserIds: newAssigned,
         // Reset sent flags saat agenda diubah agar notifikasi dikirim ulang
         notifyMorningSent: false,
         notifyBeforeSent: false,
       },
     })
+
+    // Generate real-time notification untuk newly assigned users only
+    if (newlyAssigned.length) {
+      this.notificationsService.generateAgendaCreatedNotifications(
+        id,
+        dto.title.trim(),
+        dto.startDate,
+        dto.startTime,
+        newlyAssigned,
+        updatedByName,
+      ).catch(() => {})
+    }
+
+    return event
   }
 
   async findOne(id: number) {
