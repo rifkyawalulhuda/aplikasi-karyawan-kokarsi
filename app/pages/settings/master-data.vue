@@ -165,11 +165,15 @@ const filteredData = computed(() => {
 })
 
 // Watchers to reset pagination
-watch([activeTab, searchQuery], () => {
+watch([activeTab, searchQuery], async () => {
   pagination.value.pageIndex = 0
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
-watch(() => pagination.value.pageSize, () => {
+watch(() => pagination.value.pageSize, async () => {
   pagination.value.pageIndex = 0
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
 
 const resourceLabelMap: Record<ResourceKey, string> = {
@@ -993,11 +997,11 @@ async function saveEditCompany() {
                 />
               </div>
               <UPagination
-                :key="`pagination-${pagination.pageSize}`"
+                :key="`pagination-${pagination.pageSize}-${pagination.pageIndex}`"
                 :page="pagination.pageIndex + 1"
                 :items-per-page="pagination.pageSize"
                 :total="filteredData.length"
-                @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+                @update:page="(p: number) => { pagination.pageIndex = p - 1; table?.tableApi?.setPageIndex(p - 1) }"
               />
             </div>
           </UCard>
