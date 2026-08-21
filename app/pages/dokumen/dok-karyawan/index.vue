@@ -31,6 +31,7 @@ interface SummaryResponse {
 
 // --- State ---
 const searchQuery = ref('')
+const statusFilter = ref('all')
 const page = ref(1)
 const limit = ref(15)
 const pageSizeOptions = [15, 30, 50, 100]
@@ -74,8 +75,9 @@ const { data: summaryRes, status } = await useFetch<SummaryResponse>('/api/emplo
     page: page.value,
     limit: limit.value,
     search: searchQuery.value || undefined,
+    status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
   })),
-  watch: [page, searchQuery, limit],
+  watch: [page, searchQuery, limit, statusFilter],
   lazy: true,
   credentials: 'include',
 })
@@ -83,6 +85,17 @@ const { data: summaryRes, status } = await useFetch<SummaryResponse>('/api/emplo
 const rows = computed<EmployeeSummary[]>(() => summaryRes.value?.data ?? [])
 const total = computed(() => summaryRes.value?.total ?? 0)
 const totalPages = computed(() => summaryRes.value?.totalPages ?? 1)
+
+// Reset page saat filter berubah
+watch([searchQuery, statusFilter], () => { page.value = 1 })
+
+const hasActiveFilters = computed(() => !!searchQuery.value || statusFilter.value !== 'all')
+
+function resetFilters() {
+  searchQuery.value = ''
+  statusFilter.value = 'all'
+  page.value = 1
+}
 
 // --- Badge counts ---
 const counts = computed(() => ({
@@ -302,13 +315,35 @@ const columns: TableColumn<EmployeeSummary>[] = [
       </div>
 
       <!-- Toolbar -->
-      <div class="flex flex-wrap items-center gap-2 mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
         <UInput
           v-model="searchQuery"
           class="max-w-xs"
           icon="i-lucide-search"
           placeholder="Cari nama atau no. karyawan..."
         />
+        <div class="flex items-center gap-2 flex-wrap">
+          <USelect
+            v-model="statusFilter"
+            :items="[
+              { label: 'Semua Status', value: 'all' },
+              { label: 'Aktif', value: 'AKTIF' },
+              { label: 'Akan Expired', value: 'AKAN_EXPIRED' },
+              { label: 'Expired', value: 'EXPIRED' },
+            ]"
+            class="min-w-40"
+            aria-label="Filter status dokumen"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            label="Reset"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            @click="resetFilters"
+          />
+        </div>
       </div>
 
       <!-- Table -->

@@ -240,10 +240,12 @@ export class EmployeeDocumentsService {
     page = 1,
     limit = 10,
     search,
+    status,
   }: {
     page?: number
     limit?: number
     search?: string
+    status?: string
   }) {
     const where: any = {}
     if (search) {
@@ -253,11 +255,19 @@ export class EmployeeDocumentsService {
       ]
     }
 
+    // Filter karyawan berdasarkan worstStatus dokumen mereka
+    const docWhere: any = {}
+    if (status) {
+      docWhere.status = status
+    }
+
     const [employees, total] = await Promise.all([
       this.prisma.employee.findMany({
         where: {
           ...where,
-          employeeDocuments: { some: {} },
+          employeeDocuments: status
+            ? { some: { status } }
+            : { some: {} },
         },
         include: {
           employeeDocuments: {
@@ -272,7 +282,9 @@ export class EmployeeDocumentsService {
       this.prisma.employee.count({
         where: {
           ...where,
-          employeeDocuments: { some: {} },
+          employeeDocuments: status
+            ? { some: { status } }
+            : { some: {} },
         },
       }),
     ])

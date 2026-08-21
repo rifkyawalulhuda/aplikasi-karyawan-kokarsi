@@ -32,11 +32,13 @@ export class EmployeeDocumentsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('status') status?: string,
   ) {
     return this.service.findEmployeeSummary({
       page: page ? parseInt(page) : undefined,
       limit: limit ? parseInt(limit) : undefined,
       search,
+      status,
     })
   }
 

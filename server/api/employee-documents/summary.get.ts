@@ -7,6 +7,7 @@ export default eventHandler(async (event) => {
   if (query.page) params.set('page', String(query.page))
   if (query.limit) params.set('limit', String(query.limit))
   if (query.search) params.set('search', String(query.search))
+  if (query.status) params.set('status', String(query.status))
   const qs = params.toString() ? `?${params.toString()}` : ''
 
   try {
