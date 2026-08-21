@@ -78,7 +78,7 @@ function handleAddDocConfirm() {
 }
 
 // --- Fetch Data ---
-const { data: summaryRes, status } = await useFetch<SummaryResponse>('/api/employee-documents/summary', {
+const { data: summaryRes, status, refresh: refreshSummary } = await useFetch<SummaryResponse>('/api/employee-documents/summary', {
   query: computed(() => ({
     page: page.value,
     limit: limit.value,
@@ -449,6 +449,7 @@ const columns: TableColumn<EmployeeSummary>[] = [
     v-model:open="drawerOpen"
     :employee-id="selectedEmployeeId"
     @update:open="(v: boolean) => { drawerOpen = v; if (!v) selectedEmployeeId = null }"
+    @saved="refreshSummary"
   />
 
   <!-- Add Doc Modal: pick employee first -->
