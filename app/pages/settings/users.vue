@@ -301,8 +301,10 @@ const filteredData = computed(() => {
   })
 })
 
-watch([searchQuery, roleFilter], () => {
+watch([searchQuery, roleFilter], async () => {
   pagination.value.pageIndex = 0
+  await nextTick()
+  table.value?.tableApi?.setPageIndex(0)
 })
 
 watch(() => pagination.value.pageSize, async () => {
@@ -467,11 +469,11 @@ const columns: TableColumn<UserAccount>[] = [
               />
             </div>
             <UPagination
-              :key="`pagination-${pagination.pageSize}`"
+              :key="`pagination-${pagination.pageSize}-${pagination.pageIndex}`"
               :page="pagination.pageIndex + 1"
               :items-per-page="pagination.pageSize"
               :total="filteredData.length"
-              @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
+              @update:page="(p: number) => { pagination.pageIndex = p - 1; table?.tableApi?.setPageIndex(p - 1) }"
             />
           </div>
         </UCard>
