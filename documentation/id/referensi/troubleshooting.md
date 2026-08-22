@@ -34,6 +34,40 @@ pm2 restart kokarsi-backend
 
 ---
 
+### FK Violation saat Hapus Karyawan (`master_admin_employeeNo`)
+
+**Gejala:** `Internal Server Error` saat menghapus data karyawan, log backend menunjukkan:
+```
+ForeignKeyConstraintViolation: constraint 'master_admin_employeeNo'
+```
+
+**Penyebab:** Karyawan yang dihapus terdaftar sebagai Master Admin (tabel `master_admin` memiliki FK ke `employee.employeeNo`). Transaksi hapus tidak menghapus record `master_admin` terlebih dahulu.
+
+**Solusi:** Sudah diperbaiki di versi terbaru — `employees.service.ts:remove()` kini menghapus `masterAdmin` sebelum menghapus employee dalam satu transaksi. Pastikan backend sudah di-compile ulang:
+```powershell
+cd backend
+npx tsc -p tsconfig.json
+pm2 restart kokarsi-backend
+```
+
+---
+
+### `prisma.config.ts` Tidak Membaca `.env` — Port Masih 5435
+
+**Gejala:** Setelah mengubah `DATABASE_URL` di `backend/.env` ke port lain (misal `5434`), `prisma migrate deploy` / `seed` masih mencoba koneksi ke port `5435`.
+
+**Penyebab:** `prisma.config.ts` menggunakan `process.env.DATABASE_URL ?? 'fallback-5435'` — jika `dotenv` belum terinstall atau `npm install` belum dijalankan, variabel environment tidak terbaca sehingga fallback dipakai.
+
+**Solusi:**
+```powershell
+cd backend
+npm install   # pastikan dotenv tersedia
+npx prisma generate
+npx prisma migrate deploy
+```
+
+---
+
 ### Prisma Migration Drift
 
 **Gejala:** `npx prisma migrate dev` gagal dengan pesan schema drift.

@@ -18,11 +18,35 @@ Edit field yang tersedia, klik **Simpan**.
 
 ## Tab Profil & Keamanan
 
-Ganti password melalui **Pengaturan → Keamanan**:
+Halaman **Pengaturan → Keamanan** menampilkan 2 kartu terpisah:
 
-1. Masukkan password lama
-2. Masukkan password baru (min. 6 karakter)
-3. Klik **Simpan Password**
+### Kartu Ubah Password
+
+1. Masukkan **Password Saat Ini**
+2. Masukkan **Password Baru** (min. 6 karakter)
+   - Indikator kekuatan password tampil otomatis: Lemah / Sedang / Kuat / Sangat Kuat
+   - Gunakan kombinasi huruf besar, angka, dan simbol untuk password yang lebih kuat
+3. Masukkan **Konfirmasi Password Baru**
+   - Indikator cocok/tidak cocok tampil real-time di bawah field
+4. Klik **Simpan Password**
+
+::: tip Show/Hide Password
+Gunakan tombol mata (👁) di setiap field untuk menampilkan atau menyembunyikan karakter password.
+:::
+
+::: warning Password Wajib Diisi
+Jika password lama salah, sistem akan menampilkan pesan error. Pastikan password lama diisi dengan benar sebelum menyimpan.
+:::
+
+### Kartu Info Akun
+
+Menampilkan informasi akun yang sedang login:
+- **Nama** — nama lengkap akun
+- **No. Karyawan** — nomor karyawan (employeeNo)
+- **Role** — Admin atau Pengelola Koperasi
+- **Tipe Akun** — Master Admin atau User Account
+
+Untuk mengubah data profil lainnya (nama, email, foto), buka **Pengaturan → Umum → Profil Akun**.
 
 ## Tab Tampilan Login (Admin Only)
 

@@ -38,6 +38,7 @@ export default defineConfig({
             { text: 'Arsitektur', link: '/deployment/arsitektur' },
             { text: 'Docker (Rekomendasi)', link: '/deployment/docker' },
             { text: 'PostgreSQL Native', link: '/deployment/postgresql-native' },
+            { text: 'Deploy ke Mesin Baru', link: '/deployment/mesin-baru' },
             { text: 'Cloudflare Tunnel', link: '/deployment/cloudflare-tunnel' },
           ],
         },
