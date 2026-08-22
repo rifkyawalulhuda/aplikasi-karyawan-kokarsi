@@ -347,7 +347,7 @@ export class EmployeesService {
       }),
       this.prisma.employee.findUnique({
         where: { id },
-        select: { fotoKaryawan: true },
+        select: { fotoKaryawan: true, employeeNo: true },
       }),
     ])
 
@@ -356,6 +356,10 @@ export class EmployeesService {
       await tx.employeeStatusHistory.deleteMany({ where: { employeeId: id } })
       await tx.employeeOffboarding.deleteMany({ where: { employeeId: id } })
       await tx.employeeDocument.deleteMany({ where: { employeeId: id } })
+      // Hapus masterAdmin yang terikat via FK employeeNo sebelum hapus employee
+      if (employee?.employeeNo) {
+        await tx.masterAdmin.deleteMany({ where: { employeeNo: employee.employeeNo } })
+      }
       return tx.employee.delete({ where: { id } })
     })
 

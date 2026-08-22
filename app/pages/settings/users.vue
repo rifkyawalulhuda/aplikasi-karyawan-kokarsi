@@ -147,6 +147,14 @@ async function saveUser() {
 
   clearValidationErrors()
 
+  // Validasi format email sebelum kirim ke backend
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(form.email.trim())) {
+    validationErrors.email = 'Format email tidak valid (contoh: nama@domain.com)'
+    toast.add({ title: 'Format email tidak valid', description: 'Masukkan alamat email yang valid, contoh: nama@domain.com', color: 'error' })
+    return
+  }
+
   const duplicate = findDuplicateUser()
   if (duplicate) {
     validationErrors[duplicate.field] = duplicate.message
