@@ -143,10 +143,36 @@ if (Test-Path $DbFile) {
       Write-Log "Contoh: C:\Program Files\PostgreSQL\16\bin" "ERROR"
       exit 1
     }
+
+    # Baca DATABASE_URL dari backend/.env untuk mendapatkan kredensial yang benar
+    $envFile = Join-Path $Root "backend\.env"
+    $pgUserFinal = $PgUser
+    $pgHostFinal = $PgHost
+    $pgPortFinal = $PgPort
+    $pgDbFinal   = $PgDb
+    if (Test-Path $envFile) {
+      $matchLine = Get-Content $envFile | Select-String "^DATABASE_URL" | Select-Object -First 1
+      $dbUrl = if ($matchLine) { $matchLine.Line } else { $null }
+      if ($dbUrl -match 'postgresql://([^:]+):([^@]+)@([^:/]+):(\d+)/([^"?\s]+)') {
+        $pgUserFinal = $Matches[1]
+        $env:PGPASSWORD = $Matches[2]
+        $pgHostFinal = $Matches[3]
+        $pgPortFinal = [int]$Matches[4]
+        $pgDbFinal   = $Matches[5]
+        Write-Log "Menggunakan kredensial dari backend\.env (${pgHostFinal}:${pgPortFinal})" "INFO"
+      } else {
+        Write-Log "Tidak dapat parse DATABASE_URL dari backend\.env, menggunakan parameter default" "WARN"
+        $env:PGPASSWORD = "kokarsi2026"
+      }
+    } else {
+      Write-Log "backend\.env tidak ditemukan, menggunakan parameter default" "WARN"
+      $env:PGPASSWORD = "kokarsi2026"
+    }
+
     # Drop dan recreate database native
-    & psql -U $PgUser -h $PgHost -p $PgPort -d postgres -c "DROP DATABASE IF EXISTS $PgDb;" 2>&1 | Out-Null
-    & psql -U $PgUser -h $PgHost -p $PgPort -d postgres -c "CREATE DATABASE $PgDb;" 2>&1 | Out-Null
-    & psql -U $PgUser -h $PgHost -p $PgPort -d $PgDb -f $DbFile 2>&1 | Out-Null
+    & psql -U $pgUserFinal -h $pgHostFinal -p $pgPortFinal -d postgres -c "DROP DATABASE IF EXISTS $pgDbFinal;" 2>&1 | Out-Null
+    & psql -U $pgUserFinal -h $pgHostFinal -p $pgPortFinal -d postgres -c "CREATE DATABASE $pgDbFinal;" 2>&1 | Out-Null
+    & psql -U $pgUserFinal -h $pgHostFinal -p $pgPortFinal -d $pgDbFinal -f $DbFile 2>&1 | Out-Null
   }
 
   if ($LASTEXITCODE -eq 0) {
