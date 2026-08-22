@@ -75,24 +75,39 @@ if ($Mode -eq "docker") {
 
 } else {
   Write-Host "[1/4] PostgreSQL Native mode - memastikan service berjalan..." -ForegroundColor Yellow
+
+  # Baca DATABASE_URL dari backend/.env untuk mendapatkan port yang benar
+  $envFile = Join-Path $Backend ".env"
+  $pgPort = "5432"  # default fallback
+  $pgHost = "localhost"
+  if (Test-Path $envFile) {
+    $matchLine = Get-Content $envFile | Select-String "^DATABASE_URL" | Select-Object -First 1
+    $dbUrl = if ($matchLine) { $matchLine.Line } else { $null }
+    if ($dbUrl -match 'postgresql://[^@]+@([^:/]+):(\d+)/') {
+      $pgHost = $Matches[1]
+      $pgPort = $Matches[2]
+    }
+  }
+  Write-Host "      Mengecek koneksi ke PostgreSQL di ${pgHost}:${pgPort}..." -ForegroundColor DarkGray
+
   # Cek apakah PostgreSQL native bisa diakses
   $pgReady = $false
   $retries = 5
   do {
     try {
-      $result = & psql -U kokarsi -d kokarsi_karyawan -c "SELECT 1" 2>&1
+      $result = & psql -U kokarsi -d kokarsi_karyawan -h $pgHost -p $pgPort -c "SELECT 1" 2>&1
       if ($LASTEXITCODE -eq 0) { $pgReady = $true }
     } catch {}
     if (-not $pgReady) { Start-Sleep -Seconds 2; $retries-- }
   } while (-not $pgReady -and $retries -gt 0)
 
   if (-not $pgReady) {
-    Write-Host "WARNING: PostgreSQL native tidak bisa diakses. Pastikan service sudah berjalan." -ForegroundColor DarkYellow
+    Write-Host "WARNING: PostgreSQL native tidak bisa diakses di ${pgHost}:${pgPort}. Pastikan service sudah berjalan." -ForegroundColor DarkYellow
     Write-Host "         Lanjutkan? (Y/N)" -NoNewline
     $continue = Read-Host
     if ($continue -ne "Y" -and $continue -ne "y") { exit 1 }
   } else {
-    Write-Host "      PostgreSQL native is ready." -ForegroundColor Green
+    Write-Host "      PostgreSQL native is ready (${pgHost}:${pgPort})." -ForegroundColor Green
   }
 }
 
