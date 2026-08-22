@@ -221,6 +221,8 @@ npm install
 npx prisma generate
 ```
 
+> **Catatan penting — `prisma.config.ts`:** Project ini menggunakan `prisma.config.ts` yang perlu membaca `DATABASE_URL` dari `.env`. Pastikan sudah menjalankan `npm install` agar `dotenv` tersedia, karena file ini secara eksplisit memuat `.env` melalui `dotenv`. Tanpa ini, Prisma akan menggunakan **port fallback hardcoded** (`5435`) meskipun `.env` sudah diubah.
+
 ### 4. Terapkan Semua Migrasi
 
 ```powershell
@@ -280,10 +282,13 @@ npm run prisma:seed
 
 | Error | Penyebab | Solusi |
 |-------|---------|--------|
-| `P1001: Can't reach database` | Database belum jalan | Pastikan Docker/PostgreSQL sudah running |
+| `P1001: Can't reach database server at localhost:5435` | `prisma.config.ts` tidak membaca `.env` dengan benar, fallback ke port hardcoded `5435` | Pastikan sudah menjalankan `npm install` agar `dotenv` tersedia, lalu jalankan ulang `npx prisma generate` sebelum migrate |
+| `P1001: Can't reach database server` (port beda) | Database belum jalan | Pastikan Docker/PostgreSQL sudah running di port yang sesuai |
 | `P3009: migrate found failed migrations` | Migrasi gagal sebelumnya | Jalankan `npx prisma migrate resolve --rolled-back <nama_migrasi>` |
 | `Environment variable not found: DATABASE_URL` | `.env` tidak ada | Copy dari `.env.example` dan isi `DATABASE_URL` |
 | `Cannot find module 'ts-node'` | Dependencies belum install | Jalankan `npm install` dulu |
+
+> **Penting — port mismatch:** Project ini menggunakan `prisma.config.ts` yang membaca `DATABASE_URL` via `dotenv`. Jika port di `.env` sudah diubah tapi Prisma masih menggunakan port lama, pastikan `npm install` sudah dijalankan agar `dotenv` tersedia sebagai dependency.
 
 ---
 
