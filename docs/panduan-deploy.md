@@ -194,6 +194,99 @@ psql -U kokarsi -d kokarsi_karyawan -h localhost -f "E:\Backup\kokarsi\backup_TA
 
 ---
 
+## Deploy Database Prisma & Seed (Mesin Baru)
+
+Langkah ini dilakukan **setelah database siap** (Docker atau Native) dan **sebelum menjalankan aplikasi**.
+Gunakan `migrate deploy` — bukan `migrate dev` — di mesin production/baru.
+
+> **Perbedaan penting:**
+> - `prisma migrate dev` — untuk **development** saja, bisa membuat migrasi baru
+> - `prisma migrate deploy` — untuk **production/mesin baru**, hanya menerapkan migrasi yang sudah ada
+
+### 1. Masuk ke Folder Backend
+
+```powershell
+cd E:\Github\aplikasi-karyawan-kokarsi\backend
+```
+
+### 2. Install Dependencies Backend
+
+```powershell
+npm install
+```
+
+### 3. Generate Prisma Client
+
+```powershell
+npx prisma generate
+```
+
+### 4. Terapkan Semua Migrasi
+
+```powershell
+npx prisma migrate deploy
+```
+
+Perintah ini akan menerapkan semua migrasi di folder `backend\prisma\migrations\` secara berurutan ke database yang dikonfigurasi di `backend\.env` (`DATABASE_URL`).
+
+Output sukses:
+```
+Applying migration `20240101_init`...
+Applying migration `20240215_add_notifications`...
+...
+All migrations have been successfully applied.
+```
+
+### 5. Jalankan Seed (Data Awal)
+
+```powershell
+npm run prisma:seed
+```
+
+Atau langsung via ts-node:
+
+```powershell
+npx ts-node prisma/seed.ts
+```
+
+Seed akan mengisi data awal yang dibutuhkan aplikasi:
+- Tipe kontrak default (PKWT, MITRA)
+- Tipe status pajak default
+- Admin default (`EMP001` / `admin123`)
+- Master data lookup lainnya
+
+> **Catatan:** Jika ada error "user already exists" saat seed, berarti seed pernah dijalankan sebelumnya. Ini normal dan bisa diabaikan.
+
+### 6. Verifikasi (Opsional)
+
+Buka Prisma Studio untuk memastikan data sudah masuk:
+
+```powershell
+npx prisma studio
+# Buka browser ke http://localhost:5555
+```
+
+### Urutan Lengkap (Copy-Paste)
+
+```powershell
+cd E:\Github\aplikasi-karyawan-kokarsi\backend
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm run prisma:seed
+```
+
+### Troubleshooting
+
+| Error | Penyebab | Solusi |
+|-------|---------|--------|
+| `P1001: Can't reach database` | Database belum jalan | Pastikan Docker/PostgreSQL sudah running |
+| `P3009: migrate found failed migrations` | Migrasi gagal sebelumnya | Jalankan `npx prisma migrate resolve --rolled-back <nama_migrasi>` |
+| `Environment variable not found: DATABASE_URL` | `.env` tidak ada | Copy dari `.env.example` dan isi `DATABASE_URL` |
+| `Cannot find module 'ts-node'` | Dependencies belum install | Jalankan `npm install` dulu |
+
+---
+
 ## Jalankan Aplikasi
 
 Backend dan frontend sekarang dijalankan via **PM2** (process manager) yang memberikan auto-restart, logging, dan monitoring.
