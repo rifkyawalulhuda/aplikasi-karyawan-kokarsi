@@ -3,15 +3,18 @@
 # Jalankan sekali sebagai Administrator
 #
 # Usage:
-#   .\deploy\setup-backup-schedule.ps1                           - Daftar task (jam 02:00 WIB)
-#   .\deploy\setup-backup-schedule.ps1 -Remove                   - Hapus task
-#   .\deploy\setup-backup-schedule.ps1 -Hour 3                   - Custom jam (misal jam 03:00)
-#   .\deploy\setup-backup-schedule.ps1 -BackupDir "D:\Backup"    - Custom folder backup
+#   .\deploy\setup-backup-schedule.ps1                                     - Daftar task Docker (jam 02:00 WIB)
+#   .\deploy\setup-backup-schedule.ps1 -Mode native                        - Daftar task Native PostgreSQL
+#   .\deploy\setup-backup-schedule.ps1 -Remove                             - Hapus task
+#   .\deploy\setup-backup-schedule.ps1 -Mode native -Hour 3                - Custom jam (misal jam 03:00)
+#   .\deploy\setup-backup-schedule.ps1 -Mode native -BackupDir "C:\Backup" - Custom folder backup
 
 param(
   [switch]$Remove,
   [int]$Hour = 2,
-  [string]$BackupDir = "E:\Backup\kokarsi"
+  [string]$BackupDir = "E:\Backup\kokarsi",
+  [ValidateSet("docker", "native")]
+  [string]$Mode = "docker"
 )
 
 $TaskName   = "KokarsiDatabaseBackup"
@@ -26,6 +29,19 @@ if ($Remove) {
     Write-Host "Task '$TaskName' not found." -ForegroundColor Yellow
   }
   exit 0
+}
+
+# ── Pastikan dijalankan sebagai Administrator ─────────────────────────────────
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+  Write-Host ""
+  Write-Host "ERROR: Script ini harus dijalankan sebagai Administrator!" -ForegroundColor Red
+  Write-Host ""
+  Write-Host "Caranya:" -ForegroundColor Yellow
+  Write-Host "  1. Klik kanan pada file SETUP-BACKUP-SCHEDULE-NATIVE.bat"
+  Write-Host "  2. Pilih 'Run as administrator'"
+  Write-Host ""
+  exit 1
 }
 
 # ── Pastikan script backup ada ────────────────────────────────────────────────
@@ -44,7 +60,7 @@ if (-not (Test-Path $BackupDir)) {
 # Sertakan -BackupDir agar backup.ps1 tahu folder tujuan
 $action  = New-ScheduledTaskAction `
   -Execute "powershell.exe" `
-  -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`" -BackupDir `"$BackupDir`""
+  -Argument "-NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$ScriptPath`" -Mode `"$Mode`" -BackupDir `"$BackupDir`""
 
 $trigger = New-ScheduledTaskTrigger -Daily -At "$($Hour):00"
 
@@ -72,19 +88,20 @@ Register-ScheduledTask `
   -Trigger $trigger `
   -Settings $settings `
   -Principal $principal `
-  -Description "Backup otomatis database + uploads Kokarsi PT. Sankyu setiap hari jam $($Hour):00" | Out-Null
+  -Description "Backup otomatis database + uploads Kokarsi PT. Sankyu setiap hari jam $($Hour):00 (Mode: $Mode)" | Out-Null
 
 Write-Host ""
 Write-Host "Scheduled task registered successfully!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Task name  : $TaskName"
 Write-Host "  Script     : $ScriptPath"
+Write-Host "  Mode       : $Mode"
 Write-Host "  Schedule   : Every day at $($Hour):00"
 Write-Host "  Backup dir : $BackupDir"
 Write-Host "  Retention  : 7 days"
 Write-Host ""
 Write-Host "To run backup now:"
-Write-Host "  .\deploy\backup.ps1 -BackupDir `"$BackupDir`""
+Write-Host "  .\deploy\backup.ps1 -Mode `"$Mode`" -BackupDir `"$BackupDir`""
 Write-Host ""
 Write-Host "To check task status:"
 Write-Host "  Get-ScheduledTask -TaskName '$TaskName' | Get-ScheduledTaskInfo"
