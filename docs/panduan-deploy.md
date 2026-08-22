@@ -239,6 +239,12 @@ Applying migration `20240215_add_notifications`...
 All migrations have been successfully applied.
 ```
 
+> **Jika ada error `P2022: column does not exist` setelah migrate deploy:** Beberapa kolom di schema mungkin ditambahkan langsung ke `schema.prisma` tanpa file migrasi yang tercatat. Dalam kasus ini, gunakan `prisma db push` sebagai gantinya:
+> ```powershell
+> npx prisma db push
+> ```
+> `db push` membandingkan schema langsung dengan database dan membuat semua kolom yang belum ada, tanpa memerlukan file migrasi. Gunakan ini jika `migrate deploy` menghasilkan error kolom tidak ditemukan saat seed.
+
 ### 5. Jalankan Seed (Data Awal)
 
 ```powershell

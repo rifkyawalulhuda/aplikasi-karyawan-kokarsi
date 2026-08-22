@@ -155,8 +155,6 @@ async function main() {
       contractTypeId: contractTypes[0].id,
       status: 'AKTIF',
       signedDate: new Date('2024-01-01'),
-      positionLabel: 'Staff Admin',
-      workLocationLabel: 'Head Office Jakarta',
       baseCompensation: 5941759,
     },
   })
