@@ -8,7 +8,7 @@ export class PdfGeneratorService {
   private readonly fontDir = process.env.FONT_DIR
     ?? (process.platform === 'win32'
       ? 'C:/Windows/Fonts'
-      : '/usr/share/fonts/truetype')
+      : '/usr/share/fonts/truetype/msttcorefonts')
   private readonly logoPath = path.join(__dirname, '../../assets/logo-sp.png')
 
   private formatDate(date: Date | string): string {

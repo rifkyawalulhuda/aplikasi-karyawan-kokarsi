@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import PDFDocument from 'pdfkit'
 import { promises as fs, existsSync } from 'fs'
 import { join, resolve } from 'path'
+import * as path from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 import { getContractDocumentDefinition, mergeDefinition } from './contract-document-definitions'
 import { SettingsService } from '../settings/settings.service'
@@ -52,6 +53,10 @@ export class ContractDocumentService {
   private readonly assetRoot = resolve(process.cwd(), 'assets')
   private readonly pkwtLogoPath = join(this.assetRoot, 'contract-logo-pkwt.jpg')
   private readonly mitraLogoPath = join(this.assetRoot, 'contract-logo-mitra.jpg')
+  private readonly fontDir = process.env.FONT_DIR
+    ?? (process.platform === 'win32'
+      ? 'C:/Windows/Fonts'
+      : '/usr/share/fonts/truetype/msttcorefonts')
 
   private include = {
     employee: {
@@ -566,10 +571,10 @@ export class ContractDocumentService {
       doc.on('error', reject)
 
       // Register Times New Roman fonts
-      doc.registerFont('Times-Roman', 'C:/Windows/Fonts/times.ttf')
-      doc.registerFont('Times-Bold', 'C:/Windows/Fonts/timesbd.ttf')
-      doc.registerFont('Times-Italic', 'C:/Windows/Fonts/timesi.ttf')
-      doc.registerFont('Times-BoldItalic', 'C:/Windows/Fonts/timesbi.ttf')
+      doc.registerFont('Times-Roman', path.join(this.fontDir, 'times.ttf'))
+      doc.registerFont('Times-Bold', path.join(this.fontDir, 'timesbd.ttf'))
+      doc.registerFont('Times-Italic', path.join(this.fontDir, 'timesi.ttf'))
+      doc.registerFont('Times-BoldItalic', path.join(this.fontDir, 'timesbi.ttf'))
 
       if (payload.contract.template?.family === 'PKWT') {
         this.renderPkwtPdf(doc, payload)
