@@ -82,7 +82,7 @@ else
   ENV_FILE="${ROOT}/backend/.env"
   if [[ -f "$ENV_FILE" ]]; then
     DB_URL=$(grep "^DATABASE_URL" "$ENV_FILE" | head -1 || true)
-    if [[ "$DB_URL" =~ postgresql://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^/?#\s]+) ]]; then
+    if [[ "$DB_URL" =~ postgresql://([^:]+):([^@]+)@([^:/]+):([0-9]+)/([^"?\s]+) ]]; then
       PG_USER="${BASH_REMATCH[1]}"
       export PGPASSWORD="${BASH_REMATCH[2]}"
       PG_HOST="${BASH_REMATCH[3]}"
