@@ -99,6 +99,7 @@ const { data: lookups } = await useFetch<LookupsResponse>('/api/lookups')
 
 const schema = z.object({
   employeeNo: z.string().min(3, 'Min. 3 karakter'),
+  memberNo: z.string().optional().or(z.literal('')),
   fullName: z.string().min(3, 'Min. 3 karakter'),
   nik: z.string().min(8, 'Min. 8 karakter').optional().or(z.literal('')),
   birthPlace: z.string().min(2, 'Min. 2 karakter').optional().or(z.literal('')),
@@ -120,6 +121,7 @@ type Schema = z.output<typeof schema>
 
 const state = reactive<Partial<Schema>>({
   employeeNo: '',
+  memberNo: '',
   fullName: '',
   nik: '',
   birthPlace: '',
@@ -141,6 +143,7 @@ const state = reactive<Partial<Schema>>({
 function fillState(emp: typeof props.employee) {
   if (!emp) return
   state.employeeNo = emp.employeeNo
+  state.memberNo = emp.memberNo ?? ''
   state.fullName = emp.fullName
   state.nik = emp.nik ?? ''
   state.birthPlace = emp.birthPlace ?? ''
@@ -285,9 +288,15 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         </div>
 
         <div class="grid grid-cols-2 gap-4">
+          <UFormField label="No. Anggota" name="memberNo" hint="Opsional">
+            <UInput v-model="state.memberNo" placeholder="Nomor anggota koperasi" class="w-full" />
+          </UFormField>
           <UFormField label="NIK" name="nik" :error="errorNik">
             <UInput v-model="state.nik" placeholder="3275xxxxxxxxxxxx" class="w-full" @input="errorNik = undefined" />
           </UFormField>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
           <UFormField label="Tempat Lahir" name="birthPlace">
             <UInput v-model="state.birthPlace" placeholder="Bekasi" class="w-full" />
           </UFormField>

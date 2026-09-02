@@ -64,6 +64,7 @@ export interface EmployeeStatusHistory {
 export interface Employee {
   id: number
   employeeNo: string
+  memberNo?: string | null
   fullName: string
   nik?: string | null
   birthPlace?: string | null

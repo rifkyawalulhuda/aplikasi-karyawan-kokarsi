@@ -1,0 +1,63 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy ke Server Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Connect ke Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: "1.80.3"
+
+      - name: Deploy ke server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+            ROOT="/home/rifky/Public/aplikasi-karyawan-kokarsi"
+            BACKEND="${ROOT}/backend"
+
+            echo "==> Git pull..."
+            cd $ROOT
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "==> Install dependencies frontend..."
+            cd $ROOT
+            npm install --no-audit --no-fund --prefer-offline
+
+            echo "==> Build frontend (Nuxt)..."
+            npm run build
+
+            echo "==> Install dependencies backend..."
+            cd $BACKEND
+            npm install --no-audit --no-fund --prefer-offline
+
+            echo "==> Build backend (NestJS)..."
+            npm run build
+
+            echo "==> Reload PM2 (zero-downtime)..."
+            pm2 reload kokarsi-backend --update-env
+            pm2 reload kokarsi-frontend --update-env
+            pm2 save
+
+            echo "==> Deploy selesai!"
+            pm2 list --no-color | grep kokarsi

@@ -28,6 +28,7 @@ const workItems = computed(() => [
 
 const personalItems = computed(() => [
   { label: 'NIK', value: props.employee.nik ?? '-', icon: 'i-lucide-id-card' },
+  { label: 'No. Anggota', value: props.employee.memberNo ?? '-', icon: 'i-lucide-badge' },
   { label: 'Tempat Lahir', value: props.employee.birthPlace ?? '-', icon: 'i-lucide-map' },
   { label: 'Tgl. Lahir', value: formatDate(props.employee.birthDate), icon: 'i-lucide-cake' },
   { label: 'Jenis Kelamin', value: genderLabelMap[props.employee.gender] ?? props.employee.gender, icon: 'i-lucide-user' },

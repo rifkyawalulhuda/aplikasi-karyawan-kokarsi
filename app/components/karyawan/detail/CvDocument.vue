@@ -88,7 +88,7 @@ function docStatusClass(status?: string) {
       </div>
       <div class="min-w-0 flex-1">
         <h1 class="text-3xl font-bold leading-tight">{{ employee.fullName }}</h1>
-        <p class="mt-1 text-sm text-slate-600">{{ employee.employeeNo }}</p>
+        <p class="mt-1 text-sm text-slate-600">{{ employee.employeeNo }}<span v-if="employee.memberNo"> · No. Anggota: {{ employee.memberNo }}</span></p>
         <p class="mt-2 text-base font-medium text-slate-700">
           {{ [employee.jobRole?.name, employee.workLocation?.name, employee.department?.name].filter(Boolean).join(' • ') || 'Karyawan' }}
         </p>

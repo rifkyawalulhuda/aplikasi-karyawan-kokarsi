@@ -126,6 +126,7 @@ function getSearchTokens(employee: Employee) {
 
   return [
     employee.employeeNo,
+    employee.memberNo,
     employee.fullName,
     employee.employmentStatus,
     employmentStatusLabelMap[employee.employmentStatus],

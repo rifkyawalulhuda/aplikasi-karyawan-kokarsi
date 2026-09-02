@@ -18,6 +18,7 @@ interface LookupsResponse {
 export interface EmployeeImportRow {
   rowNumber: number
   employeeNo: string
+  memberNo?: string
   fullName: string
   nik?: string
   gender: 'MALE' | 'FEMALE'
@@ -57,6 +58,7 @@ interface LookupMaps {
 
 const COLUMN_HEADERS = [
   'No. Induk Karyawan',
+  'No. Anggota',
   'Nama Lengkap',
   'NIK',
   'Jenis Kelamin',
@@ -196,21 +198,22 @@ export function useImportTemplate() {
 
       const raw = {
         employeeNo: getCellValue(row[0]),
-        fullName: getCellValue(row[1]),
-        nik: getCellValue(row[2]),
-        gender: getCellValue(row[3]),
-        birthPlace: getCellValue(row[4]),
-        birthDate: getCellValue(row[5]),
-        address: getCellValue(row[6]),
-        joinDate: getCellValue(row[7]),
-        email: getCellValue(row[8]),
-        phoneNumber: getCellValue(row[9]),
-        educationLevel: getCellValue(row[10]),
-        workLocation: getCellValue(row[11]),
-        jobRole: getCellValue(row[12]),
-        jobLevel: getCellValue(row[13]),
-        department: getCellValue(row[14]),
-        taxStatus: getCellValue(row[15]),
+        memberNo: getCellValue(row[1]),
+        fullName: getCellValue(row[2]),
+        nik: getCellValue(row[3]),
+        gender: getCellValue(row[4]),
+        birthPlace: getCellValue(row[5]),
+        birthDate: getCellValue(row[6]),
+        address: getCellValue(row[7]),
+        joinDate: getCellValue(row[8]),
+        email: getCellValue(row[9]),
+        phoneNumber: getCellValue(row[10]),
+        educationLevel: getCellValue(row[11]),
+        workLocation: getCellValue(row[12]),
+        jobRole: getCellValue(row[13]),
+        jobLevel: getCellValue(row[14]),
+        department: getCellValue(row[15]),
+        taxStatus: getCellValue(row[16]),
       }
 
       if (!raw.employeeNo) errors.push('No. Induk Karyawan wajib diisi')
@@ -293,6 +296,7 @@ export function useImportTemplate() {
         validRows.push({
           rowNumber: rowNum,
           employeeNo: raw.employeeNo,
+          memberNo: raw.memberNo || undefined,
           fullName: raw.fullName,
           nik: raw.nik || undefined,
           gender: GENDER_MAP[raw.gender]!,

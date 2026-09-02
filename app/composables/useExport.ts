@@ -66,6 +66,7 @@ export function useExport() {
     return employees.map((e: any, i: number) => ({
       'No': i + 1,
       'No. Induk Karyawan': e.employeeNo ?? '-',
+      'No. Anggota': e.memberNo ?? '-',
       'Nama Lengkap': e.fullName ?? '-',
       'NIK': e.nik ?? '-',
       'Status Kepegawaian': employmentStatusLabel(e.employmentStatus ?? '-'),
@@ -102,6 +103,7 @@ export function useExport() {
       return {
         'No': i + 1,
         'No. Induk': e.employeeNo ?? '-',
+        'No. Anggota': e.memberNo ?? '-',
         'Nama': e.fullName ?? '-',
         'Status': employmentStatusLabel(e.employmentStatus ?? '-'),
         'Gender': genderLabel(e.gender ?? ''),

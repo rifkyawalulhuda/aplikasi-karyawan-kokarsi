@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs'
 
 export class CreateEmployeeDto {
   @IsString() employeeNo: string
+  @IsOptional() @IsString() memberNo?: string
   @IsString() fullName: string
   @IsOptional() @IsString() nik?: string
   @IsOptional() @IsString() birthPlace?: string
@@ -702,6 +703,7 @@ export class EmployeesService {
 
     const COLUMN_HEADERS = [
       'No. Induk Karyawan',
+      'No. Anggota',
       'Nama Lengkap',
       'NIK',
       'Jenis Kelamin',
@@ -733,7 +735,7 @@ export class EmployeesService {
       size: 11,
     }
 
-    const requiredColumns = new Set([1, 2, 4, 6, 8, 9, 11, 12, 13, 14, 15, 16])
+    const requiredColumns = new Set([1, 3, 5, 7, 9, 10, 12, 13, 14, 15, 16, 17])
 
     const headerRow = sheet.addRow(COLUMN_HEADERS)
     headerRow.eachCell((cell, colNumber) => {
@@ -795,13 +797,13 @@ export class EmployeesService {
       }
     }
 
-    addDropdown(4, 'JK', GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
-    addDropdown(11, 'Pendidikan', EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
-    addDropdown(12, 'Lokasi', workLocations.map(l => l.name), 'Site Tidak Valid', 'Pilih dari daftar site yang tersedia.')
-    addDropdown(13, 'Pekerjaan', jobRoles.map(l => l.name), 'Pekerjaan Tidak Valid', 'Pilih dari daftar pekerjaan yang tersedia.')
-    addDropdown(14, 'Level', jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
-    addDropdown(15, 'Departemen', departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
-    addDropdown(16, 'Pajak', taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
+    addDropdown(5, 'JK', GENDER_LABELS, 'Jenis Kelamin Tidak Valid', `Pilih salah satu: ${GENDER_LABELS.join(', ')}`)
+    addDropdown(12, 'Pendidikan', EDUCATION_LABELS, 'Pendidikan Tidak Valid', `Pilih salah satu: ${EDUCATION_LABELS.join(', ')}`)
+    addDropdown(13, 'Lokasi', workLocations.map(l => l.name), 'Site Tidak Valid', 'Pilih dari daftar site yang tersedia.')
+    addDropdown(14, 'Pekerjaan', jobRoles.map(l => l.name), 'Pekerjaan Tidak Valid', 'Pilih dari daftar pekerjaan yang tersedia.')
+    addDropdown(15, 'Level', jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
+    addDropdown(16, 'Departemen', departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
+    addDropdown(17, 'Pajak', taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
 
     for (let i = 2; i <= 101; i++) {
       for (let col = 1; col <= COLUMN_HEADERS.length; col++) {
@@ -818,7 +820,7 @@ export class EmployeesService {
       sheet.getCell(i, 8).numFmt = 'dd/mm/yyyy'
     }
 
-    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18]
+    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18, 18]
     COLUMN_HEADERS.forEach((_, i) => {
       sheet.getColumn(i + 1).width = columnWidths[i]
     })
