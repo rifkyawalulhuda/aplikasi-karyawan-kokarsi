@@ -42,14 +42,15 @@ jobs:
 
             echo "==> Install dependencies frontend..."
             cd $ROOT
-            npm install --no-audit --no-fund --prefer-offline
+            rm -f package-lock.json
+            npm install --no-audit --no-fund
 
             echo "==> Build frontend (Nuxt)..."
             npm run build
 
             echo "==> Install dependencies backend..."
             cd $BACKEND
-            npm install --no-audit --no-fund --prefer-offline
+            npm install --no-audit --no-fund
 
             echo "==> Build backend (NestJS)..."
             npm run build
