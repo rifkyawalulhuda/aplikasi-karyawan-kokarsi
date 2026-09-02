@@ -4,11 +4,14 @@ node dist/main.js
 
 cd E:\Github\aplikasi-karyawan-kokarsi
 pnpm dev
+pnpm install
+pnpm build
 
 cd E:\Github\aplikasi-karyawan-kokarsi\backend
 npx prisma migrate deploy
 npx prisma generate
-pnpm build
+npm install
+npm run build
 node dist/main.js
 
 
