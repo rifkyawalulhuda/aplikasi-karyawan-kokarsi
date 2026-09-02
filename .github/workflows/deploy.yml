@@ -43,6 +43,7 @@ jobs:
             echo "==> Install dependencies frontend..."
             cd $ROOT
             rm -f package-lock.json
+            rm -f .npmrc
             npm install --no-audit --no-fund
 
             echo "==> Build frontend (Nuxt)..."
