@@ -8,6 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
+import { deleteUploadedFile } from '../shared/file-cleanup.util'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -504,12 +505,16 @@ export class ContractsService {
   }
 
   async updateDocumentUrl(id: number, documentUrl: string) {
-    await this.findOne(id)
+    const existing = await this.findOne(id)
     const contract = await this.prisma.contract.update({
       where: { id },
       data: { documentUrl },
       include: this.include,
     })
+    // Hapus file scan lama setelah DB berhasil di-update (non-fatal).
+    if (existing.documentUrl && existing.documentUrl !== documentUrl) {
+      deleteUploadedFile(existing.documentUrl)
+    }
     return this.withComputedStatus(contract)
   }
 }
