@@ -674,7 +674,10 @@ export class ContractDocumentService {
       const labelX = x + 18 // indent after "II."
       const colonX = x + 100 // fixed colon position
       const valueX = x + 108 // value starts after ": "
+      const valueWidth = width - (valueX - x)
       const lineHeight = 14
+      const suffixX = x + 18
+      const suffixWidth = width - 18
 
       let currentY = effectiveY
 
@@ -686,18 +689,20 @@ export class ContractDocumentService {
       const values = [data.name, data.birthInfo, data.gender, data.address]
       const suffix = data.suffix ?? 'Selanjutnya disebut KARYAWAN'
 
-      // Render each row
+      // Render each row; advance by the actual wrapped height so long values
+      // (e.g. a long address) never overlap the following content.
       for (let i = 0; i < labels.length; i++) {
         doc.text(labels[i], labelX, currentY)
         doc.text(':', colonX, currentY)
-        doc.text(values[i], valueX, currentY, { width: width - (valueX - x) })
-        currentY += lineHeight
+        doc.text(values[i], valueX, currentY, { width: valueWidth })
+        const rowHeight = Math.max(lineHeight, doc.heightOfString(values[i], { width: valueWidth }))
+        currentY += rowHeight
       }
 
       // Empty line + suffix
       currentY += 6
-      doc.text(suffix, x + 18, currentY, { width })
-      currentY += lineHeight
+      doc.text(suffix, suffixX, currentY, { width: suffixWidth })
+      currentY += Math.max(lineHeight, doc.heightOfString(suffix, { width: suffixWidth }))
 
       return currentY + (block.gapAfter ?? 0)
     }
@@ -721,7 +726,22 @@ export class ContractDocumentService {
     const gapBefore = block.gapBefore ?? 0
     const gapAfter = block.gapAfter ?? 0
     const anyBlock = block as any
-    if (anyBlock.partyII) return gapBefore + (14 * 4 + 6 + 14) + gapAfter
+    if (anyBlock.partyII) {
+      const data = anyBlock.partyII
+      doc.font(block.font).fontSize(block.fontSize)
+      const valueWidth = columnWidth - 108
+      const lineHeight = 14
+      const labels = data.labels ?? ['Nama', 'Tgl. Lahir', 'Jenis Kelamin', 'Alamat']
+      const values = [data.name, data.birthInfo, data.gender, data.address]
+      const suffix = data.suffix ?? 'Selanjutnya disebut KARYAWAN'
+
+      const rowsHeight = labels.reduce((sum, _, i) => {
+        const rowH = doc.heightOfString(values[i], { width: valueWidth })
+        return sum + Math.max(lineHeight, rowH)
+      }, 0)
+      const suffixH = Math.max(lineHeight, doc.heightOfString(suffix, { width: columnWidth - 18 }))
+      return gapBefore + rowsHeight + 6 + suffixH + gapAfter
+    }
     doc.font(block.font).fontSize(block.fontSize)
     return gapBefore + doc.heightOfString(block.text, { width: columnWidth, align: block.align ?? 'left', lineGap: 2 }) + gapAfter
   }
