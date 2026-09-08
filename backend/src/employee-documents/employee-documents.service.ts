@@ -228,12 +228,18 @@ export class EmployeeDocumentsService {
   }
 
   async updateFileUrl(id: number, fileUrl: string) {
-    await this.findOne(id)
-    return this.prisma.employeeDocument.update({
+    const existing = await this.findOne(id)
+    const updated = await this.prisma.employeeDocument.update({
       where: { id },
       data: { fileUrl },
       include: this.include,
     })
+    // Hapus file fisik lama setelah DB berhasil di-update (non-fatal).
+    // Nama file upload selalu unik, jadi file lama hanya tersisa bila tidak dihapus.
+    if (existing.fileUrl && existing.fileUrl !== fileUrl) {
+      deleteUploadedFile(existing.fileUrl)
+    }
+    return updated
   }
 
   async findEmployeeSummary({

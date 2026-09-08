@@ -200,12 +200,17 @@ export class VendorContractsService {
   }
 
   async updateFileUrl(id: number, fileUrl: string) {
-    await this.findOne(id)
-    return this.prisma.vendorContract.update({
+    const existing = await this.findOne(id)
+    const updated = await this.prisma.vendorContract.update({
       where: { id },
       data: { fileUrl },
       include: this.include,
     })
+    // Hapus file fisik lama setelah DB berhasil di-update (non-fatal).
+    if (existing.fileUrl && existing.fileUrl !== fileUrl) {
+      deleteUploadedFile(existing.fileUrl)
+    }
+    return updated
   }
 
   async findMotherAgreements(

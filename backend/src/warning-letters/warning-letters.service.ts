@@ -263,11 +263,16 @@ export class WarningLettersService {
   }
 
   async updateFileUrl(id: number, documentUrl: string) {
-    await this.findOne(id)
-    return this.prisma.warningLetter.update({
+    const existing = await this.findOne(id)
+    const updated = await this.prisma.warningLetter.update({
       where: { id },
       data: { documentUrl },
       include: this.include,
     })
+    // Hapus file fisik lama setelah DB berhasil di-update (non-fatal).
+    if (existing.documentUrl && existing.documentUrl !== documentUrl) {
+      deleteUploadedFile(existing.documentUrl)
+    }
+    return updated
   }
 }

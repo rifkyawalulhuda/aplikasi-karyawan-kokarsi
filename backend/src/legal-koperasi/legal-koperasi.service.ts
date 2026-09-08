@@ -178,12 +178,17 @@ export class LegalKoperasiService {
   }
 
   async updateFileUrl(id: number, fileUrl: string) {
-    await this.findOne(id)
-    return this.prisma.legalKoperasi.update({
+    const existing = await this.findOne(id)
+    const updated = await this.prisma.legalKoperasi.update({
       where: { id },
       data: { fileUrl },
       include: this.include,
     })
+    // Hapus file fisik lama setelah DB berhasil di-update (non-fatal).
+    if (existing.fileUrl && existing.fileUrl !== fileUrl) {
+      deleteUploadedFile(existing.fileUrl)
+    }
+    return updated
   }
 
   async renewLegal(id: number, dto: CreateLegalKoperasiDto) {
