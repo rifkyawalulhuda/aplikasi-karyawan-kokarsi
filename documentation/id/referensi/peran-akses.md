@@ -30,6 +30,11 @@ Aplikasi memiliki dua peran pengguna internal: **Master Admin** dan **Pengelola 
 | CRUD Kontrak Vendor | ✅ | ✅ |
 | CRUD Legal Koperasi | ✅ | ✅ |
 | CRUD Akte Dokumen | ✅ | ✅ |
+| CRUD Arsip Umum | ✅ | ✅ |
+| **Operasional** | | |
+| Tambah Pemakaian Kendaraan | ✅ | ✅ |
+| Batalkan Pemakaian Kendaraan | ✅ | ✅ |
+| Export Excel Pemakaian Kendaraan | ✅ | ✅ |
 | **Notifikasi** | | |
 | Lihat notifikasi | ✅ | ✅ |
 | **Dashboard** | | |

@@ -9,7 +9,8 @@ Sistem ini mengelola seluruh siklus hidup data karyawan secara terpusat:
 - **Data Karyawan** — CRUD lengkap, import bulk, foto profil, offboarding
 - **Kontrak Karyawan** — Buat/edit/perpanjang PKWT & MITRA, generate PDF otomatis
 - **Dokumen Karyawan** — Surat Peringatan (SP1/SP2/SP3), Sertifikasi & Ijin
-- **Dokumen Legal** — Kontrak Customer/Vendor, Legal Koperasi, Akte Dokumen
+- **Dokumen Legal** — Kontrak Customer/Vendor, Legal Koperasi, Akte Dokumen, Arsip Umum
+- **Operasional** — Pemakaian Kendaraan operasional koperasi
 - **Notifikasi** — Pengingat masa berlaku real-time via SSE
 - **Dashboard** — Statistik & visualisasi data karyawan
 - **Pengaturan** — Logo, nama organisasi, tampilan login

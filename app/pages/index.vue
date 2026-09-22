@@ -787,7 +787,7 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                     />
                   </div>
                 </div>
-                <p class="text-xs text-muted">Total seluruh data pemakaian</p>
+                <p class="text-xs text-muted">Total pemakaian bulan ini</p>
               </div>
             </template>
           </UCard>

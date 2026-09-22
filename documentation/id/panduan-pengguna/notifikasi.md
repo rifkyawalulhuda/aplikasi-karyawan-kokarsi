@@ -24,6 +24,7 @@ Klik ikon lonceng untuk membuka panel notifikasi yang menampilkan:
 | **Sertifikasi & Ijin** | 🏅 | Dokumen karyawan yang akan/sudah expired |
 | **Kontrak Vendor** | 🏢 | Kontrak vendor/customer yang akan/sudah habis |
 | **Legal Koperasi** | ✍️ | Dokumen legal yang akan/sudah berakhir |
+| **Arsip Umum** | 🗄️ | Arsip umum yang akan/sudah berakhir |
 
 ## Tingkat Urgensi
 

@@ -19,6 +19,8 @@ aplikasi-karyawan-kokarsi/
 │   │   ├── notifications/  # Sistem notifikasi SSE
 │   │   ├── akte-dokumen/   # Akte dokumen
 │   │   ├── legal-koperasi/ # Legal koperasi
+│   │   ├── general-archives/          # Arsip umum
+│   │   ├── operational-vehicle-usage/ # Pemakaian kendaraan
 │   │   └── ...             # Modul lainnya
 │   └── prisma/             # Schema & migrations
 ├── server/                 # Nitro proxy routes
@@ -75,6 +77,8 @@ Nuxt Frontend (port 3000)
 | VendorContracts | `GET/POST/PUT/DELETE /vendor-contracts` |
 | LegalKoperasi | `GET/POST/PUT/DELETE /legal-koperasi`, renew |
 | AkteDokumen | `GET/POST/PUT/DELETE /akte-dokumen`, upload file |
+| GeneralArchives | `GET/POST/PUT/DELETE /general-archives`, upload file |
+| OperationalVehicleUsage | `GET/POST /operational-vehicle-usages`, `POST /operational-vehicle-usages/:id/cancel` |
 | Notifications | `GET /notifications`, `GET /notifications/stream` (SSE) |
 | ContractCron | Scheduled jobs (00:01 WIB daily, setiap 5 menit) |
 

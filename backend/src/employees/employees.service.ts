@@ -462,7 +462,11 @@ export class EmployeesService {
     const wibDayStartUtc = Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), wibNow.getUTCDate())
     const startOfTodayWib = new Date(wibDayStartUtc - wibOffsetMs)
     const startOfTomorrowWib = new Date(wibDayStartUtc + 24 * 60 * 60 * 1000 - wibOffsetMs)
-    const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wibOffsetMs)
+const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wibOffsetMs)
+
+    // Batas bulan ini dalam WIB (UTC+7) untuk "Pemakaian per Kendaraan"
+    const startOfMonthWib = new Date(Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), 1) - wibOffsetMs)
+    const endOfMonthWib = new Date(Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth() + 1, 1) - wibOffsetMs)
 
     const [
       total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
@@ -620,7 +624,11 @@ export class EmployeesService {
         orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
         select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
       }),
-      this.prisma.operationalVehicleUsage.groupBy({ by: ['vehicleNumber'], _count: true }),
+      this.prisma.operationalVehicleUsage.groupBy({
+        by: ['vehicleNumber'],
+        where: { usedAt: { gte: startOfMonthWib, lt: endOfMonthWib } },
+        _count: true,
+      }),
     ])
 
     const byLocation = locations

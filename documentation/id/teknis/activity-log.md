@@ -103,7 +103,7 @@ async create(dto: CreateDto, actor: { name: string; role: string }) {
 4. Panggil `void this.activityLog.log(...)` setelah setiap operasi prisma berhasil
 5. Isi `detail` dengan konteks yang relevan (lihat tabel di bawah untuk referensi)
 
-## Service yang Di-hook (10 service)
+## Service yang Di-hook (12 service)
 
 | Service | Module Label | Detail CREATE | Detail UPDATE | Detail DELETE |
 |---------|-------------|--------------|--------------|--------------|
@@ -114,6 +114,8 @@ async create(dto: CreateDto, actor: { name: string; role: string }) {
 | `vendor-contracts` | Kontrak Vendor | Kategori + jenis + perlu perpanjangan | Jenis + kategori + status/`Tidak perlu perpanjangan` | Jenis + kategori |
 | `legal-koperasi` | Legal Koperasi | Kategori + penerbit + perlu perpanjangan | Kategori + status/`Tidak perlu perpanjangan` | Kategori |
 | `akte-dokumen` | Akte Dokumen | Notaris + tanggal | Notaris | Tanggal |
+| `general-archives` | Arsip Umum | Nomor dokumen | Nomor dokumen | Nomor dokumen |
+| `operational-vehicle-usages` | Pemakaian Kendaraan | Waktu pemakaian | `Status diubah menjadi Batal` (pembatalan) | — |
 | `lookups` (8 entity) | Master Data | `Nilai: <name>` | `Nilai baru: <name>` | `Nilai dihapus: <name>` |
 | `contract-templates` | Template Kontrak | Tipe kontrak | Tipe kontrak | Nama template |
 | `users` | User | Role + username | Role | Role + username |
