@@ -11,6 +11,7 @@ const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const { exportGeneralArchivesExcel } = useExport()
 const route = useRoute()
+const currentYear = new Date().getFullYear()
 
 interface Archive {
   id: number
@@ -39,6 +40,8 @@ const contextMenuY = ref(0)
 const contextMenuTarget = ref<Archive | null>(null)
 const previewOpen = ref(false)
 const previewTarget = ref<Archive | null>(null)
+const exportModal = ref(false)
+const exportYear = ref<number | 'all'>(currentYear)
 const table = useTemplateRef('table')
 
 const { data: res, status, refresh } = await useFetch<{ data: Archive[]; total: number }>('/api/general-archives', {
@@ -48,6 +51,15 @@ const { data: res, status, refresh } = await useFetch<{ data: Archive[]; total: 
 })
 
 const archives = computed(() => res.value?.data ?? [])
+const availableYears = computed(() => {
+  const years = new Set(archives.value.filter(item => item.createdDate).map(item => new Date(item.createdDate!).getFullYear()))
+  years.add(currentYear)
+  return [...years].sort((a, b) => b - a)
+})
+const exportYearOptions = computed(() => [
+  { label: 'Semua Tahun', value: 'all' as const },
+  ...availableYears.value.map(year => ({ label: String(year), value: year })),
+])
 const filteredData = computed(() => {
   let result = archives.value
   const query = searchQuery.value.trim().toLowerCase()
@@ -110,8 +122,13 @@ function confirmDelete(item: Archive) {
   })
 }
 function handleExport() {
-  if (!exportGeneralArchivesExcel(filteredData.value)) toast.add({ title: 'Tidak ada data untuk diekspor', color: 'warning' })
-  else toast.add({ title: 'Export berhasil', color: 'success' })
+  const year = exportYear.value === 'all' ? undefined : exportYear.value
+  if (!exportGeneralArchivesExcel(archives.value, year)) {
+    toast.add({ title: 'Tidak ada data', description: `Tidak ada arsip${year ? ` dengan tanggal dibuat tahun ${year}` : ''}.`, color: 'warning' })
+    return
+  }
+  toast.add({ title: 'Export berhasil', description: `Data Arsip Umum${year ? ` tahun ${year}` : ''} berhasil diekspor.`, color: 'success' })
+  exportModal.value = false
 }
 async function handleOpenId(value: string | null | (string | null)[] | undefined) {
   if (!value) return
@@ -137,7 +154,7 @@ const columns: TableColumn<Archive>[] = [
       <UDashboardNavbar title="Arsip Umum">
         <template #leading><UDashboardSidebarCollapse /></template>
         <template #right>
-          <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" @click="handleExport" />
+          <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" @click="exportModal = true" />
           <UButton label="Tambah Arsip" icon="i-lucide-plus" color="primary" @click="addModal = true" />
         </template>
       </UDashboardNavbar>
@@ -156,6 +173,21 @@ const columns: TableColumn<Archive>[] = [
   <ArsipUmumFormModal v-model:open="addModal" mode="add" @saved="refresh" />
   <ArsipUmumFormModal v-model:open="editModal" mode="edit" :initial-data="editTarget" @saved="refresh" />
   <ArsipUmumDetailDrawer v-model:open="detailDrawer" :archive="detailTarget" @edit="openEdit" />
+
+  <UModal v-model:open="exportModal" title="Export Arsip Umum" :ui="{ content: 'sm:max-w-md' }">
+    <template #body>
+      <UFormField label="Tahun Export">
+        <USelect v-model="exportYear" :items="exportYearOptions" class="w-full" />
+        <p class="mt-1.5 text-xs text-muted">Arsip tanpa tanggal dibuat hanya tersedia pada opsi Semua Tahun.</p>
+      </UFormField>
+    </template>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton label="Batal" color="neutral" variant="ghost" @click="exportModal = false" />
+        <UButton label="Export Excel" icon="i-lucide-file-spreadsheet" color="primary" @click="handleExport" />
+      </div>
+    </template>
+  </UModal>
 
   <UModal v-model:open="previewOpen" :title="previewTarget?.documentName ?? 'Preview Dokumen'" :ui="{ content: 'sm:max-w-4xl w-full' }">
     <template #body>

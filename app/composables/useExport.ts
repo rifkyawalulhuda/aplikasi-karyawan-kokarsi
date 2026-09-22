@@ -551,9 +551,12 @@ export function useExport() {
     return true
   }
 
-  function exportGeneralArchivesExcel(docs: any[], filename = 'arsip-umum') {
-    if (!docs.length) return false
-    const rows = docs.map((doc, index) => ({
+  function exportGeneralArchivesExcel(docs: any[], year?: number, filename = 'arsip-umum') {
+    const filtered = year
+      ? docs.filter(doc => doc.createdDate && new Date(doc.createdDate).getFullYear() === year)
+      : docs
+    if (!filtered.length) return false
+    const rows = filtered.map((doc, index) => ({
       'No': index + 1,
       'Nama Dokumen': doc.documentName ?? '-',
       'Nomor Dokumen': doc.documentNumber ?? '-',
@@ -567,7 +570,7 @@ export function useExport() {
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Arsip Umum')
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    XLSX.writeFile(wb, `${filename}${year ? `-${year}` : '-semua'}.xlsx`)
     return true
   }
 
