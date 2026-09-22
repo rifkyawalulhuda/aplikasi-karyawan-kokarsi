@@ -41,7 +41,7 @@ const statusFilter = ref('all')
 const rangeOpen = ref(false)
 const rangeStartCal = shallowRef<CalendarDate | null>(null)
 const rangeEndCal = shallowRef<CalendarDate | null>(null)
-const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'usedAt', direction: 'asc' })
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const table = useTemplateRef('table')
 const formOpen = ref(false)
@@ -81,6 +81,10 @@ function jakartaDateKey(value: string) {
   return `${values.year}-${values.month}-${values.day}`
 }
 
+function todayJakartaKey() {
+  return jakartaDateKey(new Date().toISOString())
+}
+
 const filteredUsages = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
   const rangeStart = rangeStartCal.value ? fromCalDate(rangeStartCal.value) : ''
@@ -103,6 +107,18 @@ const sortedUsages = computed(() => {
   return [...filteredUsages.value].sort((a, b) => {
     const aValue = sort.key === 'status' ? (a.status ?? '') : String((a as any)[sort.key] ?? '')
     const bValue = sort.key === 'status' ? (b.status ?? '') : String((b as any)[sort.key] ?? '')
+
+    if (sort.key === 'usedAt' && sort.direction === 'asc') {
+      const today = todayJakartaKey()
+      const aDate = jakartaDateKey(a.usedAt)
+      const bDate = jakartaDateKey(b.usedAt)
+      const aIsToday = aDate === today
+      const bIsToday = bDate === today
+
+      if (aIsToday !== bIsToday) return aIsToday ? -1 : 1
+      if (!aIsToday && aDate !== bDate) return bDate.localeCompare(aDate)
+    }
+
     const result = sort.key === 'usedAt'
       ? new Date(aValue).getTime() - new Date(bValue).getTime()
       : aValue.localeCompare(bValue, 'id', { sensitivity: 'base' })
