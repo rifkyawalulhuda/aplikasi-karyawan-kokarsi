@@ -462,6 +462,7 @@ export class EmployeesService {
     const wibDayStartUtc = Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), wibNow.getUTCDate())
     const startOfTodayWib = new Date(wibDayStartUtc - wibOffsetMs)
     const startOfTomorrowWib = new Date(wibDayStartUtc + 24 * 60 * 60 * 1000 - wibOffsetMs)
+    const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wibOffsetMs)
 
     const [
       total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
@@ -470,7 +471,8 @@ export class EmployeesService {
       expiringContractItems, expiringVendorContracts, expiringVendorItems,
       expiringLegalKoperasi, expiringLegalItems, expiringCertifications, expiringCertItems,
       activeWarnings,
-      vehicleTodayTotal, vehicleTodayActive, vehicleTodayCancelled, vehicleTodayItems, vehicleGroups,
+      vehicleTodayTotal, vehicleTodayActive, vehicleTodayCancelled, vehicleTodayItems,
+      vehicleSevenDaysTotal, vehicleSevenDaysActive, vehicleSevenDaysCancelled, vehicleSevenDaysItems, vehicleGroups,
     ] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { employmentStatus: 'AKTIF' } }),
@@ -602,7 +604,20 @@ export class EmployeesService {
       this.prisma.operationalVehicleUsage.findMany({
         where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib } },
         orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
-        take: 5,
+        select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
+      }),
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib } },
+      }),
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: null },
+      }),
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: 'BATAL' },
+      }),
+      this.prisma.operationalVehicleUsage.findMany({
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib } },
+        orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
         select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
       }),
       this.prisma.operationalVehicleUsage.groupBy({ by: ['vehicleNumber'], _count: true }),
@@ -670,10 +685,18 @@ export class EmployeesService {
       recruitmentTrend,
       offboardingTrend,
       vehicleUsage: {
-        todayTotal: vehicleTodayTotal,
-        todayActive: vehicleTodayActive,
-        todayCancelled: vehicleTodayCancelled,
-        todayItems: vehicleTodayItems,
+        today: {
+          total: vehicleTodayTotal,
+          active: vehicleTodayActive,
+          cancelled: vehicleTodayCancelled,
+          items: vehicleTodayItems,
+        },
+        nextSevenDays: {
+          total: vehicleSevenDaysTotal,
+          active: vehicleSevenDaysActive,
+          cancelled: vehicleSevenDaysCancelled,
+          items: vehicleSevenDaysItems,
+        },
         vehicleCounts: vehicleGroups
           .map(g => ({ vehicleNumber: g.vehicleNumber, count: g._count }))
           .sort((a, b) => b.count - a.count),

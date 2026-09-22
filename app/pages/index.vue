@@ -18,17 +18,8 @@ interface DashboardStats {
   recruitmentTrend: { year: number; count: number }[]
   offboardingTrend: { year: number; resign: number; phk: number }[]
   vehicleUsage: {
-    todayTotal: number
-    todayActive: number
-    todayCancelled: number
-    todayItems: {
-      id: number
-      usedAt: string
-      vehicleNumber: string
-      driver: string
-      destination: string
-      status: 'BATAL' | null
-    }[]
+    today: VehicleUsagePeriod
+    nextSevenDays: VehicleUsagePeriod
     vehicleCounts: { vehicleNumber: string; count: number }[]
   }
   expiringSoon: {
@@ -38,6 +29,22 @@ interface DashboardStats {
     certifications: { count: number; items: ExpiringItem[] }
     activeWarnings: number
   }
+}
+
+interface VehicleUsageItem {
+  id: number
+  usedAt: string
+  vehicleNumber: string
+  driver: string
+  destination: string
+  status: 'BATAL' | null
+}
+
+interface VehicleUsagePeriod {
+  total: number
+  active: number
+  cancelled: number
+  items: VehicleUsageItem[]
 }
 
 const auth = useAuthStore()
@@ -75,6 +82,7 @@ const sectionDemografi  = useLocalStorage('dashboard-section-demografi', false)
 const sectionDistribusi = useLocalStorage('dashboard-section-distribusi', false)
 const sectionTrend      = useLocalStorage('dashboard-section-trend', false)
 const sectionAksiCepat  = useLocalStorage('dashboard-section-aksi-cepat', true)
+const vehiclePeriod = ref<'today' | 'nextSevenDays'>('today')
 
 const allSections = [sectionKpi, sectionPerhatian, sectionKendaraan, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
 
@@ -84,6 +92,41 @@ function jamWib(value: string) {
     timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(new Date(value))
 }
+
+function tanggalWib(value: string) {
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta', weekday: 'long', day: '2-digit', month: 'long',
+  }).format(new Date(value))
+}
+
+function dateKeyWib(value: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(value))
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
+}
+
+const activeVehiclePeriod = computed(() => stats.value?.vehicleUsage?.[vehiclePeriod.value] ?? {
+  total: 0,
+  active: 0,
+  cancelled: 0,
+  items: [],
+})
+
+const groupedVehicleSchedule = computed(() => {
+  const groups: { key: string; label: string; isToday: boolean; items: VehicleUsageItem[] }[] = []
+  for (const item of activeVehiclePeriod.value.items) {
+    const key = dateKeyWib(item.usedAt)
+    let group = groups.find(existing => existing.key === key)
+    if (!group) {
+      group = { key, label: tanggalWib(item.usedAt), isToday: vehiclePeriod.value === 'nextSevenDays' && key === dateKeyWib(new Date().toISOString()), items: [] }
+      groups.push(group)
+    }
+    group.items.push(item)
+  }
+  return groups
+})
 
 // Lebar bar distribusi kendaraan (relatif terhadap kendaraan terbanyak)
 function vehicleBarWidth(count: number) {
@@ -538,9 +581,9 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
             <UIcon name="i-lucide-car-front" class="size-4 text-muted" />
             <span class="text-sm font-semibold text-highlighted">Pemakaian Kendaraan</span>
             <span
-              v-if="!statsLoading && (stats?.vehicleUsage?.todayTotal ?? 0) > 0"
+              v-if="!statsLoading && activeVehiclePeriod.total > 0"
               class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-            >{{ stats?.vehicleUsage?.todayTotal ?? 0 }} hari ini</span>
+            >{{ activeVehiclePeriod.total }} {{ vehiclePeriod === 'today' ? 'hari ini' : '7 hari' }}</span>
           </div>
           <UIcon
             name="i-lucide-chevron-down"
@@ -550,6 +593,31 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
         </button>
 
         <div v-show="sectionKendaraan">
+        <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="inline-flex rounded-lg border border-default bg-elevated/30 p-1" role="tablist" aria-label="Periode pemakaian kendaraan">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="vehiclePeriod === 'today'"
+              :class="[
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                vehiclePeriod === 'today' ? 'bg-primary text-inverted shadow-sm' : 'text-muted hover:text-highlighted',
+              ]"
+              @click="vehiclePeriod = 'today'"
+            >Hari Ini</button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="vehiclePeriod === 'nextSevenDays'"
+              :class="[
+                'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+                vehiclePeriod === 'nextSevenDays' ? 'bg-primary text-inverted shadow-sm' : 'text-muted hover:text-highlighted',
+              ]"
+              @click="vehiclePeriod = 'nextSevenDays'"
+            >7 Hari ke Depan</button>
+          </div>
+          <span class="text-xs text-muted">{{ vehiclePeriod === 'today' ? 'Agenda hari ini' : 'Hari ini + 6 hari berikutnya' }}</span>
+        </div>
         <!-- KPI hari ini -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <template v-if="statsLoading">
@@ -571,9 +639,9 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Pemakaian Hari Ini</p>
-                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayTotal ?? 0 }}</p>
-                  <p class="text-xs text-muted mt-1 truncate">Seluruh catatan hari ini</p>
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Pemakaian {{ vehiclePeriod === 'today' ? 'Hari Ini' : '7 Hari' }}</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ activeVehiclePeriod.total }}</p>
+                  <p class="text-xs text-muted mt-1 truncate">Seluruh catatan periode</p>
                 </div>
                 <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-primary/10 ring-primary/20">
                   <UIcon name="i-lucide-calendar-clock" class="size-5 text-primary" />
@@ -586,8 +654,8 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Terjadwal Hari Ini</p>
-                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayActive ?? 0 }}</p>
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Terjadwal {{ vehiclePeriod === 'today' ? 'Hari Ini' : '7 Hari' }}</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ activeVehiclePeriod.active }}</p>
                   <p class="text-xs text-muted mt-1 truncate">Pemakaian yang masih berlaku</p>
                 </div>
                 <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-green-500/10 ring-green-500/20">
@@ -601,8 +669,8 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
             >
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Batal Hari Ini</p>
-                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayCancelled ?? 0 }}</p>
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Batal {{ vehiclePeriod === 'today' ? 'Hari Ini' : '7 Hari' }}</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ activeVehiclePeriod.cancelled }}</p>
                   <p class="text-xs text-muted mt-1 truncate">Pemakaian yang dibatalkan</p>
                 </div>
                 <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-red-500/10 ring-red-500/20">
@@ -614,15 +682,15 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
         </div>
 
         <!-- Jadwal hari ini + distribusi kendaraan -->
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        <div class="mt-4 grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
           <UCard class="xl:col-span-2" :ui="{ body: 'p-4 sm:p-5' }">
             <template #header>
               <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-0 sm:px-5">
                 <div class="flex items-center gap-2">
                   <UIcon name="i-lucide-list-ordered" class="size-4 text-primary" />
-                  <span class="text-sm font-semibold text-highlighted">Jadwal Pemakaian Hari Ini</span>
+                  <span class="text-sm font-semibold text-highlighted">Jadwal Pemakaian {{ vehiclePeriod === 'today' ? 'Hari Ini' : '7 Hari ke Depan' }}</span>
                 </div>
-                <UBadge variant="subtle" color="neutral" size="sm">Maks. 5</UBadge>
+                <UBadge variant="subtle" color="neutral" size="sm">{{ activeVehiclePeriod.total }} jadwal</UBadge>
               </div>
             </template>
 
@@ -631,38 +699,39 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
                 <div v-for="i in 3" :key="`veh-row-skel-${i}`" class="h-10 bg-accented rounded animate-pulse" />
               </div>
             </template>
-            <template v-else-if="!(stats?.vehicleUsage?.todayItems?.length)">
+            <template v-else-if="!activeVehiclePeriod.items.length">
               <div class="flex flex-col items-center gap-2 py-8 text-muted">
                 <UIcon name="i-lucide-car-front" class="size-8 opacity-40" />
                 <p class="text-sm">Tidak ada pemakaian kendaraan hari ini</p>
               </div>
             </template>
             <template v-else>
-              <div class="divide-y divide-default">
-                <div
-                  v-for="item in stats?.vehicleUsage?.todayItems ?? []"
-                  :key="item.id"
-                  class="flex items-center gap-3 py-2.5"
-                >
-                  <span class="w-12 shrink-0 text-sm font-semibold text-highlighted tabular-nums">{{ jamWib(item.usedAt) }}</span>
-                  <div class="min-w-0 flex-1">
-                    <p class="text-sm font-medium text-highlighted truncate">{{ item.vehicleNumber }}</p>
-                    <p class="text-xs text-muted truncate">{{ item.driver }} · {{ item.destination }}</p>
+              <div class="max-h-96 space-y-4 overflow-y-auto pr-1">
+                <div v-for="group in groupedVehicleSchedule" :key="group.key">
+                  <div class="sticky top-0 z-10 mb-1 flex items-center gap-2 bg-default/95 py-1.5 backdrop-blur-sm">
+                    <span class="text-xs font-semibold text-highlighted">{{ group.label }}</span>
+                    <UBadge v-if="group.isToday" label="Hari Ini" color="primary" variant="subtle" size="xs" />
+                    <span class="text-xs text-muted">{{ group.items.length }} jadwal</span>
                   </div>
-                  <UBadge
-                    v-if="item.status === 'BATAL'"
-                    label="Batal"
-                    color="error"
-                    variant="subtle"
-                    size="sm"
-                  />
-                  <UBadge
-                    v-else
-                    label="Terjadwal"
-                    color="success"
-                    variant="subtle"
-                    size="sm"
-                  />
+                  <div class="divide-y divide-default rounded-lg border border-default/70 px-3">
+                    <div
+                      v-for="item in group.items"
+                      :key="item.id"
+                      class="flex items-center gap-3 py-2.5"
+                    >
+                      <span class="w-12 shrink-0 text-sm font-semibold text-highlighted tabular-nums">{{ jamWib(item.usedAt) }}</span>
+                      <div class="min-w-0 flex-1">
+                        <p class="text-sm font-medium text-highlighted truncate">{{ item.vehicleNumber }}</p>
+                        <p class="text-xs text-muted truncate">{{ item.driver }} · {{ item.destination }}</p>
+                      </div>
+                      <UBadge
+                        :label="item.status === 'BATAL' ? 'Batal' : 'Terjadwal'"
+                        :color="item.status === 'BATAL' ? 'error' : 'success'"
+                        variant="subtle"
+                        size="sm"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </template>
