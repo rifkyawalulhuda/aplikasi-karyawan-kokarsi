@@ -29,10 +29,14 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  function logout() {
-    token.value = null
-    admin.value = null
-    navigateTo('/login')
+  async function logout() {
+    try {
+      await $fetch('/api/auth/logout', { method: 'POST' })
+    } finally {
+      token.value = null
+      admin.value = null
+      await navigateTo('/login')
+    }
   }
 
   function getAuthHeader(): Record<string, string> {

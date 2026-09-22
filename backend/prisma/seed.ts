@@ -268,6 +268,54 @@ async function main() {
     }
   }
 
+  // Mock data untuk modul Pemakaian Kendaraan. Aman dijalankan ulang karena
+  // hanya menghapus record yang dibuat oleh blok seed ini.
+  await prisma.operationalVehicleUsage.deleteMany({
+    where: { destination: { startsWith: '[MOCK] ' } },
+  })
+
+  const mockDrivers = ['Budi Santoso', 'Andi Wijaya', 'Dedi Kurniawan', 'Fajar Nugroho', 'Rizky Ramadhan']
+  const mockUsers = ['Tim Operasional', 'Human Capital', 'Administrasi', 'Finance', 'Warehouse']
+  const mockRequesters = ['Rina Permata', 'Siti Aminah', 'Agus Setiawan', 'Maya Lestari', 'Dimas Pratama']
+  const mockDestinations = [
+    'Kantor Pusat Jakarta',
+    'Warehouse Cikarang',
+    'Port Tanjung Priok',
+    'Bank BCA Cikarang',
+    'Klinik Mitra Keluarga',
+    'Vendor Mekar Jaya',
+    'Stasiun Cikarang',
+  ]
+  const mockVehicles = ['Xenia B 2845 FON', 'Grand max B 9043 FCM']
+  const mockRecords = Array.from({ length: 100 }, (_, index) => {
+    const dayOffset = 99 - index
+    const hour = 7 + (index % 10)
+    const minute = (index * 7) % 60
+    const usedAt = new Date()
+    usedAt.setDate(usedAt.getDate() - dayOffset)
+    usedAt.setHours(hour, minute, 0, 0)
+
+    const isCancelled = index % 9 === 0
+    return {
+      usedAt,
+      vehicleNumber: mockVehicles[index % mockVehicles.length],
+      driver: mockDrivers[index % mockDrivers.length],
+      destination: `[MOCK] ${mockDestinations[index % mockDestinations.length]}`,
+      user: mockUsers[index % mockUsers.length],
+      requester: mockRequesters[index % mockRequesters.length],
+      status: isCancelled ? 'BATAL' as const : null,
+      cancelledAt: isCancelled ? new Date(usedAt.getTime() - 60 * 60 * 1000) : null,
+      cancelledByName: isCancelled ? (index % 2 === 0 ? 'Admin Kokarsi' : 'Rina Permata') : null,
+      cancelledByRole: isCancelled ? (index % 2 === 0 ? 'ADMIN' : 'PENGELOLA_KOPERASI') : null,
+      createdAt: new Date(usedAt.getTime() - 24 * 60 * 60 * 1000),
+      createdByName: index % 2 === 0 ? 'Admin Kokarsi' : 'Rina Permata',
+      createdByRole: index % 2 === 0 ? 'ADMIN' : 'PENGELOLA_KOPERASI',
+    }
+  })
+
+  await prisma.operationalVehicleUsage.createMany({ data: mockRecords })
+  console.log('Mock pemakaian kendaraan seeded:', mockRecords.length)
+
   console.log('Seed selesai!')
   console.log('Login admin: employeeNo=EMP001, password=admin123')
   console.log('Login admin user: username=admin.kokarsi, password=admin123')

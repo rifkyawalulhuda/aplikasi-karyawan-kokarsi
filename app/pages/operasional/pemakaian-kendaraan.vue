@@ -38,7 +38,9 @@ const saving = ref(false)
 const cancelling = ref<number | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref('all')
-const monthFilter = ref('all')
+const rangeOpen = ref(false)
+const rangeStartCal = shallowRef<CalendarDate | null>(null)
+const rangeEndCal = shallowRef<CalendarDate | null>(null)
 const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const table = useTemplateRef('table')
@@ -66,31 +68,31 @@ const state = reactive<Schema>({
 watch(dateCal, value => { state.usedDate = fromCalDate(value) })
 
 const pageSizeOptions = [15, 30, 50, 100]
-const monthFilterItems = [
-  { label: 'Semua Bulan', value: 'all' },
-  ...Array.from({ length: 12 }, (_, index) => ({
-    label: new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(new Date(2020, index, 1)),
-    value: String(index + 1),
-  })),
-]
 
 const hasActiveFilters = computed(() =>
-  searchQuery.value.trim().length > 0 || statusFilter.value !== 'all' || monthFilter.value !== 'all',
+  searchQuery.value.trim().length > 0 || statusFilter.value !== 'all' || !!rangeStartCal.value,
 )
 
-function monthInJakarta(value: string) {
-  return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(new Date(value)))
+function jakartaDateKey(value: string) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date(value))
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${values.year}-${values.month}-${values.day}`
 }
 
 const filteredUsages = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
+  const rangeStart = rangeStartCal.value ? fromCalDate(rangeStartCal.value) : ''
+  const rangeEnd = rangeEndCal.value ? fromCalDate(rangeEndCal.value) : rangeStart
   return usages.value.filter((item) => {
     const matchesSearch = !query || [item.vehicleNumber, item.driver, item.destination, item.user, item.requester]
       .some(value => value.toLocaleLowerCase('id-ID').includes(query))
     const matchesStatus = statusFilter.value === 'all'
       || (statusFilter.value === 'cancelled' ? item.status === 'BATAL' : item.status === null)
-    const matchesMonth = monthFilter.value === 'all' || monthInJakarta(item.usedAt) === Number(monthFilter.value)
-    return matchesSearch && matchesStatus && matchesMonth
+    const itemDate = jakartaDateKey(item.usedAt)
+    const matchesRange = !rangeStart || (itemDate >= rangeStart && itemDate <= (rangeEnd || rangeStart))
+    return matchesSearch && matchesStatus && matchesRange
   })
 })
 
@@ -108,7 +110,7 @@ const sortedUsages = computed(() => {
   })
 })
 
-watch([searchQuery, statusFilter, monthFilter], () => {
+watch([searchQuery, statusFilter, rangeStartCal, rangeEndCal], () => {
   pagination.value.pageIndex = 0
 })
 
@@ -120,16 +122,36 @@ watch(() => pagination.value.pageSize, async () => {
 function resetFilters() {
   searchQuery.value = ''
   statusFilter.value = 'all'
-  monthFilter.value = 'all'
+  rangeStartCal.value = null
+  rangeEndCal.value = null
 }
+
+watch(rangeStartCal, (value) => {
+  if (rangeEndCal.value && value && rangeEndCal.value.compare(value) < 0) rangeEndCal.value = null
+})
+
+const rangeLabel = computed(() => {
+  if (!rangeStartCal.value) return 'Pilih rentang tanggal'
+  const start = formatDisplay(rangeStartCal.value)
+  return rangeEndCal.value ? `${start} - ${formatDisplay(rangeEndCal.value)}` : start
+})
 
 async function fetchUsages() {
   loading.value = true
   try { usages.value = await $fetch<Usage[]>('/api/operational-vehicle-usages') }
-  catch (error: any) { toast.add({ title: 'Gagal memuat catatan', description: error?.data?.message ?? 'Terjadi kesalahan', color: 'error' }) }
+  catch (error: any) {
+    if (error?.statusCode === 401 || error?.status === 401) {
+      await auth.logout()
+      return
+    }
+    toast.add({ title: 'Gagal memuat catatan', description: error?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  }
   finally { loading.value = false }
 }
-if (auth.isLoggedIn) await fetchUsages()
+
+onMounted(() => {
+  if (auth.isLoggedIn) fetchUsages()
+})
 
 function resetForm() {
   dateCal.value = toCalDate(new Date().toISOString().slice(0, 10))
@@ -245,7 +267,39 @@ function doExport() {
             { label: 'Belum Batal', value: 'active' },
             { label: 'Batal', value: 'cancelled' },
           ]" class="min-w-36" />
-          <USelect v-model="monthFilter" :items="monthFilterItems" class="min-w-36" />
+          <UPopover v-model:open="rangeOpen">
+            <UButton
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-calendar-range"
+              class="min-w-56 justify-start font-normal"
+              :class="!rangeStartCal && 'text-muted'"
+            >
+              {{ rangeLabel }}
+            </UButton>
+            <template #content>
+              <div class="flex flex-col gap-3 p-2 sm:flex-row">
+                <div>
+                  <p class="px-2 pb-1 text-xs font-medium text-muted">Dari tanggal</p>
+                  <CalendarPicker v-model="rangeStartCal" />
+                </div>
+                <div>
+                  <p class="px-2 pb-1 text-xs font-medium text-muted">Sampai tanggal</p>
+                  <CalendarPicker v-model="rangeEndCal" :min-date="rangeStartCal" />
+                </div>
+              </div>
+              <div class="flex justify-end border-t border-default px-3 py-2">
+                <UButton
+                  label="Terapkan"
+                  size="sm"
+                  color="primary"
+                  :disabled="!rangeStartCal"
+                  @click="rangeOpen = false"
+                />
+              </div>
+            </template>
+          </UPopover>
+          <UButton v-if="rangeStartCal" icon="i-lucide-x" color="neutral" variant="ghost" size="sm" aria-label="Hapus rentang tanggal" @click="rangeStartCal = null; rangeEndCal = null" />
           <UButton v-if="hasActiveFilters" label="Reset" color="neutral" variant="ghost" size="sm" icon="i-lucide-x" @click="resetFilters" />
         </div>
       </div>
