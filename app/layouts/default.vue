@@ -215,6 +215,12 @@ const links = computed<NavigationMenuItem[]>(() => [
     onSelect: () => { open.value = false },
   },
   {
+    label: 'Pemakaian Kendaraan',
+    icon: 'i-lucide-car-front',
+    to: '/operasional/pemakaian-kendaraan',
+    onSelect: () => { open.value = false },
+  },
+  {
     label: 'Space',
     icon: 'i-lucide-kanban',
     to: '/spaces',

@@ -258,6 +258,27 @@ model EmployeeOffboarding {
   @@map("employee_offboarding")
 }
 
+model OperationalVehicleUsage {
+  id                Int                               @id @default(autoincrement())
+  usedAt            DateTime
+  vehicleNumber     String                            @db.VarChar(30)
+  driver            String                            @db.VarChar(255)
+  destination       String                            @db.VarChar(255)
+  user              String                            @db.VarChar(255)
+  requester         String                            @db.VarChar(255)
+  status            OperationalVehicleUsageStatus?
+  cancelledAt       DateTime?
+  cancelledByName   String?                           @db.VarChar(255)
+  cancelledByRole   String?                           @db.VarChar(50)
+  createdAt         DateTime                          @default(now())
+  createdByName     String                            @db.VarChar(255)
+  createdByRole     String                            @db.VarChar(50)
+
+  @@index([usedAt])
+  @@index([status])
+  @@map("operational_vehicle_usages")
+}
+
 enum EmploymentStatus {
   AKTIF
   KONTRAK_EXPIRED
@@ -299,6 +320,10 @@ enum TerminationType {
 enum AdminRole {
   ADMIN
   PENGELOLA_KOPERASI
+}
+
+enum OperationalVehicleUsageStatus {
+  BATAL
 }
 
 enum DocCategory {

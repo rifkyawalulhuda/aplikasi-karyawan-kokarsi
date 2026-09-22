@@ -67,6 +67,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get spaceAnnouncement() { return (this.client as any).spaceAnnouncement }
   get spaceDocument() { return (this.client as any).spaceDocument }
   get activityLog() { return (this.client as any).activityLog }
+  get operationalVehicleUsage() { return (this.client as any).operationalVehicleUsage }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

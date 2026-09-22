@@ -509,6 +509,48 @@ export function useExport() {
     return true
   }
 
+  function formatWib(val?: string | null) {
+    if (!val) return '-'
+    return new Intl.DateTimeFormat('id-ID', {
+      timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).format(new Date(val)).replace(',', '')
+  }
+
+  function exportOperationalVehicleUsagesExcel(usages: any[], month?: number, year?: number, filename = 'pemakaian-kendaraan') {
+    const filtered = month && year
+      ? usages.filter(item => {
+          const date = new Date(item.usedAt)
+          return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(date)) === month
+            && Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: 'numeric' }).format(date)) === year
+        })
+      : usages
+    if (!filtered.length) return false
+    const rows = filtered.map((item, index) => ({
+      'No': index + 1,
+      'Tanggal dan Jam': formatWib(item.usedAt),
+      'No. Polisi': item.vehicleNumber ?? '-',
+      'Driver': item.driver ?? '-',
+      'Destination': item.destination ?? '-',
+      'User': item.user ?? '-',
+      'Requester': item.requester ?? '-',
+      'Status': item.status === 'BATAL' ? 'Batal' : '-',
+      'Waktu Pembatalan': formatWib(item.cancelledAt),
+      'Dibatalkan Oleh': item.cancelledByName ?? '-',
+      'Role Pembatal': item.cancelledByRole ?? '-',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 28 },
+      { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 22 }, { wch: 26 }, { wch: 22 },
+    ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Pemakaian Kendaraan')
+    XLSX.writeFile(wb, `${filename}${month && year ? `-${year}-${String(month).padStart(2, '0')}` : '-semua'}.xlsx`)
+    return true
+  }
+
   return {
     exportExcel,
     exportPDF,
@@ -518,5 +560,6 @@ export function useExport() {
     exportLegalKoperasiExcel,
     exportVendorContractsExcel,
     exportActivityLogsExcel,
+    exportOperationalVehicleUsagesExcel,
   }
 }

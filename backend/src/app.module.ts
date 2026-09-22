@@ -23,6 +23,7 @@ import { CalendarModule } from './calendar/calendar.module'
 import { SpacesModule } from './spaces/spaces.module'
 import { HolidaysModule } from './holidays/holidays.module'
 import { ActivityLogModule } from './activity-log/activity-log.module'
+import { OperationalVehicleUsageModule } from './operational-vehicle-usage/operational-vehicle-usage.module'
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ActivityLogModule } from './activity-log/activity-log.module'
     PrismaModule,
     AuthModule,
     ActivityLogModule,
+    OperationalVehicleUsageModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,
