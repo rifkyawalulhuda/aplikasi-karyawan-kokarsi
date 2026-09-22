@@ -280,7 +280,7 @@ function doExport() {
         <div class="flex flex-wrap items-center gap-2">
           <USelect v-model="statusFilter" :items="[
             { label: 'Semua Status', value: 'all' },
-            { label: 'Belum Batal', value: 'active' },
+            { label: 'Terjadwal', value: 'active' },
             { label: 'Batal', value: 'cancelled' },
           ]" class="min-w-36" />
           <UPopover v-model:open="rangeOpen">

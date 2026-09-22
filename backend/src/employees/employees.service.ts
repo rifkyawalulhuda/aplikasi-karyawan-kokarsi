@@ -456,6 +456,13 @@ export class EmployeesService {
 
     const currentYear = new Date().getFullYear()
 
+    // Batas hari ini dalam WIB (UTC+7) untuk ringkasan Pemakaian Kendaraan
+    const wibOffsetMs = 7 * 60 * 60 * 1000
+    const wibNow = new Date(now.getTime() + wibOffsetMs)
+    const wibDayStartUtc = Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), wibNow.getUTCDate())
+    const startOfTodayWib = new Date(wibDayStartUtc - wibOffsetMs)
+    const startOfTomorrowWib = new Date(wibDayStartUtc + 24 * 60 * 60 * 1000 - wibOffsetMs)
+
     const [
       total, aktif, kontrakExpired, resign, phk, expiringContracts, locations, levels,
       spGroups, genderGroups, educationGroups, deptData, mitraCount, pkwtCount,
@@ -463,6 +470,7 @@ export class EmployeesService {
       expiringContractItems, expiringVendorContracts, expiringVendorItems,
       expiringLegalKoperasi, expiringLegalItems, expiringCertifications, expiringCertItems,
       activeWarnings,
+      vehicleTodayTotal, vehicleTodayActive, vehicleTodayCancelled, vehicleTodayItems, vehicleGroups,
     ] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { employmentStatus: 'AKTIF' } }),
@@ -581,6 +589,23 @@ export class EmployeesService {
       this.prisma.warningLetter.count({
         where: { validUntil: { gte: now } },
       }),
+      // Ringkasan Pemakaian Kendaraan hari ini (WIB)
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib } },
+      }),
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: null },
+      }),
+      this.prisma.operationalVehicleUsage.count({
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: 'BATAL' },
+      }),
+      this.prisma.operationalVehicleUsage.findMany({
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib } },
+        orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
+        take: 5,
+        select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
+      }),
+      this.prisma.operationalVehicleUsage.groupBy({ by: ['vehicleNumber'], _count: true }),
     ])
 
     const byLocation = locations
@@ -644,6 +669,15 @@ export class EmployeesService {
         .map(d => ({ name: d.name, count: d._count.employees })),
       recruitmentTrend,
       offboardingTrend,
+      vehicleUsage: {
+        todayTotal: vehicleTodayTotal,
+        todayActive: vehicleTodayActive,
+        todayCancelled: vehicleTodayCancelled,
+        todayItems: vehicleTodayItems,
+        vehicleCounts: vehicleGroups
+          .map(g => ({ vehicleNumber: g.vehicleNumber, count: g._count }))
+          .sort((a, b) => b.count - a.count),
+      },
       expiringSoon: {
         contracts: {
           count: expiringContracts,

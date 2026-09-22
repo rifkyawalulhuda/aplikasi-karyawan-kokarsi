@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { OperationalVehicleUsageStatus } from '@prisma/client'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { CreateOperationalVehicleUsageDto } from './operational-vehicle-usage.dto'
 
 interface Actor { name: string; role: string }
@@ -11,6 +12,7 @@ export class OperationalVehicleUsageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
+    private readonly dashboardCache: DashboardCacheService,
   ) {}
 
   async findAll(month?: number, year?: number) {
@@ -48,6 +50,7 @@ export class OperationalVehicleUsageService {
       performedByRole: actor.role,
       detail: `Waktu: ${created.usedAt.toISOString()}`,
     })
+    this.dashboardCache.invalidate()
     return created
   }
 
@@ -78,6 +81,7 @@ export class OperationalVehicleUsageService {
       performedByRole: actor.role,
       detail: 'Status diubah menjadi Batal',
     })
+    this.dashboardCache.invalidate()
     return this.prisma.operationalVehicleUsage.findUnique({ where: { id } })
   }
 }

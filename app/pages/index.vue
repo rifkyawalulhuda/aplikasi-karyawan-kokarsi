@@ -17,6 +17,20 @@ interface DashboardStats {
   byDepartment: { name: string; count: number }[]
   recruitmentTrend: { year: number; count: number }[]
   offboardingTrend: { year: number; resign: number; phk: number }[]
+  vehicleUsage: {
+    todayTotal: number
+    todayActive: number
+    todayCancelled: number
+    todayItems: {
+      id: number
+      usedAt: string
+      vehicleNumber: string
+      driver: string
+      destination: string
+      status: 'BATAL' | null
+    }[]
+    vehicleCounts: { vehicleNumber: string; count: number }[]
+  }
   expiringSoon: {
     contracts: { count: number; items: ExpiringItem[] }
     vendorContracts: { count: number; items: ExpiringItem[] }
@@ -55,13 +69,28 @@ const totalAttentionCount = computed(() => {
 // --- Collapsible section state (persisted ke localStorage) ---
 const sectionKpi        = useLocalStorage('dashboard-section-kpi', true)
 const sectionPerhatian  = useLocalStorage('dashboard-section-perhatian', true)
+const sectionKendaraan  = useLocalStorage('dashboard-section-kendaraan', true)
 const sectionCharts     = useLocalStorage('dashboard-section-charts', true)
 const sectionDemografi  = useLocalStorage('dashboard-section-demografi', false)
 const sectionDistribusi = useLocalStorage('dashboard-section-distribusi', false)
 const sectionTrend      = useLocalStorage('dashboard-section-trend', false)
 const sectionAksiCepat  = useLocalStorage('dashboard-section-aksi-cepat', true)
 
-const allSections = [sectionKpi, sectionPerhatian, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
+const allSections = [sectionKpi, sectionPerhatian, sectionKendaraan, sectionCharts, sectionDemografi, sectionDistribusi, sectionTrend, sectionAksiCepat]
+
+// Jam WIB (HH:mm) dari timestamp pemakaian kendaraan
+function jamWib(value: string) {
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(new Date(value))
+}
+
+// Lebar bar distribusi kendaraan (relatif terhadap kendaraan terbanyak)
+function vehicleBarWidth(count: number) {
+  const counts = stats.value?.vehicleUsage?.vehicleCounts ?? []
+  const max = Math.max(...counts.map(c => c.count), 1)
+  return `${Math.round((count / max) * 100)}%`
+}
 const allExpanded = computed(() => allSections.every(s => s.value === true))
 function toggleAll() {
   const next = !allExpanded.value
@@ -498,6 +527,203 @@ function getRelPos(e: MouseEvent, el: HTMLElement | null) {
           </template>
         </div>
         </div><!-- end v-show sectionPerhatian -->
+
+        <!-- Section: Pemakaian Kendaraan -->
+        <button
+          type="button"
+          class="w-full flex items-center justify-between px-1 py-1.5 rounded-lg hover:bg-accented/50 transition-colors duration-150 group cursor-pointer"
+          @click="sectionKendaraan = !sectionKendaraan"
+        >
+          <div class="flex items-center gap-2">
+            <UIcon name="i-lucide-car-front" class="size-4 text-muted" />
+            <span class="text-sm font-semibold text-highlighted">Pemakaian Kendaraan</span>
+            <span
+              v-if="!statsLoading && (stats?.vehicleUsage?.todayTotal ?? 0) > 0"
+              class="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+            >{{ stats?.vehicleUsage?.todayTotal ?? 0 }} hari ini</span>
+          </div>
+          <UIcon
+            name="i-lucide-chevron-down"
+            class="size-4 text-muted transition-transform duration-200"
+            :class="{ 'rotate-180': !sectionKendaraan }"
+          />
+        </button>
+
+        <div v-show="sectionKendaraan">
+        <!-- KPI hari ini -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+          <template v-if="statsLoading">
+            <UCard v-for="i in 3" :key="`veh-skel-${i}`" :ui="{ body: 'p-4 sm:p-5' }">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1 space-y-2">
+                  <div class="h-3 bg-accented rounded w-2/3 animate-pulse" />
+                  <div class="h-8 bg-accented rounded w-1/2 animate-pulse" />
+                  <div class="h-3 bg-accented rounded w-3/4 animate-pulse" />
+                </div>
+                <div class="p-2.5 rounded-xl bg-accented shrink-0 w-10 h-10 animate-pulse" />
+              </div>
+            </UCard>
+          </template>
+          <template v-else>
+            <UCard
+              class="cursor-default hover:ring-1 hover:ring-default transition-all duration-200"
+              :ui="{ body: 'p-4 sm:p-5' }"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Pemakaian Hari Ini</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayTotal ?? 0 }}</p>
+                  <p class="text-xs text-muted mt-1 truncate">Seluruh catatan hari ini</p>
+                </div>
+                <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-primary/10 ring-primary/20">
+                  <UIcon name="i-lucide-calendar-clock" class="size-5 text-primary" />
+                </div>
+              </div>
+            </UCard>
+            <UCard
+              class="cursor-default hover:ring-1 hover:ring-default transition-all duration-200"
+              :ui="{ body: 'p-4 sm:p-5' }"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Terjadwal Hari Ini</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayActive ?? 0 }}</p>
+                  <p class="text-xs text-muted mt-1 truncate">Pemakaian yang masih berlaku</p>
+                </div>
+                <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-green-500/10 ring-green-500/20">
+                  <UIcon name="i-lucide-circle-check" class="size-5 text-green-500" />
+                </div>
+              </div>
+            </UCard>
+            <UCard
+              class="cursor-default hover:ring-1 hover:ring-default transition-all duration-200"
+              :ui="{ body: 'p-4 sm:p-5' }"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-xs font-medium text-muted uppercase tracking-wide truncate">Batal Hari Ini</p>
+                  <p class="text-2xl sm:text-3xl font-bold text-highlighted mt-1 tabular-nums">{{ stats?.vehicleUsage?.todayCancelled ?? 0 }}</p>
+                  <p class="text-xs text-muted mt-1 truncate">Pemakaian yang dibatalkan</p>
+                </div>
+                <div class="p-2.5 rounded-xl ring ring-inset shrink-0 bg-red-500/10 ring-red-500/20">
+                  <UIcon name="i-lucide-ban" class="size-5 text-red-500" />
+                </div>
+              </div>
+            </UCard>
+          </template>
+        </div>
+
+        <!-- Jadwal hari ini + distribusi kendaraan -->
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+          <UCard class="xl:col-span-2" :ui="{ body: 'p-4 sm:p-5' }">
+            <template #header>
+              <div class="flex items-center justify-between gap-2 px-4 pt-4 pb-0 sm:px-5">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-lucide-list-ordered" class="size-4 text-primary" />
+                  <span class="text-sm font-semibold text-highlighted">Jadwal Pemakaian Hari Ini</span>
+                </div>
+                <UBadge variant="subtle" color="neutral" size="sm">Maks. 5</UBadge>
+              </div>
+            </template>
+
+            <template v-if="statsLoading">
+              <div class="space-y-3">
+                <div v-for="i in 3" :key="`veh-row-skel-${i}`" class="h-10 bg-accented rounded animate-pulse" />
+              </div>
+            </template>
+            <template v-else-if="!(stats?.vehicleUsage?.todayItems?.length)">
+              <div class="flex flex-col items-center gap-2 py-8 text-muted">
+                <UIcon name="i-lucide-car-front" class="size-8 opacity-40" />
+                <p class="text-sm">Tidak ada pemakaian kendaraan hari ini</p>
+              </div>
+            </template>
+            <template v-else>
+              <div class="divide-y divide-default">
+                <div
+                  v-for="item in stats?.vehicleUsage?.todayItems ?? []"
+                  :key="item.id"
+                  class="flex items-center gap-3 py-2.5"
+                >
+                  <span class="w-12 shrink-0 text-sm font-semibold text-highlighted tabular-nums">{{ jamWib(item.usedAt) }}</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-medium text-highlighted truncate">{{ item.vehicleNumber }}</p>
+                    <p class="text-xs text-muted truncate">{{ item.driver }} · {{ item.destination }}</p>
+                  </div>
+                  <UBadge
+                    v-if="item.status === 'BATAL'"
+                    label="Batal"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                  />
+                  <UBadge
+                    v-else
+                    label="Terjadwal"
+                    color="success"
+                    variant="subtle"
+                    size="sm"
+                  />
+                </div>
+              </div>
+            </template>
+
+            <template #footer>
+              <div class="flex justify-end">
+                <UButton
+                  label="Lihat Semua Pemakaian"
+                  icon="i-lucide-arrow-right"
+                  color="neutral"
+                  variant="subtle"
+                  to="/operasional/pemakaian-kendaraan"
+                  trailing-icon
+                />
+              </div>
+            </template>
+          </UCard>
+
+          <UCard :ui="{ body: 'p-4 sm:p-5' }">
+            <template #header>
+              <div class="flex items-center gap-2 px-4 pt-4 pb-0 sm:px-5">
+                <UIcon name="i-lucide-truck" class="size-4 text-primary" />
+                <span class="text-sm font-semibold text-highlighted">Pemakaian per Kendaraan</span>
+              </div>
+            </template>
+
+            <template v-if="statsLoading">
+              <div class="space-y-4">
+                <div v-for="i in 2" :key="`veh-count-skel-${i}`" class="space-y-2">
+                  <div class="h-3 bg-accented rounded w-2/3 animate-pulse" />
+                  <div class="h-1.5 bg-accented rounded-full animate-pulse" />
+                </div>
+              </div>
+            </template>
+            <template v-else-if="!(stats?.vehicleUsage?.vehicleCounts?.length)">
+              <p class="text-sm text-muted text-center py-6">Belum ada data pemakaian</p>
+            </template>
+            <template v-else>
+              <div class="space-y-4 py-1">
+                <div
+                  v-for="vc in stats?.vehicleUsage?.vehicleCounts ?? []"
+                  :key="vc.vehicleNumber"
+                  class="space-y-1.5"
+                >
+                  <div class="flex items-center justify-between gap-2 text-sm">
+                    <span class="text-highlighted font-medium truncate">{{ vc.vehicleNumber }}</span>
+                    <span class="text-muted tabular-nums shrink-0">{{ vc.count }}×</span>
+                  </div>
+                  <div class="h-1.5 rounded-full bg-accented overflow-hidden">
+                    <div
+                      class="h-full rounded-full bg-primary transition-all duration-500"
+                      :style="{ width: vehicleBarWidth(vc.count) }"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs text-muted">Total seluruh data pemakaian</p>
+              </div>
+            </template>
+          </UCard>
+        </div>
+        </div><!-- end v-show sectionKendaraan -->
 
         <!-- Section: Distribusi & Status -->
         <button
