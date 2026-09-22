@@ -38,6 +38,7 @@ async function fetchGroups(query: string) {
       vendorContracts: any[]
       legalKoperasi: any[]
       akteDokumen: any[]
+      generalArchives: any[]
     }>(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
       credentials: 'include',
     })
@@ -160,6 +161,21 @@ async function fetchGroups(query: string) {
           suffix: a.nomorAkte,
           icon: 'i-lucide-scroll-text',
           to: `/dokumen-legal/akte-dokumen?openId=${a.id}`,
+        })),
+      })
+    }
+
+    if (results.generalArchives?.length) {
+      groups.push({
+        id: 'generalArchives',
+        label: 'Arsip Umum',
+        ignoreFilter: true,
+        items: results.generalArchives.map((ga: any) => ({
+          id: `archive-${ga.id}`,
+          label: ga.documentName,
+          suffix: ga.documentNumber ?? 'Nomor tidak tersedia',
+          icon: 'i-lucide-archive',
+          to: `/dokumen-legal/arsip-umum?openId=${ga.id}`,
         })),
       })
     }

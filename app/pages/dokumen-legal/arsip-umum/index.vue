@@ -133,8 +133,15 @@ function handleExport() {
 async function handleOpenId(value: string | null | (string | null)[] | undefined) {
   if (!value) return
   const id = Number(Array.isArray(value) ? value[0] : value)
-  const item = archives.value.find(archive => archive.id === id)
-  if (item) openDetail(item)
+  if (!id) return
+  const unwatch = watch(archives, (val) => {
+    if (!val.length) return
+    const item = val.find(archive => archive.id === id)
+    if (item) {
+      openDetail(item)
+      unwatch()
+    }
+  }, { immediate: true })
 }
 onMounted(() => handleOpenId(route.query.openId))
 watch(() => route.query.openId, value => handleOpenId(value))

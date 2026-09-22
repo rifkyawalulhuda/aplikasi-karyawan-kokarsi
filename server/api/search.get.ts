@@ -9,13 +9,13 @@ export default defineEventHandler(async (event) => {
 
   const { q, limit = '5' } = getQuery(event)
   if (!q || String(q).trim().length < 2) {
-    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], dokKaryawan: [], vendorContracts: [], legalKoperasi: [], akteDokumen: [] }
+    return { employees: [], contracts: [], warningLetters: [], employeeDocuments: [], dokKaryawan: [], vendorContracts: [], legalKoperasi: [], akteDokumen: [], generalArchives: [] }
   }
 
   const searchParam = encodeURIComponent(String(q).trim())
   const limitParam = String(limit)
 
-  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, dokKaryawanRes, vendorContractsRes, legalKoperasiRes, akteDokumenRes] = await Promise.allSettled([
+  const [employeesRes, contractsRes, warningLettersRes, employeeDocumentsRes, dokKaryawanRes, vendorContractsRes, legalKoperasiRes, akteDokumenRes, generalArchivesRes] = await Promise.allSettled([
     $fetch(`${BACKEND}/employees?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
@@ -40,6 +40,9 @@ export default defineEventHandler(async (event) => {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
     $fetch(`${BACKEND}/akte-dokumen?search=${searchParam}&limit=${limitParam}`, {
+      headers: authHeader,
+    }) as Promise<{ data: any[] }>,
+    $fetch(`${BACKEND}/general-archives?search=${searchParam}&limit=${limitParam}`, {
       headers: authHeader,
     }) as Promise<{ data: any[] }>,
   ])
@@ -67,6 +70,9 @@ export default defineEventHandler(async (event) => {
   }
   if (akteDokumenRes.status === 'rejected') {
     console.error('[search] Gagal fetch akte-dokumen:', akteDokumenRes.reason)
+  }
+  if (generalArchivesRes.status === 'rejected') {
+    console.error('[search] Gagal fetch general-archives:', generalArchivesRes.reason)
   }
 
   const employees = employeesRes.status === 'fulfilled'
@@ -101,5 +107,9 @@ export default defineEventHandler(async (event) => {
     ? (akteDokumenRes.value?.data ?? [])
     : []
 
-  return { employees, contracts, warningLetters, employeeDocuments, dokKaryawan, vendorContracts, legalKoperasi, akteDokumen }
+  const generalArchives = generalArchivesRes.status === 'fulfilled'
+    ? (generalArchivesRes.value?.data ?? [])
+    : []
+
+  return { employees, contracts, warningLetters, employeeDocuments, dokKaryawan, vendorContracts, legalKoperasi, akteDokumen, generalArchives }
 })
