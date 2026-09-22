@@ -270,6 +270,11 @@ const links = computed<NavigationMenuItem[]>(() => [
         to: '/dokumen-legal/akte-dokumen',
         onSelect: () => { open.value = false },
       },
+      {
+        label: 'Arsip Umum',
+        to: '/dokumen-legal/arsip-umum',
+        onSelect: () => { open.value = false },
+      },
     ],
   },
   {

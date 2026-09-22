@@ -24,6 +24,7 @@ import { SpacesModule } from './spaces/spaces.module'
 import { HolidaysModule } from './holidays/holidays.module'
 import { ActivityLogModule } from './activity-log/activity-log.module'
 import { OperationalVehicleUsageModule } from './operational-vehicle-usage/operational-vehicle-usage.module'
+import { GeneralArchivesModule } from './general-archives/general-archives.module'
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { OperationalVehicleUsageModule } from './operational-vehicle-usage/opera
     AuthModule,
     ActivityLogModule,
     OperationalVehicleUsageModule,
+    GeneralArchivesModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,

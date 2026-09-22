@@ -477,13 +477,14 @@ export class ContractCronService {
       // Ambil semua fileUrl aktif dari DB secara paralel
       const [
         employeeDocs, warningLetters, legalKoperasi, vendorContracts,
-        akteDokumen, employees, contracts, appSettings,
+        akteDokumen, generalArchives, employees, contracts, appSettings,
       ] = await Promise.all([
         this.prisma.employeeDocument.findMany({ select: { fileUrl: true } }),
         this.prisma.warningLetter.findMany({ select: { documentUrl: true } }),
         this.prisma.legalKoperasi.findMany({ select: { fileUrl: true } }),
         this.prisma.vendorContract.findMany({ select: { fileUrl: true } }),
         this.prisma.akteDokumen.findMany({ select: { fileUrl: true } }),
+        this.prisma.generalArchive.findMany({ select: { fileUrl: true } }),
         this.prisma.employee.findMany({ select: { fotoKaryawan: true } }),
         this.prisma.contract.findMany({ select: { documentUrl: true, generatedPdfUrl: true } }),
         // AppSetting menyimpan URL file logo & background di kolom `value`
@@ -501,6 +502,7 @@ export class ContractCronService {
       legalKoperasi.forEach(d => addPath(d.fileUrl))
       vendorContracts.forEach(d => addPath(d.fileUrl))
       akteDokumen.forEach(d => addPath(d.fileUrl))
+      generalArchives.forEach(d => addPath(d.fileUrl))
       employees.forEach(d => addPath(d.fotoKaryawan))
       contracts.forEach(d => { addPath(d.documentUrl); addPath(d.generatedPdfUrl) })
       // AppSetting: hanya nilai yang berisi path uploads (logo, background login)

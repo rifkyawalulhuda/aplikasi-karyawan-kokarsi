@@ -1,6 +1,6 @@
 export interface AppNotification {
   id: number
-  category: 'KONTRAK_KARYAWAN' | 'SERTIFIKASI_IJIN' | 'KONTRAK_VENDOR' | 'LEGAL_KOPERASI' | 'AGENDA' | 'SPACE'
+  category: 'KONTRAK_KARYAWAN' | 'SERTIFIKASI_IJIN' | 'KONTRAK_VENDOR' | 'LEGAL_KOPERASI' | 'AGENDA' | 'SPACE' | 'ARSIP_UMUM'
   severity: 'WARNING' | 'CRITICAL'
   title: string
   message: string

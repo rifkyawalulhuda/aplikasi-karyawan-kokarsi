@@ -42,6 +42,7 @@ const categoryLabel: Record<string, string> = {
   LEGAL_KOPERASI: 'Legal Koperasi',
   AGENDA: 'Agenda',
   SPACE: 'Space',
+  ARSIP_UMUM: 'Arsip Umum',
 }
 
 const severityLabel: Record<string, string> = {

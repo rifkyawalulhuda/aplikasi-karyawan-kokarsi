@@ -551,6 +551,26 @@ export function useExport() {
     return true
   }
 
+  function exportGeneralArchivesExcel(docs: any[], filename = 'arsip-umum') {
+    if (!docs.length) return false
+    const rows = docs.map((doc, index) => ({
+      'No': index + 1,
+      'Nama Dokumen': doc.documentName ?? '-',
+      'Nomor Dokumen': doc.documentNumber ?? '-',
+      'Tanggal Dibuat': fmt(doc.createdDate),
+      'Tanggal Berakhir': fmt(doc.expiryDate),
+      'Keterangan': doc.notes ?? '-',
+      'Status': doc.expiryDate && new Date(doc.expiryDate) < new Date() ? 'Expired' : 'Aktif',
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 48 }, { wch: 14 }]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Arsip Umum')
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
+
   return {
     exportExcel,
     exportPDF,
@@ -561,5 +581,6 @@ export function useExport() {
     exportVendorContractsExcel,
     exportActivityLogsExcel,
     exportOperationalVehicleUsagesExcel,
+    exportGeneralArchivesExcel,
   }
 }

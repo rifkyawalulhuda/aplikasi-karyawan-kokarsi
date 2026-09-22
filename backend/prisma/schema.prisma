@@ -482,6 +482,22 @@ model AkteDokumen {
   @@map("akte_dokumen")
 }
 
+model GeneralArchive {
+  id             Int       @id @default(autoincrement())
+  documentName   String    @db.VarChar(255)
+  documentNumber String?   @db.VarChar(100)
+  createdDate    DateTime? @db.Date
+  expiryDate     DateTime? @db.Date
+  notes          String?   @db.Text
+  fileUrl        String?   @db.VarChar(500)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([createdDate])
+  @@index([expiryDate])
+  @@map("general_archives")
+}
+
 enum NotificationCategory {
   KONTRAK_KARYAWAN
   SERTIFIKASI_IJIN
@@ -489,6 +505,7 @@ enum NotificationCategory {
   LEGAL_KOPERASI
   AGENDA
   SPACE
+  ARSIP_UMUM
 }
 
 enum NotificationSeverity {

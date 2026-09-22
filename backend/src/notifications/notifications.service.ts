@@ -434,6 +434,37 @@ export class NotificationsService {
           }
         }
       }
+
+      // 5. ARSIP_UMUM - general_archives table (hanya arsip dengan tanggal berakhir)
+      const archives = await this.prisma.generalArchive.findMany({
+        where: { expiryDate: { gte: targetDate, lt: nextDay } },
+      })
+      for (const archive of archives) {
+        const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
+        for (const r of recipients) {
+          const sourceType = `general_archive_${r.userId ?? 'all'}`
+          try {
+            await this.prisma.notification.create({
+              data: {
+                category: 'ARSIP_UMUM',
+                severity,
+                title: `Arsip Umum ${triggerDay === 0 ? 'Expired' : 'Akan Berakhir'}`,
+                message: `${archive.documentName} berakhir ${daysText}`,
+                sourceType,
+                sourceId: archive.id,
+                triggerDay,
+                deeplink: `/dokumen-legal/arsip-umum?openId=${archive.id}`,
+                expiryDate: archive.expiryDate!,
+                userId: r.userId,
+                userType: r.userType,
+              },
+            })
+            created++
+          } catch (e: any) {
+            if (e.code !== 'P2002') throw e
+          }
+        }
+      }
     }
 
     // ── Catch-all pass (per-user) ──────────────────────────────────────────────
