@@ -41,7 +41,7 @@ const statusFilter = ref('all')
 const rangeOpen = ref(false)
 const rangeStartCal = shallowRef<CalendarDate | null>(null)
 const rangeEndCal = shallowRef<CalendarDate | null>(null)
-const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>({ key: 'usedAt', direction: 'asc' })
+const sorting = ref<{ key: string; direction: 'asc' | 'desc' }>({ key: 'usedAt', direction: 'desc' })
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const table = useTemplateRef('table')
 const formOpen = ref(false)
@@ -81,10 +81,6 @@ function jakartaDateKey(value: string) {
   return `${values.year}-${values.month}-${values.day}`
 }
 
-function todayJakartaKey() {
-  return jakartaDateKey(new Date().toISOString())
-}
-
 const filteredUsages = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
   const rangeStart = rangeStartCal.value ? fromCalDate(rangeStartCal.value) : ''
@@ -102,32 +98,36 @@ const filteredUsages = computed(() => {
 
 const sortedUsages = computed(() => {
   const sort = sorting.value
-  if (!sort) return filteredUsages.value
 
   return [...filteredUsages.value].sort((a, b) => {
-    const aValue = sort.key === 'status' ? (a.status ?? '') : String((a as any)[sort.key] ?? '')
-    const bValue = sort.key === 'status' ? (b.status ?? '') : String((b as any)[sort.key] ?? '')
+    if (sort.key === 'usedAt') {
+      const aTime = new Date(a.usedAt).getTime()
+      const bTime = new Date(b.usedAt).getTime()
+      const aInvalid = Number.isNaN(aTime)
+      const bInvalid = Number.isNaN(bTime)
 
-    if (sort.key === 'usedAt' && sort.direction === 'asc') {
-      const today = todayJakartaKey()
-      const aDate = jakartaDateKey(a.usedAt)
-      const bDate = jakartaDateKey(b.usedAt)
-      const aIsToday = aDate === today
-      const bIsToday = bDate === today
+      // Timestamp tidak valid selalu diletakkan paling bawah.
+      if (aInvalid !== bInvalid) return aInvalid ? 1 : -1
 
-      if (aIsToday !== bIsToday) return aIsToday ? -1 : 1
-      if (!aIsToday && aDate !== bDate) return bDate.localeCompare(aDate)
+      if (!aInvalid && !bInvalid) {
+        const timeResult = aTime - bTime
+        if (timeResult !== 0) return sort.direction === 'asc' ? timeResult : -timeResult
+      }
+
+      const idResult = a.id - b.id
+      return sort.direction === 'asc' ? idResult : -idResult
     }
 
-    const result = sort.key === 'usedAt'
-      ? new Date(aValue).getTime() - new Date(bValue).getTime()
-      : aValue.localeCompare(bValue, 'id', { sensitivity: 'base' })
+    const aValue = sort.key === 'status' ? (a.status ?? '') : String((a as any)[sort.key] ?? '')
+    const bValue = sort.key === 'status' ? (b.status ?? '') : String((b as any)[sort.key] ?? '')
+    const result = aValue.localeCompare(bValue, 'id', { sensitivity: 'base' })
     return sort.direction === 'asc' ? result : -result
   })
 })
 
 watch([searchQuery, statusFilter, rangeStartCal, rangeEndCal], () => {
   pagination.value.pageIndex = 0
+  sorting.value = { key: 'usedAt', direction: 'desc' }
 })
 
 watch(() => pagination.value.pageSize, async () => {
@@ -180,7 +180,14 @@ async function submit(event: FormSubmitEvent<Schema>) {
   try {
     await $fetch('/api/operational-vehicle-usages', {
       method: 'POST',
-      body: { ...event.data, usedAt: `${event.data.usedDate}T${event.data.usedTime}:00+07:00` },
+      body: {
+        usedAt: `${event.data.usedDate}T${event.data.usedTime}:00+07:00`,
+        vehicleNumber: event.data.vehicleNumber,
+        driver: event.data.driver,
+        destination: event.data.destination,
+        user: event.data.user,
+        requester: event.data.requester,
+      },
     })
     toast.add({ title: 'Pemakaian kendaraan berhasil ditambahkan', color: 'success' })
     formOpen.value = false; resetForm(); await fetchUsages()
@@ -214,11 +221,10 @@ function toggleSort(key: string) {
     sorting.value = { key, direction: 'asc' }
     return
   }
-  if (sorting.value.direction === 'asc') {
-    sorting.value = { key, direction: 'desc' }
-    return
+  sorting.value = {
+    key,
+    direction: sorting.value.direction === 'asc' ? 'desc' : 'asc',
   }
-  sorting.value = null
 }
 
 function sortableHeader(label: string, key: string) {
