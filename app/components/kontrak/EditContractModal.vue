@@ -78,7 +78,6 @@ const contractTemplateOptions = computed<LookupOption[]>(() =>
 )
 
 const schema = z.object({
-  contractNo: z.string().min(1, 'No. kontrak wajib diisi'),
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
   endDate: z.string().min(1, 'Tanggal selesai wajib diisi'),
   contractTypeId: z.number({ error: 'Tipe kontrak wajib diisi' }),
@@ -89,7 +88,7 @@ const schema = z.object({
 
 type Schema = z.output<typeof schema>
 
-const state = reactive<Partial<Schema> & { documentUrl?: string }>({
+const state = reactive<Partial<Schema> & { contractNo?: string; documentUrl?: string }>({
   contractNo: '',
   startDate: '',
   endDate: '',
@@ -145,9 +144,18 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
     const employeeId = fullContract.value?.employeeId ?? contract.employeeId
+    const { startDate, endDate, contractTypeId, templateId, signedDate, baseCompensation } = event.data
     await $fetch(`/api/contracts/${contract.id}`, {
       method: 'PUT',
-      body: { ...event.data, employeeId },
+      body: {
+        employeeId,
+        startDate,
+        endDate,
+        contractTypeId,
+        templateId,
+        signedDate,
+        baseCompensation,
+      },
     })
     toast.add({ title: 'Kontrak berhasil diperbarui', color: 'success' })
     emit('saved')
