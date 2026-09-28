@@ -5,7 +5,7 @@ import { diskStorage } from 'multer'
 import { IsString, MinLength, IsOptional } from 'class-validator'
 import { extname, join } from 'path'
 import { SettingsService } from './settings.service'
-import { validateImageOrSvgBuffer, validateImageBuffer } from '../shared/file-validation.util'
+import { validateImageBuffer } from '../shared/file-validation.util'
 
 class UpdateGeneralSettingsDto {
   @IsOptional()
@@ -81,8 +81,8 @@ export class SettingsController {
       },
     }),
     fileFilter: (_req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp|svg\+xml)$/)) {
-        return cb(new BadRequestException('Hanya file gambar (jpg, png, webp, svg) yang diizinkan'), false)
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+        return cb(new BadRequestException('Hanya file gambar JPG, PNG, atau WEBP yang diizinkan'), false)
       }
       cb(null, true)
     },
@@ -93,7 +93,7 @@ export class SettingsController {
     const { readFileSync, unlinkSync } = require('fs')
     const fileBuffer = readFileSync(file.path)
     try {
-      await validateImageOrSvgBuffer(fileBuffer)
+      await validateImageBuffer(fileBuffer)
     } catch (err) {
       unlinkSync(file.path)
       throw err

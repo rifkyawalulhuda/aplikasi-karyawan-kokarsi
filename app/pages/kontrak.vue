@@ -267,8 +267,37 @@ async function generateContractDocument(contractId: number, contractNo?: string)
   }
 }
 
-function downloadGeneratedPdf(contractId: number) {
-  window.open(`/api/contracts/${contractId}/download-pdf`, '_blank', 'noopener,noreferrer')
+const downloadChecking = ref<number | null>(null)
+
+async function downloadGeneratedPdf(contractId: number) {
+  if (downloadChecking.value !== null) return
+  downloadChecking.value = contractId
+
+  try {
+    const check = await $fetch<ContractDocumentPreview>(`/api/contracts/${contractId}/document-preview`)
+
+    if (check?.missingFields?.length) {
+      toast.add({
+        title: 'Data legal kontrak belum lengkap',
+        description: `Lengkapi dulu: ${check.missingFields.join(', ')}.`,
+        color: 'warning'
+      })
+      return
+    }
+
+    window.open(`/api/contracts/${contractId}/download-pdf`, '_blank', 'noopener,noreferrer')
+  } catch (e: any) {
+    const missing = e?.data?.missingFields
+    toast.add({
+      title: 'Gagal mengunduh PDF',
+      description: Array.isArray(missing) && missing.length
+        ? `Lengkapi dulu: ${missing.join(', ')}.`
+        : (e?.data?.message ?? 'Terjadi kesalahan'),
+      color: 'error'
+    })
+  } finally {
+    downloadChecking.value = null
+  }
 }
 
 function confirmDelete(contractId: number, contractNo: string) {
@@ -727,7 +756,8 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
                   />
                   <UButton
                     label="Unduh PDF"
-                    icon="i-lucide-download"
+                    :icon="downloadChecking === contract.id ? 'i-lucide-loader-circle' : 'i-lucide-download'"
+                    :loading="downloadChecking === contract.id"
                     color="neutral"
                     variant="subtle"
                     size="xs"
@@ -799,6 +829,7 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
             label="Unduh PDF"
             icon="i-lucide-download"
             color="primary"
+            :loading="!!previewContract && downloadChecking === previewContract.id"
             :disabled="!previewContract"
             @click="previewContract && downloadGeneratedPdf(previewContract.id)"
           />

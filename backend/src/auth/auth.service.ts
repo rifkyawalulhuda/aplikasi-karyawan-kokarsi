@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
 import { existsSync, unlinkSync } from 'fs'
 import { join } from 'path'
+import { randomUUID } from 'crypto'
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const bcrypt = require('bcrypt')
@@ -18,6 +19,8 @@ interface AuthenticatedUser {
   accountType: 'master_admin' | 'user_account'
   email?: string
   photoUrl?: string | null
+  isActive?: boolean
+  tokenVersion?: number
 }
 
 @Injectable()
@@ -37,6 +40,7 @@ export class AuthService {
       where: { employeeNo: identifier },
     })
     if (admin) {
+      if (admin.isActive === false) throw new UnauthorizedException('Kredensial tidak valid')
       await this.compareOrThrow(password, admin.password)
       return { ...admin, accountType: 'master_admin' as const, email: '' }
     }
@@ -47,6 +51,7 @@ export class AuthService {
       },
     })
     if (user) {
+      if (user.isActive === false) throw new UnauthorizedException('Kredensial tidak valid')
       await this.compareOrThrow(password, user.password)
       return { ...user, accountType: 'user_account' as const, email: user.email }
     }
@@ -57,10 +62,40 @@ export class AuthService {
   async login(admin: AuthenticatedUser) {
     const identifier = admin.employeeNo ?? admin.nik ?? admin.username
     const email = admin.email ?? ''
-    const payload = { sub: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email }
+    const payload = { sub: admin.id, jti: randomUUID(), tokenVersion: admin.tokenVersion ?? 0, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email }
     return {
       access_token: this.jwt.sign(payload),
       admin: { id: admin.id, employeeNo: identifier, fullName: admin.fullName ?? admin.name, role: admin.role, accountType: admin.accountType, email, photoUrl: admin.photoUrl ?? null },
+    }
+  }
+
+  async validateSession(payload: { sub: number; accountType?: string; tokenVersion?: number }) {
+    const kind = payload.accountType === 'user_account' ? 'user_account' : 'master_admin'
+    const account = kind === 'user_account'
+      ? await this.prisma.userAccount.findUnique({ where: { id: payload.sub } })
+      : await this.prisma.masterAdmin.findUnique({ where: { id: payload.sub } })
+
+    if (!account || account.isActive === false || (payload.tokenVersion ?? 0) !== account.tokenVersion) {
+      throw new UnauthorizedException('Sesi tidak valid')
+    }
+
+    const typed = account as any
+    return {
+      sub: typed.id,
+      employeeNo: typed.employeeNo ?? typed.nik ?? typed.username,
+      fullName: typed.fullName ?? typed.name,
+      role: typed.role,
+      kind,
+      email: typed.email ?? '',
+      photoUrl: typed.photoUrl ?? null,
+    }
+  }
+
+  async revokeSession(sub: number, kind: string) {
+    if (kind === 'user_account') {
+      await this.prisma.userAccount.update({ where: { id: sub }, data: { tokenVersion: { increment: 1 } } })
+    } else {
+      await this.prisma.masterAdmin.update({ where: { id: sub }, data: { tokenVersion: { increment: 1 } } })
     }
   }
 
@@ -70,7 +105,7 @@ export class AuthService {
     const valid = await bcrypt.compare(oldPassword, admin.password)
     if (!valid) throw new UnauthorizedException('Password lama salah')
     const hashed = await bcrypt.hash(newPassword, 10)
-    await this.prisma.masterAdmin.update({ where: { id: adminId }, data: { password: hashed } })
+    await this.prisma.masterAdmin.update({ where: { id: adminId }, data: { password: hashed, tokenVersion: { increment: 1 } } })
     return { message: 'Password berhasil diubah' }
   }
 
@@ -79,7 +114,7 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('User tidak ditemukan')
     await this.compareOrThrow(oldPassword, user.password)
     const hashed = await bcrypt.hash(newPassword, 10)
-    await this.prisma.userAccount.update({ where: { id: userId }, data: { password: hashed } })
+    await this.prisma.userAccount.update({ where: { id: userId }, data: { password: hashed, tokenVersion: { increment: 1 } } })
     return { message: 'Password berhasil diubah' }
   }
 

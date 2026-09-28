@@ -305,9 +305,6 @@ credentials-file: /home/<USERNAME>/.cloudflared/<TUNNEL_ID>.json
 
 ingress:
   - hostname: kokarsi-sankyu.web.id
-    path: /uploads/.*
-    service: http://localhost:3001
-  - hostname: kokarsi-sankyu.web.id
     service: http://localhost:3000
   - service: http_status:404
 ```

@@ -34,12 +34,8 @@ tunnel: <TUNNEL_ID>
 credentials-file: C:\Users\<USERNAME>\.cloudflared\<TUNNEL_ID>.json
 
 ingress:
-  # Uploads/file statics langsung dari backend
-  - hostname: kokarsi-sankyu.web.id
-    path: /uploads
-    service: http://localhost:3001
-
-  # Semua request lain ke frontend Nuxt
+  # Semua request ke Nuxt. /uploads diteruskan Nuxt ke backend,
+  # dan backend menolak file selain /uploads/settings tanpa JWT.
   - hostname: kokarsi-sankyu.web.id
     service: http://localhost:3000
 

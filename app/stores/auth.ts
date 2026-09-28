@@ -1,24 +1,22 @@
 import { defineStore } from 'pinia'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = useCookie('auth_token', { maxAge: 60 * 60 * 8 })
-  const admin = useCookie<{ id: number; employeeNo: string; fullName: string; email?: string; role?: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } | null>('auth_admin', { maxAge: 60 * 60 * 8 })
+  const admin = useCookie<{ id: number; employeeNo: string; fullName: string; email?: string; role?: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } | null>('auth_admin', { maxAge: 60 * 30 })
 
-  const isLoggedIn = computed(() => !!token.value)
+  const isLoggedIn = computed(() => !!admin.value)
   const canManageMasterData = computed(() => admin.value?.role === 'ADMIN')
   const canDelete = computed(() => admin.value?.role === 'ADMIN')
 
   async function login(employeeNo: string, password: string) {
-    const res = await $fetch<{ access_token: string; admin: { id: number; employeeNo: string; fullName: string; role: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } }>('/api/auth/login', {
+    const res = await $fetch<{ admin: { id: number; employeeNo: string; fullName: string; role: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } }>('/api/auth/login', {
       method: 'POST',
       body: { employeeNo, password },
     })
 
-    if (!res?.access_token) {
+    if (!res?.admin) {
       throw new Error('Login gagal, respons backend tidak valid')
     }
 
-    token.value = res.access_token
     admin.value = res.admin
     return res
   }
@@ -33,16 +31,14 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       await $fetch('/api/auth/logout', { method: 'POST' })
     } finally {
-      token.value = null
       admin.value = null
       await navigateTo('/login')
     }
   }
 
   function getAuthHeader(): Record<string, string> {
-    if (!token.value) return {}
-    return { Authorization: `Bearer ${token.value}` }
+    return {}
   }
 
-  return { token, admin, isLoggedIn, canManageMasterData, canDelete, login, logout, getAuthHeader, setPhotoUrl }
+  return { admin, isLoggedIn, canManageMasterData, canDelete, login, logout, getAuthHeader, setPhotoUrl }
 })

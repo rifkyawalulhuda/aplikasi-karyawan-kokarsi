@@ -8,12 +8,9 @@ Daftar semua environment variables yang diperlukan aplikasi.
 
 | Variable | Wajib | Default | Keterangan |
 |----------|-------|---------|-----------|
-| `DATABASE_URL` | ✅ | - | PostgreSQL connection string |
+| Konfigurasi koneksi database | ✅ | - | Simpan sebagai secret environment backend |
 
-**Contoh:**
-```
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan"
-```
+Jangan menuliskan connection string atau password database di repository maupun dokumentasi. Gunakan secret manager atau environment deployment.
 
 ### Authentication
 
@@ -64,9 +61,6 @@ FONT_DIR=/usr/share/fonts/truetype
 ## Contoh File `backend/.env`
 
 ```env
-# Database
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan"
-
 # JWT
 JWT_SECRET=your-random-secret-min-32-chars-here
 
@@ -92,16 +86,8 @@ cp backend/.env.example backend/.env
 
 ## Docker PostgreSQL Credentials
 
-Credentials default Docker PostgreSQL (dari `docker-compose.db.yml`):
-
-| Key | Value |
-|-----|-------|
-| Host | `localhost` |
-| Port | `5435` |
-| Database | `kokarsi_karyawan` |
-| Username | `kokarsi` |
-| Password | `kokarsi2026` |
+Simpan username, password, database name, dan konfigurasi koneksi PostgreSQL sebagai secret environment deployment. Jangan menuliskan nilai credential aktual di repository maupun dokumentasi.
 
 ::: danger
-Ganti password default sebelum deploy ke production!
+Gunakan password kuat yang dikelola melalui secret manager dan rotasi sebelum deploy ke production.
 :::

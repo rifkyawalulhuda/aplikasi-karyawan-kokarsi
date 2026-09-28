@@ -34,9 +34,6 @@ cp backend/.env.example backend/.env
 Edit `backend/.env`:
 
 ```env
-# Database
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan"
-
 # JWT — generate dengan: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 JWT_SECRET=your-random-secret-here
 

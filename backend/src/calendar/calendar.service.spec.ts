@@ -3,13 +3,18 @@ jest.mock('../prisma/prisma.service', () => ({ PrismaService: jest.fn() }))
 import { CalendarService } from './calendar.service'
 
 describe('CalendarService', () => {
+  const notificationsService = {
+    generateAgendaCreatedNotifications: jest.fn().mockResolvedValue(undefined),
+  }
+
   it('menolak agenda dengan tanggal selesai sebelum tanggal mulai', async () => {
-    const service = new CalendarService({} as any)
+    const service = new CalendarService({} as any, notificationsService as any)
 
     await expect(service.create({
       title: 'Agenda invalid',
       startDate: '2026-08-10',
       endDate: '2026-08-09',
+      startTime: '09:00',
       color: 'blue',
     }, 'Admin')).rejects.toThrow('Tanggal selesai tidak boleh sebelum tanggal mulai')
   })
@@ -22,7 +27,7 @@ describe('CalendarService', () => {
       vendorContract: { findMany: jest.fn().mockResolvedValue([]) },
       legalKoperasi: { findMany: jest.fn().mockResolvedValue([]) },
     }
-    const service = new CalendarService(prisma as any)
+    const service = new CalendarService(prisma as any, notificationsService as any)
 
     await expect(service.getCalendarData('2026-08-01', '2026-08-31')).resolves.toEqual([
       expect.objectContaining({ id: 'agenda-1', type: 'agenda', readOnly: false }),

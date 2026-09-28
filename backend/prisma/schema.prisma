@@ -58,6 +58,8 @@ model UserAccount {
   username  String    @unique @db.VarChar(100)
   password  String    @db.VarChar(255)
   photoUrl  String?   @db.VarChar(500)
+  isActive  Boolean   @default(true)
+  tokenVersion Int     @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -152,6 +154,8 @@ model MasterAdmin {
   password   String    @db.VarChar(255)
   role       AdminRole @default(ADMIN)
   photoUrl   String?   @db.VarChar(500)
+  isActive   Boolean   @default(true)
+  tokenVersion Int     @default(0)
   employee   Employee  @relation(fields: [employeeNo], references: [employeeNo])
 
   @@map("master_admin")

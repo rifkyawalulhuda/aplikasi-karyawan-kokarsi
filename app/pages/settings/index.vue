@@ -258,8 +258,8 @@ async function onLogoSelected(e: Event) {
   const file = input.files?.[0]
   if (!file || !auth.canManageMasterData) return
 
-  if (!file.type.match(/\/(jpg|jpeg|png|webp|svg\+xml)$/)) {
-    toast.add({ title: 'Format tidak didukung', description: 'Gunakan JPG, PNG, WEBP, atau SVG', color: 'error' })
+  if (!file.type.match(/\/(jpg|jpeg|png|webp)$/)) {
+    toast.add({ title: 'Format tidak didukung', description: 'Gunakan JPG, PNG, atau WEBP', color: 'error' })
     return
   }
 
@@ -268,12 +268,10 @@ async function onLogoSelected(e: Event) {
     return
   }
 
-  if (file.type !== 'image/svg+xml') {
-    const valid = await validateLogoDimensions(file)
-    if (!valid) {
-      if (logoFileInput.value) logoFileInput.value.value = ''
-      return
-    }
+  const valid = await validateLogoDimensions(file)
+  if (!valid) {
+    if (logoFileInput.value) logoFileInput.value.value = ''
+    return
   }
 
   uploadingLogo.value = true
@@ -519,7 +517,7 @@ function onTabChange(key: SettingsTab) {
                       <input
                         ref="logoFileInput"
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/svg+xml"
+                        accept="image/jpeg,image/png,image/webp"
                         class="block w-full text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/20 cursor-pointer"
                         :disabled="!auth.canManageMasterData || uploadingLogo"
                         @change="onLogoSelected"

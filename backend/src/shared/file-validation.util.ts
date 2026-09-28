@@ -15,25 +15,6 @@ export async function validateImageBuffer(buffer: Buffer): Promise<void> {
 }
 
 /**
- * Verifikasi magic bytes file gambar termasuk SVG.
- * SVG tidak punya magic bytes, jadi validasi dilakukan via konten XML.
- */
-export async function validateImageOrSvgBuffer(buffer: Buffer): Promise<void> {
-  const type = await fromBuffer(buffer)
-
-  if (type && ALLOWED_IMAGE_MIMES.includes(type.mime)) {
-    return // valid image
-  }
-
-  // SVG tidak terdeteksi oleh file-type, cek via konten
-  const text = buffer.toString('utf-8', 0, 512).trimStart()
-  const isSvg = text.startsWith('<svg') || text.startsWith('<?xml')
-  if (!isSvg) {
-    throw new BadRequestException('File bukan gambar yang valid (jpg, png, webp, svg)')
-  }
-}
-
-/**
  * Verifikasi magic bytes file PDF.
  */
 export async function validatePdfBuffer(buffer: Buffer): Promise<void> {

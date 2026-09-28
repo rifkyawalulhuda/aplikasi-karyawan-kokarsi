@@ -18,7 +18,7 @@ import { CookieJwtStrategy } from './cookie-jwt.strategy'
         }
         return {
           secret,
-          signOptions: { expiresIn: '8h' },
+          signOptions: { expiresIn: '30m' },
         }
       },
     }),

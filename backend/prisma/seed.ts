@@ -95,7 +95,11 @@ async function main() {
     },
   })
 
-  const hashedPassword = await bcrypt.hash('admin123', 10)
+  const bootstrapPassword = process.env.SEED_ADMIN_PASSWORD
+  if (!bootstrapPassword) {
+    throw new Error('SEED_ADMIN_PASSWORD wajib diisi saat menjalankan seed')
+  }
+  const hashedPassword = await bcrypt.hash(bootstrapPassword, 10)
   await prisma.masterAdmin.upsert({
     where: { employeeNo: 'EMP001' },
     update: {},
@@ -120,7 +124,7 @@ async function main() {
     },
   })
 
-  const adminUserPassword = await bcrypt.hash('admin123', 10)
+  const adminUserPassword = await bcrypt.hash(bootstrapPassword, 10)
   await prisma.userAccount.create({
     data: {
       name: 'Admin Kokarsi',
@@ -132,7 +136,11 @@ async function main() {
     },
   })
 
-  const pengelolaPassword = await bcrypt.hash('pengelola123', 10)
+  const pengelolaBootstrapPassword = process.env.SEED_PENGELOLA_PASSWORD
+  if (!pengelolaBootstrapPassword) {
+    throw new Error('SEED_PENGELOLA_PASSWORD wajib diisi saat menjalankan seed')
+  }
+  const pengelolaPassword = await bcrypt.hash(pengelolaBootstrapPassword, 10)
   await prisma.userAccount.create({
     data: {
       name: 'Rina Permata',
@@ -317,9 +325,7 @@ async function main() {
   console.log('Mock pemakaian kendaraan seeded:', mockRecords.length)
 
   console.log('Seed selesai!')
-  console.log('Login admin: employeeNo=EMP001, password=admin123')
-  console.log('Login admin user: username=admin.kokarsi, password=admin123')
-  console.log('Login pengelola: username=pengelola1, password=pengelola123')
+  console.log('Seed selesai. Gunakan credential bootstrap dari environment dan segera ganti password setelah login pertama.')
 }
 
 main()

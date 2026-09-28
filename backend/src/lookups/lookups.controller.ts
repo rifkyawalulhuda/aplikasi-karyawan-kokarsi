@@ -191,7 +191,9 @@ export class LookupsController {
   }
 
   @Post('companies/bulk-import')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', {
+    limits: { fileSize: 10 * 1024 * 1024 },
+  }))
   async bulkImportCompanies(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('File tidak ditemukan')
 

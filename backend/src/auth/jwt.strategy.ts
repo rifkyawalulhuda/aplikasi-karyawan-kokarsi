@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
+import { AuthService } from './auth.service'
 
 interface JwtPayload {
   sub: number
@@ -8,12 +9,13 @@ interface JwtPayload {
   fullName: string
   role: string
   accountType: string
+  tokenVersion?: number
   email: string
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(private readonly auth: AuthService) {
     const secret = process.env.JWT_SECRET
     if (!secret) {
       throw new Error('JWT_SECRET environment variable is required')
@@ -26,6 +28,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    return { sub: payload.sub, employeeNo: payload.employeeNo, fullName: payload.fullName, role: payload.role ?? 'ADMIN', kind: payload.accountType ?? 'master_admin' }
+    return this.auth.validateSession(payload)
   }
 }

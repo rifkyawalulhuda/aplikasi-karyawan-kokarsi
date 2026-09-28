@@ -13,12 +13,12 @@ export default eventHandler(async (event) => {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 60 * 60 * 8,
+        maxAge: 60 * 30,
         path: '/',
       })
     }
 
-    return res
+    return { admin: res.admin }
   } catch (error: any) {
     throw createError({
       statusCode: error?.statusCode ?? error?.response?.status ?? 500,

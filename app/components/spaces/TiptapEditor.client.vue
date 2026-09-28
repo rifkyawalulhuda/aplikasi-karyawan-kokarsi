@@ -47,14 +47,14 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 
 // Allowed image types
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/bmp', 'image/tiff']
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 function validateFile(file: File): string | null {
   if (file.size > MAX_FILE_SIZE) {
     return `Ukuran file terlalu besar. Maksimal 5MB, file Anda ${(file.size / 1024 / 1024).toFixed(2)}MB`
   }
-  if (!file.type.startsWith('image/')) {
-    return 'File harus berupa gambar'
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    return 'Format file harus JPG, PNG, atau WEBP'
   }
   return null
 }
@@ -149,7 +149,10 @@ async function handleDrop(event: DragEvent) {
   if (!files?.length) return
 
   const file = files[0]
-  if (!file || !file.type.startsWith('image/')) return
+  if (!file || !ALLOWED_TYPES.includes(file.type)) {
+    toast.add({ title: 'Upload Gagal', description: 'Format file harus JPG, PNG, atau WEBP', color: 'error' })
+    return
+  }
 
   event.preventDefault()
   event.stopPropagation()
@@ -167,7 +170,7 @@ function handlePaste(_view: any, event: ClipboardEvent): boolean {
   if (!items) return false
 
   for (const item of items) {
-    if (item.type.startsWith('image/')) {
+    if (ALLOWED_TYPES.includes(item.type)) {
       event.preventDefault()
       const file = item.getAsFile()
       if (file) {
@@ -338,12 +341,12 @@ const tools = [
             </div>
             <div class="text-center">
               <p class="font-medium text-highlighted">Klik atau drag gambar ke sini</p>
-              <p class="text-xs text-muted mt-1">Maksimal 5MB • JPG, PNG, GIF, WebP, SVG</p>
+              <p class="text-xs text-muted mt-1">Maksimal 5MB • JPG, PNG, WebP</p>
             </div>
             <input
               ref="fileInputRef"
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               class="hidden"
               @change="handleFileSelect"
             />

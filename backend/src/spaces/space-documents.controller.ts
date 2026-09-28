@@ -6,7 +6,7 @@ import { extname, join } from 'path'
 import { existsSync, mkdirSync } from 'fs'
 import { SpaceDocumentsService } from './space-documents.service'
 import { CreateDocumentDto, UpdateDocumentDto } from './dto/create-document.dto'
-import { validateImageOrSvgBuffer } from '../shared/file-validation.util'
+import { validateImageBuffer } from '../shared/file-validation.util'
 
 function ensureUploadDir() {
   const dir = join(process.cwd(), 'uploads', 'documents')
@@ -72,8 +72,8 @@ export class SpaceDocumentsController {
       },
     }),
     fileFilter: (_req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|gif|webp|svg\+xml|avif|bmp|tiff)$/)) {
-        return cb(new BadRequestException('Hanya file gambar (jpg, png, gif, webp, svg, avif, bmp, tiff) yang diizinkan'), false)
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+        return cb(new BadRequestException('Hanya file gambar JPG, PNG, atau WEBP yang diizinkan'), false)
       }
       cb(null, true)
     },
@@ -90,7 +90,7 @@ export class SpaceDocumentsController {
     const { readFileSync, unlinkSync } = require('fs')
     const fileBuffer = readFileSync(file.path)
     try {
-      await validateImageOrSvgBuffer(fileBuffer)
+      await validateImageBuffer(fileBuffer)
     } catch (err: any) {
       unlinkSync(file.path)
       throw new BadRequestException(err?.message ?? 'File gambar tidak valid')

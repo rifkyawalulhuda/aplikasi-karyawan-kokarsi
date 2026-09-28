@@ -12,15 +12,15 @@
 Internet ── Cloudflare ── Tunnel ── Windows Machine
     │                                    │
     │  kokarsi-sankyu.web.id             │
-    ├── /uploads/* ──► localhost:3001    │ ← Backend (static files)
     └── /* ─────────► localhost:3000     │ ← Nuxt production server
                           │              │
-                          └── proxy server-side → localhost:3001/api/*
+                          ├── /api/* ──────────► localhost:3001
+                          └── /uploads/* ──────► localhost:3001 (JWT)
 ```
 
 **Alasan:**
-- `/api/*` tetap lewat Nitro proxy (server-side, cookie auth tetap jalan)
-- `/uploads/*` (foto, dokumen) langsung dari backend lewat tunnel
+- `/api/*` dan `/uploads/*` lewat Nitro proxy (cookie auth tetap jalan)
+- Backend menolak `/uploads` selain `/uploads/settings` tanpa JWT
 
 ---
 
@@ -80,9 +80,6 @@ notepad "$env:USERPROFILE\.cloudflared\config.yml"
 tunnel: <tunnel-id>
 credentials-file: C:\Users\Admin\.cloudflared\<tunnel-id>.json
 ingress:
-  - hostname: kokarsi-sankyu.web.id
-    path: /uploads/*
-    service: http://localhost:3001
   - hostname: kokarsi-sankyu.web.id
     service: http://localhost:3000
   - service: http_status:404

@@ -50,7 +50,7 @@ C:\Users\<USERNAME>\.cloudflared\
 ### `backend/.env`
 
 ```env
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5434/kokarsi_karyawan"
+# Isi konfigurasi koneksi database melalui secret environment production.
 JWT_SECRET="isi-dengan-random-string-minimal-32-karakter"
 PORT=3001
 FONT_DIR=C:/Windows/Fonts
@@ -74,7 +74,7 @@ NUXT_ALLOWED_ORIGINS=https://kokarsi-sankyu.web.id
 Buka pgAdmin atau psql dan jalankan:
 
 ```sql
-CREATE USER kokarsi WITH PASSWORD 'kokarsi2026';
+CREATE USER kokarsi WITH PASSWORD '<password-kuat-dari-secret-manager>';
 CREATE DATABASE kokarsi_karyawan OWNER kokarsi;
 GRANT ALL PRIVILEGES ON DATABASE kokarsi_karyawan TO kokarsi;
 ```
@@ -82,7 +82,7 @@ GRANT ALL PRIVILEGES ON DATABASE kokarsi_karyawan TO kokarsi;
 ## 5. Migrasi & Seed Database
 
 ::: warning Install dulu sebelum Prisma
-`backend/prisma.config.ts` menggunakan `dotenv` untuk membaca `DATABASE_URL` dari `.env`. Jika `npm install` belum dijalankan, Prisma akan menggunakan port fallback hardcoded (`5435`) meskipun `.env` sudah diisi port yang benar.
+`backend/prisma.config.ts` menggunakan `dotenv` untuk membaca konfigurasi database dari environment. Pastikan dependency backend sudah terinstall sebelum menjalankan perintah Prisma.
 :::
 
 ```powershell

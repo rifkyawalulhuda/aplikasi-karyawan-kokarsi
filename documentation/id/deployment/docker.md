@@ -15,7 +15,7 @@ Mode deployment yang **direkomendasikan** untuk production menggunakan Docker un
 Buat `backend/.env`:
 
 ```env
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5435/kokarsi_karyawan"
+# Isi secret koneksi database melalui environment production.
 JWT_SECRET=your-secret-key-min-32-chars
 PORT=3001
 MAILEROO_API_KEY=your-api-key

@@ -95,9 +95,6 @@ credentials-file: C:\Users\<USERNAME_BARU>\.cloudflared\483d9bfc-f094-4d30-a344-
 
 ingress:
   - hostname: kokarsi-sankyu.web.id
-    path: /uploads/.*
-    service: http://localhost:3001
-  - hostname: kokarsi-sankyu.web.id
     service: http://localhost:3000
   - service: http_status:404
 ```

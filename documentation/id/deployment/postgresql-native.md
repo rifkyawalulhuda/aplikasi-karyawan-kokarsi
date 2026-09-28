@@ -21,7 +21,7 @@ Buka **pgAdmin** atau **psql** dan jalankan:
 
 ```sql
 -- Buat user aplikasi
-CREATE USER kokarsi WITH PASSWORD 'kokarsi2026';
+CREATE USER kokarsi WITH PASSWORD '<password-kuat-dari-secret-manager>';
 
 -- Buat database
 CREATE DATABASE kokarsi_karyawan OWNER kokarsi;
@@ -34,9 +34,7 @@ GRANT ALL PRIVILEGES ON DATABASE kokarsi_karyawan TO kokarsi;
 
 Update `backend/.env` untuk mode native:
 
-```env
-DATABASE_URL="postgresql://kokarsi:kokarsi2026@localhost:5432/kokarsi_karyawan"
-```
+Simpan secret koneksi database pada environment backend secara aman. Jangan menuliskan connection string atau password database di repository maupun dokumentasi.
 
 ::: info Port Berbeda
 Docker mode menggunakan port `5435`, native mode menggunakan port `5432` (default PostgreSQL).
@@ -66,7 +64,7 @@ npx prisma db push
 :::
 
 ::: info `prisma.config.ts` dan `dotenv`
-Project ini menggunakan `prisma.config.ts` yang membaca `DATABASE_URL` melalui `dotenv`. Pastikan `npm install` sudah dijalankan sebelum perintah Prisma agar `dotenv` tersedia — jika tidak, Prisma akan menggunakan port fallback hardcoded (`5435`) meskipun `.env` sudah diubah.
+Project ini menggunakan `prisma.config.ts` yang membaca konfigurasi database melalui `dotenv`. Pastikan `npm install` sudah dijalankan sebelum perintah Prisma agar `dotenv` tersedia.
 :::
 
 ## Seed Data Awal
@@ -110,7 +108,7 @@ Backup akan berjalan otomatis setiap hari jam 02:00. Backup lama > 7 hari dihapu
 ### Backup Manual dengan pg_dump
 
 ```powershell
-# Ganti port sesuai konfigurasi (default 5432, Docker 5435)
-$env:PGPASSWORD = "kokarsi2026"
+# Isi password hanya pada session shell dari secret manager; jangan commit atau menuliskannya di dokumentasi.
+$env:PGPASSWORD = "<password-database>"
 pg_dump -U kokarsi -d kokarsi_karyawan -h localhost -p 5432 -f backup.sql
 ```

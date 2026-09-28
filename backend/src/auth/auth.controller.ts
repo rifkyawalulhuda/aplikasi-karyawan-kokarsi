@@ -1,18 +1,18 @@
 import { Controller, Post, Body, UseGuards, Request, Put, Delete, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common'
 import { AuthService } from './auth.service'
 import { AuthGuard } from '@nestjs/passport'
-import { Throttle, SkipThrottle } from '@nestjs/throttler'
+import { Throttle } from '@nestjs/throttler'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { extname, join } from 'path'
 import { existsSync, unlinkSync } from 'fs'
 import { IsString, MinLength } from 'class-validator'
-import { validateImageOrSvgBuffer } from '../shared/file-validation.util'
+import { validateImageBuffer } from '../shared/file-validation.util'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 
 class LoginDto {
-  @IsString() employeeNo: string
-  @IsString() password: string
+  @IsString() @MinLength(1) employeeNo: string
+  @IsString() @MinLength(1) password: string
 }
 
 class ChangePasswordDto {
@@ -29,7 +29,6 @@ function profilePhotoDir() {
   return dir
 }
 
-@SkipThrottle()
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -70,6 +69,13 @@ export class AuthController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post('logout')
+  async logout(@Request() req: any) {
+    await this.auth.revokeSession(req.user.sub, req.user.kind)
+    return { success: true }
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Post('profile/photo')
   @UseInterceptors(FileInterceptor('photo', {
     storage: diskStorage({
@@ -80,8 +86,8 @@ export class AuthController {
       },
     }),
     fileFilter: (_req, file, cb) => {
-      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp|svg\+xml|avif|bmp|tiff)$/)) {
-        return cb(new BadRequestException('Hanya file gambar (jpg, png, webp, svg, avif, bmp, tiff) yang diizinkan'), false)
+      if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
+        return cb(new BadRequestException('Hanya file gambar JPG, PNG, atau WEBP yang diizinkan'), false)
       }
       cb(null, true)
     },
@@ -93,7 +99,7 @@ export class AuthController {
     const { readFileSync } = require('fs')
     const fileBuffer = readFileSync(file.path)
     try {
-      await validateImageOrSvgBuffer(fileBuffer)
+      await validateImageBuffer(fileBuffer)
     } catch (err: any) {
       unlinkSync(file.path)
       throw new BadRequestException(err?.message ?? 'File gambar tidak valid')

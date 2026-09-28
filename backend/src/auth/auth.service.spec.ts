@@ -162,8 +162,59 @@ describe('AuthService', () => {
       const result = await service.changePassword(1, 'correctold', 'newpass')
       expect(result).toEqual({ message: 'Password berhasil diubah' })
       expect(mockPrisma.masterAdmin.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { password: 'newhashedpass' } })
+        expect.objectContaining({
+          data: expect.objectContaining({
+            password: 'newhashedpass',
+            tokenVersion: { increment: 1 },
+          }),
+        })
       )
+    })
+  })
+
+  describe('validateSession', () => {
+    it('harus menolak akun nonaktif', async () => {
+      mockPrisma.masterAdmin.findUnique.mockResolvedValue({
+        id: 1,
+        isActive: false,
+        tokenVersion: 0,
+      })
+
+      await expect(service.validateSession({ sub: 1, accountType: 'master_admin', tokenVersion: 0 }))
+        .rejects.toThrow(UnauthorizedException)
+    })
+
+    it('harus menolak token dengan tokenVersion lama', async () => {
+      mockPrisma.userAccount.findUnique.mockResolvedValue({
+        id: 2,
+        isActive: true,
+        tokenVersion: 2,
+      })
+
+      await expect(service.validateSession({ sub: 2, accountType: 'user_account', tokenVersion: 1 }))
+        .rejects.toThrow(UnauthorizedException)
+    })
+
+    it('harus membangun identity dari data database', async () => {
+      mockPrisma.masterAdmin.findUnique.mockResolvedValue({
+        id: 1,
+        employeeNo: 'EMP001',
+        fullName: 'Admin Database',
+        role: 'ADMIN',
+        isActive: true,
+        tokenVersion: 3,
+      })
+
+      await expect(service.validateSession({
+        sub: 1,
+        accountType: 'master_admin',
+        tokenVersion: 3,
+      })).resolves.toMatchObject({
+        sub: 1,
+        fullName: 'Admin Database',
+        role: 'ADMIN',
+        kind: 'master_admin',
+      })
     })
   })
 })

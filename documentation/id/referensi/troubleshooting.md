@@ -52,11 +52,11 @@ pm2 restart kokarsi-backend
 
 ---
 
-### `prisma.config.ts` Tidak Membaca `.env` — Port Masih 5435
+### `prisma.config.ts` Tidak Membaca Konfigurasi Environment Database
 
-**Gejala:** Setelah mengubah `DATABASE_URL` di `backend/.env` ke port lain (misal `5434`), `prisma migrate deploy` / `seed` masih mencoba koneksi ke port `5435`.
+**Gejala:** Setelah mengubah konfigurasi environment database, `prisma migrate deploy` atau `seed` masih mencoba koneksi menggunakan konfigurasi lama.
 
-**Penyebab:** `prisma.config.ts` menggunakan `process.env.DATABASE_URL ?? 'fallback-5435'` — jika `dotenv` belum terinstall atau `npm install` belum dijalankan, variabel environment tidak terbaca sehingga fallback dipakai.
+**Penyebab:** Dependency `dotenv` belum terinstall atau environment database belum dimuat ketika perintah Prisma dijalankan.
 
 **Solusi:**
 ```powershell

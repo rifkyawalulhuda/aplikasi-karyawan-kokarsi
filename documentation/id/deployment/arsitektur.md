@@ -23,9 +23,9 @@ Internet (User Browser)
 │                                          │
 │  /* ──────► localhost:3000 (Nuxt)        │
 │             │                            │
-│             └── /api/* proxy ──►         │
-│                                          │
-│  /uploads/* ─► localhost:3001 (NestJS)   │
+│             ├── /api/* ─────► :3001      │
+│             └── /uploads/* ──► :3001     │
+│                 (JWT, kecuali settings)  │
 │                                          │
 │  localhost:3001 ◄──► localhost:5435      │
 │     (NestJS)          (PostgreSQL)       │
@@ -47,9 +47,9 @@ Internet (User Browser)
 2. Request masuk ke Cloudflare CDN
 3. Cloudflare Tunnel forward ke `localhost:3000`
 4. Nuxt (frontend) serve halaman HTML
-5. Request API (`/api/*`) di-proxy Nuxt ke `localhost:3001`
-6. NestJS proses request, query PostgreSQL di port 5435
-7. Response dikembalikan ke user
+5. Request API (`/api/*`) dan file (`/uploads/*`) di-proxy Nuxt ke `localhost:3001`
+6. NestJS menolak `/uploads` selain `/uploads/settings` bila tidak ada JWT
+7. NestJS query PostgreSQL di port 5435, lalu response dikembalikan ke user
 
 ## Kenapa Cloudflare Tunnel?
 

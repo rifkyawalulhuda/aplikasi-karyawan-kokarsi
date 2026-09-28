@@ -8,7 +8,7 @@ export default defineNuxtConfig({
   ],
 
   devtools: {
-    enabled: true
+    enabled: process.env.NODE_ENV !== 'production'
   },
 
   app: {
@@ -35,7 +35,7 @@ export default defineNuxtConfig({
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       }
     },
-    // Proxy semua upload ke backend (termasuk gambar dokumen disimpan di backend/uploads/documents/**)
+    // Semua upload lewat backend. Selain /uploads/settings, backend menolak tanpa JWT.
     '/uploads/**': {
       proxy: 'http://localhost:3001/uploads/**'
     }
