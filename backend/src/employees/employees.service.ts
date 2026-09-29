@@ -626,7 +626,7 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
       }),
       this.prisma.operationalVehicleUsage.groupBy({
         by: ['vehicleNumber'],
-        where: { usedAt: { gte: startOfMonthWib, lt: endOfMonthWib } },
+        where: { usedAt: { gte: startOfMonthWib, lt: endOfMonthWib }, status: null },
         _count: true,
       }),
     ])
