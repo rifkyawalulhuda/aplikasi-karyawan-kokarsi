@@ -597,7 +597,7 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
       }),
       // Ringkasan Pemakaian Kendaraan hari ini (WIB)
       this.prisma.operationalVehicleUsage.count({
-        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib } },
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: null },
       }),
       this.prisma.operationalVehicleUsage.count({
         where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: null },
@@ -606,12 +606,12 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
         where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: 'BATAL' },
       }),
       this.prisma.operationalVehicleUsage.findMany({
-        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib } },
+        where: { usedAt: { gte: startOfTodayWib, lt: startOfTomorrowWib }, status: null },
         orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
         select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
       }),
       this.prisma.operationalVehicleUsage.count({
-        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib } },
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: null },
       }),
       this.prisma.operationalVehicleUsage.count({
         where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: null },
@@ -620,7 +620,7 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
         where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: 'BATAL' },
       }),
       this.prisma.operationalVehicleUsage.findMany({
-        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib } },
+        where: { usedAt: { gte: startOfTodayWib, lt: endOfSevenDaysWib }, status: null },
         orderBy: [{ usedAt: 'asc' }, { id: 'asc' }],
         select: { id: true, usedAt: true, vehicleNumber: true, driver: true, destination: true, status: true },
       }),
