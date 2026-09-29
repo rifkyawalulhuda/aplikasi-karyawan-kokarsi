@@ -41,6 +41,12 @@ Target utama:
 | Master reference | Semua sumber master yang masuk registry allowlist |
 | Table | Wajib tersedia sejak V1; jumlah kolom boleh berubah antar-versi |
 | List | Wajib tersedia sejak V1 |
+| List alfabet (a, b, c) | Wajib tersedia sejak V1 untuk sub-butir ayat pasal MITRA |
+| Identitas legal koperasi | Teks template editable; tidak lagi hardcode di renderer |
+| Nomor dokumen | Mengikuti format util `{seq}/{code}/KUKP/SII/{romawi}/{tahun}` |
+| Tanggal terbit KTP mitra | Custom field CONTRACT_INPUT bertipe DATE |
+| Rentang dan durasi periode | Auto-derive dari startDate/endDate kontrak |
+| Duties driver truk B3 | Template baru MITRA_DRIVER_TRUCK_B3 terpisah dari MITRA_DRIVER |
 
 ---
 
@@ -66,6 +72,10 @@ Keterbatasan:
 - Pasal belum dapat ditambah atau dihapus secara bebas.
 - Renderer belum membaca block definition dinamis sebagai sumber utama.
 - Regenerasi PDF berisiko membaca template aktif terbaru.
+- Recitals identitas legal koperasi masih hardcode di `contract-document.service.ts` (akta pendirian, notaris, SK Kemenkumham, alamat).
+- Role tanda tangan MITRA (`(Mitra)`, `(Ketua Koperasi)`) masih hardcode di renderer.
+- Sub-butir alfabet di dalam ayat belum didukung struktur konten.
+- Tanggal terbit KTP mitra belum tersedia di model data.
 
 ---
 
@@ -278,6 +288,16 @@ Format placeholder:
 {{custom.nomor_surat_internal}}
 ```
 
+Placeholder sistem tambahan yang diwajibkan untuk mendukung sample Perjanjian Kemitraan MITRA:
+
+| Placeholder | Sumber | Contoh nilai |
+|---|---|---|
+| `{{doc.hariTanggal}}` | Auto-derive dari tanggal tanda tangan | `hari Senin tanggal 31 bulan Agustus tahun 2026` |
+| `{{contract.termRange}}` | Auto-derive dari startDate/endDate | `01 September 2026 - 31 Maret 2027` |
+| `{{contract.duration}}` | Auto-derive dari startDate/endDate | `6 (enam) bulan` |
+| `{{contract.docDate}}` | Tanggal dokumen di header | `31 Agustus 2026` |
+| `{{employee.ktpIssuedDate}}` | Custom field CONTRACT_INPUT | `08 Agustus 2024` |
+
 Jenis sumber:
 
 | Source | Contoh | Perilaku |
@@ -311,11 +331,54 @@ Contoh field master reference:
 }
 ```
 
+Contoh custom field untuk sample MITRA:
+
+```json
+{
+  "key": "ktp_issued_date",
+  "label": "Tanggal Terbit KTP Mitra",
+  "dataType": "DATE",
+  "sourceType": "CONTRACT_INPUT",
+  "required": true
+}
+```
+
+`ktp_issued_date` wajib tersedia pada seed katalog field untuk family MITRA.
+
 Semua master data harus melalui `MASTER_REFERENCE_REGISTRY`. Registry harus menentukan model, field yang boleh dibaca, formatter, dan rule akses. Jangan izinkan admin memilih tabel atau kolom database secara bebas.
 
 Sumber master yang dapat didaftarkan mencakup Employee, Department, JobRole, JobLevel, WorkLocation, TaxStatus, ContractType, Company, LegalKoperasi, DocumentType, pengurus koperasi, kendaraan, dan vendor jika data tersebut memang tersedia dan aman untuk dokumen.
 
 Sumber sensitif atau transaksional seperti password, activity log, notification, session, dan audit internal tidak boleh tersedia sebagai placeholder.
+
+---
+
+## MITRA Sample Conformance
+
+Referensi: `docs/sample-legal-doc/pdf/DRAFT KONTRAK KERJA MITRA.pdf` (hasil parse: `.firecrawl/draft-kontrak-mitra.md`).
+
+Pemetaan struktur sample ke blok template:
+
+| Bagian sample | Blok template | Catatan |
+|---|---|---|
+| Judul `PERJANJIAN KEMITRAAN` | `title` | Editable per versi |
+| `Nomor: 220/KUKP-SII/2026` | `paragraph` + `{{contract.contractNo}}` | Format mengikuti util `{seq}/{code}/KUKP/SII/{romawi}/{tahun}` |
+| `Tanggal 31 Agustus 2026` | `paragraph` + `{{contract.docDate}}` | Auto-derive |
+| Pembukaan `dibuat dan ditandatangani pada hari ...` | `paragraph` + `{{doc.hariTanggal}}` | Nama hari dihitung otomatis |
+| Recitals PIHAK PERTAMA (akta, notaris, SK Kemenkumham, alamat, Ketua Koperasi) | `paragraph` editable | Diekstrak dari hardcode `contract-document.service.ts:515` |
+| Recitals PIHAK KEDUA (nama, WNI, tempat/tgl lahir, alamat, KTP + tanggal terbit) | `paragraph` editable | `{{employee.ktpIssuedDate}}` dari custom field |
+| Recitals menerangkan 3 butir | `list` style `numbered` | |
+| Pasal 1-15 | `article` berurutan | Heading editable, urutan bebas |
+| Ayat dengan sub-butir a, b, c | `list` style `alphabetic` | Style baru di V1 |
+| Pasal 2 (jangka waktu) | `article` + `{{contract.termRange}}`, `{{contract.duration}}` | Auto-derive agar tidak terjadi inkonsistensi seperti pada sample (teks "6 bulan" padahal rentang 7 bulan) |
+| Penutup (rangkap, meterai) | `paragraph` | |
+| Tabel tanda tangan 2 kolom | `signature` | Role `(Ketua Koperasi)` dan `(Mitra)` menjadi konfigurasi blok, tidak hardcode |
+
+Konsekuensi renderer:
+
+- Blok `signature` MITRA menerima konfigurasi `leftRole` dan `rightRole` per versi template.
+- Recitals legal koperasi berhenti menjadi string literal di `contract-document.service.ts`; menjadi konten versi pertama saat migrasi.
+- Layout booklet dua kolom (pembagian 50/50, garis pembatas, border, signature footer full-width) tetap tanggung jawab renderer dan tidak diekspos ke editor.
 
 ---
 
@@ -443,6 +506,9 @@ Jika file PDF hilang, regeneration wajib memakai `templateSnapshot` dan `resolve
 10. Pastikan endpoint create kontrak selalu mengambil versi publish terbaru.
 11. Nonaktifkan runtime dependency pada `contentOverrides` setelah verifikasi migrasi.
 12. Hapus endpoint legacy hanya setelah tidak ada consumer aktif.
+13. Ekstrak recitals identitas legal koperasi yang hardcode di renderer menjadi konten versi pertama untuk setiap template MITRA.
+14. Ekstrak role tanda tangan MITRA yang hardcode (`(Mitra)`, `(Ketua Koperasi)`) menjadi konfigurasi blok signature per template.
+15. Seed template baru `MITRA_DRIVER_TRUCK_B3` dengan duties dari sample (SIM aktif, ceklis kendaraan, trip report/manifest, pengangkutan B3, APAR, APD) tanpa mengubah `MITRA_DRIVER` yang ada.
 
 Migration harus idempotent atau memiliki checkpoint agar dapat dilanjutkan jika gagal.
 
@@ -528,7 +594,8 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 2. Tambahkan enum status dan field types.
 3. Implementasikan registry master source yang allowlisted.
 4. Seed system fields dari data kontrak, employee, settings, dan master data aman.
-5. Generate dan verifikasi migration Prisma.
+5. Seed custom field `ktp_issued_date` (DATE, CONTRACT_INPUT, required untuk family MITRA).
+6. Generate dan verifikasi migration Prisma.
 
 ### Phase 2 - Version Service and API
 
@@ -544,17 +611,18 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 
 1. Ubah create contract untuk memilih versi publish.
 2. Resolve input, dropdown, dan master reference.
-3. Simpan template snapshot dan resolved values.
-4. Ubah regeneration PDF agar memakai snapshot.
-5. Tambahkan regression test bahwa publish baru tidak mengubah kontrak lama.
+3. Implementasikan auto-derive placeholder: `doc.hariTanggal`, `contract.termRange`, `contract.duration`, `contract.docDate` dari data tanggal kontrak.
+4. Simpan template snapshot dan resolved values.
+5. Ubah regeneration PDF agar memakai snapshot.
+6. Tambahkan regression test bahwa publish baru tidak mengubah kontrak lama.
 
 ### Phase 4 - Dynamic Renderer
 
 1. Buat type guard untuk block schema.
 2. Implementasikan renderer paragraph/article.
-3. Implementasikan renderer list.
+3. Implementasikan renderer list (bullet, numbered, alphabetic).
 4. Implementasikan renderer table.
-5. Implementasikan page break dan signature.
+5. Implementasikan page break dan signature dengan role configurable per versi template.
 6. Pertahankan definisi hard-code hanya untuk seed dan aturan layout khusus.
 
 ### Phase 5 - Frontend Editor
@@ -605,7 +673,12 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 - PKWT Indonesia/English;
 - MITRA Indonesia saja;
 - custom field shared oleh dua template;
-- tabel dengan jumlah kolom berbeda antar-versi.
+- tabel dengan jumlah kolom berbeda antar-versi;
+- auto-derive `contract.duration` konsisten dengan `contract.termRange` (tidak terjadi inkonsistensi 6 vs 7 bulan seperti pada sample);
+- `doc.hariTanggal` menghasilkan nama hari yang benar;
+- template `MITRA_DRIVER_TRUCK_B3` terpisah dari `MITRA_DRIVER` dengan duties masing-masing;
+- recitals legal koperasi dirender dari konten template, bukan hardcode;
+- list alphabetic (a, b, c) dirender benar di dalam ayat.
 
 ### UI Tests
 
@@ -638,6 +711,12 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 - PDF lama dapat diregenerate dari snapshot kontrak.
 - PKWT mendukung Indonesia dan English.
 - MITRA mendukung Indonesia.
+- Hasil render PDF MITRA dapat dibandingkan 1:1 dengan sample `DRAFT KONTRAK KERJA MITRA.pdf` (header, recitals, pasal, penutup, tanda tangan).
+- Hari, rentang, dan durasi periode selalu konsisten dengan tanggal kontrak karena dihitung otomatis.
+- Identitas legal koperasi dapat diedit per versi template tanpa mengubah kode renderer.
+- Sub-butir alfabet (a, b, c) dapat dirender di dalam pasal.
+- Template `MITRA_DRIVER_TRUCK_B3` tersedia sebagai template terpisah.
+- Tanggal terbit KTP mitra diisi saat kontrak dibuat melalui custom field DATE.
 - Placeholder invalid ditolak saat publish.
 - Semua perubahan penting tercatat dalam activity log.
 - Rollback mengaktifkan versi sebelumnya tanpa mengubah kontrak yang sudah ada.
@@ -658,6 +737,8 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 | Migrasi gagal di tengah jalan | Migration checkpoint dan idempotent backfill |
 | Registry membuka data sensitif | Allowlist source dan field, tanpa dynamic query |
 | Perubahan legacy override hilang | Migrasi gabungkan hard-code dan override sebelum cutover |
+| Konten sample legal berubah di masa depan | Konten editable per versi template; renderer hanya menangani layout |
+| Inkonsistensi angka durasi vs rentang tanggal | `duration` dan `termRange` dihitung dari satu sumber (tanggal kontrak), tidak pernah manual |
 
 ---
 
