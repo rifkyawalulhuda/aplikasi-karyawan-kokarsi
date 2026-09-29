@@ -60,7 +60,7 @@ const editTarget = ref<WarningLetter | null>(null)
 const previewModal = ref(false)
 const previewTarget = ref<WarningLetter | null>(null)
 const previewLoading = ref(false)
-const previewPdfSrc = ref('')
+const previewPdfSrc = ref<Blob | null>(null)
 
 // Detail Drawer state
 const drawerOpen = ref(false)
@@ -279,16 +279,35 @@ function openEdit(letter: WarningLetter) {
 function closePreview() {
   previewTarget.value = null
   previewLoading.value = false
-  previewPdfSrc.value = ''
+  previewPdfSrc.value = null
   previewModal.value = false
 }
 
 async function openPreview(letter: WarningLetter) {
   previewTarget.value = letter
-  previewLoading.value = false
-  // PdfViewer will fetch and render this URL to canvas
-  previewPdfSrc.value = `/api/warning-letters/${letter.id}/preview?preview=${Date.now()}`
+  previewLoading.value = true
+  previewPdfSrc.value = null
   previewModal.value = true
+
+  try {
+    // Fetch the protected endpoint here so the session cookie is sent once,
+    // then let PdfViewer render the PDF bytes directly.
+    const blob = await $fetch<Blob>(`/api/warning-letters/${letter.id}/preview`, {
+      responseType: 'blob',
+      credentials: 'include',
+    })
+    previewPdfSrc.value = blob
+  } catch (error: unknown) {
+    const details = error && typeof error === 'object' ? error as { data?: { message?: string }; message?: string } : {}
+    previewModal.value = false
+    toast.add({
+      title: 'Gagal memuat preview PDF',
+      description: details.data?.message ?? details.message ?? 'Periksa koneksi atau sesi login Anda.',
+      color: 'error',
+    })
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 function openDownload(letter: WarningLetter) {

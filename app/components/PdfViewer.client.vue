@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const props = defineProps<{
-  src: string
+  src: string | Blob
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
@@ -8,7 +8,7 @@ const loading = ref(true)
 const errorMsg = ref('')
 let renderToken = 0
 
-async function renderPdf(url: string) {
+async function renderPdf(url: string | Blob) {
   const token = ++renderToken
   loading.value = true
   errorMsg.value = ''
@@ -25,15 +25,19 @@ async function renderPdf(url: string) {
   try {
     // Dynamic import so pdfjs never runs during SSR
     const pdfjsLib = await import('pdfjs-dist')
-    const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default
-    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+    // Use a stable Vite asset URL. The `?url` virtual chunk can produce a
+    // worker URL that fails to fetch after a production build.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url
+    ).toString()
 
-    // Fetch PDF bytes with credentials (cookie auth)
-    const res = await fetch(url, { credentials: 'include' })
-    if (!res.ok) {
-      throw new Error(`Gagal memuat PDF (${res.status})`)
-    }
-    const data = new Uint8Array(await res.arrayBuffer())
+    // The protected API response is fetched by the parent with the session
+    // cookie. When a Blob is supplied, pass its bytes directly to PDF.js;
+    // fetching a blob URL again can fail in some browsers.
+    const data = new Uint8Array(
+      await (url instanceof Blob ? url.arrayBuffer() : fetchPdf(url))
+    )
 
     if (token !== renderToken) return
 
@@ -65,18 +69,26 @@ async function renderPdf(url: string) {
       canvas.style.borderRadius = '8px'
       canvas.style.boxShadow = '0 1px 6px rgba(15,23,42,0.12)'
 
-      await page.render({ canvas, viewport } as any).promise
+      await page.render({ canvas, viewport }).promise
 
       if (token !== renderToken) return
       target.appendChild(canvas)
     }
 
     loading.value = false
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (token !== renderToken) return
-    errorMsg.value = e?.message ?? 'Gagal menampilkan dokumen PDF'
+    errorMsg.value = e instanceof Error ? e.message : 'Gagal menampilkan dokumen PDF'
     loading.value = false
   }
+}
+
+async function fetchPdf(url: string): Promise<ArrayBuffer> {
+  const res = await fetch(url, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(`Gagal memuat PDF (${res.status})`)
+  }
+  return res.arrayBuffer()
 }
 
 watch(() => props.src, (url) => {

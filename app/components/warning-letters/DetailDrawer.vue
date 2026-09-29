@@ -29,12 +29,12 @@ function formatDateLong(date: string | null | undefined) {
 
 // Reset preview when letter changes
 const previewOpen = ref(false)
-const previewPdfSrc = ref('')
+const previewPdfSrc = ref<Blob | null>(null)
 const previewLoading = ref(false)
 
 watch(() => props.letter?.id, () => {
   previewOpen.value = false
-  previewPdfSrc.value = ''
+  previewPdfSrc.value = null
 })
 
 // --- SP Level Maps ---
@@ -146,7 +146,8 @@ async function openPreview() {
       responseType: 'blob',
       credentials: 'include',
     })
-    previewPdfSrc.value = URL.createObjectURL(blob)
+    // Pass the bytes directly so PdfViewer does not fetch a blob URL.
+    previewPdfSrc.value = blob
   } catch {
     previewOpen.value = false
   } finally {
