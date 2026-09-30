@@ -134,10 +134,13 @@ async function save() {
     // buildOverridesPayload tetap dibandingkan dengan hardcoded
     // agar payload berisi semua perbedaan dari default asli
     const overrides = buildOverridesPayload(editorState.value, hardcoded.value)
-    await $fetch(`/api/contract-templates/${props.template.id}/content-overrides`, {
-      method: 'PUT',
-      body: { overrides },
-    })
+    if (Object.keys(overrides).length > 0) {
+      const draft = await $fetch<any>(`/api/contract-templates/${props.template.id}/versions`, {
+        method: 'POST',
+        body: { overrides, changeSummary: `Perubahan konten: ${Object.keys(overrides).join(', ')}` },
+      })
+      await $fetch(`/api/contract-template-versions/${draft.id}/publish`, { method: 'POST' })
+    }
     // Update baseline ke state saat ini agar changesCount kembali ke 0
     baseline.value = buildEditorState(editorState.value as any)
     toast.add({

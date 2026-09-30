@@ -11,6 +11,7 @@
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:generate": "npx prisma generate",
     "prisma:seed": "ts-node prisma/seed.ts",
+    "contract-templates:rollout": "ts-node scripts/rollout-contract-template-versioning.ts",
     "prisma:studio": "npx prisma studio",
     "test": "jest",
     "test:watch": "jest --watch",

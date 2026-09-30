@@ -644,6 +644,22 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 6. Monitor error unresolved placeholder dan render failure.
 7. Nonaktifkan legacy override setelah semua consumer berpindah.
 
+#### Rollout command
+
+Jalankan dari folder `backend` setelah migration Prisma diterapkan:
+
+```bash
+npm run contract-templates:rollout -- --dry-run
+npm run contract-templates:rollout
+```
+
+Script rollout bersifat idempotent: hanya membuat versi `PUBLISHED` jika template
+belum memilikinya, dan hanya mengisi snapshot kontrak yang belum memiliki
+`templateSnapshot` atau `templateVersionId`. Hasil JSON menampilkan jumlah versi
+yang dibuat, kontrak yang di-backfill, serta daftar placeholder yang unresolved.
+Exit code `2` berarti ada unresolved placeholder yang perlu ditinjau sebelum
+melanjutkan rollout staging. `--dry-run` tidak mengubah database.
+
 ---
 
 ## Testing Plan

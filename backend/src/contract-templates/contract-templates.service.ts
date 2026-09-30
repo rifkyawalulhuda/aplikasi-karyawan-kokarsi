@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ContractFamily } from '@prisma/client'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { ActivityLogService } from '../activity-log/activity-log.service'
+import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
+import { validateContentDefinition } from './template-schema.validator'
 
 export interface ContractTemplatePayload {
   code: string
@@ -27,6 +29,7 @@ export class ContractTemplatesService {
 
   private readonly defaultTemplateSeeds = [
     { code: 'MITRA_DRIVER', name: 'Mitra Driver', family: 'MITRA' as const, templateKey: 'MITRA_DRIVER', contractTypeName: 'MITRA', jobRoleName: 'Driver' },
+    { code: 'MITRA_DRIVER_TRUCK_B3', name: 'Mitra Driver Truck B3', family: 'MITRA' as const, templateKey: 'MITRA_DRIVER_TRUCK_B3', contractTypeName: 'MITRA', jobRoleName: 'Driver Truck B3' },
     { code: 'MITRA_KOMART', name: 'Mitra Kasir Komart', family: 'MITRA' as const, templateKey: 'MITRA_KOMART', contractTypeName: 'MITRA', jobRoleName: 'Kasir' },
     { code: 'MITRA_STAFF', name: 'Mitra Staff Admin', family: 'MITRA' as const, templateKey: 'MITRA_STAFF', contractTypeName: 'MITRA', jobRoleName: 'Staff Admin' },
     { code: 'MITRA_WAREHOUSE', name: 'Mitra Warehouse', family: 'MITRA' as const, templateKey: 'MITRA_WAREHOUSE', contractTypeName: 'MITRA', jobRoleName: 'Karyawan Gudang' },
@@ -90,6 +93,31 @@ export class ContractTemplatesService {
           version: 1,
         },
       })
+
+      const template = await this.prisma.contractTemplate.findUnique({ where: { code: seed.code } })
+      if (!template || !definition) continue
+
+      // Bootstrap only: never overwrite an existing draft/published/archived version.
+      // This keeps the operation idempotent and preserves administrator changes.
+      const versionCount = await this.prisma.client.contractTemplateVersion.count({ where: { templateId: template.id } })
+      if (versionCount === 0) {
+        const contentDefinition = definitionToContentDefinition(definition)
+        const fieldDefinitions = definitionToFieldDefinitions(definition)
+        validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), seed.family)
+        await this.prisma.client.contractTemplateVersion.create({
+          data: {
+            templateId: template.id,
+            versionNumber: 1,
+            status: 'PUBLISHED',
+            contentDefinition: contentDefinition as any,
+            fieldDefinitions: fieldDefinitions as any,
+            changeSummary: 'Versi awal dari definisi template bawaan aplikasi',
+            createdByName: 'System seed',
+            publishedByName: 'System seed',
+            publishedAt: new Date(),
+          },
+        })
+      }
     }
   }
 

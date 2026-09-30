@@ -6,6 +6,7 @@ import * as path from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 import { getContractDocumentDefinition, mergeDefinition } from './contract-document-definitions'
 import { SettingsService } from '../settings/settings.service'
+import { buildValueMap, renderBlocks, interpolate } from './contract-block-renderer'
 
 type RenderEngine = 'PDF_NATIVE'
 type LayoutMode = 'LEGAL_PDF_TEMPLATE'
@@ -67,6 +68,7 @@ export class ContractDocumentService {
       },
     },
     contractType: true,
+    templateVersion: true,
     template: {
       select: {
         id: true,
@@ -188,19 +190,32 @@ export class ContractDocumentService {
     if (!contract) throw new NotFoundException('Kontrak tidak ditemukan')
     if (!contract.template) throw new BadRequestException('Template dokumen kontrak belum dipilih')
 
+    const snapshot = contract.templateSnapshot as any
     const rawDefinition = getContractDocumentDefinition(contract.template.templateKey)
-    if (!rawDefinition) {
+    // Versioned contracts are rendered exclusively from their immutable snapshot.
+    // The legacy definition is only required for contracts created before Phase 3.
+    if (!snapshot?.contentDefinition && !rawDefinition) {
       throw new BadRequestException(`Template key ${contract.template.templateKey} belum terdaftar di generator dokumen`)
     }
-    const definition = mergeDefinition(rawDefinition, contract.template.contentOverrides as Record<string, any> | null)
+    const definition: any = rawDefinition
+      ? mergeDefinition(rawDefinition, contract.template.contentOverrides as Record<string, any> | null)
+      : {
+          title: '', subtitle: '', openingLine: '', recitals: [], locationLine: '', termLine: '',
+          compensationLabel: '', closingParagraphs: [], firstPartyLabel: '', secondPartyLabel: '',
+          sections: [], roleLabel: '',
+        }
 
     const employee = contract.employee
     const missingFields: string[] = []
 
-    if (!employee.nik) missingFields.push('NIK karyawan')
-    if (!employee.birthPlace) missingFields.push('Tempat lahir karyawan')
-    if (!employee.address) missingFields.push('Alamat karyawan')
-    if (!contract.baseCompensation) missingFields.push('Nominal kompensasi/upah kontrak')
+    // Snapshot contracts already contain the resolved values captured at creation;
+    // do not re-validate mutable employee/master data during regeneration.
+    if (!snapshot?.contentDefinition) {
+      if (!employee.nik) missingFields.push('NIK karyawan')
+      if (!employee.birthPlace) missingFields.push('Tempat lahir karyawan')
+      if (!employee.address) missingFields.push('Alamat karyawan')
+      if (!contract.baseCompensation) missingFields.push('Nominal kompensasi/upah kontrak')
+    }
 
     const meta = {
       contractNo: contract.contractNo,
@@ -237,6 +252,7 @@ export class ContractDocumentService {
       PKWT_STAFF: 'docs/sample-legal-doc/pdf/PKWT STAFF 2026 .pdf',
       PKWT_WAREHOUSE: 'docs/sample-legal-doc/pdf/PKWT WAREHOUSE 2026.pdf',
       MITRA_DRIVER: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA DRIVER OPS .pdf',
+      MITRA_DRIVER_TRUCK_B3: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA DRIVER TRUCK B3.pdf',
       MITRA_KOMART: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA KOMART.pdf',
       MITRA_STAFF: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA STAFF.pdf',
       MITRA_WAREHOUSE: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA WAREHOUSE.pdf',
@@ -576,7 +592,13 @@ export class ContractDocumentService {
       doc.registerFont('Times-Italic', path.join(this.fontDir, 'timesi.ttf'))
       doc.registerFont('Times-BoldItalic', path.join(this.fontDir, 'timesbi.ttf'))
 
-      if (payload.contract.template?.family === 'PKWT') {
+      // Jalur baru: kontrak yang dibuat dengan versi template publish →
+      // render dari snapshot (immutable), bukan definisi hard-code.
+      const snapshot = (payload.contract as any).templateSnapshot
+      const resolved = (payload.contract as any).resolvedTemplateData
+      if (snapshot?.contentDefinition && resolved) {
+        this.renderSnapshotPdf(doc, payload)
+      } else if (payload.contract.template?.family === 'PKWT') {
         this.renderPkwtPdf(doc, payload)
       } else {
         this.renderMitraPdf(doc, payload)
@@ -584,6 +606,113 @@ export class ContractDocumentService {
 
       doc.end()
     })
+  }
+
+  /**
+   * Render kontrak dari templateSnapshot (versi template yang dipakai saat
+   * kontrak dibuat). Bahasa: PKWT → id + en (dua kolom); MITRA → id saja.
+   * Signature memakai layout renderer (dua pilar) dengan role dari blok signature.
+   */
+  private renderSnapshotPdf(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
+    const snapshot = (payload.contract as any).templateSnapshot
+    const content = snapshot.contentDefinition ?? {}
+    const values = buildValueMap((payload.contract as any).resolvedTemplateData)
+
+    const family = snapshot.family === 'PKWT' || payload.contract.template?.family === 'PKWT' ? 'PKWT' : 'MITRA'
+    this.drawCorporateHeader(doc, family === 'PKWT' ? 'PKWT' : 'MITRA')
+    const headerBottomY = this.drawSnapshotTitleBlock(doc, payload, values)
+
+    const opts = {
+      leftX: 34,
+      rightX: 310,
+      columnWidth: 252,
+      topY: headerBottomY + 108,
+      bottomY: doc.page.height - 50,
+      fontRegular: 'Times-Roman',
+      fontBold: 'Times-Bold',
+      fontItalic: 'Times-Italic',
+    }
+
+    const blocksId: any[] = content?.languages?.id ?? []
+    const blocksEn: any[] = content?.languages?.en ?? []
+
+    if (family === 'PKWT' && blocksEn.length > 0) {
+      // Dua kolom: kiri ID, kanan EN — dirender paralel dari atas
+      const leftY = headerBottomY + 108
+      renderBlocks(doc, blocksId, { values }, { ...opts, topY: leftY })
+      // render EN di kolom kanan dari Y yang sama
+      this.renderBlocksInSingleColumn(doc, blocksEn, values, opts.rightX, leftY, opts.columnWidth)
+    } else {
+      renderBlocks(doc, blocksId, { values }, opts)
+    }
+
+    this.renderSnapshotSignature(doc, payload, blocksId)
+  }
+
+  /** Render blok hanya pada satu kolom mulai dari Y tertentu (untuk kolom EN). */
+  private renderBlocksInSingleColumn(doc: any, blocks: any[], values: Record<string, string>, x: number, startY: number, width: number) {
+    renderBlocks(doc, blocks, { values }, {
+      leftX: x,
+      rightX: x,
+      columnWidth: width,
+      topY: startY,
+      bottomY: doc.page.height - 50,
+      fontRegular: 'Times-Roman',
+      fontBold: 'Times-Bold',
+      fontItalic: 'Times-Italic',
+      pageBottomPadding: 50,
+    })
+  }
+
+  /** Judul dari blok title pada snapshot; fallback ke nama template. */
+  private drawSnapshotTitleBlock(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, values: Record<string, string>): number {
+    // Cari blok title pertama dari snapshot
+    const snapshot = (payload.contract as any).templateSnapshot
+    const blocks: any[] = snapshot?.contentDefinition?.languages?.id ?? []
+    const title = blocks.find(b => b?.type === 'title')?.text
+    const subtitle = blocks.find(b => b?.type === 'subtitle')?.text
+    const headerBottomY = this.drawSnapshotHeader(
+      doc,
+      title ? interpolate(title, values) : (payload.contract.template?.name ?? ''),
+      subtitle ? interpolate(subtitle, values) : undefined,
+    )
+    return headerBottomY
+  }
+
+  private drawSnapshotHeader(doc: any, title: string, subtitle?: string): number {
+    const pageWidth = doc.page.width
+    doc.font('Times-Bold').fontSize(14).text(title, 0, 60, { width: pageWidth, align: 'center' })
+    if (subtitle) {
+      doc.font('Times-Roman').fontSize(10).text(subtitle, 0, doc.y + 4, { width: pageWidth, align: 'center' })
+    }
+    return doc.y
+  }
+
+  /** Tanda tangan dari blok signature snapshot (dua pilar). */
+  private renderSnapshotSignature(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, blocks: any[]) {
+    const sig = blocks.find(b => b?.type === 'signature')
+    if (!sig) return
+    const values = buildValueMap((payload.contract as any).resolvedTemplateData)
+    const leftRole = sig.leftRole ? interpolate(sig.leftRole, values) : '(Ketua Koperasi)'
+    const rightRole = sig.rightRole ? interpolate(sig.rightRole, values) : '(Mitra)'
+    const chairman = values['settings.cooperativeChairmanName'] ?? ''
+    const employeeName = values['employee.fullName'] ?? payload.employee.fullName
+
+    const pageWidth = doc.page.width
+    const pageHeight = doc.page.height
+    const y = pageHeight - 150
+
+    doc.font('Times-Roman').fontSize(10)
+    // Pihak pertama
+    doc.text("KOPERASI PT. SANKYU INT'L", 34, y, { width: 240, align: 'center' })
+    doc.text('', 34, y + 40)
+    doc.font('Times-Bold').text(chairman || '(...........................)', 34, y + 48, { width: 240, align: 'center' })
+    doc.font('Times-Roman').text(leftRole, 34, y + 62, { width: 240, align: 'center' })
+    // Pihak kedua
+    doc.text('MITRA', pageWidth - 274, y, { width: 240, align: 'center' })
+    doc.text('', pageWidth - 274, y + 40)
+    doc.font('Times-Bold').text(employeeName || '(...........................)', pageWidth - 274, y + 48, { width: 240, align: 'center' })
+    doc.font('Times-Roman').text(rightRole, pageWidth - 274, y + 62, { width: 240, align: 'center' })
   }
 
   private buildLayoutContext(doc: any, headerBottomY: number, hasTitleBlock: boolean = false, hasHeader: boolean = true): LayoutContext {

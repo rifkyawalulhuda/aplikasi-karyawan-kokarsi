@@ -9,6 +9,7 @@ import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
+import { TemplateSnapshotService } from '../contract-templates/template-snapshot.service'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -65,6 +66,7 @@ export class ContractsService {
     private dashboardCache: DashboardCacheService,
     private notificationsService: NotificationsService,
     private activityLog: ActivityLogService,
+    private templateSnapshot: TemplateSnapshotService,
   ) {}
 
   private include = {
@@ -106,6 +108,44 @@ export class ContractsService {
       select: { contractNo: true },
     })
     return buildDocumentNumber(existing.map(c => c.contractNo), 'KK', refDate)
+  }
+
+  /**
+   * Bangun snapshot template versi publish untuk kontrak baru.
+   * Return null jika templateId kosong atau belum ada versi publish (legacy).
+   */
+  private async buildContractSnapshot(params: {
+    templateId?: number | null
+    employeeId: number
+    contractNo: string
+    startDate: Date
+    endDate: Date
+    signedDate?: Date | null
+    baseCompensation?: number | null
+    templateData?: Record<string, any> | null
+  }) {
+    if (!params.templateId) return null
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: params.employeeId },
+      include: {
+        jobRole: { select: { id: true, name: true } },
+        workLocation: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        jobLevel: { select: { id: true, name: true } },
+      },
+    })
+    return this.templateSnapshot.buildSnapshot({
+      templateId: params.templateId,
+      employee: employee ?? undefined,
+      contract: {
+        contractNo: params.contractNo,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        signedDate: params.signedDate,
+        baseCompensation: params.baseCompensation,
+      },
+      templateData: params.templateData,
+    })
   }
 
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
@@ -347,14 +387,32 @@ export class ContractsService {
 
     try {
       const contractNo = await this.generateContractNo(new Date(dto.startDate))
+      const startDate = new Date(dto.startDate)
+      const endDate = new Date(dto.endDate)
+      const signedDate = dto.signedDate ? new Date(dto.signedDate) : undefined
+
+      const snapshot = await this.buildContractSnapshot({
+        templateId: dto.templateId,
+        employeeId: dto.employeeId,
+        contractNo,
+        startDate,
+        endDate,
+        signedDate: signedDate ?? null,
+        baseCompensation: dto.baseCompensation ?? null,
+        templateData: dto.templateData ?? null,
+      })
+
       const contract = await this.prisma.contract.create({
         data: {
           ...dto,
           contractNo,
           parentContractId: autoParentId,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
-          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+          startDate,
+          endDate,
+          signedDate,
+          templateVersionId: snapshot?.templateVersionId,
+          templateSnapshot: snapshot?.templateSnapshot as any,
+          resolvedTemplateData: snapshot?.resolvedTemplateData as any,
         },
         include: this.include,
       })
@@ -410,19 +468,37 @@ export class ContractsService {
 
     try {
       const contractNo = await this.generateContractNo(new Date(dto.startDate))
+      const startDate = new Date(dto.startDate)
+      const endDate = new Date(dto.endDate)
+      const signedDate = dto.signedDate ? new Date(dto.signedDate) : undefined
+
+      const snapshot = await this.buildContractSnapshot({
+        templateId: dto.templateId,
+        employeeId: parent.employeeId,
+        contractNo,
+        startDate,
+        endDate,
+        signedDate: signedDate ?? null,
+        baseCompensation: dto.baseCompensation ?? null,
+        templateData: dto.templateData ?? null,
+      })
+
       const contract = await this.prisma.contract.create({
         data: {
           employeeId: parent.employeeId,
           contractNo,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
+          startDate,
+          endDate,
           contractTypeId: dto.contractTypeId,
           templateId: dto.templateId,
-          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+          signedDate,
           baseCompensation: dto.baseCompensation,
           templateData: dto.templateData as any,
           documentUrl: dto.documentUrl,
           parentContractId: parentId,
+          templateVersionId: snapshot?.templateVersionId,
+          templateSnapshot: snapshot?.templateSnapshot as any,
+          resolvedTemplateData: snapshot?.resolvedTemplateData as any,
         },
         include: this.include,
       })

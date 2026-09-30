@@ -125,6 +125,7 @@ const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sect
 // Daftar tugas (Pasal 1 ayat 2) spesifik per jenis mitra, mengikuti sample PDF asli
 const MITRA_SCOPE_WORK: Record<string, string> = {
   MITRA_DRIVER: 'Driver antar jemput karyawan, pengantaran/pengiriman barang, dan antar dokumen',
+  MITRA_DRIVER_TRUCK_B3: 'Driver truck B3 untuk pengangkutan barang, distribusi, dan operasional logistik',
   MITRA_KOMART: 'Cashier Kopmart Koperasi PT. Sankyu Indonesia International',
   MITRA_STAFF: 'Staff Administrasi Koperasi PT. Sankyu Indonesia International',
   MITRA_WAREHOUSE: 'Handling Warehouse Koperasi PT. Sankyu Indonesia International',
@@ -141,6 +142,17 @@ const MITRA_DUTIES: Record<string, string[]> = {
     'g. Menjaga keselamatan penumpang atau barang yang diangkut.',
     'h. Melaporkan kejadian atau masalah yang terjadi selama perjalanan.',
     'i. Mengetahui dan mematuhi peraturan lalu lintas.',
+  ],
+  MITRA_DRIVER_TRUCK_B3: [
+    'a. Memiliki SIM yang sesuai dan masih aktif untuk kendaraan truck yang dioperasikan.',
+    'b. Melakukan pemeriksaan kelayakan truck sebelum, selama, dan setelah digunakan.',
+    'c. Memastikan muatan, dokumen pengiriman, dan perlengkapan keselamatan tersedia sebelum keberangkatan.',
+    'd. Mengemudikan truck secara aman, tertib, dan sesuai peraturan lalu lintas.',
+    'e. Menjaga keamanan barang dan bertanggung jawab atas proses pengiriman sampai tujuan.',
+    'f. Mematuhi batas muatan, rute, jadwal, serta instruksi operasional yang ditetapkan.',
+    'g. Melaporkan kerusakan kendaraan, kecelakaan, keterlambatan, atau kejadian lain kepada koordinator.',
+    'h. Menjaga kebersihan dan melakukan perawatan harian truck sesuai checklist.',
+    'i. Mengisi laporan perjalanan dan menyerahkan bukti pengiriman secara lengkap.',
   ],
   MITRA_KOMART: [
     'a. Pelayanan dan Pemrosesan Transaksi: melayani transaksi pembayaran pelanggan atau anggota koperasi baik secara tunai (cash) maupun non-tunai (kartu debit/kredit, QRIS, dll) menggunakan mesin kasir atau sistem Point of Sale (POS).',
@@ -722,6 +734,31 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'PIHAK KEDUA',
     sections: mitraFullSections('MITRA_DRIVER'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+  },
+  MITRA_DRIVER_TRUCK_B3: {
+    key: 'MITRA_DRIVER_TRUCK_B3',
+    family: 'MITRA',
+    title: 'PERJANJIAN KEMITRAAN DRIVER TRUCK B3',
+    sourceTemplateRelativePath: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA DRIVER TRUCK B3.pdf',
+    sourceTemplateFormat: 'PDF',
+    fidelityNote: DOCX_REMOVED_NOTE,
+    openingLine: 'Pada hari ini Para Pihak sepakat untuk mengikatkan diri dalam Perjanjian Kemitraan Driver Truck B3 dengan mematuhi keselamatan kerja dan ketentuan pengangkutan yang berlaku.',
+    recitals: [
+      'PIHAK PERTAMA adalah Koperasi Karyawan PT. Sankyu Indonesia Internasional yang membutuhkan dukungan layanan transportasi dan logistik.',
+      'PIHAK KEDUA adalah mitra perorangan yang memiliki kompetensi dan bersedia menjalankan tugas pengemudi truck secara aman, tertib, dan bertanggung jawab.',
+    ],
+    roleLabel: 'Driver Truck B3',
+    locationLine: 'Perjanjian kemitraan ini mengatur pekerjaan pengemudi truck untuk kebutuhan pengangkutan dan operasional logistik.',
+    termLine: 'Jangka waktu kemitraan mengikuti periode kontrak yang tercantum pada dokumen ini.',
+    compensationLabel: 'Imbalan Jasa Bulanan',
+    closingParagraphs: [
+      'Demikian perjanjian kemitraan ini dibuat dan disetujui oleh Para Pihak dalam keadaan sadar, tanpa tekanan dari pihak mana pun, untuk dilaksanakan dengan itikad baik.',
+      'Para Pihak wajib mengutamakan keselamatan manusia, kendaraan, muatan, dan lingkungan dalam setiap pelaksanaan pekerjaan.',
+    ],
+    firstPartyLabel: 'PIHAK PERTAMA',
+    secondPartyLabel: 'PIHAK KEDUA',
+    sections: mitraFullSections('MITRA_DRIVER_TRUCK_B3'),
+    requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'employee.jobRole', 'contract.baseCompensation', 'contract.termRange'],
   },
   MITRA_KOMART: {
     key: 'MITRA_KOMART',

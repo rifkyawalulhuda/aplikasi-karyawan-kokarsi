@@ -1,0 +1,92 @@
+import { ContractDocumentDefinition } from '../contracts/contract-document-definitions'
+import { collectAllPlaceholders } from './template-schema.validator'
+
+export interface SeedFieldDefinition {
+  key: string
+  label: string
+  dataType: 'TEXT' | 'NUMBER' | 'DATE'
+  sourceType: 'SYSTEM' | 'CONTRACT_INPUT'
+  required: boolean
+}
+
+export interface SeedContentDefinition {
+  languages: {
+    id: any[]
+    en: any[]
+  }
+}
+
+const replaceLegacyTokens = (text: string): string => text
+  .replace(/__ROLE_LABEL__/g, '{{employee.jobRole}}')
+  .replace(/__TERM_DATE__/g, '1. Jangka waktu kesepakatan mengikuti {{contract.termRange}}.')
+  .replace(/__WAGE_AMOUNT__/g, '1. Upah/imbalan yang disepakati adalah {{contract.baseCompensation}}.')
+
+function article(id: string, heading: string, paragraphs: string[]) {
+  return {
+    id,
+    type: 'article',
+    heading,
+    paragraphs: paragraphs.map(replaceLegacyTokens),
+  }
+}
+
+function toLanguageBlocks(definition: ContractDocumentDefinition, english = false): any[] {
+  const blocks: any[] = [
+    { id: 'title', type: 'title', text: replaceLegacyTokens(english ? (definition.subtitle ?? definition.title) : definition.title) },
+  ]
+  if (!english && definition.subtitle) {
+    blocks.push({ id: 'subtitle', type: 'subtitle', text: definition.subtitle })
+  }
+  blocks.push({ id: 'opening', type: 'paragraph', text: replaceLegacyTokens(definition.openingLine) })
+  blocks.push(article('recitals', 'Para Pihak', definition.recitals))
+  blocks.push(article('role', 'Ruang Lingkup dan Posisi', [definition.roleLabel, definition.locationLine]))
+  blocks.push(article('term', 'Jangka Waktu', [definition.termLine]))
+  blocks.push(article('compensation', definition.compensationLabel, [`{{contract.baseCompensation}}`]))
+  definition.sections.forEach((section, index) => blocks.push(article(`section-${index + 1}`, section.heading, section.paragraphs)))
+  blocks.push(article('closing', 'Penutup', definition.closingParagraphs))
+  blocks.push({
+    id: 'signature',
+    type: 'signature',
+    leftRole: definition.firstPartyLabel,
+    rightRole: definition.secondPartyLabel,
+  })
+  return blocks
+}
+
+export function definitionToContentDefinition(definition: ContractDocumentDefinition): SeedContentDefinition {
+  const id = toLanguageBlocks(definition)
+  const en = definition.family === 'PKWT' && definition.englishSections
+    ? toLanguageBlocks({
+      ...definition,
+      title: definition.subtitle ?? definition.title,
+      subtitle: undefined,
+      sections: Object.entries(definition.englishSections).map(([heading, paragraphs]) => ({ heading, paragraphs })),
+      openingLine: definition.openingLine,
+      recitals: definition.recitals,
+      closingParagraphs: definition.closingParagraphs,
+    }, true)
+    : []
+  return { languages: { id, en } }
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  'employee.nik': 'NIK Karyawan',
+  'employee.birthPlace': 'Tempat Lahir',
+  'employee.address': 'Alamat Karyawan',
+  'employee.jobRole': 'Jabatan',
+  'contract.baseCompensation': 'Kompensasi Dasar',
+  'contract.termRange': 'Rentang Periode',
+  'contract.contractNo': 'Nomor Kontrak',
+}
+
+export function definitionToFieldDefinitions(definition: ContractDocumentDefinition): SeedFieldDefinition[] {
+  const content = definitionToContentDefinition(definition)
+  const keys = [...new Set([...definition.requiredFields, ...collectAllPlaceholders(content)])]
+  return keys.map(key => ({
+    key,
+    label: FIELD_LABELS[key] ?? key,
+    dataType: key.includes('Date') || key.endsWith('Date') ? 'DATE' : key.includes('Compensation') ? 'NUMBER' : 'TEXT',
+    sourceType: key.startsWith('custom.') ? 'CONTRACT_INPUT' : 'SYSTEM',
+    required: true,
+  }))
+}
