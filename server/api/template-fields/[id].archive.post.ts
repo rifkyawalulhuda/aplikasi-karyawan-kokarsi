@@ -1,9 +1,10 @@
 import { defineEventHandler, getCookie, getRouterParam } from 'h3'
 
 export default defineEventHandler(async (event) => {
-  const templateId = getRouterParam(event, 'templateId')
   const token = getCookie(event, 'auth_token') ?? ''
-  return $fetch(`${BACKEND}/contract-templates/${templateId}/versions`, {
+  const id = getRouterParam(event, 'id')
+  return $fetch(`${BACKEND}/template-fields/${id}/archive`, {
+    method: 'PUT',
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
 })

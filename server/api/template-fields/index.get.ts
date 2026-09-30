@@ -1,9 +1,10 @@
-import { defineEventHandler, getCookie, getHeader, getRouterParam } from 'h3'
+import { defineEventHandler, getCookie, getHeader, getQuery } from 'h3'
 
 export default defineEventHandler(async (event) => {
-  const versionId = getRouterParam(event, 'versionId')
   const token = getCookie(event, 'auth_token') ?? getHeader(event, 'authorization') ?? ''
-  return $fetch(`${BACKEND}/contract-template-versions/${versionId}`, {
+  const query = getQuery(event)
+  const qs = query.includeInactive === 'true' ? '?includeInactive=true' : ''
+  return $fetch(`${BACKEND}/template-fields${qs}`, {
     headers: token ? { Authorization: token.startsWith('Bearer ') ? token : `Bearer ${token}` } : undefined,
   })
 })

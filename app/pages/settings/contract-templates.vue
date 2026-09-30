@@ -124,7 +124,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     resetForm()
     await refresh()
   } catch (e: any) {
-    toast.add({ title: 'Gagal menyimpan template', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+    toast.add({ title: 'Gagal menyimpan template', description: apiErrorMessage(e), color: 'error' })
   } finally {
     saving.value = false
   }

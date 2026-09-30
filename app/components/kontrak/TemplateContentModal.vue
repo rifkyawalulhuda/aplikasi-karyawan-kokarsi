@@ -1,392 +1,371 @@
-<script setup lang="ts">
-import type { TemplateContentEditorState } from '~/composables/useTemplateContentEditor'
-
-interface ContractTemplateMeta {
-  id: number
-  name: string
-  templateKey: string
-  family: 'PKWT' | 'MITRA'
+﻿<script setup lang="ts">
+interface Template { id: number, name: string, family: 'PKWT' | 'MITRA' }
+interface Version { id: number, versionNumber: number, status: string, contentDefinition: any, fieldDefinitions: any, changeSummary?: string }
+const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
+const open = computed({ get: () => props.open, set: v => emit('update:open', v) }); const toast = useToast()
+const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
+const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
+const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
+const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
+const fieldItems = computed(() => fields.value.length ? fields.value : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value?.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? []))
+const placeholderText = (key: string) => `{{${key}}}`
+const previewValues: Record<string, string> = {
+  'employee.fullName': 'Budi Santoso', 'employee.employeeNo': 'KOK-0001', 'employee.jobRole': 'Staff Operasional',
+  'contract.startDate': '1 Januari 2026', 'contract.endDate': '31 Desember 2026', 'contract.salary': 'Rp5.000.000',
+  'company.name': 'Koperasi Karyawan Kokarsi', 'contract.number': 'PKWT/001/2026',
+  'coop.chairmanName': 'Ahmad Fauzi'
 }
-
-const props = defineProps<{
-  open: boolean
-  template: ContractTemplateMeta | null
-}>()
-
-const emit = defineEmits<{
-  'update:open': [value: boolean]
-  saved: []
-}>()
-
-const localOpen = computed({
-  get: () => props.open,
-  set: (val) => emit('update:open', val),
-})
-
-const toast = useToast()
-const { buildEditorState, buildOverridesPayload, countChanges, containsPlaceholder } = useTemplateContentEditor()
-
-// --- State ---
-const loading = ref(false)
-const saving = ref(false)
-const hardcoded = ref<any>(null)
-const baseline = ref<TemplateContentEditorState | null>(null)
-const editorState = ref<TemplateContentEditorState | null>(null)
-const activeTab = ref('umum')
-
-// --- Computed ---
-const changesCount = computed(() => {
-  if (!editorState.value || !baseline.value) return 0
-  // Bandingkan dengan baseline (apa yang tersimpan saat modal dibuka),
-  // bukan dengan hardcoded — sehingga tidak tampil "belum tersimpan" setelah save
-  return countChanges(editorState.value, baseline.value)
-})
-
-const isPkwt = computed(() => props.template?.family === 'PKWT')
-
-const tabItems = computed(() => {
-  const base = [
-    { label: 'Teks Umum', value: 'umum' },
-    { label: isPkwt.value ? 'Pasal (Indonesia)' : 'Pasal-pasal', value: 'pasal-id' },
-  ]
-  if (isPkwt.value) {
-    base.push({ label: 'Pasal (English)', value: 'pasal-en' })
-  }
-  return base
-})
-
-// englishSections sebagai array untuk iterasi yang type-safe
-const englishSectionEntries = computed<Array<[string, string[]]>>(() => {
-  if (!editorState.value) return []
-  return Object.entries(editorState.value.englishSections) as Array<[string, string[]]>
-})
-
-// --- Load data saat template berubah ---
-watch(() => props.template?.id, async (id) => {
-  if (!id || !props.open) return
-  await fetchContentPreview(id)
-}, { immediate: false })
-
-watch(() => props.open, async (isOpen) => {
-  if (isOpen && props.template?.id) {
-    activeTab.value = 'umum'
-    await fetchContentPreview(props.template.id)
-  }
-})
-
-async function fetchContentPreview(id: number) {
-  loading.value = true
-  try {
-    const res = await $fetch<any>(`/api/contract-templates/${id}/content-preview`)
-    // hardcoded = teks asli (untuk Reset Tab ke Default)
-    hardcoded.value = res.hardcoded
-    // editorState dibangun dari merged (sudah include override tersimpan)
-    editorState.value = buildEditorState(res.merged)
-    // baseline = snapshot dari merged saat modal dibuka,
-    // dipakai untuk diff "belum tersimpan" (bukan diff vs hardcode)
-    baseline.value = buildEditorState(res.merged)
-  }
-  catch (e: any) {
-    toast.add({ title: 'Gagal memuat konten template', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
-    localOpen.value = false
-  }
-  finally {
-    loading.value = false
-  }
-}
-
-// --- Reset tab ke default ---
-function resetTab() {
-  if (!editorState.value || !hardcoded.value) return
-  const fresh = buildEditorState(hardcoded.value)
-
-  if (activeTab.value === 'umum') {
-    editorState.value.title = fresh.title
-    editorState.value.subtitle = fresh.subtitle
-    editorState.value.roleLabel = fresh.roleLabel
-    editorState.value.locationLine = fresh.locationLine
-    editorState.value.termLine = fresh.termLine
-    editorState.value.compensationLabel = fresh.compensationLabel
-    editorState.value.firstPartyLabel = fresh.firstPartyLabel
-    editorState.value.secondPartyLabel = fresh.secondPartyLabel
-  }
-  else if (activeTab.value === 'pendahuluan') {
-    editorState.value.recitals = [...fresh.recitals]
-    editorState.value.closingParagraphs = [...fresh.closingParagraphs]
-  }
-  else if (activeTab.value === 'pasal-id') {
-    editorState.value.sections = fresh.sections.map(s => ({ ...s, paragraphs: [...s.paragraphs] }))
-  }
-  else if (activeTab.value === 'pasal-en') {
-    editorState.value.englishSections = Object.fromEntries(
-      Object.entries(fresh.englishSections).map(([k, v]) => [k, [...v]]),
-    )
-  }
-
-  toast.add({ title: 'Tab direset ke default', color: 'info' })
-}
-
-// --- Simpan ---
-async function save() {
-  if (!editorState.value || !hardcoded.value || !props.template) return
-  saving.value = true
-  try {
-    // buildOverridesPayload tetap dibandingkan dengan hardcoded
-    // agar payload berisi semua perbedaan dari default asli
-    const overrides = buildOverridesPayload(editorState.value, hardcoded.value)
-    if (Object.keys(overrides).length > 0) {
-      const draft = await $fetch<any>(`/api/contract-templates/${props.template.id}/versions`, {
-        method: 'POST',
-        body: { overrides, changeSummary: `Perubahan konten: ${Object.keys(overrides).join(', ')}` },
-      })
-      await $fetch(`/api/contract-template-versions/${draft.id}/publish`, { method: 'POST' })
-    }
-    // Update baseline ke state saat ini agar changesCount kembali ke 0
-    baseline.value = buildEditorState(editorState.value as any)
-    toast.add({
-      title: 'Konten template disimpan',
-      description: `${Object.keys(overrides).length === 0 ? 'Tidak ada perubahan' : `${changesCount.value} perubahan`} tersimpan.`,
-      color: 'success',
-    })
-    emit('saved')
-    localOpen.value = false
-  }
-  catch (e: any) {
-    toast.add({ title: 'Gagal menyimpan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
-  }
-  finally {
-    saving.value = false
-  }
-}
-
-function formatHeading(heading: string) {
-  return heading.replace('\n', ' — ')
-}
+function previewText(value: any) { return String(value ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => previewValues[key] ?? `Â«${key}Â»`) }
+const previewBlocks = computed(() => blocks.value)
+/** Blok title pertama jadi judul tengah dokumen (mengikuti drawTitleBlock renderer PDF). */
+const titleBlock = computed(() => blocks.value.find(b => b.type === 'title') as any)
+const subtitleBlock = computed(() => blocks.value.find(b => b.type === 'subtitle') as any)
+const docTitle = computed(() => previewText(titleBlock.value?.text ?? ''))
+const docSubtitle = computed(() => previewText(subtitleBlock.value?.text ?? ''))
+const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
+watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
+async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields')]); versions.value = vs ?? []; fields.value = fs ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
+async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null }
+async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
+async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview' && draft.value) await save(); const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); if (name === 'preview') { preview.value = r; previewOpen.value = true } else { toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]) }
+function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
+function useField(key: string) { const b = blocks.value[0]; if (!b) return; const text = `{{${key}}}`; if (b.type === 'article')b.paragraphs[0] = (b.paragraphs[0] ?? '') + ` ${text}`; else if (b.type === 'list')b.items[0] = (b.items[0] ?? '') + ` ${text}`; else b.text = (b.text ?? '') + ` ${text}` }
+async function createField() { fieldSaving.value = true; try { const f = await $fetch<any>('/api/template-fields', { method: 'POST', body: { key: form.key, label: form.label, dataType: form.dataType, sourceType: form.sourceType, options: form.dataType === 'DROPDOWN' ? form.options.split(',').map(x => x.trim()).filter(Boolean) : undefined } }); fields.value.push(f); fieldOpen.value = false; toast.add({ title: 'Field dibuat', color: 'success' }) } catch (e: any) { toast.add({ title: 'Field gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { fieldSaving.value = false } }
+const color = (s: string) => s === 'PUBLISHED' ? 'success' : s === 'DRAFT' ? 'warning' : 'neutral'
 </script>
 
 <template>
   <UModal
-    v-model:open="localOpen"
-    :ui="{ content: 'max-w-4xl' }"
-    :title="`Edit Konten Template: ${template?.name ?? ''}`"
-    @update:open="(v) => { if (!v) localOpen = false }"
+    v-model:open="open"
+    :title="`Editor Template â€” ${template?.name ?? ''}`"
+    :ui="{ content: 'max-w-7xl w-full' }"
   >
     <template #body>
-      <!-- Loading -->
-      <div v-if="loading" class="flex flex-col items-center justify-center py-16 gap-3 text-muted">
-        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
-        <p class="text-sm">Memuat konten template...</p>
+      <div v-if="error" class="space-y-3 p-4">
+        <p>{{ error }}</p>
+        <UButton label="Coba lagi" @click="load" />
       </div>
 
-      <div v-else-if="editorState" class="space-y-4">
-        <!-- Dirty indicator -->
-        <UAlert
-          v-if="changesCount > 0"
-          color="primary"
-          variant="subtle"
-          icon="i-lucide-pencil"
-          :title="`${changesCount} field diubah dari default`"
-          description="Perubahan belum tersimpan. Klik 'Simpan Perubahan' untuk menyimpan."
-        />
+      <div v-else-if="loading" class="flex justify-center p-12">
+        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
+      </div>
 
-        <!-- Warning tentang placeholder -->
-        <UAlert
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-alert-triangle"
-          title="Perhatian: Placeholder Dinamis"
-          description="Jangan hapus placeholder seperti __TERM_DATE__, __WAGE_AMOUNT__, __MITRA_IMBALAN__ karena digunakan untuk mengisi data kontrak secara otomatis."
-        />
-
-        <!-- Tab navigation manual — menghindari UTabs DynamicSlots type issue -->
-        <div class="border-b border-(--ui-border)">
-          <nav class="flex gap-1 -mb-px">
-            <button
-              v-for="tab in tabItems"
-              :key="tab.value"
-              type="button"
-              class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-              :class="activeTab === tab.value
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted hover:text-highlighted hover:border-(--ui-border)'"
-              @click="activeTab = tab.value"
-            >
-              {{ tab.label }}
-            </button>
-          </nav>
-        </div>
-
-        <!-- Tab 1: Teks Umum -->
-        <div v-if="activeTab === 'umum'" class="space-y-4 pt-2">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UFormField label="Judul Dokumen">
-              <UInput v-model="editorState.title" class="w-full" :placeholder="hardcoded?.title" />
-            </UFormField>
-          <!-- Sub-judul hanya untuk PKWT -->
-          <UFormField v-if="isPkwt" label="Sub-judul (opsional)">
-            <UInput v-model="editorState.subtitle" class="w-full" :placeholder="hardcoded?.subtitle ?? '-'" />
-          </UFormField>
+      <div v-else class="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)_300px]">
+        <!-- Riwayat versi -->
+        <aside class="space-y-3">
+          <div class="flex justify-between">
+            <b>Riwayat versi</b>
+            <UButton
+              v-if="!draft"
+              size="xs"
+              label="Draft"
+              icon="i-lucide-plus"
+              :loading="busy"
+              @click="createDraft"
+            />
           </div>
-          <UFormField label="Label Posisi / Peran">
-            <UInput v-model="editorState.roleLabel" class="w-full" :placeholder="hardcoded?.roleLabel" />
-          </UFormField>
-        </div>
-
-        <!-- Tab 2: Pendahuluan (hanya MITRA — recitals tidak dirender di dokumen PKWT) -->
-        <div v-else-if="activeTab === 'pendahuluan'" class="space-y-6 pt-2">
-          <!-- Info: teks pembuka tidak bisa diubah via UI -->
-          <UAlert
-            color="neutral"
-            variant="subtle"
-            icon="i-lucide-info"
-            title="Teks Pembuka Tidak Dapat Diubah"
-            description="Teks pembuka (identitas Para Pihak, kalimat pembukaan) sudah terstandarisasi secara hukum dan diisi otomatis dari data sistem. Hanya Paragraf Penutup yang dapat dikustomisasi di sini."
-          />
-
-          <!-- Closing Paragraphs -->
-          <div>
-            <p class="text-sm font-semibold text-highlighted mb-3">
-              Paragraf Penutup
+          <div
+            v-for="v in versions"
+            :key="v.id"
+            class="cursor-pointer rounded border p-3"
+            :class="selected?.id===v.id?'border-primary bg-primary/5':'border-default'"
+            @click="select(v)"
+          >
+            <div class="flex justify-between">
+              <b>v{{ v.versionNumber }}</b>
+              <UBadge :color="color(v.status)" :label="v.status" />
+            </div>
+            <p class="text-xs text-muted">
+              {{ v.changeSummary||'Tanpa ringkasan' }}
             </p>
-            <div class="space-y-2">
-              <div
-                v-for="(para, idx) in editorState.closingParagraphs"
-                :key="idx"
-              >
-                <UTextarea
-                  v-model="editorState.closingParagraphs[idx]"
-                  :rows="2"
-                  class="w-full"
-                  :placeholder="hardcoded?.closingParagraphs?.[idx] ?? ''"
-                />
-                <UBadge
-                  v-if="containsPlaceholder(para)"
-                  color="warning"
-                  variant="subtle"
-                  size="xs"
-                  class="mt-1"
-                  label="Mengandung placeholder dinamis"
-                  icon="i-lucide-alert-triangle"
-                />
-              </div>
+            <UButton
+              v-if="v.status==='ARCHIVED'"
+              size="xs"
+              label="Rollback"
+              variant="ghost"
+              @click.stop="select(v).then(() => action('rollback'))"
+            />
+          </div>
+        </aside>
+
+        <!-- Editor blok -->
+        <main class="min-w-0 space-y-4">
+          <div class="flex flex-wrap justify-between gap-2">
+            <div>
+              <b>{{ draft?'Draft':'Versi' }} v{{ (draft??selected)?.versionNumber }}</b>
+              <p class="text-xs text-muted">
+                {{ draft?'Perubahan belum dipublish':'Mode baca' }}
+              </p>
+            </div>
+            <div class="flex gap-2">
+              <UButton
+                label="Preview"
+                icon="i-lucide-eye"
+                variant="soft"
+                :loading="busy"
+                @click="action('preview')"
+              />
+              <UButton
+                v-if="draft"
+                label="Publish"
+                icon="i-lucide-rocket"
+                color="primary"
+                :loading="busy"
+                @click="action('publish')"
+              />
             </div>
           </div>
-        </div>
 
-        <!-- Tab 3: Pasal Indonesia -->
-        <div v-else-if="activeTab === 'pasal-id'" class="space-y-3 pt-2">
-          <UAccordion
-            :items="editorState.sections.map((s, idx) => ({
-              label: formatHeading(s.heading),
-              slot: `section-${idx}`,
-              value: `section-${idx}`,
-            }))"
-          >
-            <template
-              v-for="(section, sIdx) in editorState.sections"
-              :key="sIdx"
-              #[`section-${sIdx}`]
+          <UInput v-if="draft" v-model="draft.changeSummary" placeholder="Ringkasan perubahan" />
+
+          <div class="flex gap-1 border-b border-default">
+            <UButton
+              label="Indonesia"
+              size="sm"
+              :variant="lang==='id'?'soft':'ghost'"
+              @click="lang='id'"
+            />
+            <UButton
+              v-if="isPkwt"
+              label="English"
+              size="sm"
+              :variant="lang==='en'?'soft':'ghost'"
+              @click="lang='en'"
+            />
+          </div>
+
+          <div class="space-y-3 rounded-xl border border-default p-3">
+            <div
+              v-for="(b, i) in blocks"
+              :key="b.id"
+              class="space-y-2 rounded-lg border border-default p-3"
             >
-              <div class="space-y-2 py-3">
-                <div
-                  v-for="(para, pIdx) in section.paragraphs"
-                  :key="pIdx"
-                >
-                  <UTextarea
-                    v-model="editorState.sections[sIdx]!.paragraphs[pIdx]"
-                    :rows="para.length > 100 ? 3 : 2"
-                    class="w-full text-sm"
-                    :placeholder="hardcoded?.sections?.[sIdx]?.paragraphs?.[pIdx] ?? ''"
-                  />
-                  <UBadge
-                    v-if="containsPlaceholder(para)"
-                    color="warning"
-                    variant="subtle"
+              <div class="flex items-center gap-2">
+                <UBadge :label="b.type" />
+                <span class="text-xs text-muted">{{ b.id }}</span>
+                <div class="ml-auto">
+                  <UButton
                     size="xs"
-                    class="mt-0.5"
-                    label="Placeholder dinamis — jangan hapus"
-                    icon="i-lucide-alert-triangle"
+                    icon="i-lucide-arrow-up"
+                    variant="ghost"
+                    :disabled="!draft||i===0"
+                    @click="move(i, -1)"
+                  />
+                  <UButton
+                    size="xs"
+                    icon="i-lucide-arrow-down"
+                    variant="ghost"
+                    :disabled="!draft||i===blocks.length-1"
+                    @click="move(i, 1)"
+                  />
+                  <UButton
+                    size="xs"
+                    icon="i-lucide-trash-2"
+                    color="error"
+                    variant="ghost"
+                    :disabled="!draft"
+                    @click="blocks.splice(i, 1)"
                   />
                 </div>
               </div>
-            </template>
-          </UAccordion>
-        </div>
 
-        <!-- Tab 4: Pasal English (hanya PKWT) -->
-        <div v-else-if="activeTab === 'pasal-en' && isPkwt" class="space-y-3 pt-2">
-          <UAccordion
-            :items="englishSectionEntries.map(([heading], idx) => ({
-              label: formatHeading(heading),
-              slot: `eng-${idx}`,
-              value: `eng-${idx}`,
-            }))"
-          >
-            <template
-              v-for="(entry, eIdx) in englishSectionEntries"
-              :key="eIdx"
-              #[`eng-${eIdx}`]
-            >
-              <div class="space-y-2 py-3">
-                <div
-                  v-for="(para, pIdx) in entry[1]"
-                  :key="pIdx"
-                >
-                  <UTextarea
-                    v-model="editorState.englishSections[entry[0]]![pIdx]"
-                    :rows="para.length > 100 ? 3 : 2"
-                    class="w-full text-sm"
-                    :placeholder="hardcoded?.englishSections?.[entry[0]]?.[pIdx] ?? ''"
-                  />
-                  <UBadge
-                    v-if="containsPlaceholder(para)"
-                    color="warning"
-                    variant="subtle"
-                    size="xs"
-                    class="mt-0.5"
-                    label="Dynamic placeholder — do not remove"
-                    icon="i-lucide-alert-triangle"
-                  />
+              <UInput
+                v-if="['title', 'subtitle', 'paragraph'].includes(b.type)"
+                v-model="b.text"
+                :disabled="!draft"
+              />
+              <template v-else-if="b.type==='article'">
+                <UInput v-model="b.heading" :disabled="!draft" />
+                <UTextarea
+                  v-for="(_, p) in b.paragraphs"
+                  :key="p"
+                  v-model="b.paragraphs[p]"
+                  :disabled="!draft"
+                  :rows="3"
+                />
+              </template>
+
+              <template v-else-if="b.type==='list'">
+                <USelect
+                  v-model="b.style"
+                  :disabled="!draft"
+                  :items="['bullet', 'numbered', 'alphabetic']"
+                />
+                <UInput
+                  v-for="(_, p) in b.items"
+                  :key="p"
+                  v-model="b.items[p]"
+                  :disabled="!draft"
+                />
+              </template>
+
+              <template v-else-if="b.type==='table'">
+                <div class="overflow-auto">
+                  <table class="w-full">
+                    <thead>
+                      <tr>
+                        <th v-for="c in b.columns" :key="c.key">
+                          <UInput v-model="c.label" :disabled="!draft" />
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(r, n) in b.rows" :key="n">
+                        <td v-for="c in b.columns" :key="c.key">
+                          <UInput v-model="r[c.key]" :disabled="!draft" />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
+              </template>
+
+              <div v-else-if="b.type==='signature'" class="grid grid-cols-2 gap-2">
+                <UInput v-model="b.leftRole" :disabled="!draft" />
+                <UInput v-model="b.rightRole" :disabled="!draft" />
               </div>
-            </template>
-          </UAccordion>
-        </div>
+
+              <div v-else class="text-sm text-muted">
+                Page break
+              </div>
+            </div>
+
+            <div v-if="draft" class="flex flex-wrap gap-2 border border-dashed border-default p-3">
+              <span class="self-center text-xs">Tambah:</span>
+              <UButton
+                v-for="t in ['paragraph', 'article', 'list', 'table', 'pageBreak', 'signature']"
+                :key="t"
+                size="sm"
+                variant="soft"
+                :label="t"
+                @click="add(t)"
+              />
+            </div>
+          </div>
+        </main>
+
+        <!-- Preview live + fields -->
+        <aside class="space-y-3">
+          <div class="flex items-center justify-between">
+            <b>Preview dokumen</b>
+            <span class="text-xs text-muted">contoh data</span>
+          </div>
+          <div class="max-h-[70vh] overflow-auto rounded-lg bg-neutral-200 p-3">
+            <KontrakDocumentPreview
+              :blocks="blocks"
+              :values="previewValues"
+              :title="docTitle"
+              :subtitle="docSubtitle"
+              :contract-no="previewValues['contract.number']"
+            />
+          </div>
+          <p class="text-xs text-muted">
+            Tampilan mengikuti dokumen PDF aktual (Times New Roman, kop surat, tanda tangan dua pilar).
+          </p>
+
+          <div class="flex justify-between border-t border-default pt-3">
+            <b>Fields</b>
+            <UButton
+              size="xs"
+              label="Custom"
+              icon="i-lucide-plus"
+              @click="fieldOpen=true"
+            />
+          </div>
+          <div v-for="f in fieldItems" :key="f.key" class="rounded border border-default p-2">
+            <p class="text-sm">
+              {{ f.label }}
+            </p>
+            <code class="text-xs text-muted">{{ placeholderText(f.key) }}</code>
+            <UButton
+              v-if="draft"
+              class="mt-1 w-full"
+              size="xs"
+              variant="ghost"
+              label="Sisipkan"
+              @click="useField(f.key)"
+            />
+          </div>
+        </aside>
       </div>
     </template>
 
     <template #footer>
-      <div class="flex items-center justify-between gap-3 w-full">
-        <div class="flex items-center gap-3">
-          <UButton
-            label="Batal"
-            color="neutral"
-            variant="subtle"
-            @click="localOpen = false"
-          />
-          <UButton
-            label="Reset Tab ke Default"
-            color="warning"
-            variant="ghost"
-            icon="i-lucide-rotate-ccw"
-            :disabled="loading || !editorState"
-            @click="resetTab"
-          />
-        </div>
-        <div class="flex items-center gap-3">
-          <span v-if="changesCount > 0" class="text-xs text-muted">
-            {{ changesCount }} field diubah
-          </span>
-          <UButton
-            label="Simpan Perubahan"
-            color="primary"
-            icon="i-lucide-save"
-            :loading="saving"
-            :disabled="loading || !editorState"
-            @click="save"
-          />
-        </div>
+      <div class="flex w-full justify-between">
+        <UButton
+          label="Tutup"
+          color="neutral"
+          variant="subtle"
+          @click="open=false"
+        />
+        <UButton
+          v-if="draft"
+          label="Simpan draft"
+          color="primary"
+          :loading="saving"
+          @click="save"
+        />
       </div>
+    </template>
+  </UModal>
+
+  <!-- Modal preview dokumen (validasi backend + tampilan dokumen) -->
+  <UModal v-model:open="previewOpen" title="Preview dokumen" :ui="{ content: 'max-w-5xl w-full' }">
+    <template #body>
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div class="max-h-[70vh] overflow-auto rounded-lg bg-neutral-200 p-3">
+          <KontrakDocumentPreview
+            :blocks="previewBlocks"
+            :values="previewValues"
+            :title="docTitle"
+            :subtitle="docSubtitle"
+            :contract-no="previewValues['contract.number']"
+          />
+        </div>
+        <aside class="space-y-3">
+          <div class="rounded-lg border border-default p-3">
+            <p class="font-semibold">
+              Validasi template
+            </p>
+            <div v-if="preview" class="mt-2 space-y-1 text-sm">
+              <p>
+                <span class="text-muted">Status:</span>
+                <UBadge :color="preview.valid?'success':'error'" :label="preview.valid?'Valid':'Tidak valid'" />
+              </p>
+              <p><span class="text-muted">Placeholder:</span> {{ preview.placeholderCount }}</p>
+              <p><span class="text-muted">Block:</span> {{ preview.blockCount }}</p>
+            </div>
+            <p v-else class="mt-2 text-xs text-muted">
+              Klik Preview untuk menjalankan validasi backend.
+            </p>
+          </div>
+          <p class="text-xs text-muted">
+            Layout mengikuti dokumen PDF aktual. Nilai berwarna adalah data contoh.
+          </p>
+        </aside>
+      </div>
+    </template>
+  </UModal>
+
+  <UModal v-model:open="fieldOpen" title="Custom field">
+    <template #body>
+      <div class="space-y-3">
+        <UInput v-model="form.key" placeholder="key_field" />
+        <UInput v-model="form.label" placeholder="Label" />
+        <USelect v-model="form.dataType" :items="['TEXT', 'NUMBER', 'DATE', 'DROPDOWN', 'MASTER_REFERENCE']" />
+        <USelect v-model="form.sourceType" :items="['CONTRACT_INPUT', 'MASTER_REFERENCE']" />
+        <UInput v-if="form.dataType==='DROPDOWN'" v-model="form.options" placeholder="Opsi dipisah koma" />
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Buat"
+        color="primary"
+        :loading="fieldSaving"
+        @click="createField"
+      />
     </template>
   </UModal>
 </template>

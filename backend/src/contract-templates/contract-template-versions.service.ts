@@ -64,19 +64,26 @@ export class ContractTemplateVersionsService {
       where: { templateId }, orderBy: { versionNumber: 'desc' },
     })
     const nextNumber = (latestVersion?.versionNumber ?? 0) + 1
-    if (!dto.contentDefinition && !lastVersion) {
-      throw new BadRequestException('contentDefinition wajib diisi untuk template tanpa versi published')
-    }
-
     let contentDefinition = dto.contentDefinition ?? lastVersion?.contentDefinition
     let fieldDefinitions = dto.fieldDefinitions ?? lastVersion?.fieldDefinitions
-    if (dto.overrides && !dto.contentDefinition) {
+    // Template lama hasil migrasi mungkin belum memiliki snapshot versi.
+    // Dalam kondisi itu, bootstrap draft dari definisi bawaan agar editor
+    // dapat membuat draft tanpa harus mengirim seluruh contentDefinition.
+    if ((!contentDefinition && !lastVersion) || (dto.overrides && !dto.contentDefinition)) {
       const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
-      const base = template && CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey]
-      if (!base) throw new BadRequestException('Definisi bawaan template tidak ditemukan')
-      const merged = mergeDefinition(base, dto.overrides as any)
+      const base = template ? CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey] : undefined
+      if (!base) {
+        throw new BadRequestException(
+          `Definisi bawaan untuk template key "${template?.templateKey ?? '-'}" tidak ditemukan. `
+          + 'Kirim contentDefinition lengkap atau gunakan template key yang terdaftar.',
+        )
+      }
+      const merged = dto.overrides ? mergeDefinition(base, dto.overrides as any) : base
       contentDefinition = definitionToContentDefinition(merged)
       fieldDefinitions = definitionToFieldDefinitions(merged)
+    }
+    if (!contentDefinition || !fieldDefinitions) {
+      throw new BadRequestException('Definisi template tidak lengkap untuk membuat draft')
     }
 
     return this.prisma.client.contractTemplateVersion.create({
@@ -208,9 +215,34 @@ export class ContractTemplateVersionsService {
 
   /** Versi PUBLISHED aktif untuk sebuah template. */
   async getPublished(templateId: number) {
-    return this.prisma.client.contractTemplateVersion.findFirst({
+    const published = await this.prisma.client.contractTemplateVersion.findFirst({
       where: { templateId, status: 'PUBLISHED' },
       orderBy: { versionNumber: 'desc' },
+    })
+    if (published) return published
+
+    // Template yang dibuat sebelum versioning belum mempunyai snapshot. Seed
+    // secara lazy agar editor tetap dapat dibuka setelah migrasi deployment.
+    const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
+    if (!template) throw new NotFoundException('Template tidak ditemukan')
+    const definition = CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey]
+    if (!definition) throw new NotFoundException('Definisi bawaan template tidak ditemukan')
+
+    const contentDefinition = definitionToContentDefinition(definition)
+    const fieldDefinitions = definitionToFieldDefinitions(definition)
+    validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), template.family)
+    return this.prisma.client.contractTemplateVersion.create({
+      data: {
+        templateId,
+        versionNumber: 1,
+        status: 'PUBLISHED',
+        contentDefinition: contentDefinition as any,
+        fieldDefinitions: fieldDefinitions as any,
+        changeSummary: 'Versi awal dibuat saat editor template dibuka',
+        createdByName: 'System',
+        publishedByName: 'System',
+        publishedAt: new Date(),
+      },
     })
   }
 

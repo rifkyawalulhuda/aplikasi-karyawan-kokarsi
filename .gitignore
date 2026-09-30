@@ -9,6 +9,9 @@ dist
 # Node dependencies
 node_modules
 
+# TypeScript incremental build info (artefak build, jangan di-commit)
+*.tsbuildinfo
+
 # Logs
 logs
 *.log
