@@ -15,7 +15,7 @@ const previewValues: Record<string, string> = {
   'company.name': 'Koperasi Karyawan Kokarsi', 'contract.number': 'PKWT/001/2026',
   'coop.chairmanName': 'Ahmad Fauzi'
 }
-function previewText(value: any) { return String(value ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => previewValues[key] ?? `Â«${key}Â»`) }
+function previewText(value: any) { return String(value ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => previewValues[key] ?? `«${key}»`) }
 const previewBlocks = computed(() => blocks.value)
 /** Blok title pertama jadi judul tengah dokumen (mengikuti drawTitleBlock renderer PDF). */
 const titleBlock = computed(() => blocks.value.find(b => b.type === 'title') as any)
@@ -39,7 +39,7 @@ const color = (s: string) => s === 'PUBLISHED' ? 'success' : s === 'DRAFT' ? 'wa
 <template>
   <UModal
     v-model:open="open"
-    :title="`Editor Template â€” ${template?.name ?? ''}`"
+    :title="`Editor Template — ${template?.name ?? ''}`"
     :ui="{ content: 'max-w-7xl w-full' }"
   >
     <template #body>
