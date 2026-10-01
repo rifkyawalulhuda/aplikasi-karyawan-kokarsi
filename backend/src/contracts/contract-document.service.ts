@@ -76,7 +76,6 @@ export class ContractDocumentService {
         code: true,
         family: true,
         templateKey: true,
-        contentOverrides: true,
       },
     },
   }
@@ -192,13 +191,14 @@ export class ContractDocumentService {
 
     const snapshot = contract.templateSnapshot as any
     const rawDefinition = getContractDocumentDefinition(contract.template.templateKey)
-    // Versioned contracts are rendered exclusively from their immutable snapshot.
-    // The legacy definition is only required for contracts created before Phase 3.
+    // Kontrak ber-snapshot dirender EKSKLUSIF dari snapshot imutabel-nya; definisi
+    // hard-code + `contentOverrides` lama tidak lagi dibaca (DoD #10).
+    // Jalur `contentOverrides` hanya tersisa untuk kontrak legacy tanpa snapshot.
     if (!snapshot?.contentDefinition && !rawDefinition) {
       throw new BadRequestException(`Template key ${contract.template.templateKey} belum terdaftar di generator dokumen`)
     }
     const definition: any = rawDefinition
-      ? mergeDefinition(rawDefinition, contract.template.contentOverrides as Record<string, any> | null)
+      ? mergeDefinition(rawDefinition, null)
       : {
           title: '', subtitle: '', openingLine: '', recitals: [], locationLine: '', termLine: '',
           compensationLabel: '', closingParagraphs: [], firstPartyLabel: '', secondPartyLabel: '',
@@ -206,10 +206,12 @@ export class ContractDocumentService {
         }
 
     const employee = contract.employee
+    // Kontrak ber-snapshot menyimpan nilai yang sudah di-resolve saat kontrak
+    // dibuat, jadi regenerasi PDF tidak boleh bergantung pada data karyawan yang
+    // bisa berubah (/ kosong) belakangan. Validasi kelengkapan karena itu HANYA
+    // berlaku untuk kontrak legacy tanpa snapshot — lihat gate di bawah.
     const missingFields: string[] = []
 
-    // Snapshot contracts already contain the resolved values captured at creation;
-    // do not re-validate mutable employee/master data during regeneration.
     if (!snapshot?.contentDefinition) {
       if (!employee.nik) missingFields.push('NIK karyawan')
       if (!employee.birthPlace) missingFields.push('Tempat lahir karyawan')

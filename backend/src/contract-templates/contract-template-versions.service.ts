@@ -69,6 +69,11 @@ export class ContractTemplateVersionsService {
     // Template lama hasil migrasi mungkin belum memiliki snapshot versi.
     // Dalam kondisi itu, bootstrap draft dari definisi bawaan agar editor
     // dapat membuat draft tanpa harus mengirim seluruh contentDefinition.
+    // Override legacy ikut di-merge: `contentOverrides` adalah satu-satunya
+    // tempat konten hasil edit admin pada template legacy disimpan, jadi
+    // mengabaikannya di titik ini akan menghilangkan konten tersebut secara
+    // permanen (lihat Risk "Perubahan legacy override hilang"). Ini satu-satunya
+    // konsumen `contentOverrides` yang masih tersisa setelah DoD #10.
     if ((!contentDefinition && !lastVersion) || (dto.overrides && !dto.contentDefinition)) {
       const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
       const base = template ? CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey] : undefined
@@ -78,7 +83,10 @@ export class ContractTemplateVersionsService {
           + 'Kirim contentDefinition lengkap atau gunakan template key yang terdaftar.',
         )
       }
-      const merged = dto.overrides ? mergeDefinition(base, dto.overrides as any) : base
+      // Prioritas: override yang dikirim editor > override legacy tersimpan.
+      // Konsisten dengan scripts/rollout-contract-template-versioning.ts.
+      const overrides = dto.overrides ?? template?.contentOverrides
+      const merged = overrides ? mergeDefinition(base, overrides as any) : base
       contentDefinition = definitionToContentDefinition(merged)
       fieldDefinitions = definitionToFieldDefinitions(merged)
     }

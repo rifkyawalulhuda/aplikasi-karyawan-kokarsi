@@ -78,6 +78,11 @@ export class ContractTemplatesController {
     return this.service.getContentPreview(id)
   }
 
+  /**
+   * @deprecated DoD #10 — jalur runtime `contentOverrides` sudah dinonaktifkan.
+   * Endpoint dipertahankan (bukan dihapus) agar klien lama menerima pesan
+   * Forbidden yang jelas alih-alih 404; selalu melempar ForbiddenException.
+   */
   @Put(':id/content-overrides')
   updateContentOverrides(
     @Request() req: any,

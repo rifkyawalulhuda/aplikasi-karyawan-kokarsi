@@ -1,0 +1,7 @@
+backups/
+
+# Direktori kerja sementara untuk probe/verifikasi manual saat rollout template.
+# Jangan pernah di-commit: berisi skrip sekali pakai dan keluaran mentah.
+tmp/
+*.tmp-out
+

@@ -277,14 +277,6 @@ const familyConfig = {
                     </div>
                     <div class="flex items-center gap-1.5 shrink-0 mt-0.5">
                       <UBadge
-                        v-if="template.contentOverrides && Object.keys(template.contentOverrides).length > 0"
-                        color="primary"
-                        variant="subtle"
-                        size="xs"
-                        icon="i-lucide-pencil"
-                        label="Dikustomisasi"
-                      />
-                      <UBadge
                         :color="template.isActive ? 'success' : 'neutral'"
                         variant="subtle"
                         size="xs"

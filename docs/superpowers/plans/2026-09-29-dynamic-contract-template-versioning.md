@@ -2,7 +2,8 @@
 
 **Date:** 2026-09-29  
 **Feature:** Template Kontrak dinamis dengan versioning, shared fields, block editor, dan snapshot dokumen  
-**Status:** Planning only
+**Status:** Implementasi kode selesai; rollout data belum dijalankan (rencana terverifikasi dry-run, lihat `Rencana Rollout` dan `Plan vs Implementation Reconciliation`)
+**Audit terakhir:** 2026-09-30
 
 ---
 
@@ -557,16 +558,26 @@ Ubah `AddContractModal.vue` dan `RenewContractModal.vue` agar:
 
 ## Backend Modules and Files
 
+> **Catatan rekonsiliasi (audit 2026-09-30):** nama file aktual berbeda dari
+> rencana awal pada beberapa modul. Yang ada di bawah adalah nama yang
+> **benar-benar dipakai di repo**; kolom kanan mencatat nama di rencana lama
+> yang sudah tidak berlaku. Lihat juga bagian `Plan vs Implementation
+> Reconciliation` di akhir dokumen ini.
+
 ### New or Expanded Modules
 
-- `backend/src/contract-templates/contract-template-version.service.ts`
-- `backend/src/contract-templates/contract-template-version.controller.ts`
-- `backend/src/contract-templates/template-field.service.ts`
-- `backend/src/contract-templates/template-field.controller.ts`
+- `backend/src/contract-templates/contract-template-versions.service.ts` *(rencana: `contract-template-version.service.ts`)*
+- `backend/src/contract-templates/contract-template-versions.controller.ts` *(rencana: `contract-template-version.controller.ts`)*
+- `backend/src/contract-templates/template-fields.service.ts` *(rencana: `template-field.service.ts`)*
+- `backend/src/contract-templates/template-fields.controller.ts` *(rencana: `template-field.controller.ts`)*
 - `backend/src/contract-templates/template-schema.validator.ts`
-- `backend/src/contract-templates/template-master-registry.ts`
-- `backend/src/contracts/template-value-resolver.service.ts`
-- `backend/prisma/migrations/<timestamp>_add_contract_template_versioning/`
+- `backend/src/contract-templates/master-reference.registry.ts` *(rencana: `template-master-registry.ts`)*
+- `backend/src/contract-templates/template-master-sources.controller.ts` *(tambahan, tidak ada di rencana awal)*
+- `backend/src/contract-templates/template-snapshot.service.ts` *(tambahan, tidak ada di rencana awal)*
+- `backend/src/contract-templates/template-value-resolver.service.ts` + `template-value-resolver.helpers.ts` *(rencana menaruh ini di `backend/src/contracts/`, realisasinya di `contract-templates/`)*
+- `backend/src/contracts/contract-block-renderer.ts` *(renderer blok dinamis; tidak disebut eksplisit di rencana awal)*
+- `backend/prisma/migrations/20260929000000_add_contract_template_versioning/`
+
 
 ### Existing Files to Modify
 
@@ -769,6 +780,46 @@ melanjutkan rollout staging. `--dry-run` tidak mengubah database.
 
 ---
 
+## Rencana Rollout
+
+Bagian ini mencatat urutan rollout yang disetujui beserta alasan bisnisnya,
+supaya langkah mutasi data tidak dijalankan ad-hoc.
+
+### Prinsip
+
+1. **Verifikasi dulu, mutasi kemudian.** `--dry-run` adalah bukti yang harus
+   tersimpan sebelum ada perubahan data.
+2. **Legalitas lebih dulu daripada fitur.** Snapshot kontrak (DoD #3) menutup
+   risiko dokumen hukum berubah isi tanpa jejak — ini prioritas tertinggi.
+3. **Satu variabel per langkah.** Jangan menggabungkan bootstrap versi,
+   backfill snapshot, dan penonaktifan jalur legacy dalam satu rilis.
+4. **Dua saksi untuk verifikasi.** Perbandingan dijalankan oleh orang yang
+   berbeda dari pelaksana mutasi.
+
+### Urutan langkah
+
+| # | Langkah | Alasan bisnis | Kriteria selesai |
+|---|---|---|---|
+| 0 | Bekukan perubahan Template Kontrak di UI | Admin yang mengedit di tengah migrasi membuat hasil tidak dapat direkonsiliasi | Tidak ada `contentOverrides` baru selama jendela rollout |
+| 1 | Backup database penuh + `pg_dump` tabel kontrak | Titik pulih bila backfill salah | Backup terverifikasi dapat di-restore |
+| 2 | Putuskan nasib template duplikat (`id=19409`, `id=29984`) | Template uji yang ikut di-bootstrap akan menghasilkan versi publik palsu | Keputusan keep/delete tercatat sebelum bootstrap |
+| 3 | Jalankan `--dry-run`, simpan output | Menemukan placeholder unresolved lebih awal, bukan setelah data berubah | Output tersimpan; exit code `2` sudah ditelaah |
+| 4 | Bootstrap versi untuk template tanpa versi | Menutup DoD #2 | 0 template tanpa versi `PUBLISHED` |
+| 5 | Backfill snapshot untuk kontrak lama | Menutup DoD #3 — inti perlindungan legal | 0 kontrak tanpa snapshot |
+| 6 | Bandingkan PDF sebelum vs sesudah regenerasi | Membuktikan kontrak lama menghasilkan dokumen identik | PDF byte-identik, atau perbedaan dijelaskan dan disetujui |
+| 7 | Nonaktifkan `PUT /content-overrides` + `mergeDefinition` runtime | Menutup DoD #10 — mencegah override baru masuk jalur legacy | Endpoint mati; tidak ada pemanggil tersisa |
+| 8 | Pantau satu siklus kontrak penuh (buat → publish → unduh) | Memastikan jalur baru benar-benar dipakai sebelum dianggap stabil | Tidak ada error render/publish |
+
+**Langkah 1–3 tidak mengubah data** dan aman dijalankan lebih dulu. Langkah 4–5
+adalah satu-satunya mutasi massal, dan keduanya idempoten — aman diulang bila
+terputus di tengah.
+
+**Rollback:** hentikan di langkah mana pun lalu restore backup langkah 1.
+Selama langkah 6 belum disetujui, jangan lanjut ke langkah 7 — selama endpoint
+legacy masih hidup, sistem tetap dapat melayani kontrak lama apa adanya.
+
+---
+
 ## Definition of Done
 
 Implementasi dinyatakan selesai setelah:
@@ -783,3 +834,264 @@ Implementasi dinyatakan selesai setelah:
 8. Kontrak lama tetap menghasilkan dokumen yang sama setelah template berubah.
 9. Test unit, integration, dan UI utama lulus.
 10. Legacy `contentOverrides` tidak lagi menjadi sumber runtime utama.
+
+---
+
+## Plan vs Implementation Reconciliation
+
+Audit 2026-09-30. Status per butir Definition of Done dibandingkan dengan kode dan
+data di database development.
+
+### Yang sudah sesuai
+
+| DoD | Bukti |
+|---|---|
+| 1. Migration schema berhasil | `backend/prisma/migrations/20260929000000_add_contract_template_versioning/` |
+| 4. Editor dapat menyimpan & publish block definition | `POST /contract-templates/:id/versions`, `PUT /contract-template-versions/:versionId`, `POST .../publish` |
+| 5. Field type V1 tervalidasi | `template-schema.validator.ts` + `template-schema.validator.spec.ts` |
+| 6. Table dan list dirender pada PDF | `contracts/contract-block-renderer.ts` + spec |
+| 7. Kontrak baru memakai versi publish terbaru | `contracts.service.ts` → `templateSnapshot.buildSnapshot()` mengisi `templateVersionId`, `templateSnapshot`, `resolvedTemplateData` |
+| Publish hanya satu versi aktif | Query: 10 template dengan tepat 1 `PUBLISHED`, 0 template dengan >1 |
+| Snapshot immutable saat render | `contract-document.service.ts:599` memilih `renderSnapshotPdf` bila `templateSnapshot.contentDefinition` ada |
+
+### Ketidaksesuaian yang ditemukan dan ditindaklanjuti
+
+**1. `createDraft` mengabaikan `contentOverrides` legacy — sudah diperbaiki.**
+Baris lama hanya memakai `dto.overrides`, sehingga konten yang pernah diedit
+admin tidak terbawa saat bootstrap draft dari template lama. Bertentangan dengan
+Risk "Perubahan legacy override hilang". Sekarang digabung dengan prioritas
+`dto.overrides ?? template.contentOverrides`, konsisten dengan
+`scripts/rollout-contract-template-versioning.ts:50`.
+Dampak terukur: 4 dari 5 template dengan override punya isi yang benar-benar
+berbeda dari definisi hard-code (`id=1`, `17142`, `18600`, `19409`).
+Regresi dikunci oleh `contract-template-versions.service.spec.ts` (diverifikasi
+gagal sebelum perbaikan).
+
+### Ketidaksesuaian yang masih terbuka (butuh keputusan, bukan sekadar rename)
+
+**2. DoD #3 belum terpenuhi: 66 dari 66 kontrak belum punya `templateSnapshot`.**
+Backfill (`backfillSnapshots()`) hanya menyentuh kontrak yang punya `templateId`,
+dan seluruh 66 kontrak memenuhi syarat itu — artinya backfill belum pernah
+dijalankan terhadap database ini, bukan karena tidak dapat diproses.
+Konsekuensi: 10 kontrak yang sudah punya PDF masih dirender lewat jalur legacy
+(`renderPkwtPdf` / `renderMitraPdf`), sehingga masih rentan pada
+"PDF lama memakai template baru".
+
+**3. DoD #2 belum terpenuhi: 2 template belum punya versi PUBLISHED.**
+`id=17142` (code `001`, key `PKWT_DRIVER`) dan `id=18600` (code `111`, key
+`MITRA_STAFF`). Keduanya punya `contentOverrides` berisi konten, jadi wajib
+di-bootstrap lewat rollout agar tidak hilang.
+
+**4. DoD #10 belum terpenuhi: `contentOverrides` masih jalur runtime.**
+`contract-document.service.ts:201` masih memanggil
+`mergeDefinition(rawDefinition, contract.template.contentOverrides)` untuk
+kontrak tanpa snapshot. Endpoint `PUT /contract-templates/:id/content-overrides`
+juga masih aktif. Baru bisa dinonaktifkan setelah butir 2 tuntas.
+
+**5. Template duplikat secara logis.**
+`id=19409` (code `212111`, key `PKWT_KASIR`) dan `id=29984` (code `TEST001`,
+key `MITRA_KOMART`) memakai `templateKey` yang sama dengan template induk
+(`id=6` dan `id=2`). Perlu ditegaskan apakah ini memang varian yang disengaja
+atau data uji yang harus dibersihkan sebelum rollout.
+
+### Status rollout: SUDAH DIJALANKAN (2026-10-01)
+
+Bagian ini menggantikan butir 2, 3, dan 5 di atas — semuanya sudah dikerjakan,
+dan beberapa kesimpulan audit awal ternyata **tidak akurat** setelah diverifikasi
+langsung ke database. Koreksi dipertahankan apa adanya agar tidak menyesatkan.
+
+**Koreksi penting terhadap audit sebelumnya**
+
+| Klaim audit awal | Kenyataan setelah diverifikasi |
+|---|---|
+| 66 dari 66 kontrak belum punya snapshot | **46 kontrak punya `templateId: null`** dan tidak pernah tersentuh backfill (memang by design). Yang tersentuh: 20 kontrak. |
+| `id=19409` belum punya versi | Salah — `id=19409` **sudah punya `v1: PUBLISHED`**. |
+| `id=5` kerusakan "tak dapat dipastikan" | **Terbukti pasti rusak**, lihat di bawah. |
+
+**`id=5` (PKWT_DRIVER): rusak dan sudah dipulihkan.** Bukti struktural
+(`contract-document-definitions.ts:364-365`) menetapkan baseline kanonik
+`title: 'KESEPAKATAN KERJA WAKTU TERTENTU'` + `subtitle: 'STATED PERIODS
+LABOUR AGREEMENT'`. Versi v2 yang sempat dipublikasikan berjudul
+`"TEST AJA WAKTU TERTENTU"` **dan blok `subtitle` terhapus**; diff terstruktur
+menunjukkan 211 leaf di kedua versi dengan sisa konten identik (hanya bergeser
+indeks karena satu blok hilang), sehingga tidak ada konten lain yang hilang.
+Keputusan konten karena itu **tidak ambigu** dan tidak memerlukan konfirmasi user.
+
+Dipulihkan dengan `scripts/repair-published-version.ts` (idempoten, butuh
+`--confirm`), **bukan** lewat `createDraft`+`publish` — keduanya membaca
+`lastVersion` PUBLISHED yang sudah rusak sehingga akan mempertahankan konten
+salah. Catatan: sebenarnya `POST /contract-template-versions/:id/rollback`
+sudah ada di service dan cukup untuk kasus ini; skrip terpisah dipilih karena
+dapat dijalankan tanpa sesi admin dan punya gerbang `--confirm`. Hasil:
+`v1: PUBLISHED` kanonik, `v2: ARCHIVED` (tidak dihapus, tetap dapat diaudit),
+dan 3 kontrak `id=5` menunjuk `templateVersionId=6`.
+
+**Rollout dijalankan.** Backup logis lebih dulu
+(`npm run contract-templates:db-backup`, hasil di `backend/backups/`).
+Hasil rollout: `createdVersions=3`, `updatedSnapshots=20`,
+`contractsWithSnapshot=20`, `contractsWithoutSnapshot=0`; kini **13/13 template
+punya versi PUBLISHED**.
+
+**Temuan baru yang perlu keputusan Anda (di luar cakupan versioning).**
+Rollout membuat `id=29984` (TEST001) ikut ter-publish meski sudah
+`isActive: false` — `bootstrapVersions()` **tidak menyaring `isActive`**.
+Dua template sudah dinonaktifkan (tanpa dihapus, 0 kontrak memakainya).
+
+Yang lebih serius: **kontaminasi "HAHAHA" sudah masuk ke snapshot imutabel
+kontrak aktif**. Karena kontrak ber-versi dirender eksklusif dari snapshot
+(`contract-document.service.ts:195`), regenerasi PDF akan tetap menghasilkan
+dokumen ber-HAHAHA.
+
+| Kontrak | Status | Kontaminasi |
+|---|---|---|
+| 61, 119 | **AKTIF** | `contentOverrides id=18600` mengandung paragraf `"HAHAHA"`; snapshot `verId=28` ikut membawanya |
+| 60 | EXPIRED | 12 teks: judul `"...HAHAHA"`, `"Driver ajaa"`, `"Pengusaha11"`, `"very stabilll"` |
+
+Kontradiksi yang perlu diselesaikan: `id=17142` bernama "Template PKWT 2026 Rev 1"
+(dengan override `roleLabel: "Driver ajaa"`) tetapi `name`-nya sendiri mengandung
+"HAHAHA" — jadi tidak bisa disimpulkan otomatis mana yang sengaja diedit.
+
+**Perbaikan kontaminasi dieksekusi.** Setelah inspeksi DB penuh, klasifikasi
+kontaminan ternyata **konklusif** (tidak perlu putaran keputusan pengguna):
+mayoritas string adalah residu uji murni, sementara `roleLabel: "Driver ajaa"`
+adalah override yang **disengaja** pemilik template dan tetap dipertahankan.
+
+Alat baru (semuanya dry-run secara default dan idempoten):
+
+- `npm run contract-templates:repair-contamination` — membuang residu uji
+  (`HAHAHA`, `Pengusaha11`, `very stabilll`, `setabilll`, paragraf `HAHAHA`,
+  `Karyawan2`) pada `contentOverrides` dan snapshot; memperbaiki ejaan; lalu
+  menerbitkan versi bersih baru (v1 lama di-ARCHIVE, tidak dihapus sebagai
+  jejak audit) dan membangun ulang `templateSnapshot` + `resolvedTemplateData`
+  kontrak dari versi bersih tersebut.
+- `scripts/verify-contamination-fix.ts` — verifikasi end-to-end lewat
+  `ContractDocumentService.loadContract` (jalur render produksi), memastikan
+  kontaminan = 0, versi lolos `validateContentDefinition`, dan override yang
+  disengaja masih ada.
+- `scripts/archive-inactive-template-versions.ts` — meng-ARCHIVE versi
+  PUBLISHED milik template nonaktif (0 kontrak tertaut); melewati template yang
+  masih dipakai kontrak.
+- `bootstrapVersions()` kini menyaring `isActive: true` (bug pada rollout awal).
+
+Hasil eksekusi: kontaminan pada **data live = TIDAK ADA** (0 template aktif,
+0 versi PUBLISHED, 0 snapshot kontrak). Jejak audit yang sengaja disimpan hanya
+di `v1 ARCHIVED` `17142`/`18600`. Template `19409`/`29984` (nonaktif) tidak lagi
+punya versi PUBLISHED. Seluruh 13 template aktif tetap punya tepat 1 versi
+PUBLISHED; 20 kontrak ber-template memiliki snapshot; regresi `tsc`/Jest
+77/77/ESLint bersih.
+
+`id=19409` (nama `"212122"`) **sudah** berstatus `isActive: false`, jadi tidak
+perlu tindakan tambahan.
+
+### Penutupan rollout (2026-10-01, lanjutan)
+
+Ketiga langkah terbuka di atas dikerjakan. Dua di antaranya ternyata berdiri di
+atas **premis yang salah**, jadi koreksinya dicatat di sini.
+
+#### Koreksi klaim lama
+
+**Klaim lama (butir 3): "6 kontrak dengan `employee.nik/birthPlace/address`
+kosong — regenerasi PDF akan gagal untuk kontrak ber-snapshot."**
+
+Klaim ini **salah pada dua sisi**:
+
+1. **Jumlahnya 10, bukan 6.** Angka 6 berasal dari artefak query: query itu
+   memakai `JOIN` (sehingga kontrak tanpa `templateId` terbuang) sekaligus
+   menyaring kolom `deletedAt` pada `Contract` — kolom yang **tidak ada** —
+   sehingga query error dan keluarannya parsial. Server menyimpan angka yang
+   salah; angka itu bukan temuan.
+2. **Regenerasi TIDAK gagal.** Seluruh 10 kontrak tersebut punya
+   `templateSnapshot` **dan** `resolvedTemplateData`, sehingga dirender lewat
+   `renderSnapshotPdf` dari nilai yang sudah dibekukan saat kontrak dibuat.
+   Diuji langsung: 10 bisa render, **0 gagal**.
+
+Konsekuensinya: tidak ada kontrak yang perlu dilengkapi data karyawannya demi
+memperbaiki PDF yang sudah terbit. Yang tersisa hanyalah **higienitas data** —
+46 kontrak tidak punya `templateId` dan tidak pernah menyentuh jalur versioning
+(memang by design), dan 49 dari 66 kontrak adalah data uji `KTR/DUMMY/*`.
+
+#### Status gate `missingFields` — dan mengapa premisnya perlu diluruskan
+
+Klaim "gate `missingFields` adalah arsitektur mati" **benar secara teknis**:
+di `contract-document.service.ts` gate itu hanya menyala bila
+`snapshot?.contentDefinition` **absen**, dan **0 dari 20** kontrak ber-template
+memenuhi kondisi tersebut.
+
+Namun kesimpulan turunannya perlu diluruskan. Setelah semua kontrak punya
+snapshot, gate itu memang tidak lagi berguna untuk kontrak ber-template — tetapi
+**bukan** karena kontrolnya hilang. Kontrolnya justru **lebih kuat**: `required`
+ditegakkan di `TemplateSnapshotService.buildSnapshot()` saat **pembuatan**
+kontrak, dan field legal benar-benar bertanda `required: true`:
+
+```
+employee.nik        required: true  sourceType: SYSTEM
+employee.birthPlace required: true  sourceType: SYSTEM
+employee.address    required: true  sourceType: SYSTEM
+```
+
+Diverifikasi langsung terhadap `employee.id=20` ("rubi", `nik: ""`):
+pembuatan snapshot **ditolak** dengan `Nilai field wajib "NIK Karyawan" tidak
+tersedia`. Jadi membiarkan gate lama sebagai sisa tidak berbahaya; yang
+berbahaya adalah **menghapus** snapshot dari kontrak lama, karena gate itulah
+satu-satunya penjaga tersisa untuk kontrak legacy tanpa snapshot.
+
+Karena itu gate `missingFields` **dipertahankan**, hanya komentarnya
+diperjelas agar mencerminkan alasan sebenarnya (snapshot = nilai beku, jangan
+validasi ulang data karyawan yang bisa berubah) alih-alih menyiratkan bahwa
+validasi karena itu opsional.
+
+#### DoD #10 ditutup: jalur runtime `contentOverrides`
+
+Perubahan yang benar-benar menghapus jalur kedua:
+
+| Lokasi | Sebelum | Sesudah |
+|---|---|---|
+| `contract-document.service.ts` select | `contentOverrides: true` | dihapus dari select |
+| `contract-document.service.ts:201` | `mergeDefinition(rawDefinition, contract.template.contentOverrides)` | `mergeDefinition(rawDefinition, null)` |
+| `contract-templates.service.ts` `updateContentOverrides()` | menulis ke DB | melempar `ForbiddenException` |
+| `contract-templates.controller.ts` | — | ditandai `@deprecated`, endpoint dipertahankan agar klien lama menerima pesan jelas (bukan 404) |
+| `app/pages/settings/contract-templates.vue` | badge "Dikustomisasi" | dihapus (menyesatkan setelah jalur dinonaktifkan) |
+
+**Yang sengaja TIDAK dihapus:** merge `contentOverrides` di
+`contract-template-versions.service.ts`. Ini **bukan** jalur render, melainkan
+jalur **bootstrap versi**: ia memindahkan konten hasil edit admin pada template
+legacy ke `contentDefinition` versi pertama. Menghapusnya justru akan
+**kehilangan** konten tersebut — kebalikan dari tujuan rollout. Ia kini menjadi
+satu-satunya konsumen `contentOverrides` yang tersisa, dan itu disengaja.
+
+Bukti bahwa penghapusan ini tidak mengubah output: `verify-contamination-fix.ts`
+memeriksa 3 kontrak ber-snapshot (60/61/119) dan memastikan (a) semuanya benar
+dirender lewat `renderSnapshotPdf`, dan (b) **nol** teks khas override legacy
+bocor ke output.
+
+Catatan metode: percobaan pertama membandingkan objek `definition` utuh dan
+melaporkan perbedaan pada `roleLabel`/`firstPartyLabel`/`recitals`. Itu **false
+positive** — `renderSnapshotPdf` memang tidak pernah membaca key tersebut, jadi
+keduanya berbeda di key yang tidak dipakai. Pemeriksaan diganti menjadi uji
+kebocoran teks + uji jalur render.
+
+#### Alat baru
+
+`scripts/backfill-legacy-snapshots.ts` (+ npm `contract-templates:backfill-snapshots`)
+— melengkapi kontrak legacy tanpa snapshot memakai **ulang**
+`TemplateSnapshotService` produksi (bukan jalur kedua). Idempoten, mendukung
+`--dry-run`, punya **preflight** yang menolak jalan bila ada template yang
+dipakai kontrak tetapi belum punya versi PUBLISHED. Hasil dry-run: preflight OK
+(9 template dipakai kontrak, semua punya versi), **0 kontrak perlu di-backfill**
+— seluruh 20 kontrak ber-template sudah punya snapshot.
+
+### Sisa pekerjaan
+
+1. **Commit.** Belum ada satu pun perubahan yang di-commit. Yang belum masuk
+   repo: 6 skrip (`repair-contamination`, `repair-published-version`,
+   `backfill-legacy-snapshots`, `archive-inactive-template-versions`,
+   `verify-contamination-fix`, `backup-contract-template-versioning`),
+   `backend/.gitignore`, `contract-template-versions.service.spec.ts`, dan
+   dokumen plan ini.
+2. **Higienitas data karyawan** (opsional, tidak memblokir apa pun): 51 dari 69
+   karyawan belum lengkap NIK/tempat lahir/alamat. Tidak ada PDF yang rusak
+   karenanya; pengaruhnya baru terasa saat **membuat kontrak baru** — dan saat
+   itu sistem justru menolak dengan pesan jelas. Perlu keputusan apakah
+   dilengkapi sekarang atau diserahkan ke admin.
+3. **Data uji** `KTR/DUMMY/*` (49 kontrak) menunggu keputusan: dibiarkan atau
+   dibersihkan setelah rollout ditutup.

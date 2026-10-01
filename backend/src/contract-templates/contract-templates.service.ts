@@ -251,10 +251,14 @@ export class ContractTemplatesService {
 
   async updateContentOverrides(id: number, overrides: Record<string, any>) {
     await this.findOne(id) // throws if not found
-    return this.prisma.contractTemplate.update({
-      where: { id },
-      data: { contentOverrides: overrides },
-      include: this.include,
-    })
+    // DoD #10: jalur runtime `contentOverrides` sudah dinonaktifkan. Kontrak
+    // dirender dari versi template (immutable snapshot) yang dikelola lewat
+    // endpoint versi template, jadi menulis override di sini tidak lagi punya
+    // efek apa pun pada PDF. Ditolak eksplisit supaya admin tidak mengira
+    // perubahannya tersimpan.
+    void overrides
+    throw new ForbiddenException(
+      'Pengaturan konten langsung sudah tidak digunakan. Kelola konten lewat versi template (Master Template Kontrak → Versi).',
+    )
   }
 }

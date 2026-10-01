@@ -36,7 +36,9 @@ function fieldKeys(value: any): string[] {
 }
 
 async function bootstrapVersions() {
-  const templates = await prisma.contractTemplate.findMany()
+  // Hanya template aktif: rollout tidak boleh mem-publish template nonaktif
+  // (mis. data uji yang sudah dinonaktifkan).
+  const templates = await prisma.contractTemplate.findMany({ where: { isActive: true } })
   let created = 0
   for (const template of templates) {
     const existing = await prisma.contractTemplateVersion.findFirst({
