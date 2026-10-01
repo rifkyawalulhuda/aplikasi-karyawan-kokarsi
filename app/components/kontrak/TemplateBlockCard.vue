@@ -21,8 +21,18 @@ const emit = defineEmits<{
   'remove': []
   'duplicate': []
   'update:collapsed': [value: boolean]
-  'focus': []
+  'activate': [blockId: string, path?: string | null]
 }>()
+
+/**
+ * Beri tahu induk blok mana (dan sub-bagian mana) yang sedang difokuskan.
+ * `path === undefined` = sinyal "blok aktif" dari `focusin` umum; sub-bagian
+ * yang sudah tercatat dipertahankan. Penting: jangan menulis default `= null`
+ * di sini, karena default parameter JS menelan `undefined`.
+ */
+function markFocus(path?: string | null) { emit('activate', props.block?.id, path) }
+/** Setel ulang ke blok ini tanpa sub-bagian (klik area kosong kartu). */
+function markBlockOnly() { emit('activate', props.block?.id, null) }
 
 /** Nama tipe blok yang ramah pengguna (bukan slug internal). */
 const BLOCK_META: Record<string, { label: string, icon: string, hint: string }> = {
@@ -125,9 +135,11 @@ function addColumn() {
   <div
     class="rounded-lg border transition"
     :class="selected ? 'border-primary ring-1 ring-primary/30' : 'border-default'"
-    @click="emit('focus')"
+    @click="markFocus()"
+    @focusin="markFocus()"
   >
-    <!-- Kepala kartu: identitas blok + aksi -->
+    <!-- Kepala kartu: identitas blok + aksi. Klik di mana pun pada kepala
+         kartu memilih blok ini sebagai target sisipan field. -->
     <div class="flex items-center gap-2 px-3 py-2">
       <UButton
         :icon="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
@@ -217,14 +229,16 @@ function addColumn() {
 
       <template v-if="['title', 'subtitle', 'paragraph'].includes(block.type)">
         <UFormField :label="block.type === 'paragraph' ? 'Teks paragraf' : 'Teks'">
-          <UTextarea
-            v-model="block.text"
-            :disabled="!editable"
-            :rows="3"
-            autoresize
-            class="w-full"
-            placeholder="Tulis teks di sini…"
-          />
+          <div @click="markBlockOnly()" @focusin="markBlockOnly()">
+            <UTextarea
+              v-model="block.text"
+              :disabled="!editable"
+              :rows="3"
+              autoresize
+              class="w-full"
+              placeholder="Tulis teks di sini…"
+            />
+          </div>
         </UFormField>
       </template>
 
@@ -239,7 +253,13 @@ function addColumn() {
         </UFormField>
         <UFormField label="Uraian pasal">
           <div class="space-y-2">
-            <div v-for="(_, p) in block.paragraphs" :key="p" class="flex items-start gap-2">
+            <div
+              v-for="(_, p) in block.paragraphs"
+              :key="p"
+              class="flex items-start gap-2"
+              @click="markFocus(`art:${p}`)"
+              @focusin="markFocus(`art:${p}`)"
+            >
               <span class="mt-2 w-5 shrink-0 text-right text-xs text-muted">{{ p + 1 }}.</span>
               <UTextarea
                 v-model="block.paragraphs[p]"
@@ -286,7 +306,13 @@ function addColumn() {
         </UFormField>
         <UFormField label="Poin daftar">
           <div class="space-y-2">
-            <div v-for="(_, p) in block.items" :key="p" class="flex items-center gap-2">
+            <div
+              v-for="(_, p) in block.items"
+              :key="p"
+              class="flex items-center gap-2"
+              @click="markFocus(`item:${p}`)"
+              @focusin="markFocus(`item:${p}`)"
+            >
               <span class="w-5 shrink-0 text-right text-xs text-muted">{{ p + 1 }}.</span>
               <UInput
                 v-model="block.items[p]"
@@ -345,7 +371,13 @@ function addColumn() {
             </thead>
             <tbody>
               <tr v-for="(r, ri) in block.rows" :key="ri">
-                <td v-for="c in block.columns" :key="c.key" class="p-1">
+                <td
+                  v-for="(c, ci) in block.columns"
+                  :key="c.key"
+                  class="p-1"
+                  @click="markFocus(`row:${ri}:${ci}`)"
+                  @focusin="markFocus(`row:${ri}:${ci}`)"
+                >
                   <UInput v-model="r[c.key]" :disabled="!editable" placeholder="—" />
                 </td>
                 <td class="p-1">

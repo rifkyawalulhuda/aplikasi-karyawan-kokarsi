@@ -7,6 +7,8 @@ const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(
 const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
 const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>>({}); const focusedBlockId = ref<string | null>(null)
 const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null>(null); const pendingVersion = ref<Version | null>(null)
+/** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
+const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
 const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
 const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
 const fieldItems = computed(() => fields.value.length ? fields.value : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value?.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? []))
@@ -27,11 +29,11 @@ const docSubtitle = computed(() => previewText(subtitleBlock.value?.text ?? ''))
 const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
 watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
 async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields')]); versions.value = vs ?? []; fields.value = fs ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
-async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; focusedBlockId.value = draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null; snapshotDraft() }
+async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
 async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
 async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview' && draft.value) await save(); const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); if (name === 'preview') { preview.value = r; previewOpen.value = true } else { toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
-function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]); focusedBlockId.value = id; collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
+function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
 function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
 /** @deprecated gunakan `insertField()` — dipertahankan untuk kompatibilitas. */
 const useField = insertField
@@ -71,7 +73,41 @@ const filteredFieldItems = computed(() => {
 /** Blok yang sedang dituju sisipan placeholder. */
 const focusedBlock = computed(() => (blocks.value ?? []).find((b: any) => b.id === focusedBlockId.value) ?? null)
 
-/** Sisipkan placeholder field ke blok yang dipilih (atau blok pertama). */
+/** Label sub-bagian target (paragraf/poin/sel) untuk ditampilkan ke pengguna. */
+const focusedLocationLabel = computed(() => {
+  const b: any = focusedBlock.value
+  if (!b) return ''
+  const path = focusedTarget.value.path
+  if (!path) return b.type === 'article' ? 'paragraf 1' : b.type === 'list' ? 'poin 1' : b.type === 'table' ? 'sel pertama' : 'isi blok'
+  const parts = path.split(':')
+  const n = Number(parts[parts.length - 1])
+  if (path.startsWith('art:')) return `paragraf ${Number.isInteger(n) ? n + 1 : 1}`
+  if (path.startsWith('item:')) return `poin ${Number.isInteger(n) ? n + 1 : 1}`
+  if (path.startsWith('row:')) return `sel tabel (baris ${Number(parts[1]) + 1})`
+  return 'isi blok'
+})
+
+/**
+ * Tandai blok + sub-bagian yang difokuskan (dipanggil kartu blok).
+ * `path === undefined` = sinyal "blok aktif" saja (dari `focusin` umum): jangan
+ * menimpa sub-bagian yang sudah tercatat pada blok yang sama.
+ */
+function setFocus(blockId: string | null, path?: string | null) {
+  // PENTING: jangan beri default `= null` pada `path`. Default parameter JS
+  // menelan `undefined`, sehingga sinyal "blok aktif saja" dari `focusin`
+  // yang membubbling akan tampak seperti `null` dan menghapus sub-bagian
+  // (paragraf/poin) yang baru saja difokuskan.
+  if (path === undefined) {
+    if (focusedBlockId.value === blockId) return
+    focusedBlockId.value = blockId
+    focusedTarget.value = { blockId, path: null }
+    return
+  }
+  focusedBlockId.value = blockId
+  focusedTarget.value = { blockId, path }
+}
+
+/** Sisipkan placeholder field ke bagian blok yang sedang difokuskan. */
 function insertField(key: string) {
   const list = blocks.value ?? []
   const target = focusedBlock.value ?? list[0]
@@ -80,24 +116,42 @@ function insertField(key: string) {
     return
   }
   const text = `{{${key}}}`
+  // Sub-path hanya relevan kalau kita benar-benar memakai blok yang terfokus.
+  // Kalau jatuh ke `list[0]`, path lama tidak boleh dipakai (bisa nyasar ke blok lain).
+  const path = focusedBlock.value ? focusedTarget.value.path : null
+  const slotIndex = path ? Number(path.split(':').pop()) : NaN
+  const at = Number.isInteger(slotIndex) && slotIndex >= 0 ? slotIndex : 0
+  const appendTo = (cur: any) => `${cur ?? ''} ${text}`.trim()
+
   if (target.type === 'article') {
     if (!target.paragraphs?.length) target.paragraphs = ['']
-    target.paragraphs[0] = `${target.paragraphs[0] ?? ''} ${text}`.trim()
+    const i = Math.min(at, target.paragraphs.length - 1)
+    target.paragraphs[i] = appendTo(target.paragraphs[i])
   } else if (target.type === 'list') {
     if (!target.items?.length) target.items = ['']
-    target.items[0] = `${target.items[0] ?? ''} ${text}`.trim()
+    const i = Math.min(at, target.items.length - 1)
+    target.items[i] = appendTo(target.items[i])
   } else if (target.type === 'table') {
     if (!target.columns?.length) target.columns = [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }]
     if (!target.rows?.length) target.rows = [{}]
-    const colKey = target.columns[0].key
-    target.rows[0][colKey] = `${target.rows[0][colKey] ?? ''} ${text}`.trim()
+    // path berbentuk `row:<baris>:<kolom>`; jatuh ke sel pertama bila tak ada fokus.
+    const parts = path?.split(':') ?? []
+    const rowIdx = parts[0] === 'row' ? Number(parts[1]) : 0
+    const colIdx = parts[0] === 'row' ? Number(parts[2]) : 0
+    const r = Math.min(Number.isInteger(rowIdx) && rowIdx >= 0 ? rowIdx : 0, target.rows.length - 1)
+    const column = target.columns[Number.isInteger(colIdx) && colIdx >= 0 ? colIdx : 0] ?? target.columns[0]
+    target.rows[r][column.key] = appendTo(target.rows[r][column.key])
   } else if (target.type === 'signature') {
     toast.add({ title: 'Blok tanda tangan tidak menerima field', description: 'Sisipkan field ke blok teks, pasal, daftar, atau tabel.', color: 'warning' })
     return
   } else {
-    target.text = `${target.text ?? ''} ${text}`.trim()
+    target.text = appendTo(target.text)
   }
-  toast.add({ title: `Field disisipkan ke Blok ${list.indexOf(target) + 1}`, color: 'success' })
+  const where = target.type === 'article' ? `paragraf ${Math.min(at, Math.max(target.paragraphs.length - 1, 0)) + 1}`
+    : target.type === 'list' ? `poin ${Math.min(at, Math.max(target.items.length - 1, 0)) + 1}`
+      : target.type === 'table' ? 'sel tabel'
+        : 'isi blok'
+  toast.add({ title: `Field disisipkan ke Blok ${list.indexOf(target) + 1}`, description: `Ditempatkan di ${where}.`, color: 'success' })
 }
 
 /** Duplikat blok, termasuk seluruh isinya. */
@@ -362,7 +416,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
               :collapsed="collapsedBlocks[b.id] ?? true"
               :selected="focusedBlockId === b.id"
               @update:collapsed="v => collapsedBlocks[b.id] = v"
-              @focus="focusedBlockId = b.id"
+              @activate="(id, path) => setFocus(id, path)"
               @move="d => move(i, d)"
               @duplicate="duplicateBlock(i)"
               @remove="confirmDeleteIndex = i"
@@ -383,37 +437,10 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
           </div>
         </main>
 
-        <!-- ── Pratinjau + field ── -->
+        <!-- ── Field dinamis (sticky) + Pratinjau + Validasi ── -->
         <aside class="space-y-3">
-          <div>
-            <div class="flex items-center justify-between">
-              <p class="font-semibold">
-                Pratinjau dokumen
-              </p>
-              <UBadge
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                label="data contoh"
-              />
-            </div>
-            <p class="mt-0.5 text-xs text-muted">
-              Tampilan mengikuti PDF asli (Times New Roman, kop surat, tanda tangan dua pihak).
-            </p>
-          </div>
-
-          <div class="max-h-[52vh] overflow-auto rounded-lg bg-neutral-200 p-3">
-            <KontrakDocumentPreview
-              :blocks="blocks"
-              :values="previewValues"
-              :title="docTitle"
-              :subtitle="docSubtitle"
-              :contract-no="previewValues['contract.number']"
-            />
-          </div>
-
-          <!-- Panel field -->
-          <div class="space-y-2 border-t border-default pt-3">
+          <!-- Panel field: sticky agar daftar field selalu terlihat saat menggulir blok. -->
+          <div class="flex flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm lg:sticky lg:top-3 lg:z-10 lg:max-h-[calc(100dvh-8rem)]">
             <div class="flex items-center justify-between">
               <div>
                 <p class="font-semibold">
@@ -435,6 +462,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
             <p v-if="focusedBlock" class="rounded-md bg-primary/5 px-2 py-1 text-xs text-muted">
               Sisipkan ke
               <b class="text-primary">Blok {{ blocks.indexOf(focusedBlock) + 1 }}</b>
+              <span v-if="focusedLocationLabel"> · {{ focusedLocationLabel }}</span>
             </p>
             <p v-else-if="blocksCount" class="rounded-md bg-elevated px-2 py-1 text-xs text-muted">
               Belum ada blok terpilih — field masuk ke Blok 1.
@@ -445,10 +473,10 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
               icon="i-lucide-search"
               placeholder="Cari field…"
               size="sm"
-              class="w-full"
+              class="w-full shrink-0"
             />
 
-            <div class="max-h-[26vh] space-y-1.5 overflow-auto pr-1">
+            <div class="min-h-0 flex-1 space-y-1.5 overflow-auto pr-1">
               <UButton
                 v-for="f in filteredFieldItems"
                 :key="f.key"
@@ -476,6 +504,32 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                 {{ fieldSearch ? 'Tidak ada field yang cocok.' : 'Belum ada field. Buat field baru untuk dipakai di template.' }}
               </div>
             </div>
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <p class="font-semibold">
+                Pratinjau dokumen
+              </p>
+              <UBadge
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                label="data contoh"
+              />
+            </div>
+            <p class="mt-0.5 text-xs text-muted">
+              Tampilan mengikuti PDF asli (Times New Roman, kop surat, tanda tangan dua pihak).
+            </p>
+          </div>
+
+          <div class="max-h-[52vh] overflow-auto rounded-lg bg-neutral-200 p-3">
+            <KontrakDocumentPreview
+              :blocks="blocks"
+              :values="previewValues"
+              :title="docTitle"
+              :subtitle="docSubtitle"
+              :contract-no="previewValues['contract.number']"
+            />
           </div>
 
           <div class="rounded-lg border border-default p-3">
