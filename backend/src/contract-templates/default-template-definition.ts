@@ -87,6 +87,11 @@ export function definitionToFieldDefinitions(definition: ContractDocumentDefinit
     label: FIELD_LABELS[key] ?? key,
     dataType: key.includes('Date') || key.endsWith('Date') ? 'DATE' : key.includes('Compensation') ? 'NUMBER' : 'TEXT',
     sourceType: key.startsWith('custom.') ? 'CONTRACT_INPUT' : 'SYSTEM',
-    required: true,
+    // Field SYSTEM selalu tersedia dari data karyawan/kontrak, jadi wajib.
+    // Field CONTRACT_INPUT diisi manual di form kontrak: flag wajibnya adalah
+    // keputusan PER-TEMPLATE (checkbox `ContractTemplateField.required`) dan
+    // diterapkan oleh `applyTemplateBindings()`. Memaksa `true` di sini membuat
+    // semua field dinamis wajib tanpa bisa dimatikan dari editor template.
+    required: !key.startsWith('custom.'),
   }))
 }

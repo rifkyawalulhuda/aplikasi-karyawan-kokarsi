@@ -5,6 +5,7 @@ import { validateContentDefinition, collectAllPlaceholders } from './template-sc
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
+import { applyTemplateBindings, extractContractInputFields } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { isValidMasterField, isValidMasterSource } from './master-reference.registry'
 
@@ -45,6 +46,29 @@ export class ContractTemplateVersionsService {
     })
     if (!version) throw new NotFoundException('Versi template tidak ditemukan')
     return version
+  }
+
+  /**
+   * Field dinamis (CONTRACT_INPUT) + status keterbitan template untuk form kontrak.
+   *
+   * Field dibaca dari `fieldDefinitions` versi efektif — sumber yang sama dengan yang
+   * divalidasi `TemplateSnapshotService` saat kontrak dibuat/diperpanjang, sehingga yang
+   * tampil di form persis sama dengan yang diwajibkan server
+   * (lihat `template-field-bindings.helpers.ts`).
+   *
+   * `published=false` berarti template belum pernah punya versi PUBLISHED. Kontrak dari
+   * template seperti itu TIDAK dapat snapshot (`TemplateSnapshotService` mengembalikan
+   * null), sehingga PDF-nya jatuh ke definisi bawaan dan field dinamis yang diisi
+   * petugas hilang tanpa pesan error. Karena itu modal kontrak memblokir submit-nya.
+   */
+  async getContractInputFields(templateId: number) {
+    await this.ensureTemplate(templateId)
+    // `getPublished()` bisa mengembalikan baris non-PUBLISHED (lihat catatan di sana).
+    const version = await this.getPublished(templateId)
+    return {
+      published: version.status === 'PUBLISHED',
+      fields: extractContractInputFields(version.fieldDefinitions),
+    }
   }
 
   /** Buat draft baru dari versi PUBLISHED terakhir (atau dari definisi hard-code via migrasi). */
@@ -94,13 +118,19 @@ export class ContractTemplateVersionsService {
       throw new BadRequestException('Definisi template tidak lengkap untuk membuat draft')
     }
 
+    // Binding katalog (checkbox "wajib diisi" per template) di-overlay terakhir
+    // supaya snapshot draft = kontrak kerja sesungguhnya antara template dan
+    // field dinamisnya.
+    const bindings = await this.fieldsService.findTemplateBindings(templateId)
+    const boundFieldDefinitions = applyTemplateBindings(fieldDefinitions, bindings)
+
     return this.prisma.client.contractTemplateVersion.create({
       data: {
         templateId,
         versionNumber: nextNumber,
         status: 'DRAFT',
         contentDefinition: contentDefinition as any,
-        fieldDefinitions: fieldDefinitions as any,
+        fieldDefinitions: boundFieldDefinitions as any,
         changeSummary: dto.changeSummary,
         createdByName: actor.name,
       },
@@ -113,11 +143,21 @@ export class ContractTemplateVersionsService {
     if (version.status !== 'DRAFT') {
       throw new BadRequestException('Hanya versi DRAFT yang dapat diubah')
     }
+    // Binding katalog tetap jadi sumber kebenaran field dinamis: kalau editor
+    // mengirim fieldDefinitions, field yang ter-bind di template ikut
+    // diselaraskan (ditambahkan bila belum ada, `required` mengikuti checkbox).
+    // Partial update (fieldDefinitions tidak dikirim) tidak menyentuh kolom itu.
+    const fieldDefinitions = dto.fieldDefinitions === undefined
+      ? undefined
+      : applyTemplateBindings(
+        dto.fieldDefinitions,
+        await this.fieldsService.findTemplateBindings(version.templateId),
+      )
     return this.prisma.client.contractTemplateVersion.update({
       where: { id: versionId },
       data: {
         contentDefinition: dto.contentDefinition !== undefined ? (dto.contentDefinition as any) : undefined,
-        fieldDefinitions: dto.fieldDefinitions !== undefined ? (dto.fieldDefinitions as any) : undefined,
+        fieldDefinitions: fieldDefinitions !== undefined ? (fieldDefinitions as any) : undefined,
         changeSummary: dto.changeSummary,
       },
     })
@@ -229,29 +269,64 @@ export class ContractTemplateVersionsService {
     })
     if (published) return published
 
-    // Template yang dibuat sebelum versioning belum mempunyai snapshot. Seed
-    // secara lazy agar editor tetap dapat dibuka setelah migrasi deployment.
     const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
     if (!template) throw new NotFoundException('Template tidak ditemukan')
+
+    // Template yang sudah PUNYA versi (tapi belum ada yang PUBLISHED — mis. admin
+    // baru menyimpan draft) tidak boleh di-bootstrap. Bootstrap di bawah selalu
+    // menulis `versionNumber: 1` dan akan menabrak unique (templateId,
+    // versionNumber) milik draft tersebut, sehingga editor template maupun modal
+    // kontrak gagal total dengan P2002. Versi terbaru yang ada dipakai sebagai
+    // versi efektif: draft tidak pernah ikut tervalidasi atau tercetak ke kontrak
+    // (`TemplateSnapshotService` tetap hanya membaca versi PUBLISHED), jadi ini
+    // murni agar UI dapat dibuka — tanpa menerbitkan versi apa pun diam-diam.
+    const latest = await this.prisma.client.contractTemplateVersion.findFirst({
+      where: { templateId },
+      orderBy: { versionNumber: 'desc' },
+    })
+    if (latest) return latest
+
+    // Template yang dibuat sebelum versioning belum mempunyai snapshot. Seed
+    // secara lazy agar editor tetap dapat dibuka setelah migrasi deployment.
     const definition = CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey]
     if (!definition) throw new NotFoundException('Definisi bawaan template tidak ditemukan')
 
     const contentDefinition = definitionToContentDefinition(definition)
-    const fieldDefinitions = definitionToFieldDefinitions(definition)
+    // Binding katalog ikut di-overlay — jalur bootstrap lazy ini juga menerbitkan
+    // versi PUBLISHED langsung, jadi tanpa overlay ini template legacy yang belum
+    // punya snapshot akan terbit tanpa field dinamisnya (form kontrak kosong
+    // padahal admin sudah mencentang field wajib di katalog).
+    const fieldDefinitions = applyTemplateBindings(
+      definitionToFieldDefinitions(definition),
+      await this.fieldsService.findTemplateBindings(templateId),
+    )
     validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), template.family)
-    return this.prisma.client.contractTemplateVersion.create({
-      data: {
-        templateId,
-        versionNumber: 1,
-        status: 'PUBLISHED',
-        contentDefinition: contentDefinition as any,
-        fieldDefinitions: fieldDefinitions as any,
-        changeSummary: 'Versi awal dibuat saat editor template dibuka',
-        createdByName: 'System',
-        publishedByName: 'System',
-        publishedAt: new Date(),
-      },
-    })
+    try {
+      return await this.prisma.client.contractTemplateVersion.create({
+        data: {
+          templateId,
+          versionNumber: 1,
+          status: 'PUBLISHED',
+          contentDefinition: contentDefinition as any,
+          fieldDefinitions: fieldDefinitions as any,
+          changeSummary: 'Versi awal dibuat saat editor template dibuka',
+          createdByName: 'System',
+          publishedByName: 'System',
+          publishedAt: new Date(),
+        },
+      })
+    } catch (error: any) {
+      // Dua request bersamaan (mis. editor template + modal kontrak) sama-sama
+      // melihat "belum ada versi" lalu sama-sama menulis v1. Yang kalah balapan
+      // cukup memakai versi yang sudah dibuat pemenangnya.
+      if (error?.code !== 'P2002') throw error
+      const winner = await this.prisma.client.contractTemplateVersion.findFirst({
+        where: { templateId },
+        orderBy: { versionNumber: 'desc' },
+      })
+      if (!winner) throw error
+      return winner
+    }
   }
 
   private async ensureTemplate(templateId: number) {
@@ -307,6 +382,20 @@ export class ContractTemplateVersionsService {
         if (definition.dataType !== 'MASTER_REFERENCE') {
           throw new BadRequestException(`Field master "${definition.key}" harus bertipe MASTER_REFERENCE`)
         }
+      }
+      // MASTER_REFERENCE belum punya jalur resolve di `template-value-resolver.helpers.ts`.
+      // Artinya field seperti ini tidak akan pernah punya nilai saat kontrak dibuat:
+      // kalau `required`, pembuatan kontrak SELALU gagal dengan pesan yang
+      // membingungkan; kalau opsional, PDF diam-diam kosong. Karena itu versi yang
+      // memuatnya ditolak di publish/preview/rollback, bukan dibiarkan terbit.
+      // Definisi bawaan (`definitionToFieldDefinitions`) tidak pernah menghasilkan
+      // MASTER_REFERENCE, jadi hanya fieldDefinitions yang ditulis manual yang
+      // terkena aturan ini.
+      if (definition.sourceType === 'MASTER_REFERENCE') {
+        throw new BadRequestException(
+          `Field master reference "${definition.key}" belum didukung pada dokumen kontrak. `
+          + 'Ubah menjadi input manual (CONTRACT_INPUT) atau hapus dari fieldDefinitions.',
+        )
       }
       if (definition.dataType === 'DROPDOWN' && (!Array.isArray(definition.options) || definition.options.length === 0)) {
         throw new BadRequestException(`Field DROPDOWN "${definition.key}" memerlukan opsi`)

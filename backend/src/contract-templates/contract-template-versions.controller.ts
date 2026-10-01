@@ -42,6 +42,17 @@ export class ContractTemplateVersionsController {
     return this.service.listVersions(templateId)
   }
 
+  /**
+   * Field dinamis yang perlu diisi user saat membuat/memperpanjang kontrak.
+   * Dipakai `AddContractModal` / `EditContractModal` / `RenewContractModal`.
+   * Response menyertakan `published` agar modal bisa memblokir template yang
+   * belum punya versi terbit (kontraknya akan kehilangan field dinamis).
+   */
+  @Get('contract-templates/:templateId/fields')
+  getContractInputFields(@Param('templateId', ParseIntPipe) templateId: number) {
+    return this.service.getContractInputFields(templateId)
+  }
+
   @Post('contract-templates/:templateId/versions')
   createDraft(
     @Request() req: any,

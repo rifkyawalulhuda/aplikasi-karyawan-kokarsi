@@ -5,6 +5,8 @@ import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/con
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { validateContentDefinition } from './template-schema.validator'
+import { TemplateFieldsService } from './template-fields.service'
+import { applyTemplateBindings } from './template-field-bindings.helpers'
 
 export interface ContractTemplatePayload {
   code: string
@@ -25,6 +27,7 @@ export class ContractTemplatesService {
   constructor(
     private prisma: PrismaService,
     private activityLog: ActivityLogService,
+    private fieldsService: TemplateFieldsService,
   ) {}
 
   private readonly defaultTemplateSeeds = [
@@ -102,7 +105,17 @@ export class ContractTemplatesService {
       const versionCount = await this.prisma.client.contractTemplateVersion.count({ where: { templateId: template.id } })
       if (versionCount === 0) {
         const contentDefinition = definitionToContentDefinition(definition)
-        const fieldDefinitions = definitionToFieldDefinitions(definition)
+        // Binding katalog (checkbox "wajib diisi" per template) ikut di-overlay di
+        // sini. Jalur bootstrap ini adalah jalur KETIGA yang membuat versi
+        // PUBLISHED langsung (selain createDraft/publish dan seed) dan dulu
+        // melewatkan binding, sehingga template bawaan yang belum pernah punya
+        // versi bisa terbit tanpa field dinamisnya. Untuk DB baru binding memang
+        // belum ada (overlay = no-op), tetapi begitu seed mengisi binding, jalur
+        // ini tetap menghasilkan snapshot yang konsisten dengan createDraft().
+        const fieldDefinitions = applyTemplateBindings(
+          definitionToFieldDefinitions(definition),
+          await this.fieldsService.findTemplateBindings(template.id),
+        )
         validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), seed.family)
         await this.prisma.client.contractTemplateVersion.create({
           data: {

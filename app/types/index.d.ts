@@ -170,6 +170,36 @@ export interface ContractTemplate {
   updatedAt?: string
 }
 
+export type ContractInputDataType = 'TEXT' | 'NUMBER' | 'DATE' | 'DROPDOWN'
+
+/**
+ * Field dinamis yang diisi petugas saat membuat kontrak, dibaca dari
+ * `fieldDefinitions` versi PUBLISHED template (`GET /api/contract-templates/:id/fields`).
+ *
+ * `key` TIDAK memakai prefix `custom.` — itulah key yang diharapkan
+ * `templateData` di backend (`template-value-resolver.helpers.ts`).
+ */
+export interface ContractInputField {
+  key: string
+  label: string
+  dataType: ContractInputDataType
+  required: boolean
+  sourceConfig?: unknown
+  options?: unknown
+}
+
+/**
+ * Response `GET /api/contract-templates/:id/fields`.
+ *
+ * `published: false` berarti template belum pernah punya versi PUBLISHED. Kontrak
+ * dari template seperti itu tidak akan punya snapshot, sehingga field dinamis tidak
+ * ikut tercetak ke PDF — modal kontrak memblokir submit-nya.
+ */
+export interface ContractInputFieldsResponse {
+  published: boolean
+  fields: ContractInputField[]
+}
+
 export interface ContractDocumentPreview {
   id: number
   title: string

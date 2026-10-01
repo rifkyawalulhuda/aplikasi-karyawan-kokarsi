@@ -99,6 +99,35 @@ Paragraf yang mengandung placeholder ditandai dengan badge peringatan kuning.
 
 Edit teks terjemahan Inggris untuk dokumen PKWT yang bilingual (Indonesia kiri, Inggris kanan).
 
+### Tab Field Dinamis
+
+Tab ini mengatur **field tambahan** yang harus diisi petugas saat membuat kontrak
+dari template ini (mis. "Tanggal Terbit KTP Mitra"). Setiap field punya:
+
+| Kolom | Keterangan |
+|---|---|
+| Kunci (key) | Nama teknis field, dipakai di placeholder `{{custom.kunci}}` |
+| Label | Nama yang tampil di form kontrak |
+| Tipe | Teks, Angka, Tanggal, atau Pilihan |
+| Wajib diisi | Bila dicentang, kontrak **tidak bisa dibuat** sebelum field ini diisi |
+
+::: warning Field wajib memblokir pembuatan kontrak
+Mencentang **Wajib diisi** berarti server akan menolak pembuatan kontrak sampai
+field tersebut diisi. Centang hanya untuk data yang benar-benar harus ada di
+dokumen (mis. nomor KTP mitra), bukan data opsional.
+:::
+
+Perubahan tab ini baru berlaku pada **versi template berikutnya**: klik
+**Simpan Perubahan**, lalu **Terbitkan Versi**. Kontrak lama tetap memakai field
+versi saat kontrak itu dibuat.
+
+::: info Field Master Reference belum didukung
+Tipe **Master Reference** (mengambil nilai otomatis dari data karyawan/jabatan)
+belum bisa dipakai di dokumen kontrak. Versi template yang memuatnya akan
+**ditolak saat diterbitkan** dengan pesan yang jelas — ubah field tersebut
+menjadi input manual, atau hapus dari daftar field.
+:::
+
 ## Menyimpan & Reset
 
 - **Simpan Perubahan** — Menyimpan semua perubahan ke database

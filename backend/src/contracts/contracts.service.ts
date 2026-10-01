@@ -437,6 +437,12 @@ export class ContractsService {
     })
     if (!parent) throw new NotFoundException('Kontrak induk tidak ditemukan')
 
+    // `templateId` dipakai untuk membangun snapshot versi terbit. UI selalu mengirimnya
+    // (field wajib di RenewContractModal), tapi API-nya bebas dikirim tanpa itu — dulu
+    // hasilnya kontrak perpanjangan lahir tanpa snapshot dan field dinamisnya hilang.
+    // Warisi template induk supaya hasilnya sama seperti perpanjangan dari UI.
+    const effectiveTemplateId = dto.templateId ?? parent.templateId ?? null
+
     const computedParent = this.withComputedStatus(parent)
     if (computedParent.status !== 'AKAN_HABIS' && computedParent.status !== 'EXPIRED') {
       throw new BadRequestException(
@@ -472,15 +478,25 @@ export class ContractsService {
       const endDate = new Date(dto.endDate)
       const signedDate = dto.signedDate ? new Date(dto.signedDate) : undefined
 
+      // Perpanjangan mewarisi field dinamis kontrak induk: nilainya tidak diminta
+      // ulang ke petugas karena RenewContractModal menampilkannya read-only
+      // (tanggal terbit KTP dsb. tidak berubah karena kontrak diperpanjang).
+      // Kalau `dto.templateData` tidak dikirim, warisan ini yang dipakai —
+      // tanpa itu kontrak perpanjangan kehilangan nilai field dinamis dan
+      // pembuatan kontrak bisa gagal karena field wajib dianggap kosong.
+      const inheritedTemplateData = dto.templateData
+        ?? (parent.templateData as Record<string, any> | null)
+        ?? null
+
       const snapshot = await this.buildContractSnapshot({
-        templateId: dto.templateId,
+        templateId: effectiveTemplateId,
         employeeId: parent.employeeId,
         contractNo,
         startDate,
         endDate,
         signedDate: signedDate ?? null,
-        baseCompensation: dto.baseCompensation ?? null,
-        templateData: dto.templateData ?? null,
+        baseCompensation: dto.baseCompensation,
+        templateData: inheritedTemplateData,
       })
 
       const contract = await this.prisma.contract.create({
@@ -490,10 +506,10 @@ export class ContractsService {
           startDate,
           endDate,
           contractTypeId: dto.contractTypeId,
-          templateId: dto.templateId,
+          templateId: effectiveTemplateId,
           signedDate,
           baseCompensation: dto.baseCompensation,
-          templateData: dto.templateData as any,
+          templateData: inheritedTemplateData as any,
           documentUrl: dto.documentUrl,
           parentContractId: parentId,
           templateVersionId: snapshot?.templateVersionId,
@@ -536,13 +552,49 @@ export class ContractsService {
       }
     }
 
+    // Field dinamis hanya ditimpa bila form mengirimkannya (modal edit selalu
+    // mengirim), sisanya nilai lama dipertahankan agar edit tanggal/kompensasi
+    // tidak menghapus data tambahan yang sudah diisi.
+    const templateData = dto.templateData
+      ?? ((existing as any).templateData as Record<string, any> | null)
+      ?? null
+
+    const startDate = new Date(dto.startDate)
+    const endDate = new Date(dto.endDate)
+    const signedDate = dto.signedDate ? new Date(dto.signedDate) : null
+
+    // Snapshot dibangun ulang supaya `resolvedTemplateData` (dipakai renderer PDF)
+    // ikut berubah saat tanggal/kompensasi/nilai field dinamis diedit. Snapshot
+    // lama akan mencetak nilai lama walau kolom kontraknya sudah diperbarui.
+    const snapshot = await this.buildContractSnapshot({
+      templateId: dto.templateId ?? (existing as any).templateId ?? null,
+      employeeId: dto.employeeId ?? existing.employeeId,
+      contractNo: existing.contractNo,
+      startDate,
+      endDate,
+      signedDate,
+      baseCompensation: dto.baseCompensation ?? (existing as any).baseCompensation ?? null,
+      templateData,
+    })
+
     const contract = await this.prisma.contract.update({
       where: { id },
       data: {
         ...dto,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        signedDate: dto.signedDate ? new Date(dto.signedDate) : null,
+        startDate,
+        endDate,
+        signedDate,
+        templateData: templateData as any,
+        // Template/binding tidak dikirim saat snapshot gagal dibangun (mis.
+        // template legacy tanpa versi terbit) — jangan timpa snapshot lama
+        // dengan null agar kontrak yang sudah punya dokumen tetap konsisten.
+        ...(snapshot
+          ? {
+              templateVersionId: snapshot.templateVersionId,
+              templateSnapshot: snapshot.templateSnapshot as any,
+              resolvedTemplateData: snapshot.resolvedTemplateData as any,
+            }
+          : {}),
       },
       include: this.include,
     })

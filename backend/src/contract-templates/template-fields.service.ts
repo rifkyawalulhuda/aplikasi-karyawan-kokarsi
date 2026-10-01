@@ -101,6 +101,20 @@ export class TemplateFieldsService {
     })
   }
 
+  /**
+   * Binding katalog field untuk sebuah template — sumber kebenaran field
+   * dinamis yang dipakai template beserta flag wajibnya. Dipakai oleh
+   * `ContractTemplateVersionsService` saat membuat/mengubah draft versi
+   * (lihat template-field-bindings.helpers.ts).
+   */
+  async findTemplateBindings(templateId: number) {
+    return this.prisma.client.contractTemplateField.findMany({
+      where: { templateId, field: { is: { isActive: true } } },
+      include: { field: true },
+      orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+    })
+  }
+
   async findOne(id: number): Promise<TemplateFieldDefinition> {
     const field = await this.prisma.client.templateFieldDefinition.findUnique({ where: { id } })
     if (!field) throw new NotFoundException('Field tidak ditemukan')
