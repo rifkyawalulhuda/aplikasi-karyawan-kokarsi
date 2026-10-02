@@ -23,6 +23,11 @@
  *   npx ts-node scripts/upgrade-mitra-template-content.ts                      (dry-run)
  *   npx ts-node scripts/upgrade-mitra-template-content.ts --confirm            (publish versi baru)
  *   npx ts-node scripts/upgrade-mitra-template-content.ts --confirm --resnapshot
+ *
+ * Secara default hanya template AKTIF yang diproses. Template MITRA nonaktif
+ * yang masih menyimpan struktur lama (mis. TEST001) dapat dibersihkan dengan
+ * menambahkan --include-inactive — versi lama di-ARCHIVE, versi baru diterbitkan,
+ * sehingga saat template diaktifkan kembali kontennya sudah benar.
  */
 import { config } from 'dotenv'
 import { resolve } from 'path'
@@ -129,9 +134,11 @@ function fieldKeys(value: any): string[] {
     )
 }
 
-async function upgradeTemplates(confirmed: boolean) {
+async function upgradeTemplates(confirmed: boolean, includeInactive = false) {
   const templates = await getPrisma().contractTemplate.findMany({
-    where: { family: 'MITRA', isActive: true },
+    where: includeInactive
+      ? { family: 'MITRA' }
+      : { family: 'MITRA', isActive: true },
     orderBy: { id: 'asc' },
   })
 
@@ -198,6 +205,7 @@ async function upgradeTemplates(confirmed: boolean) {
 
     report.push({
       template: template.code,
+      active: template.isActive,
       action: confirmed ? 'publish' : 'will-publish',
       from: published
         ? `v${published.versionNumber} (${legacyHeads.length} artikel; ` +
@@ -302,11 +310,12 @@ async function rebuildSnapshots(resnapshot: boolean) {
 async function main() {
   const confirmed = process.argv.includes('--confirm')
   const resnapshot = process.argv.includes('--resnapshot')
+  const includeInactive = process.argv.includes('--include-inactive')
 
-  const report = await upgradeTemplates(confirmed)
+  const report = await upgradeTemplates(confirmed, includeInactive)
   const snap = await rebuildSnapshots(resnapshot)
 
-  console.log(JSON.stringify({ confirmed, resnapshot, templates: report, snapshots: snap }, null, 2))
+  console.log(JSON.stringify({ confirmed, resnapshot, includeInactive, templates: report, snapshots: snap }, null, 2))
 
   if (report.some(r => r.action === 'publish' || r.action === 'will-publish')) {
     console.log(

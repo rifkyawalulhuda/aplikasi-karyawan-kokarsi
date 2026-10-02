@@ -1,6 +1,7 @@
 import { CONTRACT_DOCUMENT_DEFINITIONS } from '../contracts/contract-document-definitions'
 import { mitraInterpolate } from '../contracts/mitra-layout.engine'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
+import { SYSTEM_FIELD_SEEDS } from './template-field-seeds'
 import { collectAllPlaceholders, validateContentDefinition } from './template-schema.validator'
 
 describe('default contract template definitions', () => {
@@ -21,6 +22,31 @@ describe('default contract template definitions', () => {
     expect(definition).toBeDefined()
     expect(definition.roleLabel).toBe('Driver Truck B3')
     expect(definition.sections.flatMap(section => section.paragraphs).join(' ')).toMatch(/truck|keselamatan|pengiriman/i)
+  })
+})
+
+/**
+ * Regresi: `publish()` menolak field SYSTEM yang tidak ada di katalog
+ * (`validateFieldDefinitions`: "Field system ... tidak terdaftar di katalog").
+ * PASAL 12 (PEMBERITAHUAN) memakai {{employee.phoneNumber}} dan {{employee.email}},
+ * jadi keduanya WAJIB ada di `SYSTEM_FIELD_SEEDS`. Sebelumnya keduanya tidak
+ * di-seed, sehingga setiap percobaan publish versi MITRA gagal dengan 400.
+ */
+describe('katalog field system mencakup semua placeholder SYSTEM template bawaan', () => {
+  const catalog = new Set(SYSTEM_FIELD_SEEDS.map(seed => seed.key))
+
+  it('menyediakan employee.phoneNumber dan employee.email untuk PASAL 12', () => {
+    expect(catalog.has('employee.phoneNumber')).toBe(true)
+    expect(catalog.has('employee.email')).toBe(true)
+  })
+
+  it('setiap placeholder non-custom definisi bawaan terdaftar di katalog seed', () => {
+    for (const definition of Object.values(CONTRACT_DOCUMENT_DEFINITIONS)) {
+      const content = definitionToContentDefinition(definition)
+      const placeholders = [...new Set(collectAllPlaceholders(content))]
+      const systemPlaceholders = placeholders.filter(key => !key.startsWith('custom.'))
+      expect(systemPlaceholders.filter(key => !catalog.has(key))).toEqual([])
+    }
   })
 })
 

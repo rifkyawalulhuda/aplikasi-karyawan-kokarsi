@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { TemplateFieldDefinition } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
+import { CONTRACT_INPUT_FIELD_SEEDS, SYSTEM_FIELD_SEEDS } from './template-field-seeds'
 
 class CreateTemplateFieldDto {
   key!: string
@@ -19,35 +20,6 @@ class UpdateTemplateFieldDto {
 }
 
 const KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/
-
-/** Seed katalog field system — idempotent, dijalankan saat service start. */
-const SYSTEM_FIELD_SEEDS: Array<{
-  key: string
-  label: string
-  dataType: 'TEXT' | 'NUMBER' | 'DATE'
-  sourceType: 'SYSTEM'
-}> = [
-  // Contract
-  { key: 'contract.contractNo', label: 'Nomor Kontrak', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'contract.startDate', label: 'Tanggal Mulai', dataType: 'DATE', sourceType: 'SYSTEM' },
-  { key: 'contract.endDate', label: 'Tanggal Selesai', dataType: 'DATE', sourceType: 'SYSTEM' },
-  { key: 'contract.signedDate', label: 'Tanggal Tanda Tangan', dataType: 'DATE', sourceType: 'SYSTEM' },
-  { key: 'contract.baseCompensation', label: 'Kompensasi Dasar', dataType: 'NUMBER', sourceType: 'SYSTEM' },
-  { key: 'contract.termRange', label: 'Rentang Periode (auto)', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'contract.duration', label: 'Durasi Kontrak (auto)', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  // Employee
-  { key: 'employee.fullName', label: 'Nama Lengkap Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'employee.employeeNo', label: 'Nomor Induk Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'employee.nik', label: 'NIK Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'employee.birthPlace', label: 'Tempat Lahir', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'employee.birthDate', label: 'Tanggal Lahir', dataType: 'DATE', sourceType: 'SYSTEM' },
-  { key: 'employee.address', label: 'Alamat Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'employee.jobRole', label: 'Jabatan', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  // Doc & settings
-  { key: 'doc.docDate', label: 'Tanggal Dokumen', dataType: 'DATE', sourceType: 'SYSTEM' },
-  { key: 'doc.hariTanggal', label: 'Hari & Tanggal Tanda Tangan (auto)', dataType: 'TEXT', sourceType: 'SYSTEM' },
-  { key: 'settings.cooperativeChairmanName', label: 'Nama Ketua Koperasi', dataType: 'TEXT', sourceType: 'SYSTEM' },
-]
 
 @Injectable()
 export class TemplateFieldsService {
@@ -74,22 +46,25 @@ export class TemplateFieldsService {
         created += 1
       }
     }
-    // Custom field dari sample MITRA
-    const ktp = await this.prisma.client.templateFieldDefinition.findUnique({
-      where: { key: 'ktp_issued_date' },
-    })
-    if (!ktp) {
-      await this.prisma.client.templateFieldDefinition.create({
-        data: {
-          key: 'ktp_issued_date',
-          label: 'Tanggal Terbit KTP Mitra',
-          dataType: 'DATE',
-          sourceType: 'CONTRACT_INPUT',
-          isSystem: false,
-          isActive: true,
-        },
+    // Field dinamis (CONTRACT_INPUT) bawaan — mis. dari sample MITRA.
+    for (const seed of CONTRACT_INPUT_FIELD_SEEDS) {
+      const exists = await this.prisma.client.templateFieldDefinition.findUnique({
+        where: { key: seed.key },
       })
-      created += 1
+      if (!exists) {
+        await this.prisma.client.templateFieldDefinition.create({
+          data: {
+            key: seed.key,
+            label: seed.label,
+            dataType: seed.dataType,
+            sourceType: seed.sourceType,
+            isSystem: false,
+            isActive: true,
+            options: (seed.options ?? undefined) as any,
+          },
+        })
+        created += 1
+      }
     }
     return { created }
   }

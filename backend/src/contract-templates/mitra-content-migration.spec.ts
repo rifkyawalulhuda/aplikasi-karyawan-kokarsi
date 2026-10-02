@@ -1,4 +1,4 @@
-import { isMasterStructured } from '../../scripts/upgrade-mitra-template-content'
+import { isMasterStructured, legacyTokensOf } from '../../scripts/upgrade-mitra-template-content'
 
 /**
  * Penjaga migrasi konten MITRA.
@@ -50,5 +50,23 @@ describe('isMasterStructured — deteksi versi template MITRA', () => {
     expect(isMasterStructured({ languages: { id: [] } })).toBe(false)
     expect(isMasterStructured(null)).toBe(false)
     expect(isMasterStructured(undefined)).toBe(false)
+  })
+
+  it('menolak versi yang masih menyimpan token legacy __MITRA_*__', () => {
+    // Kasus TEST001: 15 PASAL sudah benar, TAPI masih ada token __MITRA_*__.
+    // Tanpa deteksi token, versi ini akan lolos dan kontennya rusak saat dirender.
+    const headings = Array.from({ length: 15 }, (_, i) => `PASAL ${i + 1}\nNAMA PASAL`)
+    const contaminated = content(headings, 1)
+    contaminated.languages.id[1].text = 'Jangka waktu __MITRA_TERM__ dengan imbalan __MITRA_IMBALAN__'
+    expect(legacyTokensOf(contaminated)).toEqual(['__MITRA_TERM__', '__MITRA_IMBALAN__'])
+    expect(isMasterStructured(contaminated)).toBe(false)
+  })
+
+  it('menerima versi master yang bebas token legacy', () => {
+    const headings = Array.from({ length: 15 }, (_, i) => `PASAL ${i + 1}\nNAMA PASAL`)
+    const clean = content(headings, 1)
+    clean.languages.id[1].text = 'Jangka waktu {{contract.duration}} dengan imbalan {{contract.baseCompensation}}'
+    expect(legacyTokensOf(clean)).toEqual([])
+    expect(isMasterStructured(clean)).toBe(true)
   })
 })

@@ -97,6 +97,8 @@ const FIELD_LABELS: Record<string, string> = {
   'employee.nik': 'NIK Karyawan',
   'employee.birthPlace': 'Tempat Lahir',
   'employee.address': 'Alamat Karyawan',
+  'employee.phoneNumber': 'Nomor Telepon Karyawan',
+  'employee.email': 'E-mail Karyawan',
   'employee.jobRole': 'Jabatan',
   'contract.baseCompensation': 'Kompensasi Dasar',
   'contract.termRange': 'Rentang Periode',
