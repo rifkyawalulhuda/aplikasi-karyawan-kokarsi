@@ -92,6 +92,26 @@ describe('MITRA layout — geometri master', () => {
       MITRA_GEOMETRY.firstPageBoxBottom - MITRA_GEOMETRY.firstPageBoxTop,
     )
   })
+
+  it('tabel tanda tangan: geometri master (di luar kotak, lebih sempit & di tengah)', () => {
+    const T = MITRA_GEOMETRY.signatureTable
+    // Diukur dari master p8: garis tepi 120.9 -> 468.6, pemisah 298.9.
+    expect(T.left).toBeCloseTo(120.9, 1)
+    expect(T.divider).toBeCloseTo(298.9, 1)
+    expect(T.right).toBeCloseTo(468.6, 1)
+    // Lebih sempit dari lebar kolom dan berada di dalam area halaman.
+    expect(T.left).toBeGreaterThan(MITRA_GEOMETRY.left.x0)
+    expect(T.right).toBeLessThan(MITRA_GEOMETRY.right.x1)
+    // Kedua sisi tabel harus simetris terhadap pusat halaman.
+    const pageCenter = MITRA_GEOMETRY.pageWidth / 2
+    expect(Math.abs((T.left + T.right) / 2 - pageCenter)).toBeLessThan(6)
+    // Ada jarak dari dasar kotak (tabel DI LUAR kotak).
+    expect(T.gapFromBox).toBeGreaterThan(0)
+    // 5 baris: label, perusahaan, ruang ttd, nama, jabatan.
+    const rowH = [T.labelRowH, T.companyRowH, T.signSpaceRowH, T.nameRowH, T.roleRowH]
+    expect(rowH.every(h => h > 0)).toBe(true)
+    expect(rowH[2]).toBeGreaterThan(rowH[0]) // ruang tanda tangan paling tinggi
+  })
 })
 
 describe('MITRA layout — helper', () => {

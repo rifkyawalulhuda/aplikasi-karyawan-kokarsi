@@ -81,6 +81,27 @@ export const MITRA_GEOMETRY = {
   signatureZoneHeight: 150,
 
   /**
+   * Blok tanda tangan = TABEL BERGRARIS di BAWAH & DI LUAR kotak kolom.
+   * Geometri diukur dari master (p8):
+   *   - garis tepi kiri  x = 120.9
+   *   - garis pemisah    x = 298.9
+   *   - garis tepi kanan x = 468.6
+   *   - jarak dari dasar kotak ke atas tabel ≈ 50pt
+   * Baris (tinggi pt): label, perusahaan, ruang tanda tangan, nama, jabatan.
+   */
+  signatureTable: {
+    left: 120.9,
+    divider: 298.9,
+    right: 468.6,
+    gapFromBox: 50,
+    labelRowH: 14,
+    companyRowH: 14,
+    signSpaceRowH: 88,
+    nameRowH: 16,
+    roleRowH: 14,
+  },
+
+  /**
    * Tinggi kotak kolom mengikuti isi (DINAMIS): kotak berhenti di teks
    * terakhir + bantalan, dengan tinggi minimum agar visual tetap kokoh pada
    * dokumen pendek. Kedua kolom memakai titik bawah yang SAMA (max keduanya),
@@ -664,22 +685,16 @@ export function renderMitraLayout(
   gotoStreamPage(1, 0)
   for (const b of blocksSecond) renderBlock(b)
 
-  // === Pass akhir: gambar kotak kolom DINAMIS per halaman ===
+  // === Pass akhir: gambar kotak kolom DINAMIS untuk SEMUA halaman ===
   // Kotak berhenti di teks terakhir + bantalan (bukan setinggi halaman).
-  // Halaman terakhir dilewati di sini karena blok tanda tangan belum
-  // dirender — `renderMitraSignature` yang menggambar kotak halaman terakhir
-  // agar mencakup teks + tanda tangan sekaligus.
+  // Blok tanda tangan berada DI LUAR & DI BAWAH kotak, jadi tidak dihitung
+  // sebagai isi kotak.
   const lastPage = pageCount - 1
-  const boxBottomByPage: number[] = []
 
   for (let p = 0; p < pageCount; p++) {
-    if (p === lastPage) {
-      boxBottomByPage[p] = 0 // ditentukan oleh renderMitraSignature
-      continue
-    }
     doc.switchToPage(p)
     const contentBottom = deepestByPage[p] ?? boxTop(p)
-    boxBottomByPage[p] = strokeBoxesForPage(p, contentBottom)
+    strokeBoxesForPage(p, contentBottom)
   }
 
   ;(doc as any).__mitraFinalPage = {
@@ -757,88 +772,80 @@ export function renderMitraSignature(
 ): void {
   const G = MITRA_GEOMETRY
   const F = MITRA_FONT_NAMES
-  const size = G.font.signature
-
-  /** Jarak dari konten terakhir ke baris label tanda tangan. */
-  const gapAbove = 28
-  /** Jarak label → baris nama (ruang untuk tanda tangan fisik). */
-  const nameOffset = 96
-  /** Jarak nama → jabatan. */
-  const roleOffset = 12
-  /** Tinggi satu baris teks jabatan (agar tidak terpotong kotak). */
-  const roleLineHeight = Math.ceil(size * 1.5)
-  /** Bantalan kotak di bawah jabatan. */
-  const boxPad = G.boxPaddingBottom
-  /** Tinggi total blok tanda tangan diukur dari baris label. */
-  const sigBlockHeight = nameOffset + roleOffset + roleLineHeight + boxPad
+  const T = G.signatureTable
 
   const finalPage = (doc as any).__mitraFinalPage as
     | { pageDeepest: number; pageCount: number; lastPage: number; lastPageBodyBottom: number }
     | undefined
-  const lastPage = finalPage?.lastPage ?? (doc.bufferedPageRange?.().count ?? 1) - 1
+  let lastPage = finalPage?.lastPage ?? (doc.bufferedPageRange?.().count ?? 1) - 1
   const bodyBottom = finalPage?.lastPageBodyBottom ?? G.contPageBoxTop
+
+  const rowHeights = [T.labelRowH, T.companyRowH, T.signSpaceRowH, T.nameRowH, T.roleRowH]
+  const tableHeight = rowHeights.reduce((a, b) => a + b, 0)
+
+  // Tabel tanda tangan berada DI LUAR & DI BAWAH kotak kolom.
+  const boxBottomOnLast = lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
+  let tableTop = Math.max(bodyBottom + G.boxPaddingBottom, boxBottomOnLast - tableHeight - T.gapFromBox) + T.gapFromBox
+
+  // Bila tidak muat di halaman terakhir → halaman BARU untuk tanda tangan.
+  if (tableTop + tableHeight > G.pageHeight - 40) {
+    doc.addPage()
+    lastPage += 1
+    // Halaman baru ini hanya berisi tabel tanda tangan (tanpa kotak kolom).
+    tableTop = G.contPageBoxTop + 40
+  }
 
   doc.switchToPage(lastPage)
 
-  const top = lastPage === 0 ? G.firstPageBoxTop : G.contPageBoxTop
-  const fullBottom = lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
+  const left = T.left
+  const divider = T.divider
+  const right = T.right
+  const leftW = divider - left
+  const rightW = right - divider
 
-  // Tinggi blok tanda tangan bila ditaruh tepat di bawah konten terakhir.
-  const sigNeeded = gapAbove + sigBlockHeight
-  const fitsOnLastPage = bodyBottom + sigNeeded <= fullBottom
+  // --- Garis tabel ---
+  doc.save()
+  doc.lineWidth(G.borderWidth).strokeColor('#000000')
+  // tepi luar
+  const tableBottom = tableTop + tableHeight
+  doc.rect(left, tableTop, right - left, tableHeight).stroke()
+  // garis pemisah vertikal tengah
+  doc.moveTo(divider, tableTop).lineTo(divider, tableBottom).stroke()
+  // garis horizontal antar baris (bukan setelah baris terakhir — sudah jadi tepi)
+  let y = tableTop
+  for (let i = 0; i < rowHeights.length - 1; i++) {
+    y += rowHeights[i]
+    doc.moveTo(left, y).lineTo(right, y).stroke()
+  }
+  doc.restore()
 
-  let baseY: number
-  let boxBottomFinal: number
-
-  if (fitsOnLastPage) {
-    baseY = bodyBottom + gapAbove
-    boxBottomFinal = Math.max(baseY + sigBlockHeight, top + G.minBoxHeight)
-  } else {
-    // Tidak cukup ruang → halaman baru ber-border untuk tanda tangan saja.
-    doc.addPage()
-    baseY = G.contPageBoxTop + 40
-    boxBottomFinal = Math.min(
-      G.contPageBoxBottom,
-      Math.max(baseY + sigBlockHeight, G.contPageBoxTop + G.minBoxHeight),
-    )
-    // Kotak halaman baru (belum digambar oleh pass akhir).
-    doc.save()
-    doc.lineWidth(G.borderWidth).strokeColor('#000000')
-    for (const c of [G.left, G.right]) {
-      doc.rect(c.x0, G.contPageBoxTop, c.x1 - c.x0, boxBottomFinal - G.contPageBoxTop).stroke()
-    }
-    doc.restore()
+  // --- Isi baris ---
+  const centerIn = (x0: number, w: number, text: string, options: { bold?: boolean; offsetY: number }) => {
+    doc
+      .font(options.bold ? F.bold : F.regular)
+      .fontSize(G.font.signature)
+      .fillColor('#000000')
+    doc.text(text, x0, tableTop + options.offsetY, {
+      width: w,
+      align: 'center',
+      lineBreak: false,
+    })
   }
 
-  const leftX = G.left.x0
-  const leftW = G.left.x1 - G.left.x0
-  const rightX = G.right.x0
-  const rightW = G.right.x1 - G.right.x0
+  const yLabel = rowHeights[0] * 0.25
+  const yCompany = rowHeights[0] + rowHeights[1] * 0.25
+  const yName = rowHeights[0] + rowHeights[1] + rowHeights[2] + rowHeights[3] * 0.15
+  const yRole = rowHeights[0] + rowHeights[1] + rowHeights[2] + rowHeights[3] + rowHeights[4] * 0.1
 
-  doc.font(F.regular).fontSize(size).fillColor('#000000')
-  doc.text('PIHAK PERTAMA', leftX, baseY, { width: leftW, align: 'center' })
-  doc.text('PIHAK KEDUA', rightX, baseY, { width: rightW, align: 'center' })
+  centerIn(left, leftW, 'PIHAK PERTAMA', { offsetY: yLabel })
+  centerIn(divider, rightW, 'PIHAK KEDUA', { offsetY: yLabel })
 
-  doc.text(o.leftHeader, leftX, baseY + 12, { width: leftW, align: 'center' })
-  doc.text(o.rightHeader, rightX, baseY + 12, { width: rightW, align: 'center' })
+  centerIn(left, leftW, o.leftHeader, { offsetY: yCompany })
+  centerIn(divider, rightW, o.rightHeader, { offsetY: yCompany })
 
-  const nameY = baseY + nameOffset
-  doc.font(F.bold).fontSize(size)
-  doc.text(o.leftName, leftX, nameY, { width: leftW, align: 'center' })
-  doc.text(o.rightName, rightX, nameY, { width: rightW, align: 'center' })
+  centerIn(left, leftW, o.leftName, { bold: true, offsetY: yName })
+  centerIn(divider, rightW, o.rightName, { bold: true, offsetY: yName })
 
-  doc.font(F.regular).fontSize(size)
-  doc.text(o.leftRole, leftX, nameY + roleOffset, { width: leftW, align: 'center' })
-  doc.text(o.rightRole, rightX, nameY + roleOffset, { width: rightW, align: 'center' })
-
-  // Halaman terakhir: kotak kolom digambar DI SINI agar tingginya mencakup
-  // teks + blok tanda tangan sekaligus (dinamis, tidak penuh halaman).
-  if (fitsOnLastPage) {
-    doc.save()
-    doc.lineWidth(G.borderWidth).strokeColor('#000000')
-    for (const c of [G.left, G.right]) {
-      doc.rect(c.x0, top, c.x1 - c.x0, boxBottomFinal - top).stroke()
-    }
-    doc.restore()
-  }
+  centerIn(left, leftW, o.leftRole, { offsetY: yRole })
+  centerIn(divider, rightW, o.rightRole, { offsetY: yRole })
 }

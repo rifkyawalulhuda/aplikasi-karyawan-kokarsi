@@ -1,7 +1,11 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { definitionToContentDefinition } from './default-template-definition'
-import { CONTRACT_DOCUMENT_DEFINITIONS } from '../contracts/contract-document-definitions'
+import {
+  CONTRACT_DOCUMENT_DEFINITIONS,
+  mergeDefinition,
+  isContaminatedOverrides,
+} from '../contracts/contract-document-definitions'
 import { mitraInterpolate, scrubRawTokens, MITRA_HEADER_CHROME } from '../contracts/mitra-layout.engine'
 
 const MITRA_KEYS = Object.values(CONTRACT_DOCUMENT_DEFINITIONS)
@@ -176,3 +180,47 @@ function extractMethod(src: string, name: string): string {
   }
   return ''
 }
+
+/**
+ * Override legacy (`contentOverrides`) yang terkontaminasi token usang atau
+ * teks uji harus DIABAIKAN — jangan sampai menimpa konten template yang bersih.
+ */
+describe('Override legacy terkontaminasi — penjaga integrasi', () => {
+  it('mendeteksi token __MITRA_*__ usang', () => {
+    expect(isContaminatedOverrides({ sections: [{ paragraphs: ['__MITRA_TERM__'] }] })).toBe(true)
+    expect(isContaminatedOverrides({ roleLabel: '__MITRA_IMBALAN__' })).toBe(true)
+  })
+
+  it('mendeteksi teks uji Lorem ipsum', () => {
+    expect(isContaminatedOverrides({ sections: [{ paragraphs: ['Lorem ipsum dolor sit amet'] }] })).toBe(true)
+    expect(isContaminatedOverrides({ x: 'consectetur adipiscing elit' })).toBe(true)
+  })
+
+  it('override yang wajar TIDAK dianggap terkontaminasi', () => {
+    expect(isContaminatedOverrides(null)).toBe(false)
+    expect(isContaminatedOverrides(undefined)).toBe(false)
+    expect(isContaminatedOverrides({})).toBe(false)
+    expect(isContaminatedOverrides({ roleLabel: 'Driver Operasional' })).toBe(false)
+  })
+
+  it('mergeDefinition MENGABAIKAN override terkontaminasi', () => {
+    const base: any = CONTRACT_DOCUMENT_DEFINITIONS.MITRA_DRIVER
+    const dirty = {
+      sections: [
+        { heading: 'PASAL 2', paragraphs: ['__MITRA_TERM__', 'Lorem ipsum dolor sit amet'] },
+      ],
+    }
+    const merged: any = mergeDefinition(base, dirty)
+    const txt = JSON.stringify(merged)
+    expect(txt).not.toContain('__MITRA_TERM__')
+    expect(txt.toLowerCase()).not.toContain('lorem ipsum')
+    // konten definisi bersih tetap terpakai
+    expect(txt).toContain('contract.duration')
+  })
+
+  it('mergeDefinition TETAP menerapkan override yang bersih', () => {
+    const base: any = CONTRACT_DOCUMENT_DEFINITIONS.MITRA_DRIVER
+    const merged: any = mergeDefinition(base, { roleLabel: 'Driver Senior' })
+    expect(merged.roleLabel).toBe('Driver Senior')
+  })
+})

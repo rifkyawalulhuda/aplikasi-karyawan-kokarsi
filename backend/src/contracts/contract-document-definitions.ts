@@ -865,10 +865,41 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
   },
 }
 
+/**
+ * Token legacy gaya lama yang TIDAK boleh muncul lagi di konten terbit.
+ * Bila tersisa, konten akan rusak saat dirender (menjadi titik-titik / gagal).
+ */
+export const LEGACY_CONTENT_TOKENS = [
+  '__MITRA_TERM__', '__MITRA_IMBALAN__', '__MITRA_ADDRESS__',
+  '__MITRA_PHONE__', '__MITRA_EMAIL__', '__PARTY_II_BLOCK__',
+] as const
+
+/** Pola teks uji yang tidak boleh ikut terbit. */
+export const CONTAMINATION_PATTERNS: RegExp[] = [
+  /lorem ipsum/i,
+  /dolor sit amet/i,
+  /consectetur adipisc/i,
+]
+
+/**
+ * Deteksi override legacy (`contentOverrides`) yang terkontaminasi: memuat
+ * token `__MITRA_*__` yang sudah tidak didukung, atau teks uji (Lorem ipsum).
+ * Override seperti ini harus DIABAIKAN agar tidak menimpa konten template.
+ */
+export function isContaminatedOverrides(overrides: unknown): boolean {
+  if (!overrides || typeof overrides !== 'object') return false
+  const txt = JSON.stringify(overrides)
+  if (LEGACY_CONTENT_TOKENS.some(t => txt.includes(t))) return true
+  return CONTAMINATION_PATTERNS.some(re => re.test(txt))
+}
+
 export function mergeDefinition(
   base: ContractDocumentDefinition,
   overrides: Record<string, any> | null | undefined,
 ): ContractDocumentDefinition {
+  // Override legacy yang terkontaminasi (token usang / teks uji) diabaikan
+  // sepenuhnya — definisi kode yang bersih menjadi sumber kebenaran.
+  if (isContaminatedOverrides(overrides)) return base
   if (!overrides || Object.keys(overrides).length === 0) return base
 
   const merged: ContractDocumentDefinition = { ...base }

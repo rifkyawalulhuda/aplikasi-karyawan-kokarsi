@@ -59,6 +59,17 @@ function getPrisma(): PrismaClient {
 /** Section ringkasan ciptaan kode lama yang TIDAK boleh ada lagi. */
 const LEGACY_SECTIONS = new Set(['Para Pihak', 'Ruang Lingkup dan Posisi', 'Jangka Waktu'])
 
+/**
+ * Token legacy gaya lama yang TIDAK boleh tersisa di contentDefinition.
+ * Bila ada, artinya versi terbit masih memakai teks yang belum diganti
+ * placeholder {{...}} — kontennya akan rusak saat dirender (menjadi titik-titik).
+ */
+const LEGACY_TOKENS = [
+  '__MITRA_TERM__', '__MITRA_IMBALAN__', '__MITRA_ADDRESS__',
+  '__MITRA_PHONE__', '__MITRA_EMAIL__', '__ROLE_LABEL__',
+  '__TERM_DATE__', '__WAGE_AMOUNT__', '__PARTY_II_BLOCK__',
+]
+
 function headingsOf(contentDefinition: any): string[] {
   const blocks = contentDefinition?.languages?.id
   if (!Array.isArray(blocks)) return []
@@ -67,10 +78,43 @@ function headingsOf(contentDefinition: any): string[] {
     .map((b: any) => String(b?.heading ?? '').replace(/\n/g, ' ').trim())
 }
 
-/** Versi dianggap sudah mengikuti struktur master bila tidak punya section legacy. */
+/** Token legacy yang masih tersisa di contentDefinition. */
+export function legacyTokensOf(contentDefinition: any): string[] {
+  const txt = JSON.stringify(contentDefinition ?? {})
+  return LEGACY_TOKENS.filter(t => txt.includes(t))
+}
+
+/** Pola teks uji / placeholder yang tidak boleh ikut terbit. */
+const TEST_RESIDUE = [
+  /lorem ipsum/i,
+  /dolor sit amet/i,
+  /consectetur adipisc/i,
+  /\bHAHAHA\b/i,
+  /Pengusaha11/i,
+  /\basdf\b/i,
+]
+
+/**
+ * Deteksi `contentOverrides` (mekanisme legacy) yang terkontaminasi token
+ * `__...__` atau teks uji. Override seperti ini harus DIABAIKAN agar tidak
+ * menimpa konten template yang sudah bersih.
+ */
+export function isContaminatedOverrides(overrides: unknown): boolean {
+  if (!overrides || typeof overrides !== 'object') return false
+  const txt = JSON.stringify(overrides)
+  if (LEGACY_TOKENS.some(t => txt.includes(t))) return true
+  return TEST_RESIDUE.some(re => re.test(txt))
+}
+
+/**
+ * Versi dianggap sudah mengikuti struktur master bila:
+ *   1. tidak memuat section ringkasan ciptaan kode lama, DAN
+ *   2. tidak memuat token legacy `__...__` yang akan rusak saat dirender.
+ */
 export function isMasterStructured(contentDefinition: any): boolean {
   const heads = headingsOf(contentDefinition)
   if (heads.length === 0) return false
+  if (legacyTokensOf(contentDefinition).length > 0) return false
   return !heads.some(h => LEGACY_SECTIONS.has(h))
 }
 
@@ -114,7 +158,15 @@ async function upgradeTemplates(confirmed: boolean) {
       continue
     }
 
-    const merged = mergeDefinition(definition, template.contentOverrides as any)
+    const legacyTokens = published ? legacyTokensOf(published.contentDefinition) : []
+    const legacyHeads = published ? headingsOf(published.contentDefinition) : []
+    const staleSections = legacyHeads.filter(h => LEGACY_SECTIONS.has(h))
+
+    // `contentOverrides` adalah mekanisme LEGACY. Bila isinya terkontaminasi
+    // (token __...__ atau teks uji Lorem ipsum), JANGAN di-merge — definisi
+    // kode yang sudah bersih menjadi sumber kebenaran.
+    const overridesContaminated = isContaminatedOverrides(template.contentOverrides)
+    const merged = mergeDefinition(definition, overridesContaminated ? null : (template.contentOverrides as any))
     const contentDefinition = definitionToContentDefinition(merged)
     const baseFields = definitionToFieldDefinitions(merged)
 
@@ -144,14 +196,19 @@ async function upgradeTemplates(confirmed: boolean) {
     })
     const nextVersion = (latest?.versionNumber ?? 0) + 1
 
-    const legacyHeads = published ? headingsOf(published.contentDefinition).length : 0
     report.push({
       template: template.code,
       action: confirmed ? 'publish' : 'will-publish',
-      from: published ? `v${published.versionNumber} (${legacyHeads} artikel, struktur lama)` : '(belum ada)',
+      from: published
+        ? `v${published.versionNumber} (${legacyHeads.length} artikel; ` +
+          `${staleSections.length} section lama; ` +
+          `${legacyTokens.length} token legacy)`
+        : '(belum ada)',
       to: `v${nextVersion}`,
       articles: headingsOf(contentDefinition).length,
       paragraphs: (contentDefinition.languages.id ?? []).filter((b: any) => b.type === 'paragraph').length,
+      staleTokens: legacyTokens,
+      overridesIgnored: overridesContaminated,
     })
 
     if (!confirmed) continue
