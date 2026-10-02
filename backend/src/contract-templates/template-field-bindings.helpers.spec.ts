@@ -127,6 +127,55 @@ describe('applyTemplateBindings', () => {
     const result = applyTemplateBindings({ fields: [{ key: 'employee.nik', sourceType: 'SYSTEM' }] }, [ktpBinding])
     expect(result.map(d => d.key)).toEqual(['employee.nik', 'ktp_issued_date'])
   })
+
+  describe('uncheck "Pakai" (catalogContractInputKeys)', () => {
+    it('menghapus field katalog yang tidak ter-bind ke template', () => {
+      const result = applyTemplateBindings(
+        [
+          { key: 'employee.nik', sourceType: 'SYSTEM', required: true },
+          { key: 'ktp_issued_date', sourceType: 'CONTRACT_INPUT', required: false },
+        ],
+        [], // tidak ada binding → ktp_issued_date dilepas
+        { catalogContractInputKeys: ['ktp_issued_date', 'shift_code'] },
+      )
+      expect(result.map(d => d.key)).toEqual(['employee.nik'])
+    })
+
+    it('mempertahankan field yang masih ter-bind', () => {
+      const result = applyTemplateBindings(
+        [{ key: 'ktp_issued_date', sourceType: 'CONTRACT_INPUT', required: false }],
+        [ktpBinding],
+        { catalogContractInputKeys: ['ktp_issued_date'] },
+      )
+      expect(result.map(d => d.key)).toEqual(['ktp_issued_date'])
+    })
+
+    it('mempertahankan field dinamis di luar katalog (placeholder lepasan editor)', () => {
+      const result = applyTemplateBindings(
+        [{ key: 'catatan_tambahan', sourceType: 'CONTRACT_INPUT', required: false }],
+        [],
+        { catalogContractInputKeys: ['ktp_issued_date'] },
+      )
+      expect(result.map(d => d.key)).toEqual(['catatan_tambahan'])
+    })
+
+    it('tidak menyentuh field SYSTEM', () => {
+      const result = applyTemplateBindings(
+        [{ key: 'employee.nik', sourceType: 'SYSTEM', required: true }],
+        [],
+        { catalogContractInputKeys: ['employee.nik'] },
+      )
+      expect(result.map(d => d.key)).toEqual(['employee.nik'])
+    })
+
+    it('tanpa opsi, perilaku lama dipertahankan (tidak menghapus)', () => {
+      const result = applyTemplateBindings(
+        [{ key: 'ktp_issued_date', sourceType: 'CONTRACT_INPUT', required: false }],
+        [],
+      )
+      expect(result.map(d => d.key)).toEqual(['ktp_issued_date'])
+    })
+  })
 })
 
 describe('extractContractInputFields', () => {

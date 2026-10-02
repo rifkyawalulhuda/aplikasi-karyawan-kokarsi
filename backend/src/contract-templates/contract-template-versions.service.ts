@@ -122,7 +122,9 @@ export class ContractTemplateVersionsService {
     // supaya snapshot draft = kontrak kerja sesungguhnya antara template dan
     // field dinamisnya.
     const bindings = await this.fieldsService.findTemplateBindings(templateId)
-    const boundFieldDefinitions = applyTemplateBindings(fieldDefinitions, bindings)
+    const boundFieldDefinitions = applyTemplateBindings(fieldDefinitions, bindings, {
+      catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys(),
+    })
 
     return this.prisma.client.contractTemplateVersion.create({
       data: {
@@ -152,6 +154,7 @@ export class ContractTemplateVersionsService {
       : applyTemplateBindings(
         dto.fieldDefinitions,
         await this.fieldsService.findTemplateBindings(version.templateId),
+        { catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys() },
       )
     return this.prisma.client.contractTemplateVersion.update({
       where: { id: versionId },
@@ -197,6 +200,7 @@ export class ContractTemplateVersionsService {
     const fieldDefinitions = applyTemplateBindings(
       normalizeVersionFieldDefinitions(version.fieldDefinitions),
       bindings,
+      { catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys() },
     )
 
     this.validateFieldDefinitions(fieldDefinitions, validKeys)
@@ -252,6 +256,7 @@ export class ContractTemplateVersionsService {
     const fieldDefinitions = applyTemplateBindings(
       normalizeVersionFieldDefinitions(version.fieldDefinitions),
       await this.fieldsService.findTemplateBindings(version.templateId),
+      { catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys() },
     )
     this.validateFieldDefinitions(fieldDefinitions, validKeys)
     this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)

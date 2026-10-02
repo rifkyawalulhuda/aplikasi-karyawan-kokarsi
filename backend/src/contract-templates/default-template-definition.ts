@@ -94,15 +94,47 @@ export function definitionToContentDefinition(definition: ContractDocumentDefini
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  // Employee
+  'employee.fullName': 'Nama Lengkap Karyawan',
+  'employee.employeeNo': 'Nomor Induk Karyawan',
   'employee.nik': 'NIK Karyawan',
   'employee.birthPlace': 'Tempat Lahir',
+  'employee.birthDate': 'Tanggal Lahir',
   'employee.address': 'Alamat Karyawan',
   'employee.phoneNumber': 'Nomor Telepon Karyawan',
   'employee.email': 'E-mail Karyawan',
   'employee.jobRole': 'Jabatan',
+  // Contract
+  'contract.contractNo': 'Nomor Kontrak',
+  'contract.startDate': 'Tanggal Mulai',
+  'contract.endDate': 'Tanggal Selesai',
+  'contract.signedDate': 'Tanggal Tanda Tangan',
   'contract.baseCompensation': 'Kompensasi Dasar',
   'contract.termRange': 'Rentang Periode',
-  'contract.contractNo': 'Nomor Kontrak',
+  'contract.duration': 'Durasi Kontrak',
+  // Doc & settings
+  'doc.docDate': 'Tanggal Dokumen',
+  'doc.hariTanggal': 'Hari & Tanggal Tanda Tangan',
+  'settings.cooperativeChairmanName': 'Nama Ketua Koperasi',
+}
+
+/**
+ * Tipe data eksplisit untuk key yang tidak bisa ditebak dari namanya.
+ * `doc.hariTanggal` mis. berisi "Hari & Tanggal..." (TEXT), bukan DATE.
+ */
+const FIELD_DATA_TYPES: Record<string, SeedFieldDefinition['dataType']> = {
+  'doc.hariTanggal': 'TEXT',
+  'contract.duration': 'TEXT',
+  'contract.termRange': 'TEXT',
+  'contract.contractNo': 'TEXT',
+  'settings.cooperativeChairmanName': 'TEXT',
+  'employee.phoneNumber': 'TEXT',
+  'employee.email': 'TEXT',
+  'employee.address': 'TEXT',
+  'employee.birthPlace': 'TEXT',
+  'employee.nik': 'TEXT',
+  'employee.fullName': 'TEXT',
+  'employee.employeeNo': 'TEXT',
 }
 
 export function definitionToFieldDefinitions(definition: ContractDocumentDefinition): SeedFieldDefinition[] {
@@ -111,7 +143,8 @@ export function definitionToFieldDefinitions(definition: ContractDocumentDefinit
   return keys.map(key => ({
     key,
     label: FIELD_LABELS[key] ?? key,
-    dataType: key.includes('Date') || key.endsWith('Date') ? 'DATE' : key.includes('Compensation') ? 'NUMBER' : 'TEXT',
+    dataType: FIELD_DATA_TYPES[key]
+      ?? (key.includes('Date') || key.endsWith('Date') ? 'DATE' : key.includes('Compensation') ? 'NUMBER' : 'TEXT'),
     sourceType: key.startsWith('custom.') ? 'CONTRACT_INPUT' : 'SYSTEM',
     // Field SYSTEM selalu tersedia dari data karyawan/kontrak, jadi wajib.
     // Field CONTRACT_INPUT diisi manual di form kontrak: flag wajibnya adalah

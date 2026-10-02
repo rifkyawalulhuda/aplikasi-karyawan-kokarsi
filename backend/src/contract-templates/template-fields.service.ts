@@ -2,6 +2,9 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { TemplateFieldDefinition } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { CONTRACT_INPUT_FIELD_SEEDS, SYSTEM_FIELD_SEEDS } from './template-field-seeds'
+import { CONTRACT_DOCUMENT_DEFINITIONS } from '../contracts/contract-document-definitions'
+import { definitionToContentDefinition } from './default-template-definition'
+import { collectAllPlaceholders } from './template-schema.validator'
 
 class CreateTemplateFieldDto {
   key!: string
@@ -11,6 +14,25 @@ class CreateTemplateFieldDto {
   sourceConfig?: any
   options?: any
   isSystem?: boolean
+}
+
+/** Satu baris panel binding: field katalog + status pemakaiannya di template. */
+export interface TemplateBindingView {
+  fieldId: number
+  key: string
+  label: string
+  dataType: string
+  sourceType: string
+  isSystem: boolean
+  /** Dipakai template ini (punya baris binding untuk CONTRACT_INPUT; direferensikan konten untuk SYSTEM). */
+  bound: boolean
+  /** Wajib diisi petugas saat membuat kontrak. */
+  required: boolean
+  /** SYSTEM tidak dapat diubah dari panel (selalu dipakai + wajib). */
+  locked: boolean
+  /** Placeholder-nya masih muncul di konten template — melepasnya akan menggagalkan publish. */
+  usedInContent: boolean
+  sortOrder: number | null
 }
 
 class UpdateTemplateFieldDto {
@@ -88,6 +110,147 @@ export class TemplateFieldsService {
       include: { field: true },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     })
+  }
+
+  /**
+   * Key semua field CONTRACT_INPUT di katalog (tanpa prefix `custom.`).
+   *
+   * Dipakai `applyTemplateBindings()` untuk membedakan field yang dikelola
+   * katalog template (boleh di-"uncheck Pakai") dari placeholder lepasan yang
+   * ditulis langsung di teks. Lihat `ApplyTemplateBindingsOptions`.
+   */
+  async findContractInputCatalogKeys(): Promise<Set<string>> {
+    const rows = await this.prisma.client.templateFieldDefinition.findMany({
+      where: { isActive: true, sourceType: 'CONTRACT_INPUT' },
+      select: { key: true },
+    })
+    return new Set(rows.map(row => String(row.key).replace(/^custom\./, '')))
+  }
+
+  /**
+   * Panel binding editor template: seluruh field katalog aktif + status
+   * pemakaiannya di template ini.
+   *
+   *  - `bound`         : CONTRACT_INPUT punya baris binding; SYSTEM direferensikan konten.
+   *  - `locked`        : SYSTEM tidak dapat diubah dari panel (selalu dipakai & wajib).
+   *  - `usedInContent` : placeholder masih ada di konten template — melepasnya
+   *    membuat `publish()` gagal ("Placeholder ... tidak terdaftar di katalog").
+   */
+  async listTemplateBindings(templateId: number): Promise<{ templateId: number; fields: TemplateBindingView[] }> {
+    await this.ensureTemplate(templateId)
+    const [catalog, bindings, referenced] = await Promise.all([
+      this.prisma.client.templateFieldDefinition.findMany({
+        where: { isActive: true },
+        orderBy: [{ isSystem: 'desc' }, { key: 'asc' }],
+      }),
+      this.prisma.client.contractTemplateField.findMany({
+        where: { templateId },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      }),
+      this.referencedFieldKeys(templateId),
+    ])
+
+    const byFieldId = new Map(bindings.map(b => [b.fieldId, b]))
+    const fields: TemplateBindingView[] = catalog.map(field => {
+      const binding = byFieldId.get(field.id)
+      const isSystem = field.sourceType === 'SYSTEM'
+      const usedInContent = referenced.has(field.key) || referenced.has(`custom.${field.key}`)
+      return {
+        fieldId: field.id,
+        key: field.key,
+        label: field.label,
+        dataType: field.dataType,
+        sourceType: field.sourceType,
+        isSystem,
+        bound: isSystem ? usedInContent : Boolean(binding),
+        required: isSystem ? true : Boolean(binding?.required),
+        locked: isSystem,
+        usedInContent,
+        sortOrder: binding?.sortOrder ?? null,
+      }
+    })
+    return { templateId, fields }
+  }
+
+  /**
+   * Set/pakai (bind) atau lepas (unbind) sebuah field katalog pada template.
+   *
+   * `required` hanya bermakna saat `bound`. Melepas field CONTRACT_INPUT yang
+   * masih direferensikan konten DIIZINKAN (keputusan produk), tetapi `publish()`
+   * akan menolaknya sampai placeholder `{{...}}` dihapus dari teks — panel
+   * menampilkan peringatan `usedInContent` untuk itu.
+   */
+  async setTemplateBinding(
+    templateId: number,
+    fieldId: number,
+    dto: { bound: boolean; required?: boolean },
+  ): Promise<{ templateId: number; fields: TemplateBindingView[] }> {
+    await this.ensureTemplate(templateId)
+    const field = await this.prisma.client.templateFieldDefinition.findUnique({ where: { id: fieldId } })
+    if (!field) throw new NotFoundException('Field tidak ditemukan')
+    if (field.sourceType === 'SYSTEM') {
+      throw new BadRequestException('Field system selalu dipakai dan wajib — tidak dapat diubah dari panel.')
+    }
+    if (field.sourceType === 'MASTER_REFERENCE') {
+      throw new BadRequestException('Field master reference belum didukung pada dokumen kontrak.')
+    }
+
+    const existing = await this.prisma.client.contractTemplateField.findUnique({
+      where: { templateId_fieldId: { templateId, fieldId } },
+    })
+
+    if (dto.bound) {
+      const required = dto.required === true
+      if (existing) {
+        await this.prisma.client.contractTemplateField.update({
+          where: { id: existing.id },
+          data: { required },
+        })
+      } else {
+        const max = await this.prisma.client.contractTemplateField.aggregate({
+          where: { templateId },
+          _max: { sortOrder: true },
+        })
+        await this.prisma.client.contractTemplateField.create({
+          data: { templateId, fieldId, required, sortOrder: (max._max.sortOrder ?? -1) + 1 },
+        })
+      }
+    } else if (existing) {
+      await this.prisma.client.contractTemplateField.delete({ where: { id: existing.id } })
+    }
+
+    return this.listTemplateBindings(templateId)
+  }
+
+  /** Placeholder key yang muncul di konten efektif template (PUBLISHED → draft → definisi kode). */
+  private async referencedFieldKeys(templateId: number): Promise<Set<string>> {
+    const version = await this.prisma.client.contractTemplateVersion.findFirst({
+      where: { templateId, status: 'PUBLISHED' },
+      orderBy: { versionNumber: 'desc' },
+    }) ?? await this.prisma.client.contractTemplateVersion.findFirst({
+      where: { templateId },
+      orderBy: { versionNumber: 'desc' },
+    })
+
+    let content: any = version?.contentDefinition
+    if (!content) {
+      const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
+      const definition = template ? CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey] : undefined
+      if (definition) content = definitionToContentDefinition(definition)
+    }
+
+    const keys = new Set<string>()
+    for (const placeholder of collectAllPlaceholders(content)) {
+      keys.add(placeholder)
+      keys.add(placeholder.replace(/^custom\./, ''))
+    }
+    return keys
+  }
+
+  private async ensureTemplate(templateId: number) {
+    const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
+    if (!template) throw new NotFoundException('Template kontrak tidak ditemukan')
+    return template
   }
 
   async findOne(id: number): Promise<TemplateFieldDefinition> {

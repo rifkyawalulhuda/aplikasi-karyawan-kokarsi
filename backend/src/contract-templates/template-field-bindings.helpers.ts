@@ -84,6 +84,19 @@ function normalizeDefinition(raw: unknown): VersionFieldDefinition | null {
   return { ...source, key, sourceType, required: source.required === true }
 }
 
+export interface ApplyTemplateBindingsOptions {
+  /**
+   * Key CONTRACT_INPUT yang terdaftar di katalog field (`TemplateFieldDefinition`).
+   *
+   * Bila diberikan, field CONTRACT_INPUT yang ADA DI KATALOG tetapi tidak
+   * ter-bind ke template akan DIHAPUS dari hasil — inilah "uncheck Pakai" di
+   * panel editor. Field di luar daftar ini dipertahankan, sehingga placeholder
+   * `{{custom.x}}` yang ditulis langsung di teks (tanpa baris katalog) tidak
+   * hilang. Bila tidak diberikan, perilaku lama dipertahankan (tidak menghapus).
+   */
+  catalogContractInputKeys?: Iterable<string>
+}
+
 /**
  * Timpa/selaraskan `fieldDefinitions` versi dengan binding katalog template.
  *
@@ -99,17 +112,41 @@ function normalizeDefinition(raw: unknown): VersionFieldDefinition | null {
  *    berubah menjadi kotak teks bebas;
  *  - urutan field lama dipertahankan; field baru di-append mengikuti `sortOrder`;
  *  - binding selain `CONTRACT_INPUT` diabaikan (lihat catatan cakupan di atas);
- *  - field yang TIDAK ter-bind sengaja tidak dihapus (editor bisa menambah field
- *    dinamis langsung dari `fieldDefinitions`).
+ *  - bila `options.catalogContractInputKeys` diberikan, field katalog yang tidak
+ *    ter-bind dihapus (perilaku "uncheck Pakai" di panel editor).
  */
 export function applyTemplateBindings(
   fieldDefinitions: unknown,
   bindings: TemplateFieldBindingRow[],
+  options: ApplyTemplateBindingsOptions = {},
 ): VersionFieldDefinition[] {
   const definitions = normalizeVersionFieldDefinitions(fieldDefinitions)
   const byKey = new Map<string, VersionFieldDefinition>()
   for (const definition of definitions) {
     if (!byKey.has(definition.key)) byKey.set(definition.key, definition)
+  }
+
+  const boundKeys = new Set(
+    bindings
+      .map(b => b?.field)
+      .filter((f: any) => f && f.sourceType === 'CONTRACT_INPUT' && typeof f.key === 'string')
+      .map((f: any) => String(f.key).replace(/^custom\./, '')),
+  )
+
+  // "Uncheck Pakai": buang field CONTRACT_INPUT yang terdaftar di katalog field
+  // tetapi tidak punya baris binding di template ini.
+  const removed = new Set<string>()
+  if (options.catalogContractInputKeys) {
+    const catalogKeys = new Set(
+      [...options.catalogContractInputKeys].map(k => String(k).replace(/^custom\./, '')),
+    )
+    for (const [key, definition] of byKey) {
+      if (definition.sourceType !== 'CONTRACT_INPUT') continue
+      if (catalogKeys.has(key) && !boundKeys.has(key)) {
+        byKey.delete(key)
+        removed.add(key)
+      }
+    }
   }
 
   const ordered = [...bindings].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
@@ -149,7 +186,9 @@ export function applyTemplateBindings(
     definitions.push(created)
   }
 
-  return definitions
+  // `definitions` masih memuat field yang baru dilepas; saring sebelum kembali
+  // agar urutan & isinya konsisten dengan `byKey`.
+  return removed.size === 0 ? definitions : definitions.filter(d => !removed.has(d.key))
 }
 
 /** Field dinamis (`CONTRACT_INPUT`) yang harus ditampilkan di form kontrak. */

@@ -28,7 +28,7 @@ const docTitle = computed(() => previewText(titleBlock.value?.text ?? ''))
 const docSubtitle = computed(() => previewText(subtitleBlock.value?.text ?? ''))
 const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
 watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
-async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields')]); versions.value = vs ?? []; fields.value = fs ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
+async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
 async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
 async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
@@ -39,6 +39,92 @@ function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.
 const useField = insertField
 async function createField() { fieldSaving.value = true; try { const f = await $fetch<any>('/api/template-fields', { method: 'POST', body: { key: form.key, label: form.label, dataType: form.dataType, sourceType: form.sourceType, options: form.dataType === 'DROPDOWN' ? form.options.split(',').map(x => x.trim()).filter(Boolean) : undefined } }); fields.value.push(f); fieldOpen.value = false; toast.add({ title: 'Field dibuat', color: 'success' }) } catch (e: any) { toast.add({ title: 'Field gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { fieldSaving.value = false } }
 const color = (s: string) => s === 'PUBLISHED' ? 'success' : s === 'DRAFT' ? 'warning' : 'neutral'
+
+// ── Panel binding: field katalog mana yang dipakai template ini + flag wajib ──
+// Bind/unbind bersifat PER-TEMPLATE (bukan per-versi), jadi disimpan segera saat
+// checkbox diklik — tidak menunggu "Simpan draft". Perubahan baru terlihat di
+// form kontrak setelah versi berikutnya dipublish.
+interface BindingView {
+  fieldId: number
+  key: string
+  label: string
+  dataType: string
+  sourceType: string
+  isSystem: boolean
+  bound: boolean
+  required: boolean
+  locked: boolean
+  usedInContent: boolean
+  sortOrder: number | null
+}
+const bindings = ref<BindingView[]>([])
+const bindingSaving = ref<number | null>(null)
+const bindingOpen = ref(false)
+const bindingSearch = ref('')
+
+const filteredBindings = computed(() => {
+  const q = bindingSearch.value.trim().toLowerCase()
+  if (!q) return bindings.value
+  return bindings.value.filter(b => [b.key, b.label].some(v => String(v ?? '').toLowerCase().includes(q)))
+})
+const boundCount = computed(() => bindings.value.filter(b => b.bound).length)
+
+/**
+ * Peringatan saat melepas field yang placeholder-nya masih ada di konten:
+ * publish akan ditolak sampai `{{...}}` dihapus dari teks template.
+ */
+function setBinding(row: BindingView, patch: { bound?: boolean; required?: boolean }) {
+  const nextBound = patch.bound ?? row.bound
+  const nextRequired = patch.required ?? row.required
+  if (nextBound === row.bound && nextRequired === row.required) return
+
+  if (!nextBound && row.usedInContent) {
+    const entry = toast.add({
+      title: `Lepas field "${row.label}"?`,
+      description: `Field masih dipakai di teks template (${placeholderText(row.key)}). Setelah dilepas, `
+        + 'field hilang dari form kontrak dan PENERBITAN versi akan gagal sampai placeholder itu dihapus dari teks.',
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+      duration: 0,
+      close: false,
+      actions: [
+        { label: 'Batal', color: 'neutral', variant: 'ghost', onClick: () => toast.remove(entry.id) },
+        {
+          label: 'Tetap lepas',
+          color: 'warning',
+          variant: 'solid',
+          onClick: () => { toast.remove(entry.id); void commitBinding(row, { bound: false, required: nextRequired }) },
+        },
+      ],
+    })
+    return
+  }
+  void commitBinding(row, { bound: nextBound, required: nextRequired })
+}
+
+async function commitBinding(row: BindingView, patch: { bound: boolean; required: boolean }) {
+  bindingSaving.value = row.fieldId
+  try {
+    const res = await $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', {
+      method: 'PUT',
+      body: { templateId: props.template!.id, fieldId: row.fieldId, bound: patch.bound, required: patch.required },
+    })
+    bindings.value = res.fields ?? bindings.value
+    if (!patch.bound && row.usedInContent) {
+      toast.add({
+        title: 'Field dilepas dari template',
+        description: `Hapus ${placeholderText(row.key)} dari teks template sebelum menerbitkan versi baru.`,
+        color: 'warning',
+      })
+    } else {
+      toast.add({ title: patch.bound ? 'Field dipakai di template' : 'Field dilepas dari template', color: 'success' })
+    }
+  } catch (e: any) {
+    toast.add({ title: 'Gagal mengubah field', description: apiErrorMessage(e), color: 'error' })
+  } finally {
+    bindingSaving.value = null
+  }
+}
 
 /** Katalog tipe blok untuk pemilih "Tambah blok" — label ramah pengguna. */
 const BLOCK_PICKER = [
@@ -450,13 +536,23 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                   Klik untuk menyisipkan ke blok terpilih.
                 </p>
               </div>
-              <UButton
-                size="xs"
-                label="Baru"
-                icon="i-lucide-plus"
-                variant="soft"
-                @click="fieldOpen = true"
-              />
+              <div class="flex items-center gap-1">
+                <UButton
+                  size="xs"
+                  label="Kelola"
+                  icon="i-lucide-list-checks"
+                  variant="soft"
+                  color="neutral"
+                  @click="bindingOpen = true"
+                />
+                <UButton
+                  size="xs"
+                  label="Baru"
+                  icon="i-lucide-plus"
+                  variant="soft"
+                  @click="fieldOpen = true"
+                />
+              </div>
             </div>
 
             <p v-if="focusedBlock" class="rounded-md bg-primary/5 px-2 py-1 text-xs text-muted">
@@ -788,6 +884,123 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
           @click="createField"
         />
       </div>
+    </template>
+  </UModal>
+
+  <!-- ── Modal kelola field template (binding + wajib) ── -->
+  <UModal
+    v-model:open="bindingOpen"
+    title="Field pada template ini"
+    description="Tentukan field mana yang muncul di form kontrak dan mana yang wajib diisi."
+    :ui="{ content: 'max-w-3xl w-full' }"
+  >
+    <template #body>
+      <div class="space-y-3">
+        <UAlert
+          icon="i-lucide-info"
+          color="neutral"
+          variant="subtle"
+          title="Berlaku setelah Publish"
+          description="Perubahan di sini tersimpan langsung ke template. Form kontrak mengikuti versi PUBLISHED, jadi terbitkan versi baru agar perubahan terlihat."
+        />
+
+        <UInput
+          v-model="bindingSearch"
+          icon="i-lucide-search"
+          placeholder="Cari field…"
+          size="sm"
+          class="w-full"
+        />
+
+        <div v-if="!bindings.length" class="flex items-center gap-2 py-6 text-sm text-muted">
+          <UIcon name="i-lucide-info" class="size-4" />
+          Belum ada field katalog. Tambahkan field lewat tombol "Baru".
+        </div>
+
+        <div v-else class="max-h-[55vh] overflow-auto rounded-lg border border-default">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 z-10 bg-elevated text-left text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th class="px-3 py-2 font-semibold">
+                  Field
+                </th>
+                <th class="w-20 px-3 py-2 text-center font-semibold">
+                  Pakai
+                </th>
+                <th class="w-20 px-3 py-2 text-center font-semibold">
+                  Wajib
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in filteredBindings"
+                :key="row.fieldId"
+                class="border-t border-default align-top"
+                :class="row.bound ? '' : 'opacity-70'"
+              >
+                <td class="px-3 py-2">
+                  <p class="font-medium text-highlighted">
+                    {{ row.label }}
+                  </p>
+                  <code class="text-xs text-muted">{{ placeholderText(row.key) }}</code>
+                  <div class="mt-1 flex flex-wrap items-center gap-1">
+                    <UBadge
+                      :color="row.sourceType === 'SYSTEM' ? 'neutral' : 'primary'"
+                      variant="subtle"
+                      size="xs"
+                      :label="row.sourceType === 'SYSTEM' ? 'Otomatis' : 'Input manual'"
+                    />
+                    <UBadge
+                      v-if="row.usedInContent"
+                      color="warning"
+                      variant="subtle"
+                      size="xs"
+                      label="Dipakai di teks"
+                    />
+                  </div>
+                  <p v-if="row.usedInContent && !row.locked" class="mt-1 text-xs text-warning">
+                    Melepas field ini butuh menghapus {{ placeholderText(row.key) }} dari teks template,
+                    atau Publish akan gagal.
+                  </p>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <UCheckbox
+                    :model-value="row.bound"
+                    :disabled="row.locked || bindingSaving === row.fieldId"
+                    @update:model-value="v => setBinding(row, { bound: v === true })"
+                  />
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <UCheckbox
+                    :model-value="row.required"
+                    :disabled="row.locked || !row.bound || bindingSaving === row.fieldId"
+                    @update:model-value="v => setBinding(row, { required: v === true })"
+                  />
+                </td>
+              </tr>
+              <tr v-if="!filteredBindings.length">
+                <td colspan="3" class="px-3 py-6 text-center text-sm text-muted">
+                  Tidak ada field yang cocok.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-xs text-muted">
+          {{ boundCount }} dari {{ bindings.length }} field dipakai template ini.
+          Field "Otomatis" selalu dipakai dan wajib — nilainya diambil dari data karyawan/kontrak.
+        </p>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Tutup"
+        color="neutral"
+        variant="subtle"
+        @click="bindingOpen = false"
+      />
     </template>
   </UModal>
 </template>

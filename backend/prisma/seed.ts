@@ -320,13 +320,17 @@ async function main() {
     }
 
     if (templateSeed.family === 'MITRA') {
+      // `required: false` — field tetap tampil di form kontrak (opsional), dan
+      // admin dapat mencentang "Wajib" dari panel Field template kapan saja.
+      // Jangan hardcode wajib: kontrak yang tidak butuh tanggal terbit KTP
+      // (mis. mitra lama) tidak boleh diblokir saat submit.
       await prisma.contractTemplateField.upsert({
         where: { templateId_fieldId: { templateId: template.id, fieldId: ktpIssuedDateField.id } },
-        update: { required: true, sortOrder: definitionFields.length },
+        update: { required: false, sortOrder: definitionFields.length },
         create: {
           templateId: template.id,
           fieldId: ktpIssuedDateField.id,
-          required: true,
+          required: false,
           sortOrder: definitionFields.length,
         },
       })

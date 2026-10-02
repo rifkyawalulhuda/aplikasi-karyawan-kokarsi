@@ -323,7 +323,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           />
         </UFormField>
 
-        <ContractDynamicFields
+        <KontrakContractDynamicFields
           v-model="templateData"
           :fields="templateFields"
           :errors="dynamicFieldErrors"

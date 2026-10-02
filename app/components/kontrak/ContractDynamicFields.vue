@@ -112,11 +112,11 @@ function selectItems(field: ContractInputField) {
             :class="!dateValues[field.key] ? 'text-muted' : ''"
             :disabled="readonly"
           >
-            {{ dateValues[field.key] ? formatDisplay(dateValues[field.key]) : `Pilih ${field.label}...` }}
+            {{ dateValues[field.key] ? formatDisplay(dateValues[field.key] ?? null) : `Pilih ${field.label}...` }}
           </UButton>
           <template #content>
             <CalendarPicker
-              :model-value="dateValues[field.key]"
+              :model-value="dateValues[field.key] ?? null"
               @update:model-value="onDateSelect(field, $event)"
             />
           </template>

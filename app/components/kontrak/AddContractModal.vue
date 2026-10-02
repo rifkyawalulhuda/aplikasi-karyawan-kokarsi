@@ -443,7 +443,7 @@ watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
           <UIcon name="i-lucide-loader-circle" class="w-4 h-4 animate-spin" />
           Memuat field tambahan template...
         </div>
-        <ContractDynamicFields
+        <KontrakContractDynamicFields
           v-else
           v-model="templateData"
           :fields="templateFields"
