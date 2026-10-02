@@ -5,7 +5,7 @@ import { validateContentDefinition, collectAllPlaceholders } from './template-sc
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
-import { applyTemplateBindings, extractContractInputFields } from './template-field-bindings.helpers'
+import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { isValidMasterField, isValidMasterSource } from './master-reference.registry'
 
@@ -188,18 +188,19 @@ export class ContractTemplateVersionsService {
     })
     const validKeys = new Set(catalog.map(f => f.key))
 
-    this.validateFieldDefinitions(version.fieldDefinitions, validKeys)
-    const placeholders = collectAllPlaceholders(version.contentDefinition)
-    for (const ph of placeholders) {
-      // placeholder {{custom.xxx}} juga valid jika ada di fieldDefinitions snapshot
-      const defs = Array.isArray(version.fieldDefinitions)
-        ? version.fieldDefinitions
-        : (version.fieldDefinitions as any)?.fields
-      if (Array.isArray(defs)) {
-        const inDefs = defs.some((d: any) => ph === d.key || ph === `custom.${d.key}`)
-        if (inDefs) validKeys.add(ph)
-      }
-    }
+    // Binding katalog di-overlay terakhir, sama seperti createDraft/updateDraft.
+    // `fieldDefinitions` versi adalah snapshot yang dibekukan saat publish dan
+    // jadi sumber yang dibaca `GET /fields` + `TemplateSnapshotService`; tanpa
+    // overlay di sini field ter-bind (mis. ktp_issued_date untuk MITRA) tidak
+    // pernah masuk versi PUBLISHED walaupun barisnya ada di katalog template.
+    const bindings = await this.fieldsService.findTemplateBindings(version.templateId)
+    const fieldDefinitions = applyTemplateBindings(
+      normalizeVersionFieldDefinitions(version.fieldDefinitions),
+      bindings,
+    )
+
+    this.validateFieldDefinitions(fieldDefinitions, validKeys)
+    this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)
 
     validateContentDefinition(version.contentDefinition, [...validKeys], template.family as any)
 
@@ -212,7 +213,7 @@ export class ContractTemplateVersionsService {
       })
       return tx.contractTemplateVersion.update({
         where: { id: versionId },
-        data: { status: 'PUBLISHED', publishedAt: now, publishedByName: actor.name },
+        data: { status: 'PUBLISHED', publishedAt: now, publishedByName: actor.name, fieldDefinitions: fieldDefinitions as any },
       })
     })
     await this.activityLog.log({ action: 'UPDATE', module: 'Template Kontrak', targetLabel: `Versi ${version.versionNumber}`, performedBy: actor.name, performedByRole: 'ADMIN', detail: `Publish template ${template.code}` })
@@ -224,11 +225,15 @@ export class ContractTemplateVersionsService {
     const version = await this.findOne(versionId)
     const catalog = await this.prisma.client.templateFieldDefinition.findMany({ where: { isActive: true }, select: { key: true } })
     const validKeys = new Set(catalog.map(field => field.key))
-    this.validateFieldDefinitions(version.fieldDefinitions, validKeys)
-    for (const placeholder of collectAllPlaceholders(version.contentDefinition)) {
-      const definitions = this.definitionArray(version.fieldDefinitions)
-      if (definitions.some((field: any) => placeholder === field.key || placeholder === `custom.${field.key}`)) validKeys.add(placeholder)
-    }
+    // Binding katalog ikut di-overlay supaya hasil preview sama dengan yang akan
+    // dibekukan `publish()` — tanpa ini placeholder {{custom.ktp_issued_date}}
+    // dilaporkan "tidak dikenal" padahal publish-nya valid.
+    const fieldDefinitions = applyTemplateBindings(
+      normalizeVersionFieldDefinitions(version.fieldDefinitions),
+      await this.fieldsService.findTemplateBindings(version.templateId),
+    )
+    this.validateFieldDefinitions(fieldDefinitions, validKeys)
+    this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)
     const result = validateContentDefinition(version.contentDefinition, [...validKeys], version.template.family as any)
     return { versionId: version.id, templateId: version.templateId, valid: true, ...result }
   }
@@ -241,11 +246,15 @@ export class ContractTemplateVersionsService {
     }
     const catalog = await this.prisma.client.templateFieldDefinition.findMany({ where: { isActive: true }, select: { key: true } })
     const validKeys = new Set(catalog.map(field => field.key))
-    this.validateFieldDefinitions(version.fieldDefinitions, validKeys)
-    for (const placeholder of collectAllPlaceholders(version.contentDefinition)) {
-      const definitions = this.definitionArray(version.fieldDefinitions)
-      if (definitions.some((field: any) => placeholder === field.key || placeholder === `custom.${field.key}`)) validKeys.add(placeholder)
-    }
+    // Versi ARCHIVED bisa jadi dibuat sebelum binding katalog ditulis (seed lama),
+    // jadi overlay binding juga diterapkan di sini agar rollback tidak
+    // mengaktifkan kembali versi tanpa field dinamis.
+    const fieldDefinitions = applyTemplateBindings(
+      normalizeVersionFieldDefinitions(version.fieldDefinitions),
+      await this.fieldsService.findTemplateBindings(version.templateId),
+    )
+    this.validateFieldDefinitions(fieldDefinitions, validKeys)
+    this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)
     validateContentDefinition(version.contentDefinition, [...validKeys], version.template.family as any)
     const published = await this.prisma.client.$transaction(async tx => {
       await tx.contractTemplateVersion.updateMany({
@@ -254,7 +263,7 @@ export class ContractTemplateVersionsService {
       })
       return tx.contractTemplateVersion.update({
         where: { id: versionId },
-        data: { status: 'PUBLISHED', publishedAt: new Date(), publishedByName: actor.name },
+        data: { status: 'PUBLISHED', publishedAt: new Date(), publishedByName: actor.name, fieldDefinitions: fieldDefinitions as any },
       })
     })
     await this.activityLog.log({ action: 'UPDATE', module: 'Template Kontrak', targetLabel: `Versi ${version.versionNumber}`, performedBy: actor.name, performedByRole: 'ADMIN', detail: `Rollback template ${version.template.code}` })
@@ -300,7 +309,12 @@ export class ContractTemplateVersionsService {
       definitionToFieldDefinitions(definition),
       await this.fieldsService.findTemplateBindings(templateId),
     )
-    validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), template.family)
+    // Placeholder {{custom.xxx}} yang dirujuk konten harus dianggap valid, sama
+    // seperti di publish()/preview() — kalau tidak, bootstrap versi legacy untuk
+    // template MITRA gagal validasi (mis. {{custom.ktp_issued_date}}).
+    const validKeys = new Set(fieldDefinitions.map(field => field.key))
+    this.addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+    validateContentDefinition(contentDefinition, [...validKeys], template.family)
     try {
       return await this.prisma.client.contractTemplateVersion.create({
         data: {
@@ -349,6 +363,30 @@ export class ContractTemplateVersionsService {
     if (Array.isArray(value)) return value
     if (value && Array.isArray(value.fields)) return value.fields
     throw new BadRequestException('fieldDefinitions harus berupa array atau object { fields: [] }')
+  }
+
+  /**
+   * Tambahkan key valid untuk placeholder `{{custom.xxx}}` yang dirujuk konten.
+   *
+   * `applyTemplateBindings()` membuang prefix `custom.` (resolver mengharapkan
+   * key polos), sedangkan blok konten menulis `{{custom.xxx}}`. Tanpa jembatan
+   * ini `validateContentDefinition()` melaporkan placeholder sebagai "tidak
+   * terdaftar di katalog field" — mis. `{{custom.ktp_issued_date}}` pada paragraf
+   * identitas PIHAK KEDUA — sehingga publish maupun bootstrap versi gagal.
+   *
+   * Dipakai oleh `getPublished()` (bootstrap lazy), `publish()`, dan `preview()`.
+   */
+  private addPlaceholderKeysFromDefinitions(
+    contentDefinition: unknown,
+    fieldDefinitions: Array<{ key?: unknown }>,
+    validKeys: Set<string>,
+  ): void {
+    for (const placeholder of collectAllPlaceholders(contentDefinition)) {
+      const isReferenced = fieldDefinitions.some(
+        (definition: any) => placeholder === definition.key || placeholder === `custom.${definition.key}`,
+      )
+      if (isReferenced) validKeys.add(placeholder)
+    }
   }
 
   private validateFieldDefinitions(value: any, catalog: Set<string>) {

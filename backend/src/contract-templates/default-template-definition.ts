@@ -37,6 +37,30 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
   if (!english && definition.subtitle) {
     blocks.push({ id: 'subtitle', type: 'subtitle', text: definition.subtitle })
   }
+
+  if (definition.family === 'MITRA') {
+    // Konten Perjanjian Kemitraan 100% berasal dari `definition.sections`
+    // (pembukaan + para pihak + PASAL 1..15 + penutup) sehingga seluruh teks
+    // dapat diedit admin lewat Contract Template Editor. Kode TIDAK menambah
+    // kalimat apa pun — hanya header/footer yang statis di renderer.
+    definition.sections.forEach((section, index) => {
+      if (section.heading) {
+        blocks.push(article(`section-${index + 1}`, section.heading, section.paragraphs))
+      } else {
+        // Section tanpa heading (pembukaan/penutup) = paragraf biasa.
+        for (const p of section.paragraphs) {
+          blocks.push({ id: `para-${index + 1}-${blocks.length}`, type: 'paragraph', text: replaceLegacyTokens(p) })
+        }
+      }
+    })
+    blocks.push({
+      id: 'signature',
+      type: 'signature',
+      leftRole: definition.firstPartyLabel,
+      rightRole: definition.secondPartyLabel,
+    })
+    return blocks
+  }
   blocks.push({ id: 'opening', type: 'paragraph', text: replaceLegacyTokens(definition.openingLine) })
   blocks.push(article('recitals', 'Para Pihak', definition.recitals))
   blocks.push(article('role', 'Ruang Lingkup dan Posisi', [definition.roleLabel, definition.locationLine]))

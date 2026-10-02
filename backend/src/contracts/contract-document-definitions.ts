@@ -184,11 +184,32 @@ const MITRA_DUTIES: Record<string, string[]> = {
   ],
 }
 
-// Struktur lengkap 15 Pasal Perjanjian Kemitraan (mengikuti sample PDF 1:1)
+// Struktur lengkap Perjanjian Kemitraan (mengikuti sample PDF 1:1).
+//
+// Semua teks di sini adalah KONTEN TEMPLATE yang disalin ke `contentDefinition`
+// saat versi template dibuat, sehingga isi dokumen 100% berasal dari Template
+// Kontrak (dapat diedit admin lewat Contract Template Editor), bukan dari kode.
+// Nilai dinamis memakai placeholder {{...}} — TIDAK ada teks kontrak yang
+// di-hardcode di layanan PDF.
 const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sections'] => {
   const scopeWork = MITRA_SCOPE_WORK[templateKey] ?? 'penyediaan jasa sesuai kebutuhan PIHAK PERTAMA'
   const duties = MITRA_DUTIES[templateKey] ?? []
   return [
+    // --- Pembukaan & Para Pihak (sebelum PASAL 1, sesuai master) ---
+    {
+      heading: '',
+      paragraphs: [
+        'Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada {{doc.hariTanggal}} oleh dan antara:',
+        '1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. {{settings.cooperativeChairmanName}} dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan',
+        '2. Bpk./Ibu {{employee.fullName}}, Warga Negara Indonesia, lahir di {{employee.birthPlace}} pada tanggal {{employee.birthDate}}, pemegang Kartu Tanda Penduduk (KTP) Nomor {{employee.nik}} tertanggal {{custom.ktp_issued_date}}, beralamat di {{employee.address}}, dalam hal ini bertindak untuk dan atas nama pribadi (untuk selanjutnya disebut sebagai "PIHAK KEDUA").',
+        'Kemudian PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").',
+        'Dengan ini masing-masing bertindak dalam kedudukannya tersebut di atas terlebih dahulu menerangkan hal-hal sebagai berikut:',
+        '1. Bahwa PIHAK PERTAMA adalah suatu koperasi yang salah satu ruang lingkup kegiatannya bergerak di bidang Penyediaan Tenaga Kerja.',
+        '2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA dalam penyediaan jasa kepada perusahaan-perusahaan yang membutuhkan jasa dari PIHAK PERTAMA.',
+        '3. Bahwa Para Pihak sepakat untuk mengikatkan diri dalam suatu Perjanjian dan dalam rangka melaksanakan maksud dan tujuan tersebut, Para Pihak sepakat untuk melakukan kerjasama kemitraan sebagaimana diatur menurut Perjanjian ini.',
+        'Sehubungan dengan hal-hal tersebut diatas, Para Pihak sepakat untuk membuat dan menandatangani Perjanjian ini dengan syarat-syarat dan ketentuan sebagai berikut:',
+      ],
+    },
     {
       heading: 'PASAL 1\nRUANG LINGKUP',
       paragraphs: [
@@ -204,7 +225,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
     {
       heading: 'PASAL 2\nJANGKA WAKTU PERJANJIAN',
       paragraphs: [
-        '__MITRA_TERM__',
+        '1. Para Pihak sepakat bahwa Pekerjaan yang dilaksanakan oleh PIHAK KEDUA adalah untuk jangka waktu {{contract.duration}} terhitung sejak penandatanganan Perjanjian ini dari {{contract.termRange}} dan apabila Para Pihak telah menyelesaikan seluruh kewajibannya berdasarkan Perjanjian ini.',
         '2. Jangka Waktu Perjanjian ini dapat diperpanjang berdasarkan persetujuan tertulis Para Pihak, kecuali salah satu Pihak bermaksud untuk mengakhiri Perjanjian ini dengan memberikan surat pemberitahuan kepada Pihak lainnya dalam waktu paling lambat 30 (tiga puluh) hari kerja sebelum berakhirnya Jangka Waktu Perjanjian.',
       ],
     },
@@ -235,7 +256,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
       heading: 'PASAL 4\nIMBALAN JASA',
       paragraphs: [
         '1. Para Pihak sepakat bahwa imbalan jasa atas Pekerjaan yang dilaksanakan oleh PIHAK KEDUA berdasarkan Perjanjian ini adalah sebesar:',
-        '__MITRA_IMBALAN__',
+        'a. Imbalan Jasa Bulanan sebesar {{contract.baseCompensation}} yang dibayarkan setiap bulan sesuai ketentuan perjanjian ini.',
         'b. Uang Ketupat sebesar satu kali Upah Minimum Kota/Kabupaten (UMK) yang berlaku pada area administratif terkait, dibayarkan satu kali dalam satu tahun pada periode Hari Raya Idul Fitri.',
         'c. Imbalan Tahunan sebesar 0,5 (nol koma lima) kali UMK yang berlaku pada area administratif terkait, yang dibayarkan satu kali dalam satu tahun.',
         'd. Simpanan Mitra sebesar satu kali UMK yang berlaku pada area administratif terkait, yang akan ditambahkan dan disimpan selama masa kemitraan dan akan didistribusikan pada saat adanya pemutusan hubungan kemitraan.',
@@ -324,7 +345,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
       paragraphs: [
         '1. Setiap pemberitahuan, permintaan, dan lain-lain berkaitan dengan Perjanjian ini harus dibuat secara tertulis dan harus dikirim dengan surat tercatat, jasa kurir, dikirim secara langsung dengan mendapat tanda terima, atau melalui e-mail, yang ditujukan ke alamat:',
         'Jika dikirim kepada PIHAK PERTAMA dialamatkan kepada: Alamat: Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20 GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330; Telepon: 021 - 50555340; E-mail: Kokarsi_unitjkt@sankyu.co.id',
-        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: __MITRA_ADDRESS__; Telepon: __MITRA_PHONE__; E-mail: __MITRA_EMAIL__',
+        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: {{employee.address}}; Telepon: {{employee.phoneNumber}}; E-mail: {{employee.email}}',
         '2. Pemberitahuan dianggap telah diterima oleh Pihak yang dituju: pada saat ditandatanganinya tanda terima oleh Pihak yang dituju (dalam hal dikirim langsung atau menggunakan jasa kurir); dalam 3 (tiga) hari kerja setelah tanggal pengiriman jika pemberitahuan disampaikan melalui surat tercatat; dan pada saat konfirmasi laporan pengiriman telah diterima oleh pengirim, pada tanggal diterimanya e-mail, jika pemberitahuan disampaikan melalui e-mail.',
       ],
     },
@@ -350,6 +371,13 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
         '1. Dalam hal salah satu atau lebih ketentuan-ketentuan dalam Perjanjian ini bertentangan dengan peraturan perundang-undangan yang berlaku atau tidak dapat dilaksanakan karena ketentuan hukum ("Undang-Undang"), maka ketentuan-ketentuan lain dalam Perjanjian yang tidak melanggar hukum akan tetap berlaku secara mengikat bagi Para Pihak.',
         '2. Perjanjian ini dapat ditandatangani secara bersamaan dalam dua atau lebih halaman terpisah oleh Para Pihak, dimana masing-masing bagian yang ditandatangani tersebut dianggap asli dan merupakan Perjanjian yang sama.',
         '3. Kegagalan, keterlambatan, atau penundaan salah satu Pihak untuk menjalankan haknya berdasarkan Perjanjian ini atau kegagalan, keterlambatan, atau penundaan untuk meminta Pihak lainnya agar memenuhi ketentuan-ketentuan dalam Perjanjian ini, tidak akan dianggap sebagai pengesampingan atau pelepasan hak, wewenang, atau tuntutan oleh Pihak lainnya untuk di kemudian hari menuntut dipenuhinya ketentuan-ketentuan dalam Perjanjian ini.',
+      ],
+    },
+    // --- Penutup (tanpa heading, sesuai master) ---
+    {
+      heading: '',
+      paragraphs: [
+        'Demikian Perjanjian ini dibuat dalam 2 (dua) rangkap serta bermeterai cukup dan masing-masing mempunyai kekuatan hukum yang sama. Perjanjian ini ditandatangani oleh Para Pihak untuk dipedomani sebagaimana mestinya.',
       ],
     },
   ]

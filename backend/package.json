@@ -13,6 +13,7 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "contract-templates:rollout": "ts-node scripts/rollout-contract-template-versioning.ts",
     "contract-templates:db-backup": "ts-node scripts/backup-contract-template-versioning.ts",
+    "contract-templates:repair-field-bindings": "ts-node scripts/repair-published-field-bindings.ts",
     "contract-templates:repair-version": "ts-node scripts/repair-published-version.ts",
     "contract-templates:repair-contamination": "ts-node scripts/repair-contamination.ts",
     "contract-templates:verify-contamination": "ts-node scripts/verify-contamination-fix.ts",

@@ -296,7 +296,7 @@ describe('ContractTemplateVersionsService.getContractInputFields', () => {
           id: 2,
           status: 'PUBLISHED',
           fieldDefinitions: [
-            { key: 'tanggalTerbitKtp', label: 'Tanggal Terbit KTP', dataType: 'DATE', sourceType: 'CONTRACT_INPUT', required: true },
+            { key: 'ktp_issued_date', label: 'Tanggal Terbit KTP', dataType: 'DATE', sourceType: 'CONTRACT_INPUT', required: true },
             { key: 'employee.nik', label: 'NIK', dataType: 'TEXT', sourceType: 'SYSTEM', required: true }
           ]
         }
@@ -309,7 +309,7 @@ describe('ContractTemplateVersionsService.getContractInputFields', () => {
     expect(fields.published).toBe(true)
     expect(fields.fields).toEqual([
       {
-        key: 'tanggalTerbitKtp',
+        key: 'ktp_issued_date',
         label: 'Tanggal Terbit KTP',
         dataType: 'DATE',
         required: true
@@ -330,7 +330,7 @@ describe('ContractTemplateVersionsService.getContractInputFields', () => {
           required: true,
           sortOrder: 0,
           field: {
-            key: 'tanggalTerbitKtp',
+            key: 'ktp_issued_date',
             label: 'Tanggal Terbit KTP Mitra',
             dataType: 'DATE',
             sourceType: 'CONTRACT_INPUT'
@@ -344,9 +344,12 @@ describe('ContractTemplateVersionsService.getContractInputFields', () => {
     expect(created).toHaveLength(1)
     expect(created[0].status).toBe('PUBLISHED')
     expect(fields.published).toBe(true)
+    // Label + dataType mengikuti definisi bawaan MITRA (`custom.ktp_issued_date`
+    // dari `definitionToFieldDefinitions`), sedangkan `required: true` datang dari
+    // binding katalog — overlay binding hanya menimpa flag `required`.
     expect(fields.fields).toEqual([
       {
-        key: 'tanggalTerbitKtp',
+        key: 'ktp_issued_date',
         label: 'Tanggal Terbit KTP Mitra',
         dataType: 'DATE',
         required: true
@@ -374,7 +377,7 @@ describe('ContractTemplateVersionsService.getContractInputFields', () => {
       bindings: [
         {
           required: true,
-          field: { key: 'tanggalTerbitKtp', label: 'Tanggal Terbit KTP Mitra', dataType: 'DATE', sourceType: 'CONTRACT_INPUT' }
+          field: { key: 'ktp_issued_date', label: 'Tanggal Terbit KTP Mitra', dataType: 'DATE', sourceType: 'CONTRACT_INPUT' }
         }
       ]
     })
@@ -480,5 +483,93 @@ describe('ContractTemplateVersionsService.publish (guard MASTER_REFERENCE)', () 
     })
 
     await expect(buildPublish(client).publish(21, { name: 'tester' })).rejects.toThrow(/belum didukung/)
+  })
+})
+
+describe('ContractTemplateVersionsService.publish (overlay binding katalog)', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { ContractTemplateVersionsService } = require('./contract-template-versions.service')
+  const { TemplateFieldsService } = require('./template-fields.service')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
+  /** Mock dengan transaksi yang berhasil supaya jalur tulis publish() teruji. */
+  function makePublishable(opts: MockOptions) {
+    const updated: Row[] = []
+    const { client } = makeService(opts)
+    const patched = {
+      ...client,
+      contractTemplateVersion: {
+        ...(client as any).contractTemplateVersion,
+        updateMany: async () => ({ count: 1 }),
+        update: async ({ data }: CreateArgs) => {
+          updated.push(data)
+          return data
+        }
+      },
+      $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(patched)
+    }
+    return { client: patched, updated }
+  }
+
+  function build(client: unknown) {
+    return new ContractTemplateVersionsService({ client } as never, new TemplateFieldsService({ client } as never), { log: async () => undefined } as never)
+  }
+
+  const mitraDraft = {
+    id: 31,
+    status: 'DRAFT',
+    versionNumber: 2,
+    templateId: 9,
+    contentDefinition: {
+      languages: {
+        id: [
+          { id: 'p', type: 'paragraph', text: 'Terbit {{custom.ktp_issued_date}}' },
+          { id: 'signature', type: 'signature', leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA' }
+        ]
+      }
+    },
+    fieldDefinitions: [],
+    template: { id: 9, code: 'MITRA_DRIVER', family: 'MITRA' }
+  }
+
+  it('membekukan field ter-bind ke fieldDefinitions saat publish — bukan hanya ke draft', async () => {
+    const { client, updated } = makePublishable({
+      template: { id: 9, code: 'MITRA_DRIVER', family: 'MITRA' },
+      existingDraft: mitraDraft,
+      catalog: [{ key: 'employee.nik' }],
+      bindings: [
+        {
+          required: true,
+          sortOrder: 0,
+          field: { key: 'ktp_issued_date', label: 'Tanggal Terbit KTP Mitra', dataType: 'DATE', sourceType: 'CONTRACT_INPUT' }
+        }
+      ]
+    })
+
+    await build(client).publish(31, { name: 'tester' })
+
+    const fieldDefinitions = updated[0].fieldDefinitions as Array<{ key: string, required: boolean }>
+    const ktp = fieldDefinitions.find(field => field.key === 'ktp_issued_date')
+    expect(ktp).toBeDefined()
+    expect(ktp?.required).toBe(true)
+  })
+
+  it('tidak menolak publish hanya karena placeholder custom belum ada di fieldDefinitions draft', async () => {
+    // Regresi: sebelum overlay, {{custom.ktp_issued_date}} dianggap placeholder
+    // tak dikenal sehingga publish MITRA gagal padahal binding-nya valid.
+    const { client } = makePublishable({
+      template: { id: 9, code: 'MITRA_DRIVER', family: 'MITRA' },
+      existingDraft: mitraDraft,
+      catalog: [{ key: 'employee.nik' }],
+      bindings: [
+        {
+          required: true,
+          sortOrder: 0,
+          field: { key: 'ktp_issued_date', label: 'Tanggal Terbit KTP Mitra', dataType: 'DATE', sourceType: 'CONTRACT_INPUT' }
+        }
+      ]
+    })
+
+    await expect(build(client).publish(31, { name: 'tester' })).resolves.toBeDefined()
   })
 })

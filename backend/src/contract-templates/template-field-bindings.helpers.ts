@@ -90,8 +90,13 @@ function normalizeDefinition(raw: unknown): VersionFieldDefinition | null {
  * Aturan:
  *  - field `CONTRACT_INPUT` yang ter-bind tetapi belum ada di `fieldDefinitions`
  *    ditambahkan dari metadata katalog;
- *  - field `CONTRACT_INPUT` yang sudah ada diselaraskan `required`-nya dari
- *    binding (binding = sumber kebenaran checkbox "wajib diisi");
+ *  - field `CONTRACT_INPUT` yang sudah ada diselaraskan dari katalog: `required`
+ *    mengikuti binding (sumber kebenaran checkbox "wajib diisi"), sedangkan
+ *    `label`/`dataType`/`sourceConfig`/`options` mengikuti katalog. Tanpa
+ *    penyelarasan metadata, field yang sebelumnya dibuat seed/bootstrap dengan
+ *    placeholder mentah tampil di form sebagai label `custom.xxx` bertipe TEXT —
+ *    mis. "Tanggal Terbit KTP Mitra" kehilangan tipe DATE sehingga input tanggal
+ *    berubah menjadi kotak teks bebas;
  *  - urutan field lama dipertahankan; field baru di-append mengikuti `sortOrder`;
  *  - binding selain `CONTRACT_INPUT` diabaikan (lihat catatan cakupan di atas);
  *  - field yang TIDAK ter-bind sengaja tidak dihapus (editor bisa menambah field
@@ -117,6 +122,13 @@ export function applyTemplateBindings(
     const existing = byKey.get(key)
     if (existing) {
       existing.required = binding.required === true
+      // Metadata katalog adalah sumber kebenaran untuk label/tipe: field yang
+      // dibuat jalur lama memakai key mentah (`custom.ktp_issued_date`) akan
+      // tampil apa adanya sebagai label dan kehilangan tipe DATE-nya di form.
+      if (typeof catalog.label === 'string' && catalog.label.length > 0) existing.label = catalog.label
+      if (typeof catalog.dataType === 'string' && catalog.dataType.length > 0) existing.dataType = catalog.dataType
+      if (catalog.sourceConfig !== undefined && catalog.sourceConfig !== null) existing.sourceConfig = catalog.sourceConfig
+      if (catalog.options !== undefined && catalog.options !== null) existing.options = catalog.options
       continue
     }
 
