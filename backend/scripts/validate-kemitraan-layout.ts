@@ -13,31 +13,15 @@ import { join, resolve } from 'path'
 import { definitionToContentDefinition } from '../src/contract-templates/default-template-definition'
 import { getContractDocumentDefinition } from '../src/contracts/contract-document-definitions'
 import { renderMitraLayout, renderMitraSignature, MITRA_GEOMETRY } from '../src/contracts/mitra-layout.engine'
+import { MITRA_PREVIEW_VALUES } from '../src/contracts/mitra-preview-sample'
 
 const FONT_DIR = process.env.FONT_DIR
   ?? (process.platform === 'win32' ? 'C:/Windows/Fonts' : '/usr/share/fonts/truetype/msttcorefonts')
 
 const ASSET_ROOT = resolve(process.cwd(), 'assets')
 
-/** Nilai placeholder contoh (dynamic data). */
-const SAMPLE_VALUES: Record<string, string> = {
-  'contract.contractNo': '220/KUKP-SII/2026',
-  'contract.termRange': '1 September 2026 - 31 Agustus 2027',
-  'contract.baseCompensation': 'Rp 6.000.000',
-  'contract.startDate': '31 Agustus 2026',
-  'contract.duration': '12 (dua belas) bulan',
-  'employee.fullName': 'M. Ikhsan Umar',
-  'employee.nik': '3214031603910001',
-  'employee.birthPlace': 'Purwakarta',
-  'employee.birthDate': '16 Maret 1991',
-  'employee.address': 'KP Kertajaya Rt/Rw 12/06 Desa Sukajadi Kec. Pondok Salam Purwakarta',
-  'employee.phoneNumber': '081234567890',
-  'employee.email': 'ikshan@example.com',
-  'employee.jobRole': 'Driver',
-  'settings.cooperativeChairmanName': 'Hari Suhono',
-  'doc.hariTanggal': 'Senin, 31 Agustus 2026',
-  'custom.ktp_issued_date': '08 Agustus 2024',
-}
+/** Nilai placeholder contoh (dynamic data) — SATU sumber dengan pratinjau editor. */
+const SAMPLE_VALUES: Record<string, string> = MITRA_PREVIEW_VALUES
 
 async function main() {
   const def = getContractDocumentDefinition('MITRA_DRIVER')

@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import { Prisma } from '@prisma/client'
+import { existsSync } from 'fs'
+import { resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 import { validateContentDefinition, collectAllPlaceholders } from './template-schema.validator'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
@@ -8,6 +10,9 @@ import { TemplateFieldsService } from './template-fields.service'
 import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { isValidMasterField, isValidMasterSource } from './master-reference.registry'
+import { MITRA_HEADER_CHROME } from '../contracts/mitra-layout.engine'
+import { createMitraPdfBuffer, resolveMitraFonts, resolveMitraLogoPath } from '../contracts/mitra-document.renderer'
+import { MITRA_PREVIEW_VALUES } from '../contracts/mitra-preview-sample'
 
 interface CreateDraftDto {
   changeSummary?: string
@@ -242,6 +247,53 @@ export class ContractTemplateVersionsService {
     return { versionId: version.id, templateId: version.templateId, valid: true, ...result }
   }
 
+  /**
+   * Render PDF pratinjau untuk versi template.
+   *
+   * Memakai MESIN YANG SAMA dengan generate kontrak (`createMitraPdfBuffer` →
+   * `renderMitraLayout` + `renderMitraSignature`), sehingga hasil pratinjau 1:1
+   * dengan dokumen yang dihasilkan nanti. Data placeholder memakai contoh
+   * (`MITRA_PREVIEW_VALUES`) karena versi template belum terikat kontrak.
+   *
+   * Stateless: `contentDefinition` dari body dipakai bila ada (agar editan yang
+   * BELUM disimpan ikut terlihat); DB tidak pernah ditulis.
+   *
+   * Hanya keluarga MITRA yang didukung. PKWT dirender jalur berbeda (dua kolom
+   * ID/EN dengan renderer blok generik) dan belum punya mesin pratinjau.
+   */
+  async renderPreviewPdf(
+    versionId: number,
+    dto: { contentDefinition?: Record<string, unknown> },
+  ): Promise<Buffer> {
+    const version = await this.findOne(versionId)
+    if (version.template.family !== 'MITRA') {
+      throw new BadRequestException(
+        'Pratinjau PDF baru tersedia untuk template Perjanjian Kemitraan (MITRA).',
+      )
+    }
+
+    const content = (dto.contentDefinition ?? version.contentDefinition) as any
+    const blocks: any[] = content?.languages?.id ?? []
+    if (!Array.isArray(blocks) || blocks.length === 0) {
+      throw new BadRequestException('Konten template kosong — tidak ada yang bisa dipratinjau.')
+    }
+
+    const assetRoot = resolve(process.cwd(), 'assets')
+    const logoPath = resolveMitraLogoPath(assetRoot)
+    const values = { ...MITRA_PREVIEW_VALUES }
+    const numberLabel = `${MITRA_HEADER_CHROME.numberPrefix} ${values['contract.contractNo']}`
+    const dateLabel = `${MITRA_HEADER_CHROME.datePrefix} ${values['contract.signedDate'] ?? values['contract.startDate']}`
+
+    return createMitraPdfBuffer({
+      blocks,
+      values,
+      numberLabel,
+      dateLabel,
+      logoPath: existsSync(logoPath) ? logoPath : undefined,
+      fonts: resolveMitraFonts(),
+    })
+  }
+
   /** Rollback: aktifkan kembali versi ARCHIVED tertentu sebagai PUBLISHED. */
   async rollback(versionId: number, actor: { name: string }) {
     const version = await this.findOne(versionId)
@@ -276,8 +328,7 @@ export class ContractTemplateVersionsService {
   }
 
   /** Versi PUBLISHED aktif untuk sebuah template. */
-  async getPublished(templateId: number) {
-    const published = await this.prisma.client.contractTemplateVersion.findFirst({
+  async getPublished(templateId: number) {    const published = await this.prisma.client.contractTemplateVersion.findFirst({
       where: { templateId, status: 'PUBLISHED' },
       orderBy: { versionNumber: 'desc' },
     })

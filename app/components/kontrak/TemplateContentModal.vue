@@ -5,6 +5,8 @@ const props = defineProps<{ open: boolean, template: Template | null }>(); const
 const open = computed({ get: () => props.open, set: v => emit('update:open', v) }); const toast = useToast()
 const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
 const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
+/** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
+const previewPdfBlob = ref<Blob | null>(null); const previewPdfLoading = ref(false); const previewPdfError = ref('')
 const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>>({}); const focusedBlockId = ref<string | null>(null)
 const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null>(null); const pendingVersion = ref<Version | null>(null)
 /** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
@@ -13,26 +15,53 @@ const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTR
 const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
 const fieldItems = computed(() => fields.value.length ? fields.value : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value?.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? []))
 const placeholderText = (key: string) => `{{${key}}}`
-const previewValues: Record<string, string> = {
-  'employee.fullName': 'Budi Santoso', 'employee.employeeNo': 'KOK-0001', 'employee.jobRole': 'Staff Operasional',
-  'contract.startDate': '1 Januari 2026', 'contract.endDate': '31 Desember 2026', 'contract.salary': 'Rp5.000.000',
-  'company.name': 'Koperasi Karyawan Kokarsi', 'contract.number': 'PKWT/001/2026',
-  'coop.chairmanName': 'Ahmad Fauzi'
-}
-function previewText(value: any) { return String(value ?? '').replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) => previewValues[key] ?? `«${key}»`) }
-const previewBlocks = computed(() => blocks.value)
-/** Blok title pertama jadi judul tengah dokumen (mengikuti drawTitleBlock renderer PDF). */
-const titleBlock = computed(() => blocks.value.find(b => b.type === 'title') as any)
-const subtitleBlock = computed(() => blocks.value.find(b => b.type === 'subtitle') as any)
-const docTitle = computed(() => previewText(titleBlock.value?.text ?? ''))
-const docSubtitle = computed(() => previewText(subtitleBlock.value?.text ?? ''))
 const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
 watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
 async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
 async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
 async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
-async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview' && draft.value) await save(); const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); if (name === 'preview') { preview.value = r; previewOpen.value = true } else { toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview') { await openPreview(v); return } const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+
+/**
+ * Buka pratinjau.
+ *
+ * 1. Validasi backend (`POST .../preview`) → mengisi panel status di modal.
+ * 2. MITRA: ambil PDF asli dari mesin render yang sama dengan Generate Kontrak
+ *    (1:1). `contentDefinition` draft dikirim di body, jadi editan yang BELUM
+ *    disimpan tetap terlihat dan DB tidak perlu ditulis lebih dulu.
+ *
+ * PKWT belum punya mesin pratinjau: modal menampilkan keterangan, tanpa PDF.
+ */
+async function openPreview(v: Version) {
+  previewOpen.value = true
+  previewPdfBlob.value = null
+  previewPdfError.value = ''
+
+  // Validasi (dipakai panel status). Kegagalan validasi tidak memblokir PDF.
+  try {
+    preview.value = await $fetch<any>(`/api/contract-template-versions/${v.id}/preview`, { method: 'POST' })
+  } catch (e: any) {
+    preview.value = null
+    toast.add({ title: 'Validasi gagal', description: apiErrorMessage(e), color: 'warning' })
+  }
+
+  if (isPkwt.value) return
+
+  previewPdfLoading.value = true
+  try {
+    const blob = await $fetch(`/api/contract-template-versions/${v.id}/preview-pdf`, {
+      method: 'POST',
+      body: { contentDefinition: draft.value?.contentDefinition ?? v.contentDefinition },
+      responseType: 'blob',
+    })
+    previewPdfBlob.value = blob as unknown as Blob
+  } catch (e: any) {
+    previewPdfError.value = apiErrorMessage(e, 'Gagal memuat pratinjau PDF')
+  } finally {
+    previewPdfLoading.value = false
+  }
+}
 function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
 function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
 /** @deprecated gunakan `insertField()` — dipertahankan untuk kompatibilitas. */
@@ -601,33 +630,6 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
               </div>
             </div>
           </div>
-          <div>
-            <div class="flex items-center justify-between">
-              <p class="font-semibold">
-                Pratinjau dokumen
-              </p>
-              <UBadge
-                color="neutral"
-                variant="subtle"
-                size="sm"
-                label="data contoh"
-              />
-            </div>
-            <p class="mt-0.5 text-xs text-muted">
-              Tampilan mengikuti PDF asli (Times New Roman, kop surat, tanda tangan dua pihak).
-            </p>
-          </div>
-
-          <div class="max-h-[52vh] overflow-auto rounded-lg bg-neutral-200 p-3">
-            <KontrakDocumentPreview
-              :blocks="blocks"
-              :values="previewValues"
-              :title="docTitle"
-              :subtitle="docSubtitle"
-              :contract-no="previewValues['contract.number']"
-            />
-          </div>
-
           <div class="rounded-lg border border-default p-3">
             <p class="font-semibold">
               Validasi template
@@ -675,18 +677,40 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
     </template>
   </UModal>
 
-  <!-- ── Modal pratinjau (validasi backend) ── -->
+  <!-- ── Modal pratinjau ── -->
+  <!-- MITRA: PDF asli dari mesin render yang sama dengan Generate Kontrak (1:1).
+       PKWT: belum punya mesin pratinjau — tampilkan keterangan, bukan teks kasar. -->
   <UModal v-model:open="previewOpen" title="Pratinjau dokumen" :ui="{ content: 'max-w-5xl w-full' }">
     <template #body>
       <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div class="max-h-[70vh] overflow-auto rounded-lg bg-neutral-200 p-3">
-          <KontrakDocumentPreview
-            :blocks="previewBlocks"
-            :values="previewValues"
-            :title="docTitle"
-            :subtitle="docSubtitle"
-            :contract-no="previewValues['contract.number']"
-          />
+          <!-- MITRA: PDF asli -->
+          <div v-if="!isPkwt" class="h-[68vh] rounded-lg bg-white">
+            <div v-if="previewPdfLoading" class="flex h-full items-center justify-center">
+              <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-muted" />
+            </div>
+            <div v-else-if="previewPdfError" class="flex h-full items-center justify-center p-6 text-center text-sm text-error">
+              {{ previewPdfError }}
+            </div>
+            <PdfViewer v-else-if="previewPdfBlob" :src="previewPdfBlob" />
+            <div v-else class="flex h-full items-center justify-center text-sm text-muted">
+              Pratinjau belum tersedia.
+            </div>
+          </div>
+
+          <!-- PKWT: belum ada mesin pratinjau PDF -->
+          <div v-else class="flex h-[68vh] items-center justify-center rounded-lg bg-white p-6 text-center text-sm text-muted">
+            <div>
+              <UIcon name="i-lucide-file-text" class="mx-auto mb-2 size-8" />
+              <p class="font-medium text-highlighted">
+                Pratinjau PDF belum tersedia untuk template PKWT
+              </p>
+              <p class="mt-1">
+                Pratinjau dokumen saat ini hanya mendukung Perjanjian Kemitraan (MITRA).
+                Generate kontrak PKWT tetap berjalan normal.
+              </p>
+            </div>
+          </div>
         </div>
         <aside class="space-y-3">
           <UAlert
@@ -702,11 +726,12 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
             <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
           </div>
           <UAlert
+            v-if="!isPkwt"
             icon="i-lucide-info"
             color="neutral"
             variant="subtle"
-            title="Tentang pratinjau"
-            description="Teks berwarna adalah data contoh. Placeholder tanpa nilai tampil sebagai «kunci» persis seperti di PDF."
+            title="1:1 dengan dokumen asli"
+            description="PDF ini dirender mesin yang sama dengan Generate Kontrak, memakai data contoh. Field yang kosong tampil sebagai titik-titik."
           />
         </aside>
       </div>

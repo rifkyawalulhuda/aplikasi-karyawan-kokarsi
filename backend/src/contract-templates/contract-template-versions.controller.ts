@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
@@ -88,6 +89,30 @@ export class ContractTemplateVersionsController {
   preview(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
     this.ensureAdmin(req.user?.role)
     return this.service.preview(versionId)
+  }
+
+  /**
+   * Pratinjau PDF asli (1:1 dengan hasil generate). Mengembalikan berkas
+   * `application/pdf`, bukan JSON — jadi memakai `@Res()` langsung.
+   *
+   * `contentDefinition` opsional di body: dipakai agar editan yang BELUM
+   * disimpan ikut terlihat. Tanpa payload, versi tersimpan yang dirender.
+   */
+  @Post('contract-template-versions/:versionId/preview-pdf')
+  async previewPdf(
+    @Request() req: any,
+    @Param('versionId', ParseIntPipe) versionId: number,
+    @Body() dto: Partial<VersionContentDto>,
+    @Res() res: any,
+  ) {
+    this.ensureAdmin(req.user?.role)
+    const buffer = await this.service.renderPreviewPdf(versionId, {
+      contentDefinition: dto?.contentDefinition,
+    })
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', 'inline; filename="preview-template.pdf"')
+    res.setHeader('Content-Length', String(buffer.length))
+    res.end(buffer)
   }
 
   @Post('contract-template-versions/:versionId/rollback')

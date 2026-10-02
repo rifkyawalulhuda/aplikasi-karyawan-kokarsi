@@ -8,12 +8,8 @@ import { getContractDocumentDefinition, mergeDefinition } from './contract-docum
 import { definitionToContentDefinition } from '../contract-templates/default-template-definition'
 import { SettingsService } from '../settings/settings.service'
 import { buildValueMap, renderBlocks, interpolate } from './contract-block-renderer'
-import {
-  MITRA_GEOMETRY,
-  MITRA_HEADER_CHROME,
-  renderMitraLayout,
-  renderMitraSignature,
-} from './mitra-layout.engine'
+import { MITRA_HEADER_CHROME } from './mitra-layout.engine'
+import { renderMitraDocumentInto } from './mitra-document.renderer'
 
 type RenderEngine = 'PDF_NATIVE'
 type LayoutMode = 'LEGAL_PDF_TEMPLATE'
@@ -588,61 +584,37 @@ export class ContractDocumentService {
   /**
    * Render "Perjanjian Kemitraan" memakai mesin layout master.
    *
-   * - Menggunakan contentDefinition snapshot (konten tidak diubah).
-   * - Judul/Nomor/Tanggal diambil dari blok title/subtitle + meta kontrak.
-   * - Blok title/subtitle TIDAK dirender ganda di body.
+   * Delegasi ke `renderMitraDocumentInto` (pintu tunggal yang juga dipakai
+   * pratinjau editor), supaya hasil generate dan pratinjau tidak mungkin
+   * menyimpang. Jalur ini hanya menyiapkan nilai dari snapshot kontrak.
    */
   private renderMitraLayoutFromBlocks(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, blocks: any[]) {
     const values = buildValueMap((payload.contract as any).resolvedTemplateData)
     const meta = payload.meta
-    const snapshot = (payload.contract as any).templateSnapshot
-
-    const titleBlock = blocks.find(b => b?.type === 'title')
-    const title = (titleBlock?.text
-      ? interpolate(titleBlock.text, values)
-      : payload.contract.template?.name ?? 'PERJANJIAN KEMITRAAN').toUpperCase()
 
     // Nomor & Tanggal mengikuti master (baris terpisah di bawah judul).
     const numberLabel = meta?.contractNo ? `${MITRA_HEADER_CHROME.numberPrefix} ${meta.contractNo}` : undefined
     const dateLabel = meta?.signedDate ? `${MITRA_HEADER_CHROME.datePrefix} ${meta.signedDate}` : undefined
 
-    const fontDir = this.fontDir
-    renderMitraLayout(doc, blocks, {
+    renderMitraDocumentInto(doc, {
+      blocks,
       values,
-      title,
+      fallbackTitle: payload.contract.template?.name,
       numberLabel,
       dateLabel,
       logoPath: existsSync(this.mitraLogoPath) ? this.mitraLogoPath : undefined,
       fonts: {
-        regular: path.join(fontDir, 'times.ttf'),
-        bold: path.join(fontDir, 'timesbd.ttf'),
-        italic: path.join(fontDir, 'timesi.ttf'),
+        regular: path.join(this.fontDir, 'times.ttf'),
+        bold: path.join(this.fontDir, 'timesbd.ttf'),
+        italic: path.join(this.fontDir, 'timesi.ttf'),
+      },
+      // Nama karyawan/jabatan diambil dari record karyawan bila placeholder
+      // resolved-nya kosong (kontrak lama dengan snapshot parsial).
+      signature: {
+        employeeName: values['employee.fullName'] || payload.employee?.fullName || '',
+        jobRole: values['employee.jobRole'] || payload.employee?.jobRole?.name || '',
       },
     })
-
-    // Signature: dua pilar dalam kotak kolom, mengikuti master.
-    // Label "PIHAK PERTAMA"/"PIHAK KEDUA" adalah HEADER pilar (chrome).
-    // Baris di bawah nama adalah JABATAN, bukan label pihak — memakai label
-    // pihak di sini akan mencetak "PIHAK PERTAMA" dua kali (bug).
-    const sig = blocks.find(b => b?.type === 'signature')
-    const chairman = values['settings.cooperativeChairmanName'] || ''
-    const employeeName = values['employee.fullName'] || payload.employee?.fullName || ''
-    const jobRole = values['employee.jobRole'] || payload.employee?.jobRole?.name || ''
-    const leftRole = MITRA_HEADER_CHROME.signature.leftRoleLabel
-    const rightRole = jobRole
-      ? `( ${jobRole} )`
-      : MITRA_HEADER_CHROME.signature.rightRoleFallback
-    void sig
-
-    renderMitraSignature(doc, {
-      leftHeader: MITRA_HEADER_CHROME.signature.leftHeader,
-      leftName: chairman,
-      leftRole,
-      rightHeader: MITRA_HEADER_CHROME.signature.rightHeader,
-      rightName: employeeName,
-      rightRole,
-    })
-    void snapshot
   }
 
   /** Render blok hanya pada satu kolom mulai dari Y tertentu (untuk kolom EN). */
@@ -1062,29 +1034,18 @@ export class ContractDocumentService {
       ? interpolate(String(titleBlock.text), values)
       : definition.title ?? 'PERJANJIAN KEMITRAAN').toUpperCase()
 
-    const fontDir = this.fontDir
-    renderMitraLayout(doc, blocks, {
+    renderMitraDocumentInto(doc, {
+      blocks,
       values,
       title,
       numberLabel: meta?.contractNo ? `${MITRA_HEADER_CHROME.numberPrefix} ${meta.contractNo}` : undefined,
       dateLabel: meta?.signedDate ? `${MITRA_HEADER_CHROME.datePrefix} ${meta.signedDate}` : undefined,
       logoPath: existsSync(this.mitraLogoPath) ? this.mitraLogoPath : undefined,
       fonts: {
-        regular: path.join(fontDir, 'times.ttf'),
-        bold: path.join(fontDir, 'timesbd.ttf'),
-        italic: path.join(fontDir, 'timesi.ttf'),
+        regular: path.join(this.fontDir, 'times.ttf'),
+        bold: path.join(this.fontDir, 'timesbd.ttf'),
+        italic: path.join(this.fontDir, 'timesi.ttf'),
       },
-    })
-
-    renderMitraSignature(doc, {
-      leftHeader: MITRA_HEADER_CHROME.signature.leftHeader,
-      leftName: values['settings.cooperativeChairmanName'] || '',
-      leftRole: MITRA_HEADER_CHROME.signature.leftRoleLabel,
-      rightHeader: MITRA_HEADER_CHROME.signature.rightHeader,
-      rightName: values['employee.fullName'] || '',
-      rightRole: values['employee.jobRole']
-        ? `( ${values['employee.jobRole']} )`
-        : MITRA_HEADER_CHROME.signature.rightRoleFallback,
     })
   }
 
