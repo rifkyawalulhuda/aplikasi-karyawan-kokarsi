@@ -64,6 +64,110 @@ async function openPreview(v: Version) {
 }
 function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
 function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
+
+// ── Drag & drop urutan blok ──────────────────────────────────────────────────
+// Reorder murni mengubah URUTAN array blok; tidak menyentuh data model. Memakai
+// HTML5 DnD native (pola sama dengan spaces/KanbanBoard.vue) agar tanpa dependensi.
+const dragIndex = ref(-1)
+const dropIndex = ref(-1)
+const dropPosition = ref<'before' | 'after'>('before')
+const blocksListEl = ref<HTMLElement | null>(null)
+let scrollEl: HTMLElement | null = null
+let autoScrollRaf = 0
+let lastClientY = 0
+
+/** Cari leluhur yang bisa digulir (modal body) untuk auto-scroll saat drag. */
+function findScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null
+  while (node) {
+    const oy = getComputedStyle(node).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1) return node
+    node = node.parentElement
+  }
+  return null
+}
+
+function startAutoScroll() {
+  stopAutoScroll()
+  const tick = () => {
+    if (dragIndex.value < 0) return
+    const el = scrollEl
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const EDGE = 64
+      const SPEED = 14
+      if (lastClientY < rect.top + EDGE) el.scrollTop -= SPEED
+      else if (lastClientY > rect.bottom - EDGE) el.scrollTop += SPEED
+    }
+    autoScrollRaf = requestAnimationFrame(tick)
+  }
+  autoScrollRaf = requestAnimationFrame(tick)
+}
+
+function stopAutoScroll() {
+  if (autoScrollRaf) cancelAnimationFrame(autoScrollRaf)
+  autoScrollRaf = 0
+}
+
+function onBlockDragStart(i: number, e: DragEvent) {
+  if (!draft.value) return
+  dragIndex.value = i
+  dropIndex.value = -1
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    // setData wajib agar event `drop` terpicu (Chrome/Firefox).
+    e.dataTransfer.setData('text/plain', String(i))
+  }
+  scrollEl = findScrollParent(blocksListEl.value)
+  lastClientY = e.clientY
+  startAutoScroll()
+}
+
+function onBlockDragOver(i: number, e: DragEvent) {
+  if (dragIndex.value < 0) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  lastClientY = e.clientY
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropIndex.value = i
+  dropPosition.value = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+}
+
+function onBlockDrop(i: number, e: DragEvent) {
+  if (dragIndex.value < 0) return
+  e.preventDefault()
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const after = e.clientY > rect.top + rect.height / 2
+  reorderBlocks(dragIndex.value, after ? i + 1 : i)
+  onBlockDragEnd()
+}
+
+/**
+ * Pindahkan blok `from` agar menempati posisi sebelum index `insertAt`
+ * (dihitung pada array SEBELUM penghapusan).
+ */
+function reorderBlocks(from: number, insertAt: number) {
+  const arr = blocks.value
+  if (from < 0 || from >= arr.length) return
+  let target = from < insertAt ? insertAt - 1 : insertAt
+  target = Math.max(0, Math.min(target, arr.length - 1))
+  if (target === from) return
+  const [item] = arr.splice(from, 1)
+  arr.splice(target, 0, item)
+}
+
+function onBlockDragEnd() {
+  dragIndex.value = -1
+  dropIndex.value = -1
+  stopAutoScroll()
+}
+
+/** Garis sisip hanya tampil pada kartu target (bukan kartu yang ditarik). */
+function blockDropIndicator(i: number): 'none' | 'before' | 'after' {
+  if (dragIndex.value < 0 || dropIndex.value !== i || i === dragIndex.value) return 'none'
+  return dropPosition.value
+}
+
 /** @deprecated gunakan `insertField()` — dipertahankan untuk kompatibilitas. */
 const useField = insertField
 async function createField() { fieldSaving.value = true; try { const f = await $fetch<any>('/api/template-fields', { method: 'POST', body: { key: form.key, label: form.label, dataType: form.dataType, sourceType: form.sourceType, options: form.dataType === 'DROPDOWN' ? form.options.split(',').map(x => x.trim()).filter(Boolean) : undefined } }); fields.value.push(f); fieldOpen.value = false; toast.add({ title: 'Field dibuat', color: 'success' }) } catch (e: any) { toast.add({ title: 'Field gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { fieldSaving.value = false } }
@@ -520,22 +624,32 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
             </p>
           </div>
 
-          <div v-else class="space-y-2">
-            <KontrakTemplateBlockCard
+          <div v-else ref="blocksListEl">
+            <div
               v-for="(b, i) in blocks"
               :key="b.id"
-              :block="b"
-              :index="i"
-              :total="blocksCount"
-              :editable="!!draft"
-              :collapsed="collapsedBlocks[b.id] ?? true"
-              :selected="focusedBlockId === b.id"
-              @update:collapsed="v => collapsedBlocks[b.id] = v"
-              @activate="(id, path) => setFocus(id, path)"
-              @move="d => move(i, d)"
-              @duplicate="duplicateBlock(i)"
-              @remove="confirmDeleteIndex = i"
-            />
+              class="pb-2"
+              @dragover="onBlockDragOver(i, $event)"
+              @drop="onBlockDrop(i, $event)"
+            >
+              <KontrakTemplateBlockCard
+                :block="b"
+                :index="i"
+                :total="blocksCount"
+                :editable="!!draft"
+                :collapsed="collapsedBlocks[b.id] ?? true"
+                :selected="focusedBlockId === b.id"
+                :dragging="dragIndex === i"
+                :drop-indicator="blockDropIndicator(i)"
+                @update:collapsed="v => collapsedBlocks[b.id] = v"
+                @activate="(id, path) => setFocus(id, path)"
+                @move="d => move(i, d)"
+                @duplicate="duplicateBlock(i)"
+                @remove="confirmDeleteIndex = i"
+                @dragstart="e => onBlockDragStart(i, e)"
+                @dragend="onBlockDragEnd"
+              />
+            </div>
           </div>
 
           <UButton

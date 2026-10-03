@@ -14,15 +14,43 @@ interface Props {
   editable: boolean
   collapsed: boolean
   selected: boolean
+  /** Sedang ditarik (drag) — kartu diredupkan. */
+  dragging?: boolean
+  /** Garis sisip: di atas kartu (`before`) atau di bawahnya (`after`). */
+  dropIndicator?: 'none' | 'before' | 'after'
 }
-const props = defineProps<Props>()
+const props = withDefaults(defineProps<Props>(), {
+  dragging: false,
+  dropIndicator: 'none'
+})
 const emit = defineEmits<{
   'move': [direction: number]
   'remove': []
   'duplicate': []
   'update:collapsed': [value: boolean]
   'activate': [blockId: string, path?: string | null]
+  'dragstart': [event: DragEvent]
+  'dragend': []
 }>()
+
+/**
+ * Koleksi bertipe. `block` sengaja `any` (bentuknya beda per tipe blok), jadi
+ * `v-for` atas `block.paragraphs` membuat index ter-infer `string | number`.
+ * Computed ini memaksa tipe agar `p`/`ci`/`ri` dikenali `number` oleh vue-tsc.
+ * `v-model` tetap menunjuk array asli (`block.paragraphs[p]`) agar tersimpan.
+ */
+/** Kolom tabel konten: label + kunci + metadata format. */
+interface TableColumn {
+  key: string
+  label?: string
+  width?: number
+  format?: string
+}
+
+const paragraphList = computed<string[]>(() => props.block?.paragraphs ?? [])
+const itemList = computed<string[]>(() => props.block?.items ?? [])
+const columnList = computed<TableColumn[]>(() => props.block?.columns ?? [])
+const rowList = computed<Record<string, string>[]>(() => props.block?.rows ?? [])
 
 /**
  * Beri tahu induk blok mana (dan sub-bagian mana) yang sedang difokuskan.
@@ -133,14 +161,41 @@ function addColumn() {
 
 <template>
   <div
-    class="rounded-lg border transition"
-    :class="selected ? 'border-primary ring-1 ring-primary/30' : 'border-default'"
+    class="relative rounded-lg border transition"
+    :class="[
+      selected ? 'border-primary ring-1 ring-primary/30' : 'border-default',
+      dragging ? 'opacity-40' : ''
+    ]"
     @click="markFocus()"
     @focusin="markFocus()"
   >
+    <!-- Garis sisip atas -->
+    <div
+      v-if="dropIndicator === 'before'"
+      class="pointer-events-none absolute inset-x-0 -top-[5px] z-10 flex items-center gap-1"
+    >
+      <span class="size-2 rounded-full bg-primary" />
+      <span class="h-[2px] flex-1 rounded bg-primary" />
+    </div>
+
     <!-- Kepala kartu: identitas blok + aksi. Klik di mana pun pada kepala
          kartu memilih blok ini sebagai target sisipan field. -->
     <div class="flex items-center gap-2 px-3 py-2">
+      <!-- Handle drag: hanya aktif pada draft. -->
+      <span
+        v-if="editable"
+        class="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-elevated hover:text-highlighted active:cursor-grabbing"
+        draggable="true"
+        role="button"
+        tabindex="-1"
+        title="Tarik untuk memindahkan blok"
+        aria-label="Tarik untuk memindahkan blok"
+        @dragstart="emit('dragstart', $event)"
+        @dragend="emit('dragend')"
+        @click.stop
+      >
+        <UIcon name="i-lucide-grip-vertical" class="size-4" />
+      </span>
       <UButton
         :icon="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
         size="xs"
@@ -236,7 +291,7 @@ function addColumn() {
               :rows="3"
               autoresize
               class="w-full"
-              placeholder="Tulis teks di sini…"
+              placeholder="Tulis teks di siniΓÇª"
             />
           </div>
         </UFormField>
@@ -248,13 +303,13 @@ function addColumn() {
             v-model="block.heading"
             :disabled="!editable"
             class="w-full"
-            placeholder="Contoh: Pasal 1 — Ruang Lingkup Pekerjaan"
+            placeholder="Contoh: Pasal 1 ΓÇö Ruang Lingkup Pekerjaan"
           />
         </UFormField>
         <UFormField label="Uraian pasal">
           <div class="space-y-2">
             <div
-              v-for="(_, p) in block.paragraphs"
+              v-for="(_, p) in paragraphList"
               :key="p"
               class="flex items-start gap-2"
               @click="markFocus(`art:${p}`)"
@@ -267,7 +322,7 @@ function addColumn() {
                 :rows="3"
                 autoresize
                 class="flex-1"
-                placeholder="Tulis isi pasal…"
+                placeholder="Tulis isi pasalΓÇª"
               />
               <UButton
                 icon="i-lucide-x"
@@ -297,7 +352,7 @@ function addColumn() {
             v-model="block.style"
             :disabled="!editable"
             :items="[
-              { label: 'Bullet (•)', value: 'bullet' },
+              { label: 'Bullet (ΓÇó)', value: 'bullet' },
               { label: 'Angka (1, 2, 3)', value: 'numbered' },
               { label: 'Huruf (a, b, c)', value: 'alphabetic' }
             ]"
@@ -307,7 +362,7 @@ function addColumn() {
         <UFormField label="Poin daftar">
           <div class="space-y-2">
             <div
-              v-for="(_, p) in block.items"
+              v-for="(_, p) in itemList"
               :key="p"
               class="flex items-center gap-2"
               @click="markFocus(`item:${p}`)"
@@ -318,7 +373,7 @@ function addColumn() {
                 v-model="block.items[p]"
                 :disabled="!editable"
                 class="flex-1"
-                placeholder="Isi poin…"
+                placeholder="Isi poinΓÇª"
               />
               <UButton
                 icon="i-lucide-x"
@@ -347,7 +402,7 @@ function addColumn() {
           <table class="w-full text-sm">
             <thead>
               <tr>
-                <th v-for="(c, ci) in block.columns" :key="c.key" class="p-1 align-top">
+                <th v-for="(c, ci) in columnList" :key="c.key" class="p-1 align-top">
                   <div class="flex items-center gap-1">
                     <UInput
                       v-model="c.label"
@@ -361,7 +416,7 @@ function addColumn() {
                       variant="ghost"
                       color="neutral"
                       aria-label="Hapus kolom"
-                      :disabled="!editable || block.columns.length <= 1"
+                      :disabled="!editable || columnList.length <= 1"
                       @click="removeColumn(ci)"
                     />
                   </div>
@@ -370,15 +425,15 @@ function addColumn() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(r, ri) in block.rows" :key="ri">
+              <tr v-for="(r, ri) in rowList" :key="ri">
                 <td
-                  v-for="(c, ci) in block.columns"
+                  v-for="(c, ci) in columnList"
                   :key="c.key"
                   class="p-1"
                   @click="markFocus(`row:${ri}:${ci}`)"
                   @focusin="markFocus(`row:${ri}:${ci}`)"
                 >
-                  <UInput v-model="r[c.key]" :disabled="!editable" placeholder="—" />
+                  <UInput v-model="r[c.key]" :disabled="!editable" placeholder="ΓÇö" />
                 </td>
                 <td class="p-1">
                   <UButton
@@ -387,7 +442,7 @@ function addColumn() {
                     variant="ghost"
                     color="error"
                     aria-label="Hapus baris"
-                    :disabled="!editable || block.rows.length <= 1"
+                    :disabled="!editable || rowList.length <= 1"
                     @click="removeRow(ri)"
                   />
                 </td>
@@ -448,6 +503,15 @@ function addColumn() {
           <p>Tipe: <code class="rounded bg-elevated px-1">{{ block.type }}</code></p>
         </div>
       </details>
+    </div>
+
+    <!-- Garis sisip bawah -->
+    <div
+      v-if="dropIndicator === 'after'"
+      class="pointer-events-none absolute inset-x-0 -bottom-[5px] z-10 flex items-center gap-1"
+    >
+      <span class="size-2 rounded-full bg-primary" />
+      <span class="h-[2px] flex-1 rounded bg-primary" />
     </div>
   </div>
 </template>
