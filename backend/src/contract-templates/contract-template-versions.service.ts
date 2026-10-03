@@ -3,11 +3,11 @@ import { Prisma } from '@prisma/client'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
-import { validateContentDefinition, collectAllPlaceholders } from './template-schema.validator'
+import { validateContentDefinition, collectAllPlaceholders, normalizeCustomPlaceholders } from './template-schema.validator'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
-import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions } from './template-field-bindings.helpers'
+import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions, ensureFieldDefinitionsForContent } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { isValidMasterField, isValidMasterSource } from './master-reference.registry'
 import { MITRA_HEADER_CHROME } from '../contracts/mitra-layout.engine'
@@ -130,6 +130,8 @@ export class ContractTemplateVersionsService {
     const boundFieldDefinitions = applyTemplateBindings(fieldDefinitions, bindings, {
       catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys(),
     })
+    // Selaraskan placeholder field dinamis tanpa prefix `custom.` sejak awal.
+    normalizeCustomPlaceholders(contentDefinition, await this.fieldsService.findContractInputCatalogKeys())
 
     return this.prisma.client.contractTemplateVersion.create({
       data: {
@@ -161,10 +163,17 @@ export class ContractTemplateVersionsService {
         await this.fieldsService.findTemplateBindings(version.templateId),
         { catalogContractInputKeys: await this.fieldsService.findContractInputCatalogKeys() },
       )
+    // Selaraskan placeholder field dinamis tanpa prefix `custom.` (mis. dari
+    // editor lama) supaya draft tidak menyimpan sintaks yang ditolak publish.
+    let nextContent = dto.contentDefinition
+    if (nextContent !== undefined) {
+      nextContent = JSON.parse(JSON.stringify(nextContent))
+      normalizeCustomPlaceholders(nextContent, await this.fieldsService.findContractInputCatalogKeys())
+    }
     return this.prisma.client.contractTemplateVersion.update({
       where: { id: versionId },
       data: {
-        contentDefinition: dto.contentDefinition !== undefined ? (dto.contentDefinition as any) : undefined,
+        contentDefinition: nextContent !== undefined ? (nextContent as any) : undefined,
         fieldDefinitions: fieldDefinitions !== undefined ? (fieldDefinitions as any) : undefined,
         changeSummary: dto.changeSummary,
       },
@@ -190,11 +199,11 @@ export class ContractTemplateVersionsService {
     if (!template) throw new NotFoundException('Template tidak ditemukan')
 
     // Kumpulkan field keys valid: system + custom yang direferensikan fieldDefinitions
-    const catalog = await this.prisma.client.templateFieldDefinition.findMany({
+    const catalogRows = await this.prisma.client.templateFieldDefinition.findMany({
       where: { isActive: true },
-      select: { key: true },
+      select: { key: true, label: true, dataType: true, sourceType: true, sourceConfig: true, options: true },
     })
-    const validKeys = new Set(catalog.map(f => f.key))
+    const validKeys = new Set(catalogRows.map(f => f.key))
 
     // Binding katalog di-overlay terakhir, sama seperti createDraft/updateDraft.
     // `fieldDefinitions` versi adalah snapshot yang dibekukan saat publish dan
@@ -209,9 +218,23 @@ export class ContractTemplateVersionsService {
     )
 
     this.validateFieldDefinitions(fieldDefinitions, validKeys)
-    this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)
+    // Perbaiki placeholder field dinamis yang ditulis tanpa prefix `custom.`
+    // (mis. `{{ktp_issued_date}}` → `{{custom.ktp_issued_date}}`). Versi lama
+    // dapat memuat sintaks ini dari editor sebelum perbaikan; tanpa normalisasi,
+    // publish gagal dengan "sintaks {{...}} rusak".
+    const customKeys = await this.fieldsService.findContractInputCatalogKeys()
+    const contentDefinition = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
+    const fixedCount = normalizeCustomPlaceholders(contentDefinition, customKeys)
 
-    validateContentDefinition(version.contentDefinition, [...validKeys], template.family as any)
+    // Pastikan fieldDefinitions mencakup SETIAP placeholder SYSTEM di konten.
+    // Placeholder SYSTEM yang tidak terdaftar tidak di-resolve saat kontrak
+    // dibuat → tercetak `...............`. CONTRACT_INPUT tetap harus di-bind
+    // eksplisit (lihat ensureFieldDefinitionsForContent).
+    ensureFieldDefinitionsForContent(contentDefinition, fieldDefinitions, catalogRows)
+
+    this.addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+
+    validateContentDefinition(contentDefinition, [...validKeys], template.family as any)
 
     const now = new Date()
     const published = await this.prisma.client.$transaction(async tx => {
@@ -222,7 +245,14 @@ export class ContractTemplateVersionsService {
       })
       return tx.contractTemplateVersion.update({
         where: { id: versionId },
-        data: { status: 'PUBLISHED', publishedAt: now, publishedByName: actor.name, fieldDefinitions: fieldDefinitions as any },
+        data: {
+          status: 'PUBLISHED',
+          publishedAt: now,
+          publishedByName: actor.name,
+          fieldDefinitions: fieldDefinitions as any,
+          // Simpan konten yang sudah dinormalisasi agar snapshot konsisten.
+          ...(fixedCount > 0 ? { contentDefinition: contentDefinition as any } : {}),
+        },
       })
     })
     await this.activityLog.log({ action: 'UPDATE', module: 'Template Kontrak', targetLabel: `Versi ${version.versionNumber}`, performedBy: actor.name, performedByRole: 'ADMIN', detail: `Publish template ${template.code}` })
@@ -242,8 +272,12 @@ export class ContractTemplateVersionsService {
       await this.fieldsService.findTemplateBindings(version.templateId),
     )
     this.validateFieldDefinitions(fieldDefinitions, validKeys)
-    this.addPlaceholderKeysFromDefinitions(version.contentDefinition, fieldDefinitions, validKeys)
-    const result = validateContentDefinition(version.contentDefinition, [...validKeys], version.template.family as any)
+    // Sama seperti publish(): perbaiki placeholder tanpa prefix `custom.` agar
+    // pratinjau tidak melaporkan "sintaks rusak" untuk data lama.
+    const previewContent = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
+    normalizeCustomPlaceholders(previewContent, await this.fieldsService.findContractInputCatalogKeys())
+    this.addPlaceholderKeysFromDefinitions(previewContent, fieldDefinitions, validKeys)
+    const result = validateContentDefinition(previewContent, [...validKeys], version.template.family as any)
     return { versionId: version.id, templateId: version.templateId, valid: true, ...result }
   }
 

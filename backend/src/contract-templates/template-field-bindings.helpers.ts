@@ -19,6 +19,7 @@
  *
  * Helper ini murni (tanpa NestJS/Prisma) agar bisa di-unit-test.
  */
+import { collectAllPlaceholders } from './template-schema.validator'
 
 /** Baris katalog `TemplateFieldDefinition` yang relevan untuk binding. */
 export interface CatalogFieldRow {
@@ -189,6 +190,66 @@ export function applyTemplateBindings(
   // `definitions` masih memuat field yang baru dilepas; saring sebelum kembali
   // agar urutan & isinya konsisten dengan `byKey`.
   return removed.size === 0 ? definitions : definitions.filter(d => !removed.has(d.key))
+}
+
+/** Tebak tipe data dari nama key bila katalog tidak menyediakannya. */
+function inferDataType(key: string): string {
+  if (key.includes('Date') || key.endsWith('Date')) return 'DATE'
+  if (key.includes('Compensation')) return 'NUMBER'
+  return 'TEXT'
+}
+
+/**
+ * Pastikan `fieldDefinitions` mencakup SETIAP placeholder SYSTEM yang dipakai
+ * konten.
+ *
+ * MASALAH YANG DIPERBAIKI: `TemplateSnapshotService.buildSnapshot()` hanya
+ * me-resolve key yang terdaftar di `fieldDefinitions` versi. Bila editor
+ * menyisipkan placeholder SYSTEM (mis. `{{contract.contractNo}}`) ke teks TANPA
+ * menambahkannya ke `fieldDefinitions`, key itu tidak pernah punya nilai →
+ * tercetak sebagai `...............` di PDF, walaupun pratinjau (yang memakai
+ * data contoh) terlihat lengkap. Validasi publish pun lolos karena key SYSTEM
+ * ada di katalog global — jadi ketidak-sinkronan ini senyap.
+ *
+ * Hanya field SYSTEM yang ditambahkan: nilainya berasal dari data kontrak/
+ * karyawan sehingga selalu dapat di-resolve. Field `CONTRACT_INPUT` (`custom.*`)
+ * TIDAK ditambahkan otomatis — ia harus ter-bind eksplisit lewat panel "Kelola",
+ * kalau tidak nilainya tidak punya sumber (dan publish memang harus menolak).
+ */
+export function ensureFieldDefinitionsForContent(
+  content: unknown,
+  fieldDefinitions: VersionFieldDefinition[],
+  catalog: CatalogFieldRow[] = [],
+): VersionFieldDefinition[] {
+  const byKey = new Map<string, VersionFieldDefinition>()
+  for (const definition of fieldDefinitions) {
+    if (!byKey.has(definition.key)) byKey.set(definition.key, definition)
+  }
+  const catalogByKey = new Map<string, CatalogFieldRow>()
+  for (const row of catalog) {
+    if (row?.key) catalogByKey.set(String(row.key).replace(/^custom\./, ''), row)
+  }
+
+  for (const placeholder of collectAllPlaceholders(content)) {
+    if (placeholder.startsWith('custom.')) continue
+    const key = placeholder
+    if (!key || byKey.has(key)) continue
+
+    const cat = catalogByKey.get(key)
+    if (!cat || cat.sourceType !== 'SYSTEM') continue
+
+    const created: VersionFieldDefinition = {
+      key,
+      label: typeof cat.label === 'string' && cat.label.length > 0 ? cat.label : key,
+      dataType: typeof cat.dataType === 'string' && cat.dataType.length > 0 ? cat.dataType : inferDataType(key),
+      sourceType: 'SYSTEM',
+      required: true,
+    }
+    byKey.set(key, created)
+    fieldDefinitions.push(created)
+  }
+
+  return fieldDefinitions
 }
 
 /** Field dinamis (`CONTRACT_INPUT`) yang harus ditampilkan di form kontrak. */

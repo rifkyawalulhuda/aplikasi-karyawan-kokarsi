@@ -14,8 +14,40 @@ const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null
 const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
 const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
 const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
-const fieldItems = computed(() => fields.value.length ? fields.value : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value?.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? []))
+const fieldItems = computed(() => {
+  // Gabungkan katalog field dengan status binding template. Field
+  // `CONTRACT_INPUT` yang BELUM di-bind ke template ini ditandai `bound:false`
+  // sehingga tidak dapat disisipkan: placeholder-nya tidak akan pernah punya
+  // nilai dan membuat publish gagal ("tidak terdaftar di katalog field").
+  type CatalogField = { key: string, label?: string, sourceType?: string, bound?: boolean }
+  const catalog: CatalogField[] = fields.value.length
+    ? (fields.value as CatalogField[])
+    : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? [])
+  if (!bindings.value.length) return catalog.map(f => ({ ...f, bound: true }))
+  const boundByKey = new Map<string, boolean>(bindings.value.map(b => [b.key, b.bound] as [string, boolean]))
+  return catalog.map(f => ({
+    ...f,
+    bound: f.sourceType === 'CONTRACT_INPUT' ? (boundByKey.get(f.key) ?? false) : true
+  }))
+})
 const placeholderText = (key: string) => `{{${key}}}`
+
+/**
+ * Key placeholder kanonik untuk sebuah field katalog.
+ *
+ * Field `CONTRACT_INPUT` disimpan TANPA prefix `custom.` (mis. `ktp_issued_date`),
+ * tetapi placeholder di konten HARUS memakai prefix (`{{custom.ktp_issued_date}}`)
+ * agar dikenali validator & resolver backend. Tanpa ini, menyisipkan field
+ * dinamis menghasilkan `{{ktp_issued_date}}` yang ditolak saat publish dengan
+ * "sintaks {{...}} rusak", dan nilainya tidak akan pernah ter-resolve.
+ */
+function fieldPlaceholderKey(field: { key?: unknown, sourceType?: unknown } | null | undefined): string {
+  const key = String(field?.key ?? '')
+  if (!key) return ''
+  const isCustom = field?.sourceType === 'CONTRACT_INPUT'
+  return isCustom && !key.startsWith('custom.') ? `custom.${key}` : key
+}
+
 const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
 watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
 async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
@@ -108,7 +140,36 @@ async function openPreview(v: Version) {
     previewPdfLoading.value = false
   }
 }
-function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
+/**
+ * Blok tanda tangan hanya boleh SATU per versi. Dua blok akan menghasilkan dua
+ * tabel tanda tangan di PDF dan membingungkan saat penandatanganan.
+ */
+const hasSignatureBlock = computed(() => (blocks.value ?? []).some((b: { type?: string }) => b?.type === 'signature'))
+
+function add(type: string) {
+  if (type === 'signature' && hasSignatureBlock.value) {
+    toast.add({
+      title: 'Blok tanda tangan sudah ada',
+      description: 'Hapus blok tanda tangan yang lama dulu bila ingin menambah yang baru.',
+      color: 'warning'
+    })
+    blockPickerOpen.value = false
+    return
+  }
+  const id = `${type}-${Date.now()}`
+  const d: any = {
+    paragraph: { id, type, text: '' },
+    article: { id, type, heading: 'Pasal baru', paragraphs: [''] },
+    list: { id, type, style: 'bullet', items: [''] },
+    table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] },
+    pageBreak: { id, type },
+    signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' }
+  }
+  blocks.value.push(d[type])
+  setFocus(id)
+  collapsedBlocks.value[id] = false
+  blockPickerOpen.value = false
+}
 function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
 
 // ── Drag & drop urutan blok ──────────────────────────────────────────────────
@@ -260,7 +321,7 @@ function setBinding(row: BindingView, patch: { bound?: boolean; required?: boole
   if (!nextBound && row.usedInContent) {
     const entry = toast.add({
       title: `Lepas field "${row.label}"?`,
-      description: `Field masih dipakai di teks template (${placeholderText(row.key)}). Setelah dilepas, `
+      description: `Field masih dipakai di teks template (${placeholderText(fieldPlaceholderKey(row))}). Setelah dilepas, `
         + 'field hilang dari form kontrak dan PENERBITAN versi akan gagal sampai placeholder itu dihapus dari teks.',
       icon: 'i-lucide-triangle-alert',
       color: 'warning',
@@ -292,7 +353,7 @@ async function commitBinding(row: BindingView, patch: { bound: boolean; required
     if (!patch.bound && row.usedInContent) {
       toast.add({
         title: 'Field dilepas dari template',
-        description: `Hapus ${placeholderText(row.key)} dari teks template sebelum menerbitkan versi baru.`,
+        description: `Hapus ${placeholderText(fieldPlaceholderKey(row))} dari teks template sebelum menerbitkan versi baru.`,
         color: 'warning',
       })
     } else {
@@ -784,17 +845,20 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                 variant="outline"
                 color="neutral"
                 size="sm"
-                :disabled="!draft"
+                :disabled="!draft || f.bound === false"
                 class="justify-start text-left"
-                @click="insertField(f.key)"
+                @click="insertField(fieldPlaceholderKey(f))"
               >
                 <div class="min-w-0 flex-1">
                   <p class="truncate text-sm">
                     {{ f.label || f.key }}
                   </p>
-                  <code class="text-xs text-muted">{{ placeholderText(f.key) }}</code>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(f)) }}</code>
+                  <p v-if="f.bound === false" class="text-xs text-warning">
+                    Belum dipakai template ini — aktifkan di "Kelola" agar bisa disisipkan.
+                  </p>
                 </div>
-                <UIcon v-if="draft" name="i-lucide-corner-down-left" class="size-3.5 shrink-0" />
+                <UIcon v-if="draft && f.bound !== false" name="i-lucide-corner-down-left" class="size-3.5 shrink-0" />
               </UButton>
 
               <div
@@ -934,7 +998,8 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
           v-for="opt in BLOCK_PICKER"
           :key="opt.type"
           type="button"
-          class="flex items-start gap-3 rounded-lg border border-default p-3 text-left transition hover:border-primary hover:bg-primary/5"
+          :disabled="opt.type === 'signature' && hasSignatureBlock"
+          class="flex items-start gap-3 rounded-lg border border-default p-3 text-left transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-default disabled:hover:bg-transparent"
           @click="add(opt.type)"
         >
           <UIcon :name="opt.icon" class="mt-0.5 size-5 shrink-0 text-primary" />
@@ -943,7 +1008,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
               {{ opt.label }}
             </p>
             <p class="text-xs text-muted">
-              {{ opt.desc }}
+              {{ opt.type === 'signature' && hasSignatureBlock ? 'Sudah ada di versi ini (maksimal satu)' : opt.desc }}
             </p>
           </div>
         </button>
@@ -1143,7 +1208,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                   <p class="font-medium text-highlighted">
                     {{ row.label }}
                   </p>
-                  <code class="text-xs text-muted">{{ placeholderText(row.key) }}</code>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(row)) }}</code>
                   <div class="mt-1 flex flex-wrap items-center gap-1">
                     <UBadge
                       :color="row.sourceType === 'SYSTEM' ? 'neutral' : 'primary'"
@@ -1160,7 +1225,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                     />
                   </div>
                   <p v-if="row.usedInContent && !row.locked" class="mt-1 text-xs text-warning">
-                    Melepas field ini butuh menghapus {{ placeholderText(row.key) }} dari teks template,
+                    Melepas field ini butuh menghapus {{ placeholderText(fieldPlaceholderKey(row)) }} dari teks template,
                     atau Publish akan gagal.
                   </p>
                 </td>

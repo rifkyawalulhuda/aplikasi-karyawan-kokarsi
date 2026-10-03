@@ -1,4 +1,4 @@
-import { validateContentDefinition, extractPlaceholders, findBrokenPlaceholders, collectAllPlaceholders } from './template-schema.validator'
+﻿import { validateContentDefinition, extractPlaceholders, findBrokenPlaceholders, collectAllPlaceholders, normalizeCustomPlaceholders } from './template-schema.validator'
 
 const VALID_FIELD_KEYS = ['employee.fullName', 'contract.contractNo', 'contract.termRange', 'contract.duration', 'custom.ktp_issued_date']
 
@@ -61,6 +61,20 @@ describe('validateContentDefinition', () => {
       },
     }
     expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).toThrow(/signature/)
+  })
+
+  it('menolak lebih dari satu blok signature (agar tidak duplikat)', () => {
+    const content = baseContent(b => [
+      ...b,
+      { id: 'sig-2', type: 'signature' },
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA'))
+      .toThrow(/Hanya satu blok tanda tangan/i)
+  })
+
+  it('menerima tepat satu blok signature', () => {
+    const content = baseContent()
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
   })
 
   it('menolak MITRA tanpa konten', () => {
@@ -173,5 +187,59 @@ describe('validateContentDefinition', () => {
       },
     }
     expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
+  })
+})
+
+describe('normalizeCustomPlaceholders', () => {
+  it('menambahkan prefix custom. pada key CONTRACT_INPUT tanpa prefix', () => {
+    const content = {
+      languages: {
+        id: [
+          { id: 'p', type: 'paragraph', text: 'No {{contract.contractNo}} tgl {{ktp_issued_date}}.' },
+          { id: 'sig', type: 'signature' },
+        ],
+      },
+    }
+    const fixed = normalizeCustomPlaceholders(content, ['ktp_issued_date', 'shift_code'])
+    expect(fixed).toBe(1)
+    expect(content.languages.id[0].text).toBe('No {{contract.contractNo}} tgl {{custom.ktp_issued_date}}.')
+  })
+
+  it('tidak menyentuh placeholder sistem yang sudah benar', () => {
+    const content = { languages: { id: [{ id: 'p', type: 'paragraph', text: '{{employee.fullName}}' }] } }
+    const fixed = normalizeCustomPlaceholders(content, ['ktp_issued_date'])
+    expect(fixed).toBe(0)
+    expect(content.languages.id[0].text).toBe('{{employee.fullName}}')
+  })
+
+  it('tidak menyentuh key yang bukan field CONTRACT_INPUT', () => {
+    const content = { languages: { id: [{ id: 'p', type: 'paragraph', text: '{{tidak_dikenal}}' }] } }
+    const fixed = normalizeCustomPlaceholders(content, ['ktp_issued_date'])
+    expect(fixed).toBe(0)
+    expect(content.languages.id[0].text).toBe('{{tidak_dikenal}}')
+  })
+
+  it('menormalkan item list, baris tabel, dan heading', () => {
+    const content = {
+      languages: {
+        id: [
+          { id: 'a', type: 'article', heading: 'Pasal {{shift_code}}', paragraphs: ['x {{ktp_issued_date}}'] },
+          { id: 'l', type: 'list', items: ['{{shift_code}}'] },
+          { id: 't', type: 'table', columns: [{ key: 'c', label: 'C' }], rows: [{ c: '{{ktp_issued_date}}' }] },
+        ],
+      },
+    }
+    const fixed = normalizeCustomPlaceholders(content, ['ktp_issued_date', 'shift_code'])
+    expect(fixed).toBe(4)
+    expect(content.languages.id[0].heading).toBe('Pasal {{custom.shift_code}}')
+    expect(content.languages.id[0].paragraphs[0]).toBe('x {{custom.ktp_issued_date}}')
+    expect(content.languages.id[1].items[0]).toBe('{{custom.shift_code}}')
+    expect(content.languages.id[2].rows[0].c).toBe('{{custom.ktp_issued_date}}')
+  })
+
+  it('menerima key dengan prefix custom. sebagai input daftar', () => {
+    const content = { languages: { id: [{ id: 'p', type: 'paragraph', text: '{{ktp_issued_date}}' }] } }
+    expect(normalizeCustomPlaceholders(content, ['custom.ktp_issued_date'])).toBe(1)
+    expect(content.languages.id[0].text).toBe('{{custom.ktp_issued_date}}')
   })
 })

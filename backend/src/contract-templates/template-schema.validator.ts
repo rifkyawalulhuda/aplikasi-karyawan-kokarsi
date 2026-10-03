@@ -84,6 +84,8 @@ export function validateContentDefinition(
     const seenIds = new Set<string>()
     let hasSignature = false
     let hasContent = false
+    /** Hitung blok signature: hanya SATU yang diizinkan per bahasa. */
+    let signatureCount = 0
 
     blocks.forEach((block: any, idx: number) => {
       const id = String(block?.id ?? `index-${idx}`)
@@ -99,6 +101,13 @@ export function validateContentDefinition(
 
       if (block.type === 'signature') {
         hasSignature = true
+        signatureCount += 1
+        if (signatureCount > 1) {
+          issues.push({
+            blockId: id,
+            message: 'Hanya satu blok tanda tangan yang diizinkan. Hapus blok tanda tangan duplikat.',
+          })
+        }
         return
       }
 
@@ -209,7 +218,11 @@ export function validateContentDefinition(
         for (const ph of extractPlaceholders(t)) {
           placeholderCount += 1
           if (!validKeys.has(ph)) {
-            issues.push({ blockId: id, message: `Placeholder "{{${ph}}}" tidak terdaftar di katalog field` })
+            issues.push({
+              blockId: id,
+              message: `Placeholder "{{${ph}}}" tidak terdaftar di katalog field. `
+                + 'Hapus placeholder ini, atau aktifkan field-nya untuk template ini lewat "Kelola" pada panel Field dinamis.',
+            })
           }
         }
       }
@@ -263,4 +276,63 @@ export function collectAllPlaceholders(content: any): string[] {
     }
   }
   return [...out]
+}
+
+/**
+ * Perbaiki placeholder field dinamis yang ditulis TANPA prefix `custom.`.
+ *
+ * Editor lama menyisipkan `{{ktp_issued_date}}` (key mentah field
+ * `CONTRACT_INPUT`), padahal sintaks yang sah adalah `{{custom.ktp_issued_date}}`.
+ * Placeholder tanpa prefix ditolak validator ("sintaks {{...}} rusak") dan tidak
+ * pernah ter-resolve, sehingga publish gagal.
+ *
+ * Fungsi ini MENYELARASKAN konten secara in-place: hanya key yang benar-benar
+ * ada di `customKeys` (= daftar field CONTRACT_INPUT katalog) yang diberi prefix,
+ * jadi tidak ada teks lain yang ikut berubah.
+ *
+ * @returns jumlah placeholder yang diperbaiki.
+ */
+export function normalizeCustomPlaceholders(content: any, customKeys: Iterable<string>): number {
+  const keys = new Set<string>()
+  for (const k of customKeys) keys.add(String(k).replace(/^custom\./, ''))
+  if (keys.size === 0) return 0
+
+  let fixed = 0
+  const fixText = (text: string): string =>
+    text.replace(/\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g, (whole, inner: string) => {
+      if (!keys.has(inner)) return whole
+      fixed += 1
+      return `{{custom.${inner}}}`
+    })
+
+  const languages = content?.languages
+  if (!languages || typeof languages !== 'object') return 0
+  for (const lang of Object.keys(languages)) {
+    const blocks = languages[lang]
+    if (!Array.isArray(blocks)) continue
+    for (const block of blocks) {
+      if (!block || typeof block !== 'object') continue
+      if (typeof block.text === 'string') block.text = fixText(block.text)
+      if (typeof block.heading === 'string') block.heading = fixText(block.heading)
+      if (Array.isArray(block.paragraphs)) {
+        block.paragraphs = block.paragraphs.map((p: any) => (typeof p === 'string' ? fixText(p) : p))
+      }
+      if (Array.isArray(block.items)) {
+        block.items = block.items.map((it: any) =>
+          typeof it === 'string' ? fixText(it) : (it && typeof it === 'object' && typeof it.text === 'string' ? { ...it, text: fixText(it.text) } : it),
+        )
+      }
+      if (Array.isArray(block.rows)) {
+        block.rows = block.rows.map((row: any) => {
+          if (!row || typeof row !== 'object') return row
+          const out: Record<string, unknown> = { ...row }
+          for (const [k, v] of Object.entries(row)) {
+            if (typeof v === 'string') out[k] = fixText(v)
+          }
+          return out
+        })
+      }
+    }
+  }
+  return fixed
 }

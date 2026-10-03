@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { resolvePlaceholders, ResolveContext } from './template-value-resolver.helpers'
 import { BadRequestException } from '@nestjs/common'
+import { ensureFieldDefinitionsForContent } from './template-field-bindings.helpers'
 
 export interface SnapshotInput {
   templateId: number
@@ -49,11 +50,51 @@ export class TemplateSnapshotService {
     })
     if (!published) return null
 
+    return this.resolveSnapshot(input, {
+      templateVersionId: published.id,
+      versionNumber: published.versionNumber,
+      family: published.template.family,
+      contentDefinition: published.contentDefinition,
+      fieldDefinitions: published.fieldDefinitions,
+    })
+  }
+
+  /**
+   * Bangun ulang snapshot dari KONTEN yang sudah ada (konten beku kontrak),
+   * bukan dari versi PUBLISHED terkini. Dipakai jalur perbaikan data: kontrak
+   * lama yang `resolvedTemplateData`-nya tidak lengkap diperbaiki memakai
+   * konten snapshot-nya sendiri, sehingga dokumen tetap sama.
+   *
+   * Mengembalikan `null` bila tidak ada versi PUBLISHED untuk template tsb.
+   */
+  async rebuildWithContent(input: SnapshotInput, contentDefinition: unknown, fieldDefinitions: unknown): Promise<SnapshotResult | null> {
+    const tpl = await this.prisma.client.contractTemplate.findUnique({ where: { id: input.templateId } })
+    if (!tpl) return null
+    return this.resolveSnapshot(input, {
+      templateVersionId: 0,
+      versionNumber: 0,
+      family: tpl.family,
+      contentDefinition,
+      fieldDefinitions,
+    })
+  }
+
+  /** Inti resolusi snapshot — dipakai `buildSnapshot` & `rebuildWithContent`. */
+  private async resolveSnapshot(
+    input: SnapshotInput,
+    source: {
+      templateVersionId: number
+      versionNumber: number
+      family: string
+      contentDefinition: unknown
+      fieldDefinitions: unknown
+    },
+  ): Promise<SnapshotResult> {
     const settingRows = await this.prisma.appSetting.findMany()
     const settings: Record<string, any> = {}
     for (const row of settingRows) settings[row.key] = row.value
 
-    const definitions = this.collectDefinitions(published.fieldDefinitions)
+    const definitions = this.collectDefinitions(source.fieldDefinitions)
     // Normalisasi + validasi bentuk dulu supaya nilai salah ketik gagal di sini
     // (pesan jelas, kontrak tidak dibuat) alih-alih tercetak salah di PDF.
     const templateData = this.normalizeContractInputValues(definitions, input.templateData)
@@ -65,10 +106,26 @@ export class TemplateSnapshotService {
       settings,
     }
 
-    const defKeys = this.collectFieldKeys(published.fieldDefinitions)
+    // `fieldDefinitions` versi mungkin TIDAK mencakup semua placeholder yang
+    // dipakai konten (mis. placeholder yang disisipkan editor lama tanpa
+    // memperbarui daftar field). Tanpa penambahan ini, key tersebut tidak
+    // di-resolve dan tercetak sebagai `...............` di PDF — padahal
+    // pratinjau (memakai data contoh) terlihat lengkap. Lihat
+    // `ensureFieldDefinitionsForContent`.
+    const catalog = await this.prisma.client.templateFieldDefinition.findMany({
+      where: { isActive: true },
+      select: { key: true, label: true, dataType: true, sourceType: true, sourceConfig: true, options: true },
+    })
+    const allDefinitions = ensureFieldDefinitionsForContent(
+      source.contentDefinition,
+      this.collectDefinitions(source.fieldDefinitions),
+      catalog,
+    )
+
+    const defKeys = this.collectFieldKeys(allDefinitions)
     const { resolved } = resolvePlaceholders(defKeys, ctx)
 
-    for (const definition of definitions) {
+    for (const definition of allDefinitions) {
       const inputKey = String(definition.key).replace(/^custom\./, '')
       const key = definition.sourceType === 'CONTRACT_INPUT' ? `custom.${inputKey}` : definition.key
       if (!definition.required) continue
@@ -81,13 +138,13 @@ export class TemplateSnapshotService {
     }
 
     return {
-      templateVersionId: published.id,
+      templateVersionId: source.templateVersionId,
       templateSnapshot: {
         templateId: input.templateId,
-        templateVersionNumber: published.versionNumber,
-        family: published.template.family,
-        contentDefinition: published.contentDefinition,
-        fieldDefinitions: published.fieldDefinitions,
+        templateVersionNumber: source.versionNumber,
+        family: source.family,
+        contentDefinition: source.contentDefinition,
+        fieldDefinitions: allDefinitions,
         snapshottedAt: new Date().toISOString(),
       },
       resolvedTemplateData: resolved,
