@@ -30,6 +30,31 @@ function article(id: string, heading: string, paragraphs: string[]) {
   }
 }
 
+/**
+ * Blok tanda tangan default.
+ *
+ * Semua teks STATIS eksplisit di sini (Opsi D) supaya tampil di editor dan
+ * dapat diedit per-template. Nilai-nilai ini juga menjadi fallback bila admin
+ * mengosongkannya. Nama ORANG tidak di sini — diambil dari data kontrak.
+ */
+function signatureBlock(definition: ContractDocumentDefinition) {
+  const isPkwt = definition.family === 'PKWT'
+  return {
+    id: 'signature',
+    type: 'signature',
+    // Label pilar (baris atas tabel tanda tangan) — `Pihak Pertama`/`Pihak Kedua`.
+    leftRole: definition.firstPartyLabel,
+    rightRole: definition.secondPartyLabel,
+    // Nama perusahaan/pihak. Default mengikuti renderer sebelumnya
+    // (MITRA & PKWT snapshot sama-sama memakai kop koperasi di kiri).
+    leftHeader: "KOPERASI PT. SANKYU INT'L",
+    rightHeader: isPkwt ? 'KARYAWAN' : 'MITRA',
+    // Jabatan (baris bawah).
+    leftParty: '(Ketua Koperasi)',
+    rightParty: isPkwt ? '(Karyawan)' : '(Mitra)',
+  }
+}
+
 function toLanguageBlocks(definition: ContractDocumentDefinition, english = false): any[] {
   const blocks: any[] = [
     { id: 'title', type: 'title', text: replaceLegacyTokens(english ? (definition.subtitle ?? definition.title) : definition.title) },
@@ -53,12 +78,7 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
         }
       }
     })
-    blocks.push({
-      id: 'signature',
-      type: 'signature',
-      leftRole: definition.firstPartyLabel,
-      rightRole: definition.secondPartyLabel,
-    })
+    blocks.push(signatureBlock(definition))
     return blocks
   }
   blocks.push({ id: 'opening', type: 'paragraph', text: replaceLegacyTokens(definition.openingLine) })
@@ -68,12 +88,7 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
   blocks.push(article('compensation', definition.compensationLabel, [`{{contract.baseCompensation}}`]))
   definition.sections.forEach((section, index) => blocks.push(article(`section-${index + 1}`, section.heading, section.paragraphs)))
   blocks.push(article('closing', 'Penutup', definition.closingParagraphs))
-  blocks.push({
-    id: 'signature',
-    type: 'signature',
-    leftRole: definition.firstPartyLabel,
-    rightRole: definition.secondPartyLabel,
-  })
+  blocks.push(signatureBlock(definition))
   return blocks
 }
 

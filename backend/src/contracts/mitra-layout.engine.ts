@@ -827,11 +827,17 @@ function computeSplitIndex(blocks: MitraBlock[], heightOf: (b: MitraBlock) => nu
 export function renderMitraSignature(
   doc: any,
   o: {
+    /** Label pilar (teks statis). Default: 'PIHAK PERTAMA' / 'PIHAK KEDUA'. */
+    leftLabel?: string
+    rightLabel?: string
+    /** Nama perusahaan/pihak (teks statis). Default dari chrome. */
     leftHeader: string
-    leftName: string
-    leftRole: string
     rightHeader: string
+    /** Nama ORANG (dari data kontrak) — bukan teks template. */
+    leftName: string
     rightName: string
+    /** Jabatan (teks statis). Default dari chrome. */
+    leftRole: string
     rightRole: string
   },
 ): void {
@@ -839,78 +845,81 @@ export function renderMitraSignature(
   const F = MITRA_FONT_NAMES
   const T = G.signatureTable
 
-  const finalPage = (doc as any).__mitraFinalPage as
-    | { pageDeepest: number; pageCount: number; lastPage: number; lastPageBodyBottom: number }
-    | undefined
-  let lastPage = finalPage?.lastPage ?? (doc.bufferedPageRange?.().count ?? 1) - 1
-  const bodyBottom = finalPage?.lastPageBodyBottom ?? G.contPageBoxTop
-
-  const rowHeights = [T.labelRowH, T.companyRowH, T.signSpaceRowH, T.nameRowH, T.roleRowH]
-  const tableHeight = rowHeights.reduce((a, b) => a + b, 0)
-
-  // Tabel tanda tangan berada DI LUAR & DI BAWAH kotak kolom.
-  const boxBottomOnLast = lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
-  let tableTop = Math.max(bodyBottom + G.boxPaddingBottom, boxBottomOnLast - tableHeight - T.gapFromBox) + T.gapFromBox
-
-  // Bila tidak muat di halaman terakhir → halaman BARU untuk tanda tangan.
-  if (tableTop + tableHeight > G.pageHeight - 40) {
-    doc.addPage()
-    lastPage += 1
-    // Halaman baru ini hanya berisi tabel tanda tangan (tanpa kotak kolom).
-    tableTop = G.contPageBoxTop + 40
-  }
-
-  doc.switchToPage(lastPage)
+  const leftLabel = o.leftLabel?.trim() || 'PIHAK PERTAMA'
+  const rightLabel = o.rightLabel?.trim() || 'PIHAK KEDUA'
 
   const left = T.left
   const divider = T.divider
   const right = T.right
   const leftW = divider - left
   const rightW = right - divider
+  // Padding teks dalam sel agar tidak menempel garis.
+  const cellPad = 4
+  const textW = (w: number) => Math.max(w - cellPad * 2, 8)
 
-  // --- Garis tabel ---
+  /** Baris tabel: tinggi dasar + isi teks kiri/kanan. */
+  const rows: Array<{ base: number, left: string, right: string, bold?: boolean }> = [
+    { base: T.labelRowH, left: leftLabel, right: rightLabel, bold: false },
+    { base: T.companyRowH, left: o.leftHeader, right: o.rightHeader, bold: false },
+    { base: T.signSpaceRowH, left: '', right: '' },
+    { base: T.nameRowH, left: o.leftName, right: o.rightName, bold: true },
+    { base: T.roleRowH, left: o.leftRole, right: o.rightRole, bold: false },
+  ]
+
+  // Tinggi DINAMIS: baris tumbuh mengikuti teks yang dibungkus (word-wrap).
+  const heights = rows.map(row => {
+    if (!row.left && !row.right) return row.base
+    doc.font(row.bold ? F.bold : F.regular).fontSize(G.font.signature)
+    const hl = row.left ? doc.heightOfString(row.left, { width: textW(leftW), align: 'center' }) : 0
+    const hr = row.right ? doc.heightOfString(row.right, { width: textW(rightW), align: 'center' }) : 0
+    return Math.max(row.base, Math.max(hl, hr) + 6)
+  })
+  const tableHeight = heights.reduce((a, b) => a + b, 0)
+
+  const finalPage = (doc as any).__mitraFinalPage as
+    | { pageDeepest: number; pageCount: number; lastPage: number; lastPageBodyBottom: number }
+    | undefined
+  let lastPage = finalPage?.lastPage ?? (doc.bufferedPageRange?.().count ?? 1) - 1
+  const bodyBottom = finalPage?.lastPageBodyBottom ?? G.contPageBoxTop
+
+  const boxBottomOnLast = lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
+  let tableTop = Math.max(bodyBottom + G.boxPaddingBottom, boxBottomOnLast - tableHeight - T.gapFromBox) + T.gapFromBox
+
+  if (tableTop + tableHeight > G.pageHeight - 40) {
+    doc.addPage()
+    lastPage += 1
+    tableTop = G.contPageBoxTop + 40
+  }
+
+  doc.switchToPage(lastPage)
+
+  // Garis tabel
   doc.save()
   doc.lineWidth(G.borderWidth).strokeColor('#000000')
-  // tepi luar
   const tableBottom = tableTop + tableHeight
   doc.rect(left, tableTop, right - left, tableHeight).stroke()
-  // garis pemisah vertikal tengah
   doc.moveTo(divider, tableTop).lineTo(divider, tableBottom).stroke()
-  // garis horizontal antar baris (bukan setelah baris terakhir — sudah jadi tepi)
   let y = tableTop
-  for (let i = 0; i < rowHeights.length - 1; i++) {
-    y += rowHeights[i]
+  for (let i = 0; i < heights.length - 1; i++) {
+    y += heights[i]
     doc.moveTo(left, y).lineTo(right, y).stroke()
   }
   doc.restore()
 
-  // --- Isi baris ---
-  const centerIn = (x0: number, w: number, text: string, options: { bold?: boolean; offsetY: number }) => {
-    doc
-      .font(options.bold ? F.bold : F.regular)
-      .fontSize(G.font.signature)
-      .fillColor('#000000')
-    doc.text(text, x0, tableTop + options.offsetY, {
-      width: w,
-      align: 'center',
-      lineBreak: false,
-    })
+  // Isi baris: teks dibungkus & dipusatkan dalam sel.
+  const centerIn = (x0: number, w: number, text: string, top: number, rowH: number, bold: boolean) => {
+    if (!text) return
+    doc.font(bold ? F.bold : F.regular).fontSize(G.font.signature).fillColor('#000000')
+    const h = doc.heightOfString(text, { width: textW(w), align: 'center' })
+    const offsetY = Math.max((rowH - h) / 2, 3)
+    doc.text(text, x0 + cellPad, top + offsetY, { width: textW(w), align: 'center' })
   }
 
-  const yLabel = rowHeights[0] * 0.25
-  const yCompany = rowHeights[0] + rowHeights[1] * 0.25
-  const yName = rowHeights[0] + rowHeights[1] + rowHeights[2] + rowHeights[3] * 0.15
-  const yRole = rowHeights[0] + rowHeights[1] + rowHeights[2] + rowHeights[3] + rowHeights[4] * 0.1
-
-  centerIn(left, leftW, 'PIHAK PERTAMA', { offsetY: yLabel })
-  centerIn(divider, rightW, 'PIHAK KEDUA', { offsetY: yLabel })
-
-  centerIn(left, leftW, o.leftHeader, { offsetY: yCompany })
-  centerIn(divider, rightW, o.rightHeader, { offsetY: yCompany })
-
-  centerIn(left, leftW, o.leftName, { bold: true, offsetY: yName })
-  centerIn(divider, rightW, o.rightName, { bold: true, offsetY: yName })
-
-  centerIn(left, leftW, o.leftRole, { offsetY: yRole })
-  centerIn(divider, rightW, o.rightRole, { offsetY: yRole })
+  let rowTop = tableTop
+  rows.forEach((row, i) => {
+    const h = heights[i]
+    centerIn(left, leftW, row.left, rowTop, h, row.bold === true)
+    centerIn(divider, rightW, row.right, rowTop, h, row.bold === true)
+    rowTop += h
+  })
 }

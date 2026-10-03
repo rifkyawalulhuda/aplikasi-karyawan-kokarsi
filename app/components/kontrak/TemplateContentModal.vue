@@ -108,7 +108,7 @@ async function openPreview(v: Version) {
     previewPdfLoading.value = false
   }
 }
-function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'Pihak Pertama', rightRole: 'Pihak Kedua' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
+function add(type: string) { const id = `${type}-${Date.now()}`; const d: any = { paragraph: { id, type, text: '' }, article: { id, type, heading: 'Pasal baru', paragraphs: [''] }, list: { id, type, style: 'bullet', items: [''] }, table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] }, pageBreak: { id, type }, signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' } }; blocks.value.push(d[type]); setFocus(id); collapsedBlocks.value[id] = false; blockPickerOpen.value = false }
 function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
 
 // ── Drag & drop urutan blok ──────────────────────────────────────────────────

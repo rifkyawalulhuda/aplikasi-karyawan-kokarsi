@@ -95,21 +95,31 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
   })
 
   // Signature: dua pilar di bawah kotak kolom, mengikuti master.
-  // Label "PIHAK PERTAMA"/"PIHAK KEDUA" adalah HEADER pilar (chrome).
-  // Baris di bawah nama adalah JABATAN, bukan label pihak — memakai label
-  // pihak di sini akan mencetak "PIHAK PERTAMA" dua kali (bug).
+  //
+  // Teks STATIS dapat dikonfigurasi per-template lewat blok `signature`
+  // (Opsi D): label pilar (`leftRole`/`rightRole`), nama perusahaan/pihak
+  // (`leftHeader`/`rightHeader`), dan jabatan (`leftParty`/`rightParty`).
+  // Field yang kosong → fallback chrome (data lama tetap 1:1 dengan master).
+  // Nama ORANG tetap dari data kontrak, bukan teks template.
+  const sig = blocks.find((b: any) => b?.type === 'signature') as any
+  const text = (v: unknown): string | undefined =>
+    typeof v === 'string' && v.trim() ? v.trim() : undefined
+
   const chairman = opts.signature?.chairmanName ?? values['settings.cooperativeChairmanName'] ?? ''
   const employeeName = opts.signature?.employeeName ?? values['employee.fullName'] ?? ''
   const jobRole = opts.signature?.jobRole ?? values['employee.jobRole'] ?? ''
   renderMitraSignature(doc, {
-    leftHeader: MITRA_HEADER_CHROME.signature.leftHeader,
+    // Label pilar — dari field lama `leftRole`/`rightRole` (seeder mengisinya
+    // dengan `firstPartyLabel` = "PIHAK PERTAMA"/"PIHAK KEDUA").
+    leftLabel: text(sig?.leftRole),
+    rightLabel: text(sig?.rightRole),
+    leftHeader: text(sig?.leftHeader) ?? MITRA_HEADER_CHROME.signature.leftHeader,
+    rightHeader: text(sig?.rightHeader) ?? MITRA_HEADER_CHROME.signature.rightHeader,
     leftName: chairman,
-    leftRole: MITRA_HEADER_CHROME.signature.leftRoleLabel,
-    rightHeader: MITRA_HEADER_CHROME.signature.rightHeader,
     rightName: employeeName,
-    rightRole: jobRole
-      ? `( ${jobRole} )`
-      : MITRA_HEADER_CHROME.signature.rightRoleFallback,
+    leftRole: text(sig?.leftParty) ?? MITRA_HEADER_CHROME.signature.leftRoleLabel,
+    rightRole: text(sig?.rightParty)
+      ?? (jobRole ? `( ${jobRole} )` : MITRA_HEADER_CHROME.signature.rightRoleFallback),
   })
 }
 

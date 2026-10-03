@@ -661,8 +661,17 @@ export class ContractDocumentService {
     const sig = blocks.find(b => b?.type === 'signature')
     if (!sig) return
     const values = buildValueMap((payload.contract as any).resolvedTemplateData)
-    const leftRole = sig.leftRole ? interpolate(sig.leftRole, values) : '(Ketua Koperasi)'
-    const rightRole = sig.rightRole ? interpolate(sig.rightRole, values) : '(Mitra)'
+    // Teks statis dapat dikonfigurasi per-template (sama seperti MITRA):
+    // label pilar (`leftRole`/`rightRole`), nama pihak (`leftHeader`/`rightHeader`),
+    // jabatan (`leftParty`/`rightParty`). Kosong → fallback bawaan.
+    const text = (v: unknown): string | undefined =>
+      typeof v === 'string' && v.trim() ? v.trim() : undefined
+    const leftLabel = text(sig.leftRole) ?? 'PIHAK PERTAMA'
+    const rightLabel = text(sig.rightRole) ?? 'PIHAK KEDUA'
+    const leftHeader = text(sig.leftHeader) ?? "KOPERASI PT. SANKYU INT'L"
+    const rightHeader = text(sig.rightHeader) ?? 'MITRA'
+    const leftRole = text(sig.leftParty) ?? '(Ketua Koperasi)'
+    const rightRole = text(sig.rightParty) ?? '(Mitra)'
     const chairman = values['settings.cooperativeChairmanName'] ?? ''
     const employeeName = values['employee.fullName'] ?? payload.employee.fullName
 
@@ -671,14 +680,16 @@ export class ContractDocumentService {
     const y = pageHeight - 150
 
     doc.font('Times-Roman').fontSize(10)
-    // Pihak pertama
-    doc.text("KOPERASI PT. SANKYU INT'L", 34, y, { width: 240, align: 'center' })
+    // Label pilar
+    doc.text(leftLabel, 34, y - 14, { width: 240, align: 'center' })
+    doc.text(rightLabel, pageWidth - 274, y - 14, { width: 240, align: 'center' })
+    // Nama perusahaan/pihak
+    doc.text(leftHeader, 34, y, { width: 240, align: 'center' })
+    doc.text(rightHeader, pageWidth - 274, y, { width: 240, align: 'center' })
     doc.text('', 34, y + 40)
+    // Nama orang (dari data kontrak)
     doc.font('Times-Bold').text(chairman || '(...........................)', 34, y + 48, { width: 240, align: 'center' })
     doc.font('Times-Roman').text(leftRole, 34, y + 62, { width: 240, align: 'center' })
-    // Pihak kedua
-    doc.text('MITRA', pageWidth - 274, y, { width: 240, align: 'center' })
-    doc.text('', pageWidth - 274, y + 40)
     doc.font('Times-Bold').text(employeeName || '(...........................)', pageWidth - 274, y + 48, { width: 240, align: 'center' })
     doc.font('Times-Roman').text(rightRole, pageWidth - 274, y + 62, { width: 240, align: 'center' })
   }

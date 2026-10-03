@@ -146,20 +146,44 @@ describe('MITRA passthrough — teks kontrak berasal dari template', () => {
     expect(rendered).not.toContain('ktp_issued_date')
   })
 
-  it('label pihak tidak dicetak dua kali di blok tanda tangan', () => {
-    // Header pilar = "PIHAK PERTAMA"/"PIHAK KEDUA" (chrome).
-    // Baris jabatan di bawah nama HARUS jabatan, bukan label pihak lagi.
+  it('teks tanda tangan dapat dikonfigurasi, default tetap setia master', () => {
+    // Opsi D: teks statis blok tanda tangan dapat diedit per-template. Test ini
+    // mengunci dua hal: (1) renderer MEMAKAI field blok bila terisi, dan
+    // (2) bila kosong, MEMAKAI default sehingga dokumen tetap 1:1 dengan master.
     const { leftRoleLabel, rightRoleFallback, leftHeader, rightHeader } = MITRA_HEADER_CHROME.signature
-    expect(leftRoleLabel).not.toBe('PIHAK PERTAMA')
-    expect(rightRoleFallback).not.toBe('PIHAK KEDUA')
+
+    // Default (tanpa override) tidak boleh menduplikasi label pilar, dan
+    // jabatan harus berbeda dari label pilar.
+    expect(leftRoleLabel).toBe('(Ketua Koperasi)')
+    expect(rightRoleFallback).toBe('(Mitra)')
     expect(leftHeader).not.toBe('PIHAK PERTAMA')
     expect(rightHeader).not.toBe('PIHAK KEDUA')
 
-    // Service tidak boleh memakai sig.leftRole/rightRole sebagai jabatan.
-    const servicePath = path.join(__dirname, '..', 'contracts', 'contract-document.service.ts')
-    const src = fs.readFileSync(servicePath, 'utf8')
-    expect(src).not.toMatch(/leftRole:\s*sig\?\.leftRole/)
-    expect(src).not.toMatch(/rightRole:\s*sig\?\.rightRole/)
+    // Renderer membaca field blok (leftRole/rightRole/leftHeader/rightHeader/
+    // leftParty/rightParty) dengan fallback ke chrome.
+    const rendererPath = path.join(__dirname, '..', 'contracts', 'mitra-document.renderer.ts')
+    const src = fs.readFileSync(rendererPath, 'utf8')
+    expect(src).toMatch(/sig\?\.leftRole/)
+    expect(src).toMatch(/sig\?\.rightRole/)
+    expect(src).toMatch(/sig\?\.leftHeader/)
+    expect(src).toMatch(/sig\?\.rightHeader/)
+    expect(src).toMatch(/sig\?\.leftParty/)
+    expect(src).toMatch(/sig\?\.rightParty/)
+    // Fallback ke chrome tetap ada (data lama → 1:1 master).
+    expect(src).toMatch(/MITRA_HEADER_CHROME\.signature\.leftRoleLabel/)
+    expect(src).toMatch(/MITRA_HEADER_CHROME\.signature\.rightRoleFallback/)
+  })
+
+  it('blok signature default membawa semua teks statis (dapat diedit)', () => {
+    for (const key of MITRA_KEYS) {
+      const def = (CONTRACT_DOCUMENT_DEFINITIONS as any)[key]
+      const sig = definitionToContentDefinition(def).languages.id.find((b: any) => b.type === 'signature')
+      expect(sig).toBeDefined()
+      for (const field of ['leftRole', 'rightRole', 'leftHeader', 'rightHeader', 'leftParty', 'rightParty']) {
+        expect(typeof sig[field]).toBe('string')
+        expect(String(sig[field]).length).toBeGreaterThan(0)
+      }
+    }
   })
 })
 

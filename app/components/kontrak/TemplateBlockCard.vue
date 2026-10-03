@@ -490,12 +490,28 @@ function addColumn() {
       </template>
 
       <template v-else-if="block.type === 'signature'">
+        <p class="text-xs text-muted">
+          Nama orang (Ketua Koperasi &amp; Mitra/Karyawan) diambil otomatis dari data kontrak.
+          Teks di bawah dapat disesuaikan; kosongkan untuk memakai format bawaan.
+        </p>
         <div class="grid gap-3 sm:grid-cols-2">
-          <UFormField label="Peran pihak kiri">
-            <UInput v-model="block.leftRole" :disabled="!editable" class="w-full" />
+          <UFormField label="Label pilar kiri">
+            <UInput v-model="block.leftRole" :disabled="!editable" placeholder="PIHAK PERTAMA" />
           </UFormField>
-          <UFormField label="Peran pihak kanan">
-            <UInput v-model="block.rightRole" :disabled="!editable" class="w-full" />
+          <UFormField label="Label pilar kanan">
+            <UInput v-model="block.rightRole" :disabled="!editable" placeholder="PIHAK KEDUA" />
+          </UFormField>
+          <UFormField label="Nama perusahaan/pihak kiri">
+            <UInput v-model="block.leftHeader" :disabled="!editable" placeholder="KOPERASI PT. SANKYU INT'L" />
+          </UFormField>
+          <UFormField label="Nama perusahaan/pihak kanan">
+            <UInput v-model="block.rightHeader" :disabled="!editable" placeholder="MITRA" />
+          </UFormField>
+          <UFormField label="Jabatan kiri">
+            <UInput v-model="block.leftParty" :disabled="!editable" placeholder="(Ketua Koperasi)" />
+          </UFormField>
+          <UFormField label="Jabatan kanan">
+            <UInput v-model="block.rightParty" :disabled="!editable" placeholder="(Mitra)" />
           </UFormField>
         </div>
       </template>
