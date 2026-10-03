@@ -45,6 +45,25 @@ export class ContractTemplatesService {
   private include = {
     contractType: { select: { id: true, name: true } },
     jobRole: { select: { id: true, name: true } },
+    // Daftar template perlu menunjukkan status dokumen yang sebenarnya:
+    // berapa kontrak memakainya (menentukan boleh/tidaknya dihapus dan
+    // risikonya saat mengubah konten) dan versi mana yang sedang aktif.
+    // `contracts` sengaja TIDAK di-select penuh — hanya jumlahnya.
+    _count: {
+      select: {
+        contracts: true,
+        // Draft = ada perubahan yang belum diterbitkan (lihat
+        // docs/superpowers/plans/2026-09-29-dynamic-contract-template-versioning.md,
+        // "Draft menampilkan badge DRAFT").
+        versions: { where: { status: 'DRAFT' as const } },
+      },
+    },
+    versions: {
+      where: { status: 'PUBLISHED' as const },
+      orderBy: { versionNumber: 'desc' as const },
+      take: 1,
+      select: { id: true, versionNumber: true, publishedAt: true, publishedByName: true },
+    },
   }
 
   private async ensureDefaultTemplates() {
@@ -206,7 +225,11 @@ export class ContractTemplatesService {
           notes: payload.notes ?? null,
           requiredFields: (payload.requiredFields as any) ?? null,
           isActive: payload.isActive ?? true,
-          version: payload.version ?? 1,
+          // `undefined` = jangan sentuh kolom `version`. Sebelumnya `?? 1`
+          // membuat setiap PUT yang tidak menyertakan `version` (mis. form
+          // edit template di halaman Master Template Kontrak) menurunkan
+          // kembali counter `version` ke 1.
+          version: payload.version ?? undefined,
         },
         include: this.include,
       })
@@ -235,16 +258,60 @@ export class ContractTemplatesService {
       throw new BadRequestException(`Template ${template.name} sedang dipakai oleh ${usageCount} kontrak`)
     }
 
-    const deleted = await this.prisma.contractTemplate.delete({ where: { id } })
-    void this.activityLog.log({
-      action: 'DELETE',
-      module: 'Template Kontrak',
-      targetLabel: template.name,
-      performedBy: actor.name,
-      performedByRole: actor.role,
-      detail: `Nama: ${template.name}`,
-    })
-    return deleted
+    const versionIds = (
+      await this.prisma.client.contractTemplateVersion.findMany({
+        where: { templateId: id },
+        select: { id: true },
+      })
+    ).map(version => version.id)
+
+    // Kontrak yang masih menunjuk salah satu versi template ini lewat
+    // `templateVersionId` harus ditolak. FK-nya `SET NULL`, jadi menghapus
+    // versinya akan menghilangkan jejak audit "kontrak ini dulu memakai versi
+    // berapa". Sejalan dengan aturan di
+    // `ContractTemplateVersionsService.deleteVersion`.
+    if (versionIds.length > 0) {
+      const versionUsage = await this.prisma.contract.count({
+        where: { templateVersionId: { in: versionIds } },
+      })
+      if (versionUsage > 0) {
+        throw new BadRequestException(
+          `Template ${template.name} masih dirujuk oleh ${versionUsage} kontrak melalui versi template-nya`,
+        )
+      }
+    }
+
+    try {
+      // Versi template & binding field adalah anak template dengan FK
+      // `ON DELETE RESTRICT`. Memanggil `delete()` pada template secara langsung
+      // SELALU gagal (P2003) selama baris-baris itu ada — dulu berujung 500
+      // "Internal server error" tanpa keterangan. Keduanya dihapus lebih dulu
+      // dalam satu transaksi agar template tidak pernah terhapus setengah jalan.
+      const deleted = await this.prisma.client.$transaction(async (tx) => {
+        await tx.contractTemplateField.deleteMany({ where: { templateId: id } })
+        await tx.contractTemplateVersion.deleteMany({ where: { templateId: id } })
+        return tx.contractTemplate.delete({ where: { id } })
+      })
+      void this.activityLog.log({
+        action: 'DELETE',
+        module: 'Template Kontrak',
+        targetLabel: template.name,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+        detail: `Nama: ${template.name}`,
+      })
+      return deleted
+    } catch (error: any) {
+      // Jaring pengaman: bila masih ada referensi yang belum tertangkap guard di
+      // atas (mis. ditulis bersamaan oleh permintaan lain), balas 409 dengan
+      // pesan yang bisa ditindaklanjuti alih-alih 500 tanpa keterangan.
+      if (error?.code === 'P2003' || error?.meta?.cause?.originalCode === '23503') {
+        throw new ConflictException(
+          `Template ${template.name} masih direferensikan data lain dan tidak bisa dihapus`,
+        )
+      }
+      throw error
+    }
   }
 
   async getContentPreview(id: number) {

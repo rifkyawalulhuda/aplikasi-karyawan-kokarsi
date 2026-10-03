@@ -150,6 +150,17 @@ export interface ContractHistoryResponse {
 
 export type ContractFamily = 'MITRA' | 'PKWT'
 
+/**
+ * Versi PUBLISHED efektif sebuah template, disertakan pada list/detail template
+ * oleh `ContractTemplatesService` (`include.versions` dengan `where.status`).
+ */
+export interface ContractTemplatePublishedVersion {
+  id: number
+  versionNumber: number
+  publishedAt: string | null
+  publishedByName?: string | null
+}
+
 export interface ContractTemplate {
   id: number
   code: string
@@ -166,6 +177,10 @@ export interface ContractTemplate {
   isActive: boolean
   version: number
   notes?: string | null
+  /** Jumlah kontrak yang memakai template ini (dari `_count.contracts`). */
+  _count?: { contracts: number; versions?: number }
+  /** Versi PUBLISHED efektif; `undefined` bila belum pernah diterbitkan. */
+  versions?: ContractTemplatePublishedVersion[]
   createdAt?: string
   updatedAt?: string
 }
