@@ -4,6 +4,7 @@ interface Version { id: number, versionNumber: number, status: string, contentDe
 const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
 const open = computed({ get: () => props.open, set: v => emit('update:open', v) }); const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { confirmActionToast } = useConfirmActionToast()
 const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
 const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
 /** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
@@ -100,6 +101,52 @@ async function refreshAfterDelete() {
 }
 async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
 async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview') { await openPreview(v); return } const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+
+/**
+ * Konfirmasi Publish.
+ *
+ * Publish mengubah versi AKTIF template (yang dipakai kontrak baru) dan
+ * mengarsipkan versi terbit sebelumnya — jadi selalu minta konfirmasi dulu.
+ *
+ * Publish mengirim versi yang TERSIMPAN, bukan editan yang masih di editor:
+ * kalau masih ada perubahan belum disimpan (`draftDirty`), peringatkan supaya
+ * petugas tidak mengira editan itu ikut terbit.
+ */
+function confirmPublish() {
+  const v = draft.value
+  if (!v || busy.value) return
+  const dirtyWarning = draftDirty.value
+    ? ' Perubahan yang belum disimpan TIDAK akan ikut terbit — tekan "Simpan" dulu bila ingin menyertakannya.'
+    : ''
+  confirmActionToast({
+    title: `Publish versi v${v.versionNumber}?`,
+    description: `Versi v${v.versionNumber} akan menjadi versi terbit dan langsung dipakai untuk kontrak baru. Versi terbit sebelumnya akan diarsipkan.${dirtyWarning}`,
+    confirmLabel: 'Publish Versi',
+    confirmColor: 'primary',
+    onConfirm: () => action('publish')
+  })
+}
+
+/**
+ * Konfirmasi Rollback.
+ *
+ * Rollback mengaktifkan kembali versi ARCHIVED sebagai versi terbit dan
+ * mengarsipkan versi terbit saat ini. Karena `select(v)` mengganti draft yang
+ * terbuka, peringatkan bila ada perubahan draft yang belum disimpan.
+ */
+function confirmRollback(v: Version) {
+  if (busy.value) return
+  const dirtyWarning = draftDirty.value
+    ? ' Perubahan pada draft yang sedang dibuka akan hilang.'
+    : ''
+  confirmActionToast({
+    title: `Rollback ke versi v${v.versionNumber}?`,
+    description: `Versi v${v.versionNumber} akan diaktifkan kembali sebagai versi terbit, dan versi terbit saat ini akan diarsipkan.${dirtyWarning}`,
+    confirmLabel: 'Rollback',
+    confirmColor: 'warning',
+    onConfirm: () => select(v).then(() => action('rollback'))
+  })
+}
 
 /**
  * Buka pratinjau.
@@ -623,7 +670,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                 icon="i-lucide-undo-2"
                 variant="subtle"
                 color="warning"
-                @click.stop="select(v).then(() => action('rollback'))"
+                @click.stop="confirmRollback(v)"
               />
             </div>
           </div>
@@ -683,7 +730,7 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                   icon="i-lucide-rocket"
                   color="primary"
                   :loading="busy"
-                  @click="action('publish')"
+                  @click="confirmPublish"
                 />
               </div>
             </div>
