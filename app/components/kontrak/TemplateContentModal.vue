@@ -3,6 +3,7 @@ interface Template { id: number, name: string, family: 'PKWT' | 'MITRA' }
 interface Version { id: number, versionNumber: number, status: string, contentDefinition: any, fieldDefinitions: any, changeSummary?: string }
 const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
 const open = computed({ get: () => props.open, set: v => emit('update:open', v) }); const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
 const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
 /** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
@@ -20,6 +21,51 @@ watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => 
 async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
 async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
 async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+
+/**
+ * Hapus versi ARCHIVED/DRAFT setelah konfirmasi.
+ *
+ * PUBLISHED dan versi yang dipakai kontrak ditolak backend — pesannya
+ * ditampilkan apa adanya. Setelah sukses, daftar disegarkan; bila versi yang
+ * sedang dibuka ikut terhapus, editor pindah ke versi PUBLISHED (bukan draft),
+ * supaya mendarat di versi aktif.
+ */
+function removeVersion(v: Version) {
+  const isDraft = v.status === 'DRAFT'
+  confirmDeleteToast({
+    title: `Hapus versi v${v.versionNumber}?`,
+    description: isDraft
+      ? 'Draft ini belum pernah dipublikasikan. Seluruh perubahan di dalamnya akan hilang permanen.'
+      : 'Versi arsip ini akan dihapus permanen dari riwayat versi.',
+    confirmLabel: 'Hapus Versi',
+    onConfirm: async () => {
+      try {
+        await $fetch(`/api/contract-template-versions/${v.id}`, { method: 'DELETE' })
+        toast.add({ title: `Versi v${v.versionNumber} dihapus`, color: 'success' })
+        await refreshAfterDelete()
+        emit('saved')
+      } catch (e: unknown) {
+        toast.add({ title: 'Gagal menghapus versi', description: apiErrorMessage(e), color: 'error' })
+      }
+    }
+  })
+}
+
+/** Segarkan daftar versi; pilih PUBLISHED bila versi terpilih ikut terhapus. */
+async function refreshAfterDelete() {
+  if (!props.template) return
+  const vs = await $fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`)
+  versions.value = vs ?? []
+  // Versi yang sedang dibuka masih ada → biarkan pilihan tetap.
+  if (versions.value.some(x => x.id === selected.value?.id)) return
+  const target = versions.value.find(x => x.status === 'PUBLISHED') ?? versions.value[0]
+  if (target) {
+    await select(target)
+  } else {
+    selected.value = null
+    draft.value = null
+  }
+}
 async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
 async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview') { await openPreview(v); return } const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 
@@ -483,12 +529,27 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
                   />
                   <b class="text-sm">v{{ v.versionNumber }}</b>
                 </div>
-                <UBadge
-                  :color="color(v.status)"
-                  variant="subtle"
-                  size="sm"
-                  :label="v.status"
-                />
+                <div class="flex items-center gap-1">
+                  <UBadge
+                    :color="color(v.status)"
+                    variant="subtle"
+                    size="sm"
+                    :label="v.status"
+                  />
+                  <UTooltip
+                    v-if="v.status === 'ARCHIVED' || v.status === 'DRAFT'"
+                    text="Hapus versi"
+                  >
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      size="xs"
+                      variant="ghost"
+                      color="error"
+                      aria-label="Hapus versi"
+                      @click.stop="removeVersion(v)"
+                    />
+                  </UTooltip>
+                </div>
               </div>
               <p class="mt-1 line-clamp-2 text-xs text-muted">
                 {{ v.changeSummary || 'Tanpa ringkasan' }}

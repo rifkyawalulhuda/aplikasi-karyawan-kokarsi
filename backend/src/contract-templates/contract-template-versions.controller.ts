@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -119,6 +120,16 @@ export class ContractTemplateVersionsController {
   rollback(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
     this.ensureAdmin(req.user?.role)
     return this.service.rollback(versionId, { name: req.user?.username ?? 'unknown' })
+  }
+
+  /**
+   * Hapus versi ARCHIVED/DRAFT. PUBLISHED dan versi yang dipakai kontrak ditolak
+   * di service dengan pesan jelas.
+   */
+  @Delete('contract-template-versions/:versionId')
+  removeVersion(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
+    this.ensureAdmin(req.user?.role)
+    return this.service.deleteVersion(versionId, { name: req.user?.username ?? 'unknown' })
   }
 
   @Get('contract-templates/:templateId/versions/published')

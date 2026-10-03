@@ -327,6 +327,52 @@ export class ContractTemplateVersionsService {
     return published
   }
 
+  /**
+   * Hapus versi ARCHIVED atau DRAFT.
+   *
+   * Aturan:
+   *  - Versi PUBLISHED tidak boleh dihapus (harus ada versi terbit aktif).
+   *  - Versi yang masih dipakai kontrak (`contracts.templateVersionId`) tidak
+   *    boleh dihapus — FK-nya `SET NULL`, jadi menghapusnya akan menghilangkan
+   *    jejak audit "kontrak ini dulu pakai versi berapa". Konsisten dengan
+   *    penolakan hapus template yang masih dipakai (`contract-templates.service`).
+   *
+   * Menghapus DRAFT juga membebaskan `ensureNoOpenDraft()` yang tadinya
+   * memblokir pembuatan draft baru tanpa jalan keluar.
+   */
+  async deleteVersion(versionId: number, actor: { name: string }) {
+    const version = await this.findOne(versionId)
+
+    if (version.status === 'PUBLISHED') {
+      throw new BadRequestException(
+        'Versi yang sedang terbit (PUBLISHED) tidak dapat dihapus. Terbitkan versi lain dulu bila ingin menggantinya.',
+      )
+    }
+    if (version.status !== 'ARCHIVED' && version.status !== 'DRAFT') {
+      throw new BadRequestException(`Versi berstatus ${version.status} tidak dapat dihapus`)
+    }
+
+    const usedByContracts = await this.prisma.client.contract.count({
+      where: { templateVersionId: versionId },
+    })
+    if (usedByContracts > 0) {
+      throw new BadRequestException(
+        `Versi ini dipakai oleh ${usedByContracts} kontrak, tidak bisa dihapus.`,
+      )
+    }
+
+    const deleted = await this.prisma.client.contractTemplateVersion.delete({ where: { id: versionId } })
+    await this.activityLog.log({
+      action: 'DELETE',
+      module: 'Template Kontrak',
+      targetLabel: `Versi ${version.versionNumber}`,
+      performedBy: actor.name,
+      performedByRole: 'ADMIN',
+      detail: `Hapus versi ${version.status} template ${version.template.code}`,
+    })
+    return deleted
+  }
+
   /** Versi PUBLISHED aktif untuk sebuah template. */
   async getPublished(templateId: number) {    const published = await this.prisma.client.contractTemplateVersion.findFirst({
       where: { templateId, status: 'PUBLISHED' },
