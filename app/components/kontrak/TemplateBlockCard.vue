@@ -130,6 +130,20 @@ function removeListItem(i: number) {
   if (arr.length <= 1) { arr[0] = ''; return }
   arr.splice(i, 1)
 }
+
+/**
+ * Prefix tampilan tiap poin daftar, mencerminkan hasil di PDF
+ * (`listPrefix` di `mitra-layout.engine.ts`): `\u2022` / `1.` / `a.`.
+ *
+ * Memakai escape `\u2022`, bukan karakter literal, supaya tidak rusak lagi bila
+ * berkas disimpan ulang dengan encoding berbeda (pernah terjadi mojibake).
+ */
+function itemPrefix(index: number): string {
+  const style = props.block?.style ?? 'bullet'
+  if (style === 'numbered') return `${index + 1}.`
+  if (style === 'alphabetic') return `${String.fromCharCode(97 + (index % 26))}.`
+  return '\u2022'
+}
 function removeRow(i: number) {
   const arr = props.block.rows ?? []
   if (arr.length <= 1) return
@@ -291,7 +305,7 @@ function addColumn() {
               :rows="3"
               autoresize
               class="w-full"
-              placeholder="Tulis teks di siniΓÇª"
+              placeholder="Tulis teks di sini&#8230;"
             />
           </div>
         </UFormField>
@@ -303,7 +317,7 @@ function addColumn() {
             v-model="block.heading"
             :disabled="!editable"
             class="w-full"
-            placeholder="Contoh: Pasal 1 ΓÇö Ruang Lingkup Pekerjaan"
+            placeholder="Contoh: Pasal 1 &#8212; Ruang Lingkup Pekerjaan"
           />
         </UFormField>
         <UFormField label="Uraian pasal">
@@ -322,7 +336,7 @@ function addColumn() {
                 :rows="3"
                 autoresize
                 class="flex-1"
-                placeholder="Tulis isi pasalΓÇª"
+                placeholder="Tulis isi pasal&#8230;"
               />
               <UButton
                 icon="i-lucide-x"
@@ -352,7 +366,7 @@ function addColumn() {
             v-model="block.style"
             :disabled="!editable"
             :items="[
-              { label: 'Bullet (ΓÇó)', value: 'bullet' },
+              { label: 'Bullet (\u2022)', value: 'bullet' },
               { label: 'Angka (1, 2, 3)', value: 'numbered' },
               { label: 'Huruf (a, b, c)', value: 'alphabetic' }
             ]"
@@ -368,12 +382,12 @@ function addColumn() {
               @click="markFocus(`item:${p}`)"
               @focusin="markFocus(`item:${p}`)"
             >
-              <span class="w-5 shrink-0 text-right text-xs text-muted">{{ p + 1 }}.</span>
+              <span class="w-5 shrink-0 text-right text-xs text-muted">{{ itemPrefix(p) }}</span>
               <UInput
                 v-model="block.items[p]"
                 :disabled="!editable"
                 class="flex-1"
-                placeholder="Isi poinΓÇª"
+                placeholder="Isi poin&#8230;"
               />
               <UButton
                 icon="i-lucide-x"
@@ -433,7 +447,7 @@ function addColumn() {
                   @click="markFocus(`row:${ri}:${ci}`)"
                   @focusin="markFocus(`row:${ri}:${ci}`)"
                 >
-                  <UInput v-model="r[c.key]" :disabled="!editable" placeholder="ΓÇö" />
+                  <UInput v-model="r[c.key]" :disabled="!editable" placeholder="&#8212;" />
                 </td>
                 <td class="p-1">
                   <UButton
