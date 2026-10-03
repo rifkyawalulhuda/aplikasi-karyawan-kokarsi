@@ -837,8 +837,16 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
 
         <!-- ── Field dinamis (sticky) + Pratinjau + Validasi ── -->
         <aside class="space-y-3">
-          <!-- Panel field: sticky agar daftar field selalu terlihat saat menggulir blok. -->
-          <div class="flex flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm lg:sticky lg:top-3 lg:z-10 lg:max-h-[calc(100dvh-8rem)]">
+          <!-- Panel field: sticky agar daftar field selalu terlihat saat menggulir blok.
+               `max-h` dihitung dari TINGGI BODY MODAL, bukan sekadar viewport: modal
+               non-scrollable (`UModal`) punya header (--ui-header-height = 4rem) dan
+               footer (≈4,25rem) + padding body (1,5rem atas/bawah) + offset sticky
+               (0,75rem) + margin tengah modal (≈2rem) ≈ 15rem. Sebelumnya nilai 8rem
+               membuat panel ~7rem lebih tinggi dari area yang terlihat, sehingga
+               bagian bawah (daftar field & kartu "Validasi template") tertutup footer
+               sampai pengguna menggulir. `min-h-0` dipasang agar `flex-1` pada daftar
+               field benar-benar membatasi tinggi dan scroll-nya internal. -->
+          <div class="flex min-h-0 flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm lg:sticky lg:top-3 lg:z-10 lg:max-h-[calc(100dvh-15rem)]">
             <div class="flex items-center justify-between">
               <div>
                 <p class="font-semibold">
