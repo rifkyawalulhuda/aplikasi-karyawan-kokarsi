@@ -204,15 +204,35 @@ function add(type: string) {
     return
   }
   const id = `${type}-${Date.now()}`
-  const d: any = {
+  // Setiap tipe yang ditawarkan `BLOCK_PICKER` WAJIB punya entri di sini. Sebelum
+  // ini `title`/`subtitle` terdaftar di picker tapi tidak ada di map, sehingga
+  // `d[type]` menghasilkan `undefined` dan `push(undefined)` membuat render
+  // berikutnya membaca `b.id` dari undefined → TypeError → halaman membeku.
+  // `title`/`subtitle` memakai `text` (lihat `template-schema.validator.ts` dan
+  // `contract-block-renderer.ts`).
+  const d: Record<string, Record<string, unknown>> = {
     paragraph: { id, type, text: '' },
+    title: { id, type, text: 'JUDUL DOKUMEN' },
+    subtitle: { id, type, text: 'Subjudul dokumen' },
     article: { id, type, heading: 'Pasal baru', paragraphs: [''] },
     list: { id, type, style: 'bullet', items: [''] },
     table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] },
     pageBreak: { id, type },
     signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' }
   }
-  blocks.value.push(d[type])
+  const block = d[type]
+  // Jaring pengaman: bila suatu saat picker menambah tipe tanpa mengisi map ini,
+  // jangan pernah masukkan `undefined` ke `blocks`.
+  if (!block) {
+    toast.add({
+      title: 'Jenis blok belum didukung',
+      description: `Blok "${type}" belum dapat ditambahkan. Laporkan ke tim pengembang.`,
+      color: 'error'
+    })
+    blockPickerOpen.value = false
+    return
+  }
+  blocks.value.push(block as any)
   setFocus(id)
   collapsedBlocks.value[id] = false
   blockPickerOpen.value = false
@@ -541,7 +561,13 @@ function duplicateBlock(i: number) {
 /** Hapus blok setelah konfirmasi. */
 function confirmDeleteBlock() {
   if (confirmDeleteIndex.value === null) return
-  blocks.value.splice(confirmDeleteIndex.value, 1)
+  const idx = confirmDeleteIndex.value
+  const list = blocks.value ?? []
+  if (idx < 0 || idx >= list.length) {
+    confirmDeleteIndex.value = null
+    return
+  }
+  list.splice(idx, 1)
   confirmDeleteIndex.value = null
   toast.add({ title: 'Blok dihapus', color: 'success' })
 }
@@ -562,6 +588,42 @@ function requestClose() {
 
 /** Ringkasan singkat isi blok untuk tampilan daftar. */
 const blocksCount = computed(() => (blocks.value ?? []).length)
+
+/**
+ * Blok yang aman dirender, beserta indeks ASLINYA di `blocks`.
+ *
+ * Versi lama `v-for` langsung atas `blocks` dan membaca `b.id`. Draft yang
+ * terlanjur menyimpan entri `undefined` (mis. akibat bug `add()` yang dulu
+ * mem-push `d[type]` untuk tipe tanpa cabang) membuat render melempar
+ * TypeError dan halaman membeku total. Filter ini menjaga halaman tetap bisa
+ * dibuka sehingga admin masih punya kesempatan memperbaiki draftnya.
+ *
+ * `index` sengaja dibawa terpisah: aksi kartu (pindah/hapus/duplikat/drag)
+ * harus menyasar indeks di `blocks`, bukan urutan hasil filter.
+ */
+const validBlocks = computed<Array<{ block: { id: string }, index: number }>>(() =>
+  (blocks.value ?? [])
+    .map((block, index) => ({ block: block as { id: string }, index }))
+    .filter(entry => !!entry.block?.id)
+)
+
+/**
+ * Entri rusak yang terlanjur tersimpan di draft (mis. `undefined` akibat bug
+ * `add()` lama). Disimpan terpisah supaya tetap bisa DILIHAT dan DIHAPUS —
+ * kalau hanya disembunyikan, entri ini mustahil dibersihkan dan ikut tersimpan
+ * ke backend setiap kali draft disimpan.
+ */
+const invalidBlocks = computed(() =>
+  (blocks.value ?? [])
+    .map((_block, index) => ({ index }))
+    .filter(entry => !(blocks.value ?? [])[entry.index]?.id)
+)
+
+/** Buang satu entri rusak dari draft berdasarkan indeks aslinya. */
+function removeInvalidBlock(index: number) {
+  blocks.value.splice(index, 1)
+  toast.add({ title: 'Blok rusak dihapus', color: 'success' })
+}
 </script>
 
 <template>
@@ -795,27 +857,56 @@ const blocksCount = computed(() => (blocks.value ?? []).length)
 
           <div v-else ref="blocksListEl">
             <div
-              v-for="(b, i) in blocks"
-              :key="b.id"
+              v-if="invalidBlocks.length"
+              class="mb-3 rounded-lg border border-error/40 bg-error/5 p-3"
+            >
+              <p class="mb-2 flex items-center gap-2 text-sm font-medium text-error">
+                <UIcon name="i-lucide-triangle-alert" class="size-4 shrink-0" />
+                {{ invalidBlocks.length }} blok rusak pada draft ini
+              </p>
+              <p class="mb-3 text-xs text-muted">
+                Blok ini tidak dapat ditampilkan maupun dirender dan harus dihapus agar template bisa disimpan.
+              </p>
+              <ul class="grid gap-2">
+                <li
+                  v-for="entry in invalidBlocks"
+                  :key="`rusak-${entry.index}`"
+                  class="flex items-center justify-between gap-3 rounded-md bg-elevated px-3 py-2"
+                >
+                  <span class="text-xs text-muted">Blok ke-{{ entry.index + 1 }} · data tidak valid</span>
+                  <UButton
+                    size="xs"
+                    color="error"
+                    variant="soft"
+                    icon="i-lucide-trash-2"
+                    label="Hapus"
+                    @click="removeInvalidBlock(entry.index)"
+                  />
+                </li>
+              </ul>
+            </div>
+            <div
+              v-for="entry in validBlocks"
+              :key="entry.block.id"
               class="pb-2"
-              @dragover="onBlockDragOver(i, $event)"
-              @drop="onBlockDrop(i, $event)"
+              @dragover="onBlockDragOver(entry.index, $event)"
+              @drop="onBlockDrop(entry.index, $event)"
             >
               <KontrakTemplateBlockCard
-                :block="b"
-                :index="i"
+                :block="entry.block"
+                :index="entry.index"
                 :total="blocksCount"
                 :editable="!!draft"
-                :collapsed="collapsedBlocks[b.id] ?? true"
-                :selected="focusedBlockId === b.id"
-                :dragging="dragIndex === i"
-                :drop-indicator="blockDropIndicator(i)"
-                @update:collapsed="v => collapsedBlocks[b.id] = v"
+                :collapsed="collapsedBlocks[entry.block.id] ?? true"
+                :selected="focusedBlockId === entry.block.id"
+                :dragging="dragIndex === entry.index"
+                :drop-indicator="blockDropIndicator(entry.index)"
+                @update:collapsed="v => collapsedBlocks[entry.block.id] = v"
                 @activate="(id, path) => setFocus(id, path)"
-                @move="d => move(i, d)"
-                @duplicate="duplicateBlock(i)"
-                @remove="confirmDeleteIndex = i"
-                @dragstart="e => onBlockDragStart(i, e)"
+                @move="d => move(entry.index, d)"
+                @duplicate="duplicateBlock(entry.index)"
+                @remove="confirmDeleteIndex = entry.index"
+                @dragstart="e => onBlockDragStart(entry.index, e)"
                 @dragend="onBlockDragEnd"
               />
             </div>

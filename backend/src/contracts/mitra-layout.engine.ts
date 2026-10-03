@@ -277,6 +277,16 @@ export function renderMitraLayout(
   doc.registerFont(F.italic, opts.fonts.italic)
 
   /**
+   * Blok `title` PERTAMA = judul dokumen yang sudah digambar di KOP (header
+   * halaman 1). Blok itu DILEWATI saat body dirender agar judul tidak tampil
+   * dua kali — sehingga template MITRA lama (satu blok `title` di index 0)
+   * menghasilkan PDF yang sama seperti sebelumnya.
+   *
+   * Blok `title` TAMBAHAN dan SEMUA blok `subtitle` digambar pada posisinya.
+   */
+  const headerTitleBlock = blocks.find((b) => b?.type === 'title') ?? null
+
+  /**
    * MODE ALIRAN DUA-STREAM (booklet) — sesuai master `Original Example.pdf`.
    *
    * Master BUKAN aliran sekuensial (kolom kiri habis → kolom kanan). Ia adalah
@@ -566,7 +576,32 @@ export function renderMitraLayout(
   const renderBlock = (block: any) => {
     switch (block?.type) {
       case 'title':
+        // Blok `title` PERTAMA sudah dipakai sebagai JUDUL KOP pada header
+        // halaman 1 (`drawMasterHeader`). Menggambarnya lagi di body akan
+        // membuat judul tampil dua kali, jadi blok itu dilewati.
+        //
+        // Aturan ini ditentukan di sini (bukan dari opsi pemanggil) supaya
+        // hasilnya konsisten: template MITRA bawaan menaruh blok `title` di
+        // index 0, sedangkan blok `title` TAMBAHAN yang dibuat admin lewat
+        // editor tetap digambar pada posisinya masing-masing.
+        if (block === headerTitleBlock) break
+        writeText(block.text ?? '', {
+          font: F.bold,
+          size: G.font.body,
+          align: 'center',
+          gapBefore: 2,
+          gapAfter: G.headingGapAfter,
+        })
+        break
+
       case 'subtitle':
+        writeText(block.text ?? '', {
+          font: F.bold,
+          size: G.font.body - 2,
+          align: 'center',
+          gapBefore: 2,
+          gapAfter: G.headingGapAfter,
+        })
         break
 
       case 'paragraph':
@@ -715,7 +750,8 @@ export function renderMitraLayout(
   drawMasterHeader()
 
   // === Bagi konten jadi dua stream (~50/50 tinggi) ===
-  const splitIndex = computeSplitIndex(blocks, (b) => estimateBlockHeight(doc, b, opts))
+  // Blok judul kop tidak dihitung karena tidak digambar di body.
+  const splitIndex = computeSplitIndex(blocks, (b) => estimateBlockHeight(doc, b, opts, headerTitleBlock))
   const blocksFirst = blocks.slice(0, splitIndex)
   const blocksSecond = blocks.slice(splitIndex)
 
@@ -748,7 +784,12 @@ export function renderMitraLayout(
 }
 
 /** Perkirakan tinggi sebuah blok untuk keperluan pemisahan stream. */
-function estimateBlockHeight(doc: any, block: any, opts: MitraLayoutOptions): number {
+function estimateBlockHeight(
+  doc: any,
+  block: any,
+  opts: MitraLayoutOptions,
+  headerTitleBlock?: MitraBlock | null,
+): number {
   if (!block) return 0
   const G = MITRA_GEOMETRY
   const width = G.left.x1 - G.left.x0 - G.textPaddingLeft * 2
@@ -793,8 +834,18 @@ function estimateBlockHeight(doc: any, block: any, opts: MitraLayoutOptions): nu
       return h
     }
     case 'title':
+      if (block === headerTitleBlock) return 0
+      doc.font(MITRA_FONT_NAMES.bold).fontSize(G.font.body)
+      return doc.heightOfString(mitraInterpolate(String(block.text ?? ''), opts.values), {
+        width,
+        align: 'center',
+      }) + G.headingGapAfter + 2
     case 'subtitle':
-      return 0
+      doc.font(MITRA_FONT_NAMES.bold).fontSize(G.font.body - 2)
+      return doc.heightOfString(mitraInterpolate(String(block.text ?? ''), opts.values), {
+        width,
+        align: 'center',
+      }) + G.headingGapAfter + 2
     default:
       return doc.heightOfString(JSON.stringify(block ?? {}), { width })
   }

@@ -295,3 +295,87 @@ describe('MITRA layout — rendering', () => {
     expect(text.length).toBeGreaterThan(0)
   }, 30000)
 })
+
+/**
+ * Regresi: blok `title`/`subtitle` dari editor template.
+ *
+ * Sebelumnya `renderBlock` melakukan `break` untuk kedua tipe ini sehingga
+ * blok yang ditambahkan admin lewat editor TIDAK PERNAH muncul di PDF
+ * (dilaporkan sebagai "tidak ada di Pratinjau"). Blok `title` pertama tetap
+ * "dikonsumsi" sebagai judul kop supaya template lama tidak dapat judul dobel.
+ */
+describe('MITRA layout — blok title/subtitle dari editor', () => {
+  /**
+   * Kumpulkan semua string yang BENAR-BENAR digambar lewat `doc.text()`.
+   *
+   * PDFKit menyandikan teks sebagai CID (subset font), jadi memeriksa byte PDF
+   * tidak dapat diandalkan — menyadap pemanggilan `text()` jauh lebih tepat.
+   */
+  async function drawnTexts(blocks: any[]): Promise<string[]> {
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>((res) => doc.on('end', () => res()))
+    const drawn: string[] = []
+    const realText = doc.text.bind(doc)
+    ;(doc as any).text = (text: any, ...rest: any[]) => {
+      if (typeof text === 'string') drawn.push(text)
+      return realText(text, ...rest)
+    }
+
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: blocks.find((b) => b?.type === 'title')?.text ?? 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fonts(),
+    })
+    doc.end()
+    await done
+
+    expect(Buffer.concat(buffers).subarray(0, 5).toString()).toBe('%PDF-')
+    return drawn
+  }
+
+  it('menggambar blok subtitle di body (sebelumnya selalu dibuang)', async () => {
+    const drawn = await drawnTexts([
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      { type: 'subtitle', text: 'SUBTITLE_MARKER' },
+      { type: 'paragraph', text: 'Isi paragraf.' },
+    ])
+
+    expect(drawn).toContain('SUBTITLE_MARKER')
+  })
+
+  it('menggambar blok title TAMBAHAN di body', async () => {
+    const drawn = await drawnTexts([
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      { type: 'paragraph', text: 'Isi paragraf.' },
+      { type: 'title', text: 'JUDUL_TAMBAHAN_MARKER' },
+    ])
+
+    expect(drawn).toContain('JUDUL_TAMBAHAN_MARKER')
+  })
+
+  it('tidak menggambar blok title PERTAMA dua kali (hanya di kop)', async () => {
+    const drawn = await drawnTexts([
+      { type: 'title', text: 'JUDUL_KOP_MARKER' },
+      { type: 'paragraph', text: 'Isi paragraf.' },
+    ])
+
+    // Sekali untuk kop (header halaman 1) — tidak diulang di body.
+    expect(drawn.filter((t) => t === 'JUDUL_KOP_MARKER')).toHaveLength(1)
+  })
+
+  it('menggambar title TAMBAHAN + subtitle tanpa menduplikasi judul kop', async () => {
+    const drawn = await drawnTexts([
+      { type: 'title', text: 'JUDUL_KOP_MARKER' },
+      { type: 'paragraph', text: 'Isi paragraf.' },
+      { type: 'title', text: 'JUDUL_TAMBAHAN_MARKER' },
+      { type: 'subtitle', text: 'SUBJUDUL_TAMBAHAN_MARKER' },
+    ])
+
+    expect(drawn.filter((t) => t === 'JUDUL_KOP_MARKER')).toHaveLength(1)
+    expect(drawn).toContain('JUDUL_TAMBAHAN_MARKER')
+    expect(drawn).toContain('SUBJUDUL_TAMBAHAN_MARKER')
+  })
+})
+
