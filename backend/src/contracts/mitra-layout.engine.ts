@@ -15,6 +15,7 @@
  * Modul ini hanya mengatur TATA LETAK. Ia tidak menciptakan, meringkas,
  * atau menulis ulang konten legal.
  */
+import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
 
 /** Geometri master (satuan: PDF point, origin kiri-atas). */
 export const MITRA_GEOMETRY = {
@@ -610,33 +611,74 @@ export function renderMitraLayout(
         const columns = block.columns ?? []
         const rows = block.rows ?? []
         if (columns.length === 0) break
-        const s = currentStream
         const size = G.font.body - 1
-        const totalWidth = colInnerWidth(s)
-        const widths = columns.map((c: any) =>
-          c.width ? (totalWidth * Number(c.width)) / 100 : totalWidth / columns.length,
-        )
+        // Lebar kolom dinormalisasi (bobot relatif) supaya totalnya SELALU
+        // selebar kolom — memperbaiki tabel yang dulu meluber keluar halaman.
+        const widths = computeColumnWidths(columns, colInnerWidth(currentStream))
+
+        /**
+         * Gambar satu baris. Bila tinggi baris MELEBIHI tinggi halaman penuh,
+         * baris dipecah per-lini ke beberapa halaman (teks tetap utuh, tidak
+         * terpotong). Baris normal hanya perlu `ensureSpace` seperti biasa.
+         */
         const drawRow = (cells: string[], bold: boolean) => {
           const font = bold ? F.bold : F.regular
           doc.font(font).fontSize(size)
-          const heights = columns.map((_c: any, ci: number) =>
-            doc.heightOfString(cells[ci] ?? '', { width: widths[ci] - 8 }),
-          )
-          const rowHeight = Math.max(...heights, size) + 6
-          ensureSpace(rowHeight)
-          let x = colX(s)
-          columns.forEach((c: any, ci: number) => {
-            doc.rect(x, y, widths[ci], rowHeight).stroke('#000000')
-            doc
-              .font(font)
-              .fontSize(size)
-              .text(cells[ci] ?? '', x + 4, y + 3, {
-                width: widths[ci] - 8,
-                align: (c.align ?? 'left') as any,
-              })
-            x += widths[ci]
-          })
-          y += rowHeight
+          const lineHeight = doc.heightOfString('Xg', { lineGap: 0 })
+          const rowHeight = computeRowHeight(doc, cells, widths, size, 8, 6)
+          const s = currentStream
+          const maxBody = boxBottom(streamPage[s]) - boxTop(streamPage[s]) - 4
+
+          if (rowHeight <= maxBody) {
+            ensureSpace(rowHeight)
+            const x0 = colX(currentStream)
+            let x = x0
+            columns.forEach((c: any, ci: number) => {
+              doc.rect(x, y, widths[ci], rowHeight).stroke('#000000')
+              doc
+                .font(font)
+                .fontSize(size)
+                .text(cells[ci] ?? '', x + 4, y + 3, {
+                  width: Math.max(widths[ci] - 8, 1),
+                  align: (c.align ?? 'left') as any,
+                })
+              x += widths[ci]
+            })
+            y += rowHeight
+            noteDeepest()
+            return
+          }
+
+          // --- Baris ekstra-tinggi: pecah per-lini lintas halaman. ---
+          const cellLines = cells.map((cell, ci) => wrapCellLines(doc, cell ?? '', Math.max(widths[ci] - 8, 1), font, size))
+          const maxLines = Math.max(1, cellLines.reduce((m, l) => Math.max(m, l.length), 0))
+          let consumed = 0
+          while (consumed < maxLines) {
+            if (y + lineHeight * 2 > boxBottom(streamPage[s])) nextPageForStream(s)
+            const avail = boxBottom(streamPage[s]) - y
+            const fit = Math.max(1, Math.floor((avail - 6) / lineHeight))
+            const take = Math.min(fit, maxLines - consumed)
+            const segHeight = take * lineHeight + 6
+            const x0 = colX(currentStream)
+            let x = x0
+            columns.forEach((c: any, ci: number) => {
+              doc.rect(x, y, widths[ci], segHeight).stroke('#000000')
+              const chunk = cellLines[ci].slice(consumed, consumed + take).join('\n')
+              doc
+                .font(font)
+                .fontSize(size)
+                .text(chunk, x + 4, y + 3, {
+                  width: Math.max(widths[ci] - 8, 1),
+                  align: (c.align ?? 'left') as any,
+                  lineGap: 0,
+                })
+              x += widths[ci]
+            })
+            y += segHeight
+            consumed += take
+            noteDeepest()
+            if (consumed < maxLines) nextPageForStream(s)
+          }
         }
         if (block.header !== false) {
           drawRow(columns.map((c: any) => mitraInterpolate(String(c.label ?? ''), opts.values)), true)
@@ -727,6 +769,29 @@ function estimateBlockHeight(doc: any, block: any, opts: MitraLayoutOptions): nu
       ) + G.paragraphGap
     case 'list':
       return (block.items ?? []).length * (doc.currentLineHeight() + 2)
+    case 'table': {
+      // Tinggi tabel SEBENARNYA (header + semua baris), bukan tinggi JSON-nya.
+      // Dipakai `computeSplitIndex` untuk membagi konten ke dua stream; tanpa
+      // ini tabel diukur sebagai teks JSON sehingga pembagian 50/50 meleset.
+      const cols = block.columns ?? []
+      if (cols.length === 0) return 0
+      const widths = computeColumnWidths(cols, width)
+      const fontSize = G.font.body - 1
+      const cellsOf = (row: any, bold: boolean) =>
+        cols.map((c: any) =>
+          bold
+            ? mitraInterpolate(String(c.label ?? ''), opts.values)
+            : formatMitraCell(mitraInterpolate(String(row?.[c.key] ?? ''), opts.values), c.format),
+        )
+      let h = 0
+      if (block.header !== false) {
+        h += computeRowHeight(doc, cellsOf(null, true), widths, fontSize) + G.paragraphGap
+      }
+      for (const row of block.rows ?? []) {
+        h += computeRowHeight(doc, cellsOf(row, false), widths, fontSize) + G.paragraphGap
+      }
+      return h
+    }
     case 'title':
     case 'subtitle':
       return 0

@@ -9,6 +9,7 @@
  *    query DB dan tidak ada master template yang dibaca saat render.
  *  - Layout tetap milik renderer (margin, kolom, font) — admin hanya mengatur konten.
  */
+import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
 
 export interface RenderedBlockContext {
   /** Map placeholder key → displayValue */
@@ -203,10 +204,10 @@ export function renderBlocks(
         const fontSize = 9
         doc.font(opts.fontRegular).fontSize(fontSize)
 
-        const totalWidth = opts.columnWidth
-        const widths = columns.map((c: any) =>
-          c.width ? (totalWidth * Number(c.width)) / 100 : totalWidth / columns.length,
-        )
+        // Normalisasi bobot lebar kolom (lihat `computeColumnWidths`) supaya
+        // totalnya selalu selebar kolom, bukan 100% per kolom.
+        const widths = computeColumnWidths(columns, opts.columnWidth)
+        const lineHeight = doc.heightOfString('Xg', { lineGap: 0 })
 
         const ensureTableSpace = (needed: number) => {
           if (state.y + needed > pageBottom()) moveToNextColumnOrPage()
@@ -215,28 +216,57 @@ export function renderBlocks(
         const drawRow = (cells: string[], bold: boolean) => {
           const font = bold ? opts.fontBold : opts.fontRegular
           doc.font(font).fontSize(fontSize)
-          const heights = columns.map((_c: any, ci: number) =>
-            doc.heightOfString(cells[ci] ?? '', { width: widths[ci] - 8 }),
+          const rowHeight = computeRowHeight(doc, cells, widths, fontSize, 8, 6)
+          const maxBody = pageBottom() - opts.topY
+
+          if (rowHeight <= maxBody) {
+            ensureTableSpace(rowHeight)
+            let x = currentX
+            columns.forEach((c: any, ci: number) => {
+              doc.rect(x, state.y, widths[ci], rowHeight).stroke('#000000')
+              doc
+                .font(font)
+                .fontSize(fontSize)
+                .text(cells[ci] ?? '', x + 4, state.y + 3, {
+                  width: Math.max(widths[ci] - 8, 1),
+                  align: (c.align ?? 'left') as any,
+                })
+              x += widths[ci]
+            })
+            state.y += rowHeight
+            return
+          }
+
+          // Baris ekstra-tinggi: pecah per-lini lintas kolom/halaman.
+          const cellLines = cells.map((cell, ci) =>
+            wrapCellLines(doc, cell ?? '', Math.max(widths[ci] - 8, 1), font, fontSize),
           )
-          const rowHeight = Math.max(...heights, fontSize) + 6
-          ensureTableSpace(rowHeight)
-          let x = currentX
-          const alignMap: Record<number, string> = {}
-          columns.forEach((c: any, ci: number) => {
-            alignMap[ci] = c.align ?? 'left'
-          })
-          columns.forEach((_c: any, ci: number) => {
-            doc.rect(x, state.y, widths[ci], rowHeight).stroke('#000000')
-            doc
-              .font(font)
-              .fontSize(fontSize)
-              .text(cells[ci] ?? '', x + 4, state.y + 3, {
-                width: widths[ci] - 8,
-                align: alignMap[ci] as any,
-              })
-            x += widths[ci]
-          })
-          state.y += rowHeight
+          const maxLines = Math.max(1, cellLines.reduce((m, l) => Math.max(m, l.length), 0))
+          let consumed = 0
+          while (consumed < maxLines) {
+            if (state.y + lineHeight * 2 > pageBottom()) moveToNextColumnOrPage()
+            const avail = pageBottom() - state.y
+            const fit = Math.max(1, Math.floor((avail - 6) / lineHeight))
+            const take = Math.min(fit, maxLines - consumed)
+            const segHeight = take * lineHeight + 6
+            let x = currentX
+            columns.forEach((c: any, ci: number) => {
+              doc.rect(x, state.y, widths[ci], segHeight).stroke('#000000')
+              const chunk = cellLines[ci].slice(consumed, consumed + take).join('\n')
+              doc
+                .font(font)
+                .fontSize(fontSize)
+                .text(chunk, x + 4, state.y + 3, {
+                  width: Math.max(widths[ci] - 8, 1),
+                  align: (c.align ?? 'left') as any,
+                  lineGap: 0,
+                })
+              x += widths[ci]
+            })
+            state.y += segHeight
+            consumed += take
+            if (consumed < maxLines) moveToNextColumnOrPage()
+          }
         }
 
         if (block.header !== false) {

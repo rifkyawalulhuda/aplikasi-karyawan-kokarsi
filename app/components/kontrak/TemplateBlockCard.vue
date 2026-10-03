@@ -168,7 +168,12 @@ function addColumn() {
   let key = `kolom${n}`
   const used = new Set((b.columns ?? []).map((c: any) => c.key))
   while (used.has(key)) { n++; key = `kolom${n}` }
-  b.columns = [...(b.columns ?? []), { key, label: `Kolom ${n}`, width: 100, format: 'text' }]
+  const next = [...(b.columns ?? []), { key, label: `Kolom ${n}`, width: 1, format: 'text' }]
+  // Bagi bobot lebar secara merata (2 kolom → 50/50, 3 → ~33 tiap kolom).
+  // `width` adalah BOBOT RELATIF yang dinormalisasi renderer, bukan persen
+  // mentah — dulu semua kolom memakai 100 sehingga tabel meluber dari halaman.
+  const even = Math.round(100 / next.length)
+  b.columns = next.map((c: TableColumn) => ({ ...c, width: even }))
   for (const r of b.rows ?? []) r[key] = ''
 }
 </script>
