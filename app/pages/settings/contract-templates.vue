@@ -236,6 +236,7 @@ function formatDate(value?: string | null) {
 // --- Search & filters (client-side; daftar template kecil & sudah di-fetch) ---
 const search = ref('')
 const statusFilter = ref<'all' | 'active' | 'inactive' | 'draft' | 'unpublished'>('all')
+const familyFilter = ref<'all' | 'PKWT' | 'MITRA'>('all')
 const sortBy = ref<'family' | 'name' | 'usage' | 'published'>('family')
 
 // Info bar bisa dilipat karena isinya penjelasan statis yang tidak perlu
@@ -251,6 +252,8 @@ function matchesFilters(template: ContractTemplate) {
       .toLowerCase()
     if (!haystack.includes(q)) return false
   }
+
+  if (familyFilter.value !== 'all' && template.family !== familyFilter.value) return false
 
   switch (statusFilter.value) {
     case 'active':
@@ -290,11 +293,21 @@ const filteredByFamily = computed(() => {
 
 const totalCount = computed(() => templates.value.length)
 const resultCount = computed(() => filteredByFamily.value.PKWT.length + filteredByFamily.value.MITRA.length)
-const hasFilter = computed(() => search.value.trim().length > 0 || statusFilter.value !== 'all')
+const hasFilter = computed(() =>
+  search.value.trim().length > 0 || statusFilter.value !== 'all' || familyFilter.value !== 'all'
+)
+
+// Untuk pesan "tidak ada yang cocok" di dalam satu keluarga: filter keluarga
+// TIDAK dihitung, karena memilih keluarga bukan penyebab satu keluarga kosong —
+// kalau keluarga itu memang belum punya template, pesannya harus "Belum ada".
+const hasNarrowingFilter = computed(() =>
+  search.value.trim().length > 0 || statusFilter.value !== 'all'
+)
 
 function resetFilters() {
   search.value = ''
   statusFilter.value = 'all'
+  familyFilter.value = 'all'
 }
 
 function clearSearch() {
@@ -307,6 +320,12 @@ const statusFilterOptions = [
   { label: 'Nonaktif', value: 'inactive' },
   { label: 'Punya draft', value: 'draft' },
   { label: 'Belum diterbitkan', value: 'unpublished' }
+]
+
+const familyFilterOptions = [
+  { label: 'Semua keluarga', value: 'all' },
+  { label: 'PKWT', value: 'PKWT' },
+  { label: 'MITRA', value: 'MITRA' }
 ]
 
 const sortOptions = [
@@ -335,6 +354,14 @@ const familyConfig = {
 } as const
 
 const familyKeys = ['PKWT', 'MITRA'] as const
+
+// Saat filter keluarga aktif, hanya section keluarga itu yang dirender —
+// section lain tidak perlu tampil kosong dan membingungkan.
+const visibleFamilyKeys = computed(() =>
+  familyFilter.value === 'all'
+    ? [...familyKeys]
+    : familyKeys.filter(key => key === familyFilter.value)
+)
 
 // --- Row actions ---
 // Hapus dinonaktifkan (bukan disembunyikan) saat template masih dipakai, agar
@@ -467,6 +494,13 @@ function moreActions(template: ContractTemplate) {
                 class="w-full sm:w-44"
               />
               <USelectMenu
+                v-model="familyFilter"
+                :items="familyFilterOptions"
+                value-key="value"
+                icon="i-lucide-folder-tree"
+                class="w-full sm:w-44"
+              />
+              <USelectMenu
                 v-model="sortBy"
                 :items="sortOptions"
                 value-key="value"
@@ -493,7 +527,7 @@ function moreActions(template: ContractTemplate) {
           </div>
 
           <!-- Family sections -->
-          <div v-for="familyKey in familyKeys" :key="familyKey" class="space-y-4">
+          <div v-for="familyKey in visibleFamilyKeys" :key="familyKey" class="space-y-4">
             <!-- Section header -->
             <div class="flex items-center gap-3">
               <div
@@ -519,7 +553,7 @@ function moreActions(template: ContractTemplate) {
               v-if="filteredByFamily[familyKey].length === 0"
               class="rounded-xl border border-dashed border-default bg-elevated/30 px-6 py-10 text-center"
             >
-              <template v-if="hasFilter">
+              <template v-if="hasNarrowingFilter">
                 <UIcon name="i-lucide-search-x" class="mx-auto mb-2 size-8 text-muted" />
                 <p class="text-sm font-medium text-highlighted">
                   Tidak ada template {{ familyConfig[familyKey].label }} yang cocok
