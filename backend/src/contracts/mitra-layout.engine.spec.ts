@@ -342,6 +342,117 @@ describe('MITRA layout — rendering', () => {
     expect((sigTable as any).bottom).toBeLessThanOrEqual(G.pageHeight)
   }, 30000)
 
+  /**
+   * Regresi gap halaman: saat tanda tangan MASIH MUAT di bawah kotak halaman
+   * terakhir, kotak itu TIDAK boleh dipendekkan.
+   *
+   * Bug yang dijaga di sini (ditemukan pada kontrak nyata
+   * 015/KK/KUKP/SII/X/2026): halaman terakhir SELALU dipendekkan 210pt, sehingga
+   * teks yang seharusnya mengisi penuh halaman terakhir tertarik ke halaman
+   * berikutnya dan menyisakan ~219pt ruang kosong DI DALAM kotak. Bagi pembaca,
+   * teks yang seharusnya menyambung antar halaman jadi terputus.
+   */
+  it('tidak memendekkan kotak halaman terakhir bila tanda tangan masih muat', async () => {
+    const { doc } = makeDoc()
+
+    const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+    // 12 paragraf pendek → beberapa halaman, halaman terakhir masih lega.
+    for (let i = 1; i <= 12; i++) {
+      blocks.push({ type: 'paragraph', text: `PARA-${i} ` + 'kata '.repeat(60) })
+    }
+    blocks.push({ type: 'signature' })
+
+    const G = MITRA_GEOMETRY
+    const columnBoxes: Array<{ top: number; bottom: number }> = []
+    let pendingCol: { top: number; bottom: number } | null = null
+    const realRect = doc.rect.bind(doc)
+    ;(doc as any).rect = (x: number, y: number, w: number, h: number, ...rest: any[]) => {
+      const isCol = Math.abs(x - G.left.x0) < 1 || Math.abs(x - G.right.x0) < 1
+      pendingCol = isCol ? { top: y, bottom: y + h } : null
+      return realRect(x, y, w, h, ...rest)
+    }
+    const realStroke = doc.stroke.bind(doc)
+    ;(doc as any).stroke = (...a: any[]) => {
+      if (pendingCol) { columnBoxes.push(pendingCol); pendingCol = null }
+      return realStroke(...a)
+    }
+
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: 'PERJANJIAN KEMITRAAN',
+      fonts: fonts(),
+      reserveSignatureZone: true,
+      signature: {
+        leftHeader: "KOPERASI PT. SANKYU INT'L",
+        rightHeader: 'MITRA',
+        leftName: 'Hari Suhono',
+        rightName: 'M. Ikhsan Umar',
+        leftRole: '(Ketua Koperasi)',
+        rightRole: '( Driver )',
+      },
+    })
+
+    const plan = (doc as any).__mitraSplit
+    const finalPage = (doc as any).__mitraFinalPage
+
+    // 1. Tanda tangan MUAT tanpa reservasi → tidak boleh ada pemendekan sama sekali.
+    expect(finalPage.signatureFits).toBe(true)
+    expect(plan.reservedPage).toBe(-1)
+    expect(plan.reserveShrink ?? 0).toBe(0)
+
+    // 2. Kotak halaman terakhir mengikuti ISI — bukan dipotong ke konstanta
+    //    `contPageBoxBottom - 210`. Kalau dipendekkan, tingginya akan jatuh jauh
+    //    di bawah titik terdalam isi halaman itu.
+    const lastBoxBottom = columnBoxes[columnBoxes.length - 1].bottom
+    const expected = Math.min(finalPage.pageDeepest + G.boxPaddingBottom, G.contPageBoxBottom)
+    expect(lastBoxBottom).toBeCloseTo(expected, 1)
+  }, 30000)
+
+  /**
+   * Regresi: bila tanda tangan memang TIDAK muat, pemendekan yang dipakai harus
+   * yang TERKECIL yang cukup — bukan 210pt tetap — supaya ruang kosong yang
+   * tertinggal di dalam kotak sekecil mungkin.
+   */
+  it('memendekkan halaman terakhir seminimal mungkin saat tanda tangan tidak muat', async () => {
+    const { doc } = makeDoc()
+
+    const G = MITRA_GEOMETRY
+    const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+    // Dokumen panjang: halaman terakhir nyaris penuh sehingga tanda tangan tidak
+    // mendapat ruang, tetapi pemendekannya tidak perlu sampai 210pt penuh.
+    for (let i = 1; i <= 20; i++) {
+      blocks.push({ type: 'article', heading: `PASAL ${i}`, paragraphs: ['Ketentuan ' + 'x'.repeat(500)] })
+    }
+    blocks.push({ type: 'signature' })
+
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: 'PERJANJIAN KEMITRAAN',
+      fonts: fonts(),
+      reserveSignatureZone: true,
+      signature: {
+        leftHeader: "KOPERASI PT. SANKYU INT'L",
+        rightHeader: 'MITRA',
+        leftName: 'Hari Suhono',
+        rightName: 'M. Ikhsan Umar',
+        leftRole: '(Ketua Koperasi)',
+        rightRole: '( Driver )',
+      },
+    })
+
+    const plan = (doc as any).__mitraSplit
+    const finalPage = (doc as any).__mitraFinalPage
+    const gapNeeded = finalPage.signatureGapNeeded
+
+    // Pemendekan harus > 0 (memang perlu) tetapi TIDAK boros.
+    expect(plan.reservedPage).toBeGreaterThanOrEqual(0)
+    expect(plan.reserveShrink).toBeGreaterThan(0)
+    // Pencarian biner membulatkan ke atas → toleransi 1pt.
+    expect(plan.reserveShrink).toBeLessThanOrEqual(Math.ceil(gapNeeded) + 1)
+    // Dan tetap jauh di bawah nilai tetap lama (210pt).
+    expect(plan.reserveShrink).toBeLessThan(G.signatureZoneHeight)
+  }, 30000)
+
   it('merender dokumen panjang tanpa error dan menghasilkan PDF', async () => {
     const { doc, buffers } = makeDoc()
     const done = new Promise<void>(res => doc.on('end', () => res()))

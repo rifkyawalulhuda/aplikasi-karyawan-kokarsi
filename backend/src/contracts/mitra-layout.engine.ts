@@ -82,9 +82,18 @@ export const MITRA_GEOMETRY = {
   paragraphGap: 4,
   headingGapAfter: 4,
   /**
-   * Zona bawah yang DISISIHKAN untuk blok tanda tangan pada halaman terakhir.
-   * Body tidak boleh turun melewati batas ini bila signature ikut dirender,
-   * agar tanda tangan tidak menimpa teks (master bebas overlap).
+   * Batas atas pemendekan kotak halaman terakhir untuk memberi ruang tanda
+   * tangan.
+   *
+   * Dulu dipakai sebagai pemendekan TETAP 210pt untuk setiap dokumen, dan itu
+   * menyebabkan bug "gap halaman": teks yang seharusnya mengisi penuh halaman
+   * terakhir tertarik ke halaman berikutnya, menyisakan ratusan pt kosong di
+   * dalam kotak (terukur pada 015/KK/KUKP/SII/X/2026: kotak 761 → 551pt).
+   *
+   * Sekarang pemendekan dihitung `planMitraLayout` secara KONDISIONAL dan
+   * sebesar kebutuhan nyata (`reserveShrink`). Konstanta ini tinggal menjadi
+   * acuan historis/audit — tes memakainya untuk membuktikan pemendekan yang
+   * dipakai selalu lebih kecil dari nilai lama.
    */
   signatureZoneHeight: 210,
 
@@ -95,6 +104,10 @@ export const MITRA_GEOMETRY = {
    *   - garis pemisah    x = 298.9
    *   - garis tepi kanan x = 468.6
    *   - jarak dari dasar kotak ke atas tabel ≈ 50pt
+   *     (master `KONTRAK KERJA MITRA STAFF.pdf` hal. 8 mengukur ≈ 22.6pt; 50
+   *     dipakai agar lebih lega. Jarak ini ikut dihitung `planMitraLayout`
+   *     lewat `signatureGapNeeded`, jadi tidak pernah membuat tabel keluar
+   *     batas halaman.)
    * Baris (tinggi pt): label, perusahaan, ruang tanda tangan, nama, jabatan.
    */
   signatureTable: {
@@ -151,10 +164,88 @@ export interface MitraLayoutOptions {
   logoPath?: string
   fonts: { regular: string; bold: string; italic: string }
   /**
-   * Bila true, zona bawah halaman terakhir disisihkan untuk blok tanda tangan
-   * sehingga body berhenti di atasnya (mencegah tanda tangan menimpa teks).
+   * Bila true, halaman terakhir boleh dipendekkan agar blok tanda tangan muat
+   * DI BAWAH kotak pada halaman yang sama (mencegah tanda tangan menimpa teks).
+   *
+   * Pemendekannya bersifat KONDISIONAL & MINIMUM: hanya dilakukan bila tanda
+   * tangan memang tidak muat, dan hanya sebesar yang diperlukan. Lihat
+   * `planMitraLayout`.
    */
   reserveSignatureZone?: boolean
+  /**
+   * Isi blok tanda tangan. HANYA dipakai `planMitraLayout` untuk mengukur tinggi
+   * tabel secara akurat (panjang nama/jabatan memengaruhi word-wrap). Render
+   * sesungguhnya tetap dilakukan pemanggil lewat `renderMitraSignature`.
+   */
+  signature?: MitraSignatureOptions
+}
+
+/**
+ * Isi tabel tanda tangan. Satu sumber kebenaran untuk menggambar
+ * (`renderMitraSignature`) DAN mengukur (`planMitraLayout`).
+ */
+export interface MitraSignatureOptions {
+  /** Label pilar (teks statis). Default: 'PIHAK PERTAMA' / 'PIHAK KEDUA'. */
+  leftLabel?: string
+  rightLabel?: string
+  /** Nama perusahaan/pihak (teks statis). Default dari chrome. */
+  leftHeader: string
+  rightHeader: string
+  /** Nama ORANG (dari data kontrak) — bukan teks template. */
+  leftName: string
+  rightName: string
+  /** Jabatan (teks statis). Default dari chrome. */
+  leftRole: string
+  rightRole: string
+}
+
+/** Padding teks di dalam sel tabel tanda tangan (agar tidak menempel garis). */
+const SIG_CELL_PAD = 4
+
+/**
+ * Susun baris tabel tanda tangan + hitung tinggi tiap baris.
+ *
+ * Tinggi bersifat DINAMIS: baris tumbuh mengikuti teks yang dibungkus
+ * (word-wrap), jadi nama perusahaan/jabatan yang panjang menambah tinggi tabel.
+ * Karena itu pengukuran harus memakai fungsi yang SAMA dengan penggambaran —
+ * kalau tidak, keputusan "muat atau tidak" akan menyimpang dari hasil nyata.
+ */
+export function mitraSignatureRows(doc: any, o?: MitraSignatureOptions) {
+  const G = MITRA_GEOMETRY
+  const F = MITRA_FONT_NAMES
+  const T = G.signatureTable
+  const leftW = T.divider - T.left
+  const rightW = T.right - T.divider
+  const textW = (w: number) => Math.max(w - SIG_CELL_PAD * 2, 8)
+
+  /**
+   * Fallback chrome untuk pemanggil yang hanya ingin MENGUKUR (mis. tes/alat)
+   * dan tidak mengisi teks tanda tangan. `renderMitraSignature` sendiri selalu
+   * menerima objek lengkap dari `renderMitraDocumentInto`.
+   */
+  const C = MITRA_HEADER_CHROME.signature
+  const rows: Array<{ base: number; left: string; right: string; bold: boolean }> = [
+    { base: T.labelRowH, left: o?.leftLabel?.trim() || 'PIHAK PERTAMA', right: o?.rightLabel?.trim() || 'PIHAK KEDUA', bold: false },
+    { base: T.companyRowH, left: o?.leftHeader ?? C.leftHeader, right: o?.rightHeader ?? C.rightHeader, bold: false },
+    { base: T.signSpaceRowH, left: '', right: '', bold: false },
+    { base: T.nameRowH, left: o?.leftName ?? '', right: o?.rightName ?? '', bold: true },
+    { base: T.roleRowH, left: o?.leftRole ?? C.leftRoleLabel, right: o?.rightRole ?? C.rightRoleFallback, bold: false },
+  ]
+
+  const heights = rows.map((row) => {
+    if (!row.left && !row.right) return row.base
+    doc.font(row.bold ? F.bold : F.regular).fontSize(G.font.signature)
+    const hl = row.left ? doc.heightOfString(row.left, { width: textW(leftW), align: 'center' }) : 0
+    const hr = row.right ? doc.heightOfString(row.right, { width: textW(rightW), align: 'center' }) : 0
+    return Math.max(row.base, Math.max(hl, hr) + 6)
+  })
+
+  return { rows, heights, leftW, rightW, textW }
+}
+
+/** Tinggi total tabel tanda tangan (jumlah tinggi semua baris). */
+export function mitraSignatureTableHeight(doc: any, o?: MitraSignatureOptions): number {
+  return mitraSignatureRows(doc, o).heights.reduce((a, b) => a + b, 0)
 }
 
 export interface MitraBlock {
@@ -794,7 +885,10 @@ function renderMitraPass(
   const splitIndex = plan.splitIndex
   if (opts.reserveSignatureZone === true && plan.reservedPage >= 0) {
     const base = plan.reservedPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
-    reservedBottomByPage.set(plan.reservedPage, base - G.signatureZoneHeight)
+    // `reserveShrink` = pemendekan MINIMUM yang membuat tanda tangan muat
+    // (dihitung `planMitraLayout`). Default 0 → kotak tidak dipendekkan, dan
+    // teks mengisi penuh halaman terakhir tanpa ruang kosong menggantung.
+    reservedBottomByPage.set(plan.reservedPage, base - (plan.reserveShrink ?? 0))
   }
 
   ;(doc as any).__mitraSplit = { ...plan }
@@ -831,6 +925,23 @@ function renderMitraPass(
     if (p === lastPage) lastPageBoxBottom = drawnBottom
   }
 
+  /**
+   * Tinggi total tabel tanda tangan bila dimulai tepat di bawah
+   * `lastPageBoxBottom`. Dipakai `planMitraLayout` untuk memutuskan apakah
+   * reservasi perlu, dan seberapa banyak yang harus dipotong. Memakai helper
+   * yang SAMA dengan penggambaran agar keputusan tidak menyimpang.
+   */
+  const signatureGapNeeded = G.signatureTable.gapFromBox
+    + mitraSignatureTableHeight(doc, opts.signature)
+  /**
+   * Apakah tanda tangan muat TANPA memendekkan kotak?
+   *
+   * Aturannya harus SAMA PERSIS dengan `renderMitraSignature` (`tableTop +
+   * tableHeight > G.pageHeight - 40`), kalau tidak keputusan pemendekan di
+   * `planMitraLayout` akan berbeda dari hasil gambar yang sesungguhnya.
+   */
+  const signatureFits = lastPageBoxBottom + signatureGapNeeded <= G.pageHeight - 40
+
   ;(doc as any).__mitraFinalPage = {
     pageDeepest: deepestByPage[lastPage] ?? 0,
     pageCount,
@@ -838,6 +949,10 @@ function renderMitraPass(
     lastPageBodyBottom: deepestByPage[lastPage] ?? boxTop(lastPage),
     /** Batas bawah kotak halaman terakhir yang BENAR-BENAR digambar. */
     lastPageBoxBottom,
+    /** Jarak minimum yang dibutuhkan tanda tangan di bawah kotak. */
+    signatureGapNeeded,
+    /** Apakah tanda tangan muat tanpa memendekkan kotak. */
+    signatureFits,
     /**
      * Halaman terakhir tiap stream (0-based). Dipakai `planMitraLayout` untuk
      * memilih split: jumlah halaman dokumen = max(stream kiri, stream kanan).
@@ -856,6 +971,12 @@ export interface MitraLayoutPlan {
   reservedPage: number
   /** Jumlah halaman akhir menurut pengukuran. */
   pageCount: number
+  /**
+   * Berapa pt kotak halaman `reservedPage` dipendekkan (0 = tidak dipendekkan).
+   * Diisi `planMitraLayout` dengan nilai MINIMUM yang membuat tanda tangan muat,
+   * supaya ruang kosong yang tertinggal di dalam kotak sekecil mungkin.
+   */
+  reserveShrink?: number
 }
 
 /**
@@ -879,17 +1000,32 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
       autoFirstPage: true,
     })
 
-  /** Ukur satu kandidat split dengan render sungguhan. */
-  const measure = (splitIndex: number, reservedPage = -1) => {
+  /**
+   * Ukur satu kandidat split dengan render sungguhan.
+   *
+   * `shrink` = berapa pt kotak halaman `reservedPage` dipendekkan. Nilai ini
+   * diteruskan ke `renderMitraPass` supaya pengukuran dan render akhir memakai
+   * geometri yang sama persis.
+   */
+  const measure = (splitIndex: number, reservedPage = -1, shrink = 0) => {
     const doc = makeDoc()
-    renderMitraPass(doc, blocks, opts, { splitIndex, reservedPage, pageCount: 1 })
+    renderMitraPass(doc, blocks, opts, { splitIndex, reservedPage, pageCount: 1, reserveShrink: shrink })
     const meta = (doc as any).__mitraFinalPage as
-      | { pageCount: number; lastPageStream: [number, number] }
+      | {
+        pageCount: number
+        lastPageStream: [number, number]
+        lastPageBoxBottom: number
+        signatureGapNeeded: number
+        signatureFits: boolean
+      }
       | undefined
     return {
       pageCount: meta?.pageCount ?? 1,
       leftPages: (meta?.lastPageStream?.[0] ?? 0) + 1,
       rightPages: (meta?.lastPageStream?.[1] ?? 0) + 1,
+      lastPageBoxBottom: meta?.lastPageBoxBottom ?? 0,
+      signatureGapNeeded: meta?.signatureGapNeeded ?? 0,
+      signatureFits: meta?.signatureFits ?? false,
     }
   }
 
@@ -929,20 +1065,48 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
     return { splitIndex: bestSplit, reservedPage: -1, pageCount: measure(bestSplit).pageCount }
   }
   /**
-   * Halaman yang dipendekkan = halaman terakhir aliran TANPA reservasi.
+   * Reservasi bersifat KONDISIONAL dan sehemat mungkin.
    *
-   * Memendekkan halaman itu membuat konten yang tidak muat meluber ke halaman
-   * berikutnya, dan halaman baru itu IKUT digambar ber-border karena sudah
-   * termasuk `pageCount`. Hasilnya: tanda tangan mendapat ruang cukup di bawah
-   * kotak pada halaman ber-border — bukan halaman kosong tanpa border.
+   * Memendekkan halaman terakhir membuang ruang yang sebenarnya terpakai: teks
+   * yang tadinya mengisi penuh halaman terakhir ditarik ke halaman berikutnya,
+   * sehingga menyisakan ruang kosong besar DI DALAM kotak halaman terakhir
+   * (terukur pada kontrak nyata: kotak hal. 8 turun dari 761 → 551pt sementara
+   * teks berhenti di 532pt — menyisakan ~219pt kosong yang terlihat
+   * "menggantung" dan membuat teks yang seharusnya menyambung jadi terputus).
    *
-   * Catatan: memendekkan halaman yang BELUM ADA tidak berefek apa pun, jadi
-   * nilainya harus diambil dari aliran tanpa reservasi.
+   * Bila halaman terakhir masih menyisakan ruang cukup di bawah KOTAK yang
+   * benar-benar digambar, tanda tangan sudah muat di sana tanpa memendekkan
+   * apa pun. Inilah kondisi normal (master acuan: 8 halaman, tanda tangan di
+   * halaman terakhir tepat di bawah kotak).
    */
   const base = measure(bestSplit, -1)
+  if (base.signatureFits) {
+    return { splitIndex: bestSplit, reservedPage: -1, pageCount: base.pageCount }
+  }
+
+  /**
+   * Tanda tangan TIDAK muat di bawah kotak halaman terakhir. Cari pemendekan
+   * TERKECIL yang membuatnya muat, bukan 210pt tetap: makin sedikit yang
+   * dipotong, makin sedikit ruang kosong yang tertinggal di dalam kotak.
+   *
+   * Pemendekan penuh (`signatureGapNeeded`) selalu membuat tanda tangan muat,
+   * jadi batas atas pencarian pasti valid.
+   */
   const reservedPage = base.pageCount - 1
-  const final = measure(bestSplit, reservedPage)
-  return { splitIndex: bestSplit, reservedPage, pageCount: final.pageCount }
+  const fullShrink = Math.ceil(base.signatureGapNeeded)
+  let shrinkLo = 0
+  let shrinkHi = fullShrink
+  while (shrinkLo < shrinkHi) {
+    const mid = (shrinkLo + shrinkHi) >> 1
+    if (measure(bestSplit, reservedPage, mid).signatureFits) shrinkHi = mid
+    else shrinkLo = mid + 1
+  }
+  return {
+    splitIndex: bestSplit,
+    reservedPage,
+    pageCount: measure(bestSplit, reservedPage, shrinkLo).pageCount,
+    reserveShrink: shrinkLo,
+  }
 }
 /**
  * Signature block — master: label di area bawah halaman terakhir, dua pilar
@@ -953,54 +1117,24 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
  */
 export function renderMitraSignature(
   doc: any,
-  o: {
-    /** Label pilar (teks statis). Default: 'PIHAK PERTAMA' / 'PIHAK KEDUA'. */
-    leftLabel?: string
-    rightLabel?: string
-    /** Nama perusahaan/pihak (teks statis). Default dari chrome. */
-    leftHeader: string
-    rightHeader: string
-    /** Nama ORANG (dari data kontrak) — bukan teks template. */
-    leftName: string
-    rightName: string
-    /** Jabatan (teks statis). Default dari chrome. */
-    leftRole: string
-    rightRole: string
-  },
+  o: MitraSignatureOptions,
 ): void {
   const G = MITRA_GEOMETRY
   const F = MITRA_FONT_NAMES
   const T = G.signatureTable
 
-  const leftLabel = o.leftLabel?.trim() || 'PIHAK PERTAMA'
-  const rightLabel = o.rightLabel?.trim() || 'PIHAK KEDUA'
-
   const left = T.left
   const divider = T.divider
   const right = T.right
-  const leftW = divider - left
-  const rightW = right - divider
   // Padding teks dalam sel agar tidak menempel garis.
-  const cellPad = 4
-  const textW = (w: number) => Math.max(w - cellPad * 2, 8)
+  const cellPad = SIG_CELL_PAD
 
-  /** Baris tabel: tinggi dasar + isi teks kiri/kanan. */
-  const rows: Array<{ base: number, left: string, right: string, bold?: boolean }> = [
-    { base: T.labelRowH, left: leftLabel, right: rightLabel, bold: false },
-    { base: T.companyRowH, left: o.leftHeader, right: o.rightHeader, bold: false },
-    { base: T.signSpaceRowH, left: '', right: '' },
-    { base: T.nameRowH, left: o.leftName, right: o.rightName, bold: true },
-    { base: T.roleRowH, left: o.leftRole, right: o.rightRole, bold: false },
-  ]
-
-  // Tinggi DINAMIS: baris tumbuh mengikuti teks yang dibungkus (word-wrap).
-  const heights = rows.map(row => {
-    if (!row.left && !row.right) return row.base
-    doc.font(row.bold ? F.bold : F.regular).fontSize(G.font.signature)
-    const hl = row.left ? doc.heightOfString(row.left, { width: textW(leftW), align: 'center' }) : 0
-    const hr = row.right ? doc.heightOfString(row.right, { width: textW(rightW), align: 'center' }) : 0
-    return Math.max(row.base, Math.max(hl, hr) + 6)
-  })
+  /**
+   * Baris + tinggi dihitung helper BERSAMA dengan `planMitraLayout`, supaya
+   * keputusan "tanda tangan muat atau tidak" memakai angka yang sama dengan
+   * hasil gambar.
+   */
+  const { rows, heights, leftW, rightW, textW } = mitraSignatureRows(doc, o)
   const tableHeight = heights.reduce((a, b) => a + b, 0)
 
   const finalPage = (doc as any).__mitraFinalPage as
@@ -1044,6 +1178,19 @@ export function renderMitraSignature(
   }
 
   doc.switchToPage(lastPage)
+
+  /**
+   * Rekam posisi tabel yang BENAR-BENAR digambar (audit + verifikasi).
+   * `page` dipakai untuk membuktikan tanda tangan tidak menambah halaman.
+   */
+  ;(doc as any).__mitraSignatureBox = {
+    page: lastPage,
+    top: tableTop,
+    bottom: tableTop + tableHeight,
+    height: tableHeight,
+    /** Kotak kolom yang jadi acuan: tanda tangan harus di bawah nilai ini. */
+    boxBottomOnLast,
+  }
 
   // Garis tabel
   doc.save()

@@ -20,6 +20,7 @@ import {
   renderMitraLayout,
   renderMitraSignature,
   type MitraBlock,
+  type MitraSignatureOptions,
 } from './mitra-layout.engine'
 
 /** Path font Times New Roman. */
@@ -70,6 +71,16 @@ export interface MitraDocumentRenderOptions {
     employeeName?: string
     jobRole?: string
   }
+  /**
+   * Sisihkan ruang tanda tangan di halaman terakhir (default: true).
+   *
+   * `true`  → halaman terakhir dipendekkan 210pt agar tabel tanda tangan muat
+   *           DI BAWAH kotak. Berguna bila kotak halaman terakhir nyaris penuh.
+   * `false` → kotak memakai tinggi penuh; engine meletakkan tanda tangan di
+   *           bawah batas kotak yang BENAR-BENAR digambar (`lastPageBoxBottom`),
+   *           sehingga tidak ada ruang kosong di dalam kotak.
+   */
+  reserveSignatureZone?: boolean
 }
 
 /**
@@ -85,19 +96,6 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     ?? (titleBlock?.text ? interpolate(String(titleBlock.text), values) : opts.fallbackTitle)
     ?? 'PERJANJIAN KEMITRAAN').toUpperCase()
 
-  renderMitraLayout(doc, blocks, {
-    values,
-    title,
-    numberLabel: opts.numberLabel,
-    dateLabel: opts.dateLabel,
-    logoPath: opts.logoPath,
-    fonts: opts.fonts,
-    // Tanda tangan harus berada DI LUAR kotak kolom. Engine memendekkan kotak
-    // halaman terakhir agar tabel tanda tangan muat di bawahnya tanpa
-    // menambah halaman.
-    reserveSignatureZone: true,
-  })
-
   // Signature: dua pilar di bawah kotak kolom, mengikuti master.
   //
   // Teks STATIS dapat dikonfigurasi per-template lewat blok `signature`
@@ -112,7 +110,16 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
   const chairman = opts.signature?.chairmanName ?? values['settings.cooperativeChairmanName'] ?? ''
   const employeeName = opts.signature?.employeeName ?? values['employee.fullName'] ?? ''
   const jobRole = opts.signature?.jobRole ?? values['employee.jobRole'] ?? ''
-  renderMitraSignature(doc, {
+
+  /**
+   * Isi tanda tangan dibangun SEKALI, lalu dipakai DUA kali:
+   *  1. `renderMitraLayout` — untuk MENGUKUR tinggi tabel secara akurat, supaya
+   *     keputusan "perlu memendekkan halaman terakhir atau tidak" memakai angka
+   *     nyata (panjang nama perusahaan/jabatan memengaruhi word-wrap).
+   *  2. `renderMitraSignature` — untuk menggambar.
+   * Karena satu objek, pengukuran dan hasil gambar tidak mungkin menyimpang.
+   */
+  const signature: MitraSignatureOptions = {
     // Label pilar — dari field lama `leftRole`/`rightRole` (seeder mengisinya
     // dengan `firstPartyLabel` = "PIHAK PERTAMA"/"PIHAK KEDUA").
     leftLabel: text(sig?.leftRole),
@@ -124,7 +131,23 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     leftRole: text(sig?.leftParty) ?? MITRA_HEADER_CHROME.signature.leftRoleLabel,
     rightRole: text(sig?.rightParty)
       ?? (jobRole ? `( ${jobRole} )` : MITRA_HEADER_CHROME.signature.rightRoleFallback),
+  }
+
+  renderMitraLayout(doc, blocks, {
+    values,
+    title,
+    numberLabel: opts.numberLabel,
+    dateLabel: opts.dateLabel,
+    logoPath: opts.logoPath,
+    fonts: opts.fonts,
+    // Tanda tangan harus berada DI LUAR kotak kolom. Reservasi dipakai HANYA
+    // bila tanda tangan memang tidak muat di bawah kotak halaman terakhir, dan
+    // hanya sebesar yang diperlukan — lihat `planMitraLayout`.
+    reserveSignatureZone: opts.reserveSignatureZone ?? true,
+    signature,
   })
+
+  renderMitraSignature(doc, signature)
 }
 
 /**
