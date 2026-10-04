@@ -1,4 +1,12 @@
 <script setup lang="ts">
+import {
+  type BlockLike,
+  isDynamicField,
+  normalizeFieldKey,
+  scanFieldUsage,
+  uniqueBlockLabels
+} from '~/utils/field-usage'
+
 interface Template { id: number, name: string, family: 'PKWT' | 'MITRA' }
 interface Version { id: number, versionNumber: number, status: string, contentDefinition: any, fieldDefinitions: any, changeSummary?: string }
 const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
@@ -10,6 +18,15 @@ const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previ
 /** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
 const previewPdfBlob = ref<Blob | null>(null); const previewPdfLoading = ref(false); const previewPdfError = ref('')
 const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>>({}); const focusedBlockId = ref<string | null>(null)
+/**
+ * Pencarian "field ini dipakai di blok mana".
+ *
+ * Berbeda dari `fieldSearch` di panel kanan (yang mencari field untuk
+ * DISISIPKAN), state ini mencari LOKASI pemakaian field yang sudah ada.
+ */
+const usageSearch = ref('')
+const usageOpen = ref(false)
+
 const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null>(null); const pendingVersion = ref<Version | null>(null)
 /** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
 const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
@@ -463,6 +480,99 @@ const filteredFieldItems = computed(() => {
   return items.filter((f: any) => [f.key, f.label].some(v => String(v ?? '').toLowerCase().includes(q)))
 })
 
+/**
+ * Bentuk item panel field (`fieldItems`) yang dibutuhkan pencarian pemakaian.
+ *
+ * Dipakai menggantikan `any` pada `map`/`filter`, mengikuti gaya `CatalogField`
+ * di `fieldItems` — nilainya dibaca lewat helper yang menerima `unknown`.
+ */
+interface FieldItemLike {
+  key?: unknown
+  label?: unknown
+  sourceType?: unknown
+  bound?: unknown
+}
+
+/**
+ * Pemindaian pemakaian pada bahasa AKTIF — sumber utama fitur pencarian.
+ *
+ * Sengaja memakai `blocks.value` (= `draft ?? versi terpilih`) dan bukan
+ * `usedInContent` backend: `listTemplateBindings()` membaca versi PUBLISHED
+ * lebih dulu (`template-fields.service.ts:226`), sehingga hasilnya basi saat
+ * pengguna mengedit draft dan salah di mode baca.
+ */
+const usageScan = computed(() => scanFieldUsage(blocks.value))
+
+/**
+ * Pemindaian bahasa LAIN — hanya untuk peringatan.
+ *
+ * Tanpa ini, field yang hanya dipakai di bahasa `en` tampak "belum dipakai"
+ * saat editor berada di bahasa `id` — kesimpulan yang salah dan berbahaya.
+ */
+const usageOtherLang = computed(() => {
+  const other = lang.value === 'id' ? 'en' : 'id'
+  const content = draft.value?.contentDefinition ?? selected.value?.contentDefinition
+  return scanFieldUsage(content?.languages?.[other])
+})
+
+/** Daftar field beserta lokasi pemakaiannya, mengikuti kata kunci pencarian. */
+const usageRows = computed(() => {
+  const scan = usageScan.value
+  const otherKeys = new Set(usageOtherLang.value.byKey.keys())
+  const rows = (fieldItems.value ?? []).map((f: FieldItemLike) => {
+    const normalized = normalizeFieldKey(f.key)
+    const occurrences = scan.byKey.get(normalized) ?? []
+    return {
+      key: String(f.key ?? ''),
+      label: String(f.label || f.key || ''),
+      // `sourceType` wajib ikut: `fieldPlaceholderKey()` memakainya untuk
+      // menambah prefix `custom.` pada field dinamis. Tanpa ini, modal
+      // menampilkan `{{ktp_issued_date}}` — bentuk yang justru DITOLAK
+      // validator, sehingga pengguna disesatkan.
+      sourceType: f.sourceType,
+      isDynamic: isDynamicField(f),
+      bound: f.bound !== false,
+      occurrences,
+      // Membedakan "1 blok dipakai 4×" dari "4 blok masing-masing 1×".
+      blockCount: uniqueBlockLabels(occurrences).length,
+      usedInOtherLang: otherKeys.has(normalized)
+    }
+  })
+  const q = usageSearch.value.trim().toLowerCase()
+  const filtered = q
+    ? rows.filter(r => [r.label, r.key].some(v => String(v ?? '').toLowerCase().includes(q)))
+    : rows
+  // Yang paling sering dipakai di atas; sisanya alfabetis agar stabil.
+  return filtered.sort((a, b) => b.occurrences.length - a.occurrences.length || a.label.localeCompare(b.label))
+})
+
+/** Ringkasan untuk header modal. */
+const usageSummary = computed(() => {
+  const scan = usageScan.value
+  const used = (fieldItems.value ?? [])
+    .filter((f: FieldItemLike) => (scan.byKey.get(normalizeFieldKey(f.key)) ?? []).length > 0)
+    .length
+  return {
+    fields: (fieldItems.value ?? []).length,
+    used,
+    occurrences: scan.occurrences.length,
+    blocks: new Set(scan.occurrences.map(o => o.blockIndex)).size
+  }
+})
+
+/**
+ * Placeholder yang dipakai di teks tetapi TIDAK ada di katalog field.
+ * Publish menolaknya ("tidak terdaftar di katalog field"), jadi ini ditampilkan
+ * sebagai masalah, bukan sekadar hasil pencarian.
+ */
+const usageOrphans = computed(() => {
+  const catalogKeys = new Set((fieldItems.value ?? []).map((f: FieldItemLike) => normalizeFieldKey(f.key)))
+  return [...usageScan.value.byKey.keys()]
+    .filter(key => !catalogKeys.has(key))
+    .map(key => ({ key, occurrences: usageScan.value.byKey.get(key) ?? [] }))
+    .sort((a, b) => b.occurrences.length - a.occurrences.length)
+})
+
 /** Blok yang sedang dituju sisipan placeholder. */
 const focusedBlock = computed(() => (blocks.value ?? []).find((b: any) => b.id === focusedBlockId.value) ?? null)
 
@@ -545,6 +655,38 @@ function insertField(key: string) {
       : target.type === 'table' ? 'sel tabel'
         : 'isi blok'
   toast.add({ title: `Field disisipkan ke Blok ${list.indexOf(target) + 1}`, description: `Ditempatkan di ${where}.`, color: 'success' })
+}
+
+/**
+ * Id DOM kartu blok — dipakai untuk menggulir dari hasil pencarian pemakaian.
+ *
+ * Dijadikan satu fungsi supaya id yang dipasang di template dan yang dicari
+ * saat menggulir tidak pernah menyimpang.
+ */
+function blockDomId(block: BlockLike | null | undefined, index: number): string {
+  return `template-block-${block?.id ?? `index-${index}`}`
+}
+
+/**
+ * Buka blok pemakai field: bentangkan kartunya, gulir ke sana, lalu jadikan
+ * target sisipan.
+ *
+ * Inilah inti fitur pencarian pemakaian. Tanpa lompatan ini, pengguna tetap
+ * harus membuka blok satu per satu — persis masalah yang ingin dihilangkan.
+ */
+function goToUsage(occurrence: { blockIndex: number, blockId: string, path: string | null }) {
+  const list = blocks.value ?? []
+  const block = list[occurrence.blockIndex]
+  if (!block) return
+  // Kunci `collapsedBlocks` harus sama dengan yang dipakai kartu blok di
+  // template (`collapsedBlocks[entry.block.id]`).
+  collapsedBlocks.value[String(block.id ?? occurrence.blockId)] = false
+  setFocus(String(block.id ?? occurrence.blockId), occurrence.path)
+  usageOpen.value = false
+  // Kartu baru terbentang setelah re-render, jadi gulir menunggu tick berikutnya.
+  nextTick(() => {
+    document.getElementById(blockDomId(block, occurrence.blockIndex))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
 }
 
 /** Duplikat blok, termasuk seluruh isinya. */
@@ -887,6 +1029,7 @@ function removeInvalidBlock(index: number) {
             </div>
             <div
               v-for="entry in validBlocks"
+              :id="blockDomId(entry.block, entry.index)"
               :key="entry.block.id"
               class="pb-2"
               @dragover="onBlockDragOver(entry.index, $event)"
@@ -948,6 +1091,16 @@ function removeInvalidBlock(index: number) {
                 </p>
               </div>
               <div class="flex items-center gap-1">
+                <UTooltip text="Cari di blok mana field dipakai">
+                  <UButton
+                    size="xs"
+                    icon="i-lucide-search-check"
+                    variant="soft"
+                    color="neutral"
+                    aria-label="Cari pemakaian field"
+                    @click="usageOpen = true"
+                  />
+                </UTooltip>
                 <UButton
                   size="xs"
                   label="Kelola"
@@ -1411,6 +1564,150 @@ function removeInvalidBlock(index: number) {
         color="neutral"
         variant="subtle"
         @click="bindingOpen = false"
+      />
+    </template>
+  </UModal>
+
+  <!-- ── Pencarian pemakaian field: "field ini dipakai di blok mana" ── -->
+  <UModal
+    v-model:open="usageOpen"
+    title="Pemakaian field dinamis"
+    description="Cari field untuk melihat di blok mana ia dipakai, lalu klik untuk membuka bloknya."
+    :ui="{ content: 'max-w-4xl w-full' }"
+  >
+    <template #body>
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <UInput
+            v-model="usageSearch"
+            icon="i-lucide-search"
+            placeholder="Cari nama atau key field…"
+            size="sm"
+            class="min-w-56 flex-1"
+            autofocus
+          />
+          <UBadge color="neutral" variant="subtle" size="sm">
+            {{ usageSummary.used }} dari {{ usageSummary.fields }} field dipakai
+          </UBadge>
+          <UBadge color="neutral" variant="subtle" size="sm">
+            {{ usageSummary.occurrences }} kemunculan di {{ usageSummary.blocks }} blok
+          </UBadge>
+        </div>
+
+        <UAlert
+          v-if="!draft"
+          icon="i-lucide-eye"
+          color="neutral"
+          variant="subtle"
+          title="Mode baca"
+          description="Menampilkan versi terpilih (bukan draft). Hasil di bawah mengikuti versi ini."
+        />
+
+        <UAlert
+          v-if="usageOrphans.length"
+          icon="i-lucide-triangle-alert"
+          color="warning"
+          variant="subtle"
+          title="Placeholder tidak ada di katalog field"
+          :description="`${usageOrphans.length} placeholder tidak terdaftar: `
+            + usageOrphans.slice(0, 5).map(o => placeholderText(o.key)).join(', ')
+            + (usageOrphans.length > 5 ? `, +${usageOrphans.length - 5} lagi` : '')
+            + '. Penerbitan versi akan gagal sampai ini diperbaiki.'"
+        />
+
+        <div class="max-h-[55vh] overflow-auto rounded-lg border border-default">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-default text-xs text-muted">
+              <tr>
+                <th class="px-3 py-2 text-left font-medium">
+                  Field
+                </th>
+                <th class="px-3 py-2 text-left font-medium">
+                  Dipakai di
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in usageRows"
+                :key="row.key"
+                class="border-t border-default align-top"
+                :class="row.occurrences.length ? '' : 'opacity-60'"
+              >
+                <td class="px-3 py-2">
+                  <p class="font-medium text-highlighted">
+                    {{ row.label }}
+                  </p>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(row)) }}</code>
+                  <div class="mt-1 flex flex-wrap items-center gap-1">
+                    <UBadge
+                      :color="row.isDynamic ? 'primary' : 'neutral'"
+                      variant="subtle"
+                      size="xs"
+                      :label="row.isDynamic ? 'Dinamis' : 'Otomatis'"
+                    />
+                    <UBadge
+                      v-if="!row.bound"
+                      color="error"
+                      variant="subtle"
+                      size="xs"
+                      label="Belum di-bind"
+                    />
+                    <UBadge
+                      v-if="row.usedInOtherLang"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
+                      :label="`Dipakai di bahasa ${lang === 'id' ? 'EN' : 'ID'}`"
+                    />
+                  </div>
+                </td>
+                <td class="px-3 py-2">
+                  <div v-if="row.occurrences.length" class="flex flex-wrap gap-1">
+                    <UButton
+                      v-for="occ in row.occurrences"
+                      :key="`${occ.blockId}-${occ.path ?? 'x'}-${occ.locationLabel}`"
+                      size="xs"
+                      variant="soft"
+                      color="neutral"
+                      :label="`Blok ${occ.blockIndex + 1} · ${occ.locationLabel}`"
+                      @click="goToUsage(occ)"
+                    />
+                    <UBadge
+                      v-if="row.blockCount > 1"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
+                      :label="`${row.blockCount} blok`"
+                    />
+                  </div>
+                  <div v-else class="flex items-center gap-1 text-xs text-muted">
+                    <UIcon name="i-lucide-minus" class="size-3.5" />
+                    Belum dipakai di bahasa ini
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!usageRows.length">
+                <td colspan="2" class="px-3 py-6 text-center text-sm text-muted">
+                  Tidak ada field yang cocok dengan pencarian.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-xs text-muted">
+          Klik lokasi untuk membuka bloknya dan menggulir ke sana. Field dinamis disisipkan
+          sebagai <code class="text-xs">{{ placeholderText('custom.key') }}</code>.
+        </p>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Tutup"
+        color="neutral"
+        variant="subtle"
+        @click="usageOpen = false"
       />
     </template>
   </UModal>

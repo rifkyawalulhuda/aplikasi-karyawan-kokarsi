@@ -117,6 +117,29 @@ field tersebut diisi. Centang hanya untuk data yang benar-benar harus ada di
 dokumen (mis. nomor KTP mitra), bukan data opsional.
 :::
 
+#### Mencari field ini dipakai di blok mana
+
+Blok di editor tampil **tertutup** secara default, jadi sulit mengetahui sebuah
+field sudah dipakai di bagian mana saja. Klik ikon **kaca pembesar bertanda centang**
+di panel "Field dinamis" untuk membuka pencarian pemakaian.
+
+| Bagian | Keterangan |
+|---|---|
+| Kotak pencarian | Saring berdasarkan nama atau kunci field |
+| Badge "Dinamis" / "Otomatis" | Field input manual vs field otomatis dari data karyawan/kontrak |
+| Badge "Belum di-bind" | Field dipakai di teks tetapi belum dipakai template ini — **penerbitan akan gagal** |
+| Badge "Dipakai di bahasa EN/ID" | Field tidak ada di bahasa yang sedang dibuka, tetapi dipakai di bahasa lain |
+| Tombol "Blok 12 · paragraf 3" | **Klik untuk membuka blok itu dan menggulir ke sana** |
+
+Hasil pencarian mengikuti **draft yang sedang dibuka**; bila tidak ada draft
+(mode baca), yang dipindai adalah versi yang sedang dipilih.
+
+::: info Placeholder di luar katalog
+Placeholder yang muncul di teks tetapi tidak terdaftar di katalog field
+ditampilkan sebagai peringatan di bagian atas pencarian. Perbaiki sebelum
+menerbitkan versi.
+:::
+
 Perubahan tab ini baru berlaku pada **versi template berikutnya**: klik
 **Simpan Perubahan**, lalu **Terbitkan Versi**. Kontrak lama tetap memakai field
 versi saat kontrak itu dibuat.
