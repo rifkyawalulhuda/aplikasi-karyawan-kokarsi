@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
-import { validateContentDefinition, collectAllPlaceholders, normalizeCustomPlaceholders } from './template-schema.validator'
+import { validateContentDefinition, collectAllPlaceholders, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
@@ -132,6 +132,10 @@ export class ContractTemplateVersionsService {
     })
     // Selaraskan placeholder field dinamis tanpa prefix `custom.` sejak awal.
     normalizeCustomPlaceholders(contentDefinition, await this.fieldsService.findContractInputCatalogKeys())
+    // Rapikan judul pasal yang melebihi 2 baris (mis. dari tempel-teks) sebelum
+    // draft disimpan, supaya draft baru tidak mewarisi judul yang merusak
+    // tata letak PDF.
+    normalizeArticleHeadings(contentDefinition)
 
     return this.prisma.client.contractTemplateVersion.create({
       data: {
@@ -169,6 +173,10 @@ export class ContractTemplateVersionsService {
     if (nextContent !== undefined) {
       nextContent = JSON.parse(JSON.stringify(nextContent))
       normalizeCustomPlaceholders(nextContent, await this.fieldsService.findContractInputCatalogKeys())
+      // Judul pasal dibatasi 2 baris. Editor sudah mencegah Enter ke-3, tapi
+      // tempel-teks (paste) dapat membawa `\n\n` / 3+ baris tanpa lewat jalur
+      // itu; normalisasi di sini menjaga draft tetap aman bagi tata letak PDF.
+      normalizeArticleHeadings(nextContent)
     }
     return this.prisma.client.contractTemplateVersion.update({
       where: { id: versionId },
@@ -225,6 +233,10 @@ export class ContractTemplateVersionsService {
     const customKeys = await this.fieldsService.findContractInputCatalogKeys()
     const contentDefinition = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
     const fixedCount = normalizeCustomPlaceholders(contentDefinition, customKeys)
+    // Judul pasal >2 baris (mis. dari tempel-teks) juga dirapikan sebelum
+    // snapshot dibekukan, supaya dokumen yang dirender selalu sesuai asumsi
+    // tata letak.
+    const fixedHeadings = normalizeArticleHeadings(contentDefinition)
 
     // Pastikan fieldDefinitions mencakup SETIAP placeholder SYSTEM di konten.
     // Placeholder SYSTEM yang tidak terdaftar tidak di-resolve saat kontrak
@@ -251,7 +263,7 @@ export class ContractTemplateVersionsService {
           publishedByName: actor.name,
           fieldDefinitions: fieldDefinitions as any,
           // Simpan konten yang sudah dinormalisasi agar snapshot konsisten.
-          ...(fixedCount > 0 ? { contentDefinition: contentDefinition as any } : {}),
+          ...(fixedCount > 0 || fixedHeadings > 0 ? { contentDefinition: contentDefinition as any } : {}),
         },
       })
     })
@@ -276,6 +288,7 @@ export class ContractTemplateVersionsService {
     // pratinjau tidak melaporkan "sintaks rusak" untuk data lama.
     const previewContent = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
     normalizeCustomPlaceholders(previewContent, await this.fieldsService.findContractInputCatalogKeys())
+    normalizeArticleHeadings(previewContent)
     this.addPlaceholderKeysFromDefinitions(previewContent, fieldDefinitions, validKeys)
     const result = validateContentDefinition(previewContent, [...validKeys], version.template.family as any)
     return { versionId: version.id, templateId: version.templateId, valid: true, ...result }
@@ -306,7 +319,11 @@ export class ContractTemplateVersionsService {
       )
     }
 
-    const content = (dto.contentDefinition ?? version.contentDefinition) as any
+    // Salin dulu supaya normalisasi judul pasal di bawah tidak menyentuh objek
+    // milik `version`; hasil pratinjau harus sama dengan yang akan dirender
+    // setelah draft disimpan.
+    const content = JSON.parse(JSON.stringify((dto.contentDefinition ?? version.contentDefinition) ?? {})) as any
+    normalizeArticleHeadings(content)
     const blocks: any[] = content?.languages?.id ?? []
     if (!Array.isArray(blocks) || blocks.length === 0) {
       throw new BadRequestException('Konten template kosong — tidak ada yang bisa dipratinjau.')

@@ -1,4 +1,4 @@
-﻿import { validateContentDefinition, extractPlaceholders, findBrokenPlaceholders, collectAllPlaceholders, normalizeCustomPlaceholders } from './template-schema.validator'
+﻿import { validateContentDefinition, extractPlaceholders, findBrokenPlaceholders, collectAllPlaceholders, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
 
 const VALID_FIELD_KEYS = ['employee.fullName', 'contract.contractNo', 'contract.termRange', 'contract.duration', 'custom.ktp_issued_date']
 
@@ -241,5 +241,66 @@ describe('normalizeCustomPlaceholders', () => {
     const content = { languages: { id: [{ id: 'p', type: 'paragraph', text: '{{ktp_issued_date}}' }] } }
     expect(normalizeCustomPlaceholders(content, ['custom.ktp_issued_date'])).toBe(1)
     expect(content.languages.id[0].text).toBe('{{custom.ktp_issued_date}}')
+  })
+})
+
+describe('normalizeArticleHeadings', () => {
+  function articleContent(heading: string, type = 'article') {
+    return { languages: { id: [{ id: 'a1', type, heading, paragraphs: ['x'] }] } }
+  }
+
+  it('membiarkan judul 2 baris yang sudah benar tanpa perubahan', () => {
+    const content = articleContent('PASAL 1\nRUANG LINGKUP')
+    expect(normalizeArticleHeadings(content)).toBe(0)
+    expect(content.languages.id[0].heading).toBe('PASAL 1\nRUANG LINGKUP')
+  })
+
+  it('menggabungkan baris kosong hasil tempel-teks (\\n\\n)', () => {
+    const content = articleContent('PASAL 1\n\nRUANG LINGKUP')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    expect(content.languages.id[0].heading).toBe('PASAL 1\nRUANG LINGKUP')
+  })
+
+  it('memotong judul yang lebih dari 2 baris', () => {
+    const content = articleContent('PASAL 1\nRUANG\nLINGKUP')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    expect(content.languages.id[0].heading).toBe('PASAL 1\nRUANG')
+  })
+
+  it('menormalkan CRLF dan membuang baris kosong di tepi', () => {
+    const content = articleContent('\r\nPASAL 3\r\nJANGKA WAKTU\r\n\r\n')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    expect(content.languages.id[0].heading).toBe('PASAL 3\nJANGKA WAKTU')
+  })
+
+  it('membuang spasi di ujung tiap baris', () => {
+    const content = articleContent('PASAL 4  \nKEADAAN MEMAKSA ')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    expect(content.languages.id[0].heading).toBe('PASAL 4\nKEADAAN MEMAKSA')
+  })
+
+  it('mengubah judul yang hanya berisi spasi/baris kosong menjadi string kosong', () => {
+    const content = articleContent(' \n \n ')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    expect(content.languages.id[0].heading).toBe('')
+  })
+
+  it('tidak menyentuh blok non-article', () => {
+    const content = { languages: { id: [{ id: 't', type: 'title', text: 'A\n\nB\nC' }] } }
+    expect(normalizeArticleHeadings(content)).toBe(0)
+    expect(content.languages.id[0].text).toBe('A\n\nB\nC')
+  })
+
+  it('idempoten: pemanggilan kedua tidak mengubah apa pun', () => {
+    const content = articleContent('PASAL 5\n\nA\nB\nC  ')
+    expect(normalizeArticleHeadings(content)).toBe(1)
+    const once = content.languages.id[0].heading
+    expect(normalizeArticleHeadings(content)).toBe(0)
+    expect(content.languages.id[0].heading).toBe(once)
+  })
+
+  it('aman untuk konten tanpa languages', () => {
+    expect(normalizeArticleHeadings({})).toBe(0)
+    expect(normalizeArticleHeadings(null)).toBe(0)
   })
 })

@@ -573,3 +573,79 @@ describe('ContractTemplateVersionsService.publish (overlay binding katalog)', ()
     await expect(build(client).publish(31, { name: 'tester' })).resolves.toBeDefined()
   })
 })
+
+describe('ContractTemplateVersionsService.updateDraft (normalisasi judul pasal)', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { ContractTemplateVersionsService } = require('./contract-template-versions.service')
+  const { TemplateFieldsService } = require('./template-fields.service')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
+  const headingDraft = {
+    id: 41,
+    status: 'DRAFT',
+    versionNumber: 1,
+    templateId: 9,
+    contentDefinition: { languages: { id: [{ id: 'a1', type: 'article', heading: 'PASAL 1', paragraphs: ['x'] }] } },
+    fieldDefinitions: [],
+    template: { id: 9, code: 'MITRA_DRIVER', family: 'MITRA' }
+  }
+
+  /** updateDraft() harus mengembalikan data yang ditulis agar bisa diperiksa. */
+  function makeUpdatable(opts: MockOptions) {
+    const { client } = makeService(opts)
+    const patched = {
+      ...client,
+      contractTemplateVersion: {
+        ...(client as any).contractTemplateVersion,
+        update: async ({ data }: CreateArgs) => data
+      }
+    }
+    return patched
+  }
+
+  function build(client: unknown) {
+    return new ContractTemplateVersionsService({ client } as never, new TemplateFieldsService({ client } as never), { log: async () => undefined } as never)
+  }
+
+  it('merapikan judul pasal hasil tempel-teks yang membawa baris kosong', async () => {
+    const client = makeUpdatable({ template: headingDraft.template, existingDraft: headingDraft })
+
+    const result: any = await build(client).updateDraft(41, {
+      contentDefinition: {
+        languages: {
+          id: [{ id: 'a1', type: 'article', heading: 'PASAL 1\n\nRUANG LINGKUP', paragraphs: ['x'] }]
+        }
+      }
+    } as never, { name: 'tester' })
+
+    expect(result.contentDefinition.languages.id[0].heading).toBe('PASAL 1\nRUANG LINGKUP')
+  })
+
+  it('memotong judul pasal yang lebih dari dua baris', async () => {
+    const client = makeUpdatable({ template: headingDraft.template, existingDraft: headingDraft })
+
+    const result: any = await build(client).updateDraft(41, {
+      contentDefinition: {
+        languages: {
+          id: [{ id: 'a1', type: 'article', heading: 'PASAL 1\nRUANG\nLINGKUP', paragraphs: ['x'] }]
+        }
+      }
+    } as never, { name: 'tester' })
+
+    expect(result.contentDefinition.languages.id[0].heading).toBe('PASAL 1\nRUANG')
+  })
+
+  it('tidak menyentuh judul 2 baris yang sudah benar', async () => {
+    const client = makeUpdatable({ template: headingDraft.template, existingDraft: headingDraft })
+
+    const result: any = await build(client).updateDraft(41, {
+      contentDefinition: {
+        languages: {
+          id: [{ id: 'a1', type: 'article', heading: 'PASAL 7\nKEADAAN MEMAKSA', paragraphs: ['x'] }]
+        }
+      }
+    } as never, { name: 'tester' })
+
+    expect(result.contentDefinition.languages.id[0].heading).toBe('PASAL 7\nKEADAAN MEMAKSA')
+  })
+})

@@ -72,7 +72,10 @@ function markBlockOnly() { emit('activate', props.block?.id, null) }
  * - sudah ada 1 newline  -> tolak (sudah 2 baris)
  * - baris pertama kosong -> tolak (hindari baris kosong di atas judul)
  *
- * Catatan: tempel-teks (paste) yang membawa `\n\n` tidak melewati jalur ini.
+ * Penjagaan ini hanya untuk jalur ketik. Tempel-teks (paste) yang membawa
+ * `\n\n` atau 3+ baris tidak melewatinya, sehingga backend menormalkan judul
+ * pasal saat draft disimpan / versi dipublish — lihat `normalizeArticleHeadings`
+ * di `template-schema.validator.ts`.
  */
 function onHeadingKeydown(event: KeyboardEvent) {
   if (event.key !== 'Enter') return

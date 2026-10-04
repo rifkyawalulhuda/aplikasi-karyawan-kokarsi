@@ -27,6 +27,61 @@ export const PLACEHOLDER_REGEX = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-z
 /** Placeholder custom yang dibuat admin (snake_case): {{custom.nama_field}} */
 const CUSTOM_PLACEHOLDER_REGEX = /\{\{\s*custom\.([a-z][a-z0-9_]*)\s*\}\}/g
 
+/**
+ * Judul pasal (blok `article`) dirancang TEPAT maksimal 2 baris
+ * ("PASAL 7\nKEADAAN MEMAKSA"). Batas ini bukan sekadar kosmetik: mesin tata
+ * letak MITRA mengukur tinggi judul dengan asumsi 2 baris supaya judul tidak
+ * terpisah dari uraiannya. Baris ke-3, baris kosong di atas judul, atau spasi
+ * berlebih di ujung akan membuat paginasi salah hitung.
+ */
+export const MAX_ARTICLE_HEADING_LINES = 2
+
+/** Normalisasi satu judul pasal agar aman bagi tata letak PDF. */
+export function normalizeArticleHeading(heading: string): string {
+  // Samakan CRLF/CR menjadi LF supaya hitungan baris konsisten.
+  const lines = heading
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    // Buang spasi/tab berlebih di ujung tiap baris (tidak mengubah redaksi).
+    .map(line => line.replace(/[^\S\n]+$/g, ''))
+    // Buang baris kosong (mis. dari tempel-teks Word) di posisi mana pun —
+    // baris kosong hanya menambah tinggi tanpa isi.
+    .filter(line => line.trim() !== '')
+    .slice(0, MAX_ARTICLE_HEADING_LINES)
+
+  // Seluruh baris kosong: pertahankan judul kosong (bukan string berisi "\n").
+  return lines.length === 0 ? '' : lines.join('\n')
+}
+
+/**
+ * Normalisasi judul pasal pada SELURUH blok `article`, in-place.
+ *
+ * Menutup celah yang tidak terjangkau penjagaan tombol Enter di editor:
+ * tempel-teks (paste) dari Word/Docs dapat membawa `\n\n` maupun 3+ baris,
+ * sehingga judul pasal tersimpan lebih dari 2 baris dan tata letak PDF rusak.
+ *
+ * @returns jumlah blok yang judulnya benar-benar berubah.
+ */
+export function normalizeArticleHeadings(content: any): number {
+  let changed = 0
+  const languages = content?.languages
+  if (!languages || typeof languages !== 'object') return 0
+  for (const lang of Object.keys(languages)) {
+    const blocks = languages[lang]
+    if (!Array.isArray(blocks)) continue
+    for (const block of blocks) {
+      if (!block || typeof block !== 'object' || block.type !== 'article') continue
+      if (typeof block.heading !== 'string') continue
+      const normalized = normalizeArticleHeading(block.heading)
+      if (normalized !== block.heading) {
+        block.heading = normalized
+        changed += 1
+      }
+    }
+  }
+  return changed
+}
+
 /** Kumpulkan semua placeholder unik dari teks. */
 export function extractPlaceholders(text: string): string[] {
   const found = new Set<string>()
