@@ -62,6 +62,24 @@ function markFocus(path?: string | null) { emit('activate', props.block?.id, pat
 /** Setel ulang ke blok ini tanpa sub-bagian (klik area kosong kartu). */
 function markBlockOnly() { emit('activate', props.block?.id, null) }
 
+/**
+ * Judul pasal dirancang maksimal 2 baris (`"PASAL 1\nRUANG LINGKUP"`), dan
+ * layout PDF MITRA memakai batas itu untuk mengukur tinggi + menjaga judul
+ * tidak terpisah dari uraiannya.
+ *
+ * Karena field ini kini `UTextarea` (bisa menerima Enter), Enter perlu dijaga
+ * agar pengguna tidak membuat baris ke-3 yang merusak tata letak:
+ * - sudah ada 1 newline  -> tolak (sudah 2 baris)
+ * - baris pertama kosong -> tolak (hindari baris kosong di atas judul)
+ *
+ * Catatan: tempel-teks (paste) yang membawa `\n\n` tidak melewati jalur ini.
+ */
+function onHeadingKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter') return
+  const heading = String(props.block?.heading ?? '')
+  if (heading.includes('\n') || heading.trim() === '') event.preventDefault()
+}
+
 /** Nama tipe blok yang ramah pengguna (bukan slug internal). */
 const BLOCK_META: Record<string, { label: string, icon: string, hint: string }> = {
   title: { label: 'Judul', icon: 'i-lucide-heading-1', hint: 'Judul dokumen' },
@@ -317,12 +335,19 @@ function addColumn() {
       </template>
 
       <template v-else-if="block.type === 'article'">
-        <UFormField label="Judul pasal">
-          <UInput
+        <UFormField
+          label="Judul pasal"
+          hint="Maks. 2 baris. Tekan Enter untuk memisah, mis. PASAL 1 / RUANG LINGKUP"
+        >
+          <UTextarea
             v-model="block.heading"
             :disabled="!editable"
+            :rows="2"
+            :maxrows="2"
+            autoresize
             class="w-full"
-            placeholder="Contoh: Pasal 1 &#8212; Ruang Lingkup Pekerjaan"
+            placeholder="PASAL 1&#10;RUANG LINGKUP"
+            @keydown.enter="onHeadingKeydown"
           />
         </UFormField>
         <UFormField label="Uraian pasal">
