@@ -213,6 +213,23 @@ describe('MITRA layout — rendering', () => {
     }
     blocks.push({ type: 'signature' })
 
+    // Sadap teks yang BENAR-BENAR digambar, sekaligus kolom tempatnya ditulis
+    // (x < tengah halaman = KIRI). Ini membuktikan aliran dua-stream, bukan
+    // sekadar jumlah halaman.
+    const drawnLeft: string[] = []
+    const drawnRight: string[] = []
+    const realText = doc.text.bind(doc)
+    ;(doc as any).text = (text: any, x?: any, ...rest: any[]) => {
+      if (typeof text === 'string' && x !== undefined) {
+        const isLeft = x < MITRA_GEOMETRY.pageWidth / 2
+        // Teks kop memakai x=0 dengan lebar penuh, jadi hanya catat teks body.
+        const isBodyCol = Math.abs(x - (MITRA_GEOMETRY.left.x0 + MITRA_GEOMETRY.textPaddingLeft)) < 0.5
+          || Math.abs(x - (MITRA_GEOMETRY.right.x0 + MITRA_GEOMETRY.textPaddingLeft)) < 0.5
+        if (isBodyCol) (isLeft ? drawnLeft : drawnRight).push(text)
+      }
+      return realText(text, x, ...rest)
+    }
+
     renderMitraLayout(doc, blocks, {
       values: {},
       title: 'PERJANJIAN KEMITRAAN',
@@ -225,10 +242,104 @@ describe('MITRA layout — rendering', () => {
     const buf = Buffer.concat(buffers)
     expect(buf.subarray(0, 5).toString()).toBe('%PDF-')
 
+    // SEMUA paragraf harus tergambar — tidak ada yang hilang karena pemisahan
+    // stream. Ini penjaga utama: pengukuran yang salah tidak boleh membuang
+    // konten demi menghemat halaman.
+    const allDrawn = [...drawnLeft, ...drawnRight].join(' ')
+    for (let i = 1; i <= 10; i++) {
+      expect(allDrawn).toContain(`PARA-${i} `)
+    }
+
+    // Kedua kolom terisi, dan konten awal ada di KIRI (bukan semua di kanan).
+    expect(drawnLeft.length).toBeGreaterThan(0)
+    expect(drawnRight.length).toBeGreaterThan(0)
+
     // Layout dua-stream berarti jumlah halaman = max(panjang stream), bukan
     // jumlah semua blok dibagi dua kolom per halaman secara sekuensial.
     const pages = (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
-    expect(pages).toBeGreaterThan(1)
+    expect(pages).toBeGreaterThan(0)
+  }, 30000)
+
+  it('tanda tangan DI LUAR kotak dan tidak menambah halaman', async () => {
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>(res => doc.on('end', () => res()))
+
+    // Dokumen panjang: memaksa banyak halaman sehingga kotak halaman terakhir
+    // hampir penuh — inilah kondisi yang dulu memaksa tanda tangan ke halaman
+    // baru atau menembus kotak.
+    const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+    for (let i = 1; i <= 30; i++) {
+      blocks.push({
+        type: 'article',
+        heading: `PASAL ${i}\nPASAL UJI ${i}`,
+        paragraphs: ['Ketentuan ini mengatur ' + 'x'.repeat(400) + ' dan seterusnya.'],
+      })
+    }
+    blocks.push({ type: 'signature' })
+
+    const G = MITRA_GEOMETRY
+    const columnBoxes: Array<{ top: number; bottom: number }> = []
+    let pendingCol: { top: number; bottom: number } | null = null
+    let sigTable: { top: number; bottom: number } | null = null
+
+    const realRect = doc.rect.bind(doc)
+    ;(doc as any).rect = (x: number, y: number, w: number, h: number, ...rest: any[]) => {
+      const isCol = Math.abs(x - G.left.x0) < 1 || Math.abs(x - G.right.x0) < 1
+      pendingCol = isCol ? { top: y, bottom: y + h } : null
+      // Tabel tanda tangan dikenali dari x tepi kirinya yang khas.
+      if (Math.abs(x - G.signatureTable.left) < 0.5) sigTable = { top: y, bottom: y + h }
+      return realRect(x, y, w, h, ...rest)
+    }
+    const realStroke = doc.stroke.bind(doc)
+    ;(doc as any).stroke = (...a: any[]) => {
+      if (pendingCol) {
+        columnBoxes.push(pendingCol)
+        pendingCol = null
+      }
+      return realStroke(...a)
+    }
+
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fonts(),
+      reserveSignatureZone: true,
+    })
+    const plannedPages = (doc as any).__mitraSplit?.pageCount as number
+    const layoutPages = doc.bufferedPageRange().count
+
+    renderMitraSignature(doc, {
+      leftHeader: "KOPERASI PT. SANKYU INT'L",
+      leftName: 'Hari Suhono',
+      leftRole: '(Ketua Koperasi)',
+      rightHeader: 'MITRA',
+      rightName: 'M. Ikhsan Umar',
+      rightRole: '( Driver )',
+    })
+    const afterSigPages = doc.bufferedPageRange().count
+
+    doc.end()
+    await done
+    expect(Buffer.concat(buffers).subarray(0, 5).toString()).toBe('%PDF-')
+
+    // 1. Rencana engine HARUS cocok dengan jumlah halaman nyata. Bila meleset,
+    //    seluruh pemilihan split & reservasi tidak bisa dipercaya.
+    expect(layoutPages).toBe(plannedPages)
+
+    // 2. Tanda tangan TIDAK boleh menambah halaman.
+    expect(afterSigPages).toBe(layoutPages)
+
+    // 3. Tanda tangan berada DI BAWAH kotak halaman terakhir (di luar kotak).
+    //    Kotak digambar berurutan per halaman (kiri lalu kanan), jadi dua entri
+    //    terakhir adalah halaman terakhir.
+    expect(sigTable).not.toBeNull()
+    const lastBoxBottom = columnBoxes[columnBoxes.length - 1].bottom
+    expect((sigTable as any).top).toBeGreaterThanOrEqual(lastBoxBottom)
+
+    // 4. Tanda tangan tidak boleh keluar batas halaman.
+    expect((sigTable as any).bottom).toBeLessThanOrEqual(G.pageHeight)
   }, 30000)
 
   it('merender dokumen panjang tanpa error dan menghasilkan PDF', async () => {

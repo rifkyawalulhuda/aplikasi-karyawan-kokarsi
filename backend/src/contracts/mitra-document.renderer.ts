@@ -92,6 +92,10 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     dateLabel: opts.dateLabel,
     logoPath: opts.logoPath,
     fonts: opts.fonts,
+    // Tanda tangan harus berada DI LUAR kotak kolom. Engine memendekkan kotak
+    // halaman terakhir agar tabel tanda tangan muat di bawahnya tanpa
+    // menambah halaman.
+    reserveSignatureZone: true,
   })
 
   // Signature: dua pilar di bawah kotak kolom, mengikuti master.

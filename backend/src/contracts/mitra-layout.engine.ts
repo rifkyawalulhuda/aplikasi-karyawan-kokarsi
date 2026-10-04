@@ -16,6 +16,13 @@
  * atau menulis ulang konten legal.
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
+import PDFDocument from 'pdfkit'
+
+/** Lebar dalam kolom (di dalam border & padding). */
+function columnInnerWidth(col: 0 | 1): number {
+  const G = MITRA_GEOMETRY
+  return (col === 0 ? G.left.x1 - G.left.x0 : G.right.x1 - G.right.x0) - G.textPaddingLeft * 2
+}
 
 /** Geometri master (satuan: PDF point, origin kiri-atas). */
 export const MITRA_GEOMETRY = {
@@ -79,7 +86,7 @@ export const MITRA_GEOMETRY = {
    * Body tidak boleh turun melewati batas ini bila signature ikut dirender,
    * agar tanda tangan tidak menimpa teks (master bebas overlap).
    */
-  signatureZoneHeight: 150,
+  signatureZoneHeight: 210,
 
   /**
    * Blok tanda tangan = TABEL BERGRARIS di BAWAH & DI LUAR kotak kolom.
@@ -259,15 +266,38 @@ export function formatMitraCell(value: string, format: string | undefined): stri
  * nyata PDFKit. Menghormati newline eksplisit. Tidak ada kata yang ditempel.
  */
 /**
- * Render blok konten ke PDFKit doc dengan layout master dua kolom ber-border.
+ * Render layout MITRA — SATU-SATUNYA pintu masuk.
  *
- * Header + horizontal rules + title hanya dirender pada HALAMAN 1.
- * Kotak dua kolom dirender pada SETIAP halaman.
+ * Dua fase:
+ *  1. `planMitraLayout` mengukur engine pada dokumen scratch untuk memilih
+ *     split stream dan halaman yang perlu disisihkan untuk tanda tangan.
+ *  2. Render sungguhan ke `doc` memakai rencana itu.
+ *
+ * Memisahkan perencanaan dari penggambaran membuat hasilnya akurat tanpa
+ * menebak, dan tetap idempoten: dokumen yang sama selalu menghasilkan tata
+ * letak yang sama.
  */
 export function renderMitraLayout(
   doc: any,
   blocks: MitraBlock[],
   opts: MitraLayoutOptions,
+): void {
+  const plan = planMitraLayout(blocks, opts)
+  renderMitraPass(doc, blocks, opts, plan)
+}
+
+/**
+ * Render satu kali dengan RENCANA yang sudah dihitung.
+ *
+ * Dipisahkan dari `renderMitraLayout` supaya `planMitraLayout` dapat
+ * menjalankannya berulang pada dokumen SCRATCH untuk mengukur tinggi stream,
+ * tanpa rekursi tak berujung.
+ */
+function renderMitraPass(
+  doc: any,
+  blocks: MitraBlock[],
+  opts: MitraLayoutOptions,
+  plan: MitraLayoutPlan,
 ): void {
   const G = MITRA_GEOMETRY
   const F = MITRA_FONT_NAMES
@@ -305,7 +335,16 @@ export function renderMitraLayout(
   const colInnerWidth = (c: number) =>
     (c === 0 ? G.left.x1 - G.left.x0 : G.right.x1 - G.right.x0) - G.textPaddingLeft * 2
   const boxTop = (pageIdx: number) => (pageIdx === 0 ? G.firstPageBoxTop : G.contPageBoxTop)
-  const boxBottom = (pageIdx: number) => (pageIdx === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom)
+  /**
+   * Halaman yang kotaknya SENGAJA dipendekkan agar tabel tanda tangan mendapat
+   * ruang di bawahnya (peta halaman → batas bawah baru).
+   */
+  const reservedBottomByPage = new Map<number, number>()
+  const boxBottom = (pageIdx: number) => {
+    const base = pageIdx === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
+    const cap = reservedBottomByPage.get(pageIdx)
+    return cap === undefined ? base : Math.min(base, cap)
+  }
 
   // --- State ---
   let pageCount = 1 // halaman 0 dibuat otomatis (autoFirstPage)
@@ -749,9 +788,16 @@ export function renderMitraLayout(
   doc.switchToPage(0)
   drawMasterHeader()
 
-  // === Bagi konten jadi dua stream (~50/50 tinggi) ===
-  // Blok judul kop tidak dihitung karena tidak digambar di body.
-  const splitIndex = computeSplitIndex(blocks, (b) => estimateBlockHeight(doc, b, opts, headerTitleBlock))
+  // === Bagi konten jadi dua stream sesuai RENCANA ===
+  // Split & reservasi sudah dihitung `planMitraLayout` lewat pengukuran
+  // terhadap engine asli, jadi di sini tinggal menerapkannya.
+  const splitIndex = plan.splitIndex
+  if (opts.reserveSignatureZone === true && plan.reservedPage >= 0) {
+    const base = plan.reservedPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
+    reservedBottomByPage.set(plan.reservedPage, base - G.signatureZoneHeight)
+  }
+
+  ;(doc as any).__mitraSplit = { ...plan }
   const blocksFirst = blocks.slice(0, splitIndex)
   const blocksSecond = blocks.slice(splitIndex)
 
@@ -769,10 +815,20 @@ export function renderMitraLayout(
   // sebagai isi kotak.
   const lastPage = pageCount - 1
 
+  // Kotak digambar mengikuti isi; `boxBottom()` sudah memperhitungkan
+  // pemendekan halaman yang disisihkan untuk tanda tangan.
+  //
+  // Batas bawah kotak halaman terakhir DISIMPAN karena tanda tangan harus
+  // diletakkan di bawah KOTAK YANG BENAR-BENAR DIGAMBAR — bukan di bawah
+  // konstanta `contPageBoxBottom`. Kotak bersifat dinamis dan bisa jauh lebih
+  // pendek dari halaman; memakai konstanta membuat tanda tangan dianggap tidak
+  // muat padahal ruang di bawah kotak berlimpah.
+  let lastPageBoxBottom = boxBottom(lastPage)
   for (let p = 0; p < pageCount; p++) {
     doc.switchToPage(p)
     const contentBottom = deepestByPage[p] ?? boxTop(p)
-    strokeBoxesForPage(p, contentBottom)
+    const drawnBottom = strokeBoxesForPage(p, contentBottom)
+    if (p === lastPage) lastPageBoxBottom = drawnBottom
   }
 
   ;(doc as any).__mitraFinalPage = {
@@ -780,94 +836,114 @@ export function renderMitraLayout(
     pageCount,
     lastPage,
     lastPageBodyBottom: deepestByPage[lastPage] ?? boxTop(lastPage),
+    /** Batas bawah kotak halaman terakhir yang BENAR-BENAR digambar. */
+    lastPageBoxBottom,
+    /**
+     * Halaman terakhir tiap stream (0-based). Dipakai `planMitraLayout` untuk
+     * memilih split: jumlah halaman dokumen = max(stream kiri, stream kanan).
+     */
+    lastPageStream: [streamPage[0], streamPage[1]] as [number, number],
+    /** Halaman yang benar-benar dipendekkan pada render ini (audit). */
+    reservedPages: [...reservedBottomByPage.keys()],
   }
 }
 
-/** Perkirakan tinggi sebuah blok untuk keperluan pemisahan stream. */
-function estimateBlockHeight(
-  doc: any,
-  block: any,
-  opts: MitraLayoutOptions,
-  headerTitleBlock?: MitraBlock | null,
-): number {
-  if (!block) return 0
+/** Rencana tata letak hasil pengukuran. */
+export interface MitraLayoutPlan {
+  /** Indeks pemisahan stream. */
+  splitIndex: number
+  /** Halaman yang kotaknya dipendekkan untuk tanda tangan (-1 = tidak ada). */
+  reservedPage: number
+  /** Jumlah halaman akhir menurut pengukuran. */
+  pageCount: number
+}
+
+/**
+ * Pilih rencana tata letak dengan MENGUKUR ENGINE ASLI.
+ *
+ * Alih-alih menaksir tinggi blok dengan rumus (yang meleset besar untuk
+ * `article` panjang — terukur satu pasal ditaksir 1515pt sementara kolom penuh
+ * hanya ±725pt), engine dijalankan utuh pada dokumen SCRATCH lalu
+ * `__mitraFinalPage` dibaca. Ini satu-satunya cara yang benar-benar akurat.
+ */
+export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions): MitraLayoutPlan {
   const G = MITRA_GEOMETRY
-  const width = G.left.x1 - G.left.x0 - G.textPaddingLeft * 2
-  doc.font(MITRA_FONT_NAMES.regular).fontSize(G.font.body)
-  switch (block.type) {
-    case 'article': {
-      let h = 0
-      if (block.heading) h += G.headingGapAfter + G.font.body * 2
-      for (const p of block.paragraphs ?? []) {
-        h += doc.heightOfString(scrubRawTokens(mitraInterpolate(String(p), opts.values)), { width }) + G.paragraphGap
-      }
-      return h
-    }
-    case 'paragraph':
-      return doc.heightOfString(
-        scrubRawTokens(mitraInterpolate(String(block.text ?? ''), opts.values)),
-        { width },
-      ) + G.paragraphGap
-    case 'list':
-      return (block.items ?? []).length * (doc.currentLineHeight() + 2)
-    case 'table': {
-      // Tinggi tabel SEBENARNYA (header + semua baris), bukan tinggi JSON-nya.
-      // Dipakai `computeSplitIndex` untuk membagi konten ke dua stream; tanpa
-      // ini tabel diukur sebagai teks JSON sehingga pembagian 50/50 meleset.
-      const cols = block.columns ?? []
-      if (cols.length === 0) return 0
-      const widths = computeColumnWidths(cols, width)
-      const fontSize = G.font.body - 1
-      const cellsOf = (row: any, bold: boolean) =>
-        cols.map((c: any) =>
-          bold
-            ? mitraInterpolate(String(c.label ?? ''), opts.values)
-            : formatMitraCell(mitraInterpolate(String(row?.[c.key] ?? ''), opts.values), c.format),
-        )
-      let h = 0
-      if (block.header !== false) {
-        h += computeRowHeight(doc, cellsOf(null, true), widths, fontSize) + G.paragraphGap
-      }
-      for (const row of block.rows ?? []) {
-        h += computeRowHeight(doc, cellsOf(row, false), widths, fontSize) + G.paragraphGap
-      }
-      return h
-    }
-    case 'title':
-      if (block === headerTitleBlock) return 0
-      doc.font(MITRA_FONT_NAMES.bold).fontSize(G.font.body)
-      return doc.heightOfString(mitraInterpolate(String(block.text ?? ''), opts.values), {
-        width,
-        align: 'center',
-      }) + G.headingGapAfter + 2
-    case 'subtitle':
-      doc.font(MITRA_FONT_NAMES.bold).fontSize(G.font.body - 2)
-      return doc.heightOfString(mitraInterpolate(String(block.text ?? ''), opts.values), {
-        width,
-        align: 'center',
-      }) + G.headingGapAfter + 2
-    default:
-      return doc.heightOfString(JSON.stringify(block ?? {}), { width })
-  }
-}
+  const n = blocks?.length ?? 0
+  if (n <= 1) return { splitIndex: Math.max(1, n), reservedPage: -1, pageCount: n === 0 ? 0 : 1 }
 
-/** Cari indeks pemisahan terdekat 50% tinggi total. */
-function computeSplitIndex(blocks: MitraBlock[], heightOf: (b: MitraBlock) => number): number {
-  if (!blocks?.length) return 0
-  const heights = blocks.map(heightOf)
-  const total = heights.reduce((a, b) => a + b, 0)
-  let acc = 0
-  let idx = blocks.length
-  for (let i = 0; i < blocks.length; i++) {
-    acc += heights[i]
-    if (acc >= total / 2) {
-      idx = i + 1
-      break
+  const makeDoc = () =>
+    new PDFDocument({
+      size: [G.pageWidth, G.pageHeight],
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      bufferPages: true,
+      autoFirstPage: true,
+    })
+
+  /** Ukur satu kandidat split dengan render sungguhan. */
+  const measure = (splitIndex: number, reservedPage = -1) => {
+    const doc = makeDoc()
+    renderMitraPass(doc, blocks, opts, { splitIndex, reservedPage, pageCount: 1 })
+    const meta = (doc as any).__mitraFinalPage as
+      | { pageCount: number; lastPageStream: [number, number] }
+      | undefined
+    return {
+      pageCount: meta?.pageCount ?? 1,
+      leftPages: (meta?.lastPageStream?.[0] ?? 0) + 1,
+      rightPages: (meta?.lastPageStream?.[1] ?? 0) + 1,
     }
   }
-  return Math.min(Math.max(idx, 1), blocks.length)
-}
 
+  // --- 1. Cari split dengan jumlah halaman paling sedikit ---
+  // Syarat penting: KEDUA stream harus terisi. Split yang menaruh semua blok di
+  // satu stream menghasilkan satu kolom kosong dan halaman lebih sedikit, tetapi
+  // itu bukan layout booklet — jadi kandidat semacam itu dibuang.
+  const isBalanced = (m: { leftPages: number; rightPages: number }) =>
+    m.leftPages > 0 && m.rightPages > 0
+
+  let lo = 1
+  let hi = n - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    const m = measure(mid)
+    if (!isBalanced(m) || m.leftPages >= m.rightPages) hi = mid
+    else lo = mid + 1
+  }
+  const candidates = new Set<number>([lo - 1, lo, lo + 1].filter(k => k >= 1 && k <= n - 1))
+  let bestSplit = lo
+  let bestScore = Number.POSITIVE_INFINITY
+  for (const k of candidates) {
+    const m = measure(k)
+    if (!isBalanced(m)) continue
+    const score = m.pageCount * 1000 + Math.abs(m.leftPages - m.rightPages)
+    if (score < bestScore) {
+      bestScore = score
+      bestSplit = k
+    }
+  }
+  // Bila tidak ada kandidat yang seimbang (dokumen sangat pendek / blok raksasa),
+  // pakai titik tengah sebagai jaring pengaman.
+  if (bestScore === Number.POSITIVE_INFINITY) bestSplit = Math.max(1, Math.round(n / 2))
+
+  // --- 2. Tentukan halaman yang perlu disisihkan untuk tanda tangan ---
+  if (opts.reserveSignatureZone !== true) {
+    return { splitIndex: bestSplit, reservedPage: -1, pageCount: measure(bestSplit).pageCount }
+  }
+  /**
+   * Halaman yang dipendekkan = halaman terakhir aliran TANPA reservasi.
+   *
+   * Memendekkan halaman itu membuat konten yang tidak muat meluber ke halaman
+   * berikutnya, dan halaman baru itu IKUT digambar ber-border karena sudah
+   * termasuk `pageCount`. Hasilnya: tanda tangan mendapat ruang cukup di bawah
+   * kotak pada halaman ber-border — bukan halaman kosong tanpa border.
+   *
+   * Catatan: memendekkan halaman yang BELUM ADA tidak berefek apa pun, jadi
+   * nilainya harus diambil dari aliran tanpa reservasi.
+   */
+  const base = measure(bestSplit, -1)
+  const reservedPage = base.pageCount - 1
+  const final = measure(bestSplit, reservedPage)
+  return { splitIndex: bestSplit, reservedPage, pageCount: final.pageCount }
+}
 /**
  * Signature block — master: label di area bawah halaman terakhir, dua pilar
  * (PIHAK PERTAMA di kolom kiri, PIHAK KEDUA di kolom kanan).
@@ -928,15 +1004,40 @@ export function renderMitraSignature(
   const tableHeight = heights.reduce((a, b) => a + b, 0)
 
   const finalPage = (doc as any).__mitraFinalPage as
-    | { pageDeepest: number; pageCount: number; lastPage: number; lastPageBodyBottom: number }
+    | {
+        pageDeepest: number
+        pageCount: number
+        lastPage: number
+        lastPageBodyBottom: number
+        /** Batas bawah kotak halaman terakhir yang benar-benar digambar. */
+        lastPageBoxBottom?: number
+      }
     | undefined
   let lastPage = finalPage?.lastPage ?? (doc.bufferedPageRange?.().count ?? 1) - 1
-  const bodyBottom = finalPage?.lastPageBodyBottom ?? G.contPageBoxTop
 
-  const boxBottomOnLast = lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom
-  let tableTop = Math.max(bodyBottom + G.boxPaddingBottom, boxBottomOnLast - tableHeight - T.gapFromBox) + T.gapFromBox
+  /**
+   * Batas bawah kotak halaman terakhir yang BENAR-BENAR DIGAMBAR.
+   *
+   * Ini BUKAN `contPageBoxBottom`. Kotak kolom bersifat dinamis dan bisa jauh
+   * lebih pendek dari halaman; memakai konstanta membuat tanda tangan dianggap
+   * "tidak muat" padahal ruang di bawah kotak masih berlimpah. Inilah yang dulu
+   * mendorong tanda tangan ke halaman baru tanpa border.
+   */
+  const boxBottomOnLast =
+    finalPage?.lastPageBoxBottom ??
+    (lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom)
+
+  /**
+   * Tempatkan tabel tanda tangan.
+   *
+   * ATURAN KERAS: tanda tangan harus berada DI BAWAH kotak kolom, tidak boleh
+   * menembusnya. Jadi `tableTop` = tepat `gapFromBox` di bawah batas bawah kotak
+   * yang benar-benar digambar, dan tidak boleh melewati batas halaman.
+   */
+  let tableTop = boxBottomOnLast + T.gapFromBox
 
   if (tableTop + tableHeight > G.pageHeight - 40) {
+    // Tidak muat di bawah kotak pada halaman ini: halaman baru ber-border.
     doc.addPage()
     lastPage += 1
     tableTop = G.contPageBoxTop + 40
