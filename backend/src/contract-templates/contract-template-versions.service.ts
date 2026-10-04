@@ -13,6 +13,9 @@ import { isValidMasterField, isValidMasterSource } from './master-reference.regi
 import { MITRA_HEADER_CHROME } from '../contracts/mitra-layout.engine'
 import { createMitraPdfBuffer, resolveMitraFonts, resolveMitraLogoPath } from '../contracts/mitra-document.renderer'
 import { MITRA_PREVIEW_VALUES } from '../contracts/mitra-preview-sample'
+import { PKWT_HEADER_CHROME } from '../contracts/pkwt-layout.engine'
+import { createPkwtPdfBuffer, resolvePkwtFonts, resolvePkwtLogoPath } from '../contracts/pkwt-document.renderer'
+import { PKWT_PREVIEW_VALUES } from '../contracts/pkwt-preview-sample'
 
 interface CreateDraftDto {
   changeSummary?: string
@@ -297,25 +300,28 @@ export class ContractTemplateVersionsService {
   /**
    * Render PDF pratinjau untuk versi template.
    *
-   * Memakai MESIN YANG SAMA dengan generate kontrak (`createMitraPdfBuffer` →
-   * `renderMitraLayout` + `renderMitraSignature`), sehingga hasil pratinjau 1:1
-   * dengan dokumen yang dihasilkan nanti. Data placeholder memakai contoh
-   * (`MITRA_PREVIEW_VALUES`) karena versi template belum terikat kontrak.
+   * Memakai MESIN YANG SAMA dengan generate kontrak:
+   *  - MITRA → `createMitraPdfBuffer` → `renderMitraLayout` + `renderMitraSignature`
+   *  - PKWT  → `createPkwtPdfBuffer`  → `renderPkwtLayout` (bilingual, row-locked)
+   * sehingga hasil pratinjau 1:1 dengan dokumen yang dihasilkan nanti. Data
+   * placeholder memakai contoh (`MITRA_PREVIEW_VALUES` / `PKWT_PREVIEW_VALUES`)
+   * karena versi template belum terikat kontrak.
    *
    * Stateless: `contentDefinition` dari body dipakai bila ada (agar editan yang
    * BELUM disimpan ikut terlihat); DB tidak pernah ditulis.
    *
-   * Hanya keluarga MITRA yang didukung. PKWT dirender jalur berbeda (dua kolom
-   * ID/EN dengan renderer blok generik) dan belum punya mesin pratinjau.
+   * Keluarga yang didukung: MITRA dan PKWT. Keluarga lain belum punya mesin
+   * layout master, jadi ditolak dengan pesan jelas.
    */
   async renderPreviewPdf(
     versionId: number,
     dto: { contentDefinition?: Record<string, unknown> },
   ): Promise<Buffer> {
     const version = await this.findOne(versionId)
-    if (version.template.family !== 'MITRA') {
+    const family = version.template.family
+    if (family !== 'MITRA' && family !== 'PKWT') {
       throw new BadRequestException(
-        'Pratinjau PDF baru tersedia untuk template Perjanjian Kemitraan (MITRA).',
+        'Pratinjau PDF baru tersedia untuk template Perjanjian Kemitraan (MITRA) dan Kesepakatan Kerja Waktu Tertentu (PKWT).',
       )
     }
 
@@ -329,6 +335,13 @@ export class ContractTemplateVersionsService {
       throw new BadRequestException('Konten template kosong — tidak ada yang bisa dipratinjau.')
     }
 
+    return version.template.family === 'PKWT'
+      ? this.renderPkwtPreview(blocks, content)
+      : this.renderMitraPreview(blocks)
+  }
+
+  /** Pratinjau MITRA — mesin yang sama dengan generate (`createMitraPdfBuffer`). */
+  private renderMitraPreview(blocks: any[]): Promise<Buffer> {
     const assetRoot = resolve(process.cwd(), 'assets')
     const logoPath = resolveMitraLogoPath(assetRoot)
     const values = { ...MITRA_PREVIEW_VALUES }
@@ -342,6 +355,39 @@ export class ContractTemplateVersionsService {
       dateLabel,
       logoPath: existsSync(logoPath) ? logoPath : undefined,
       fonts: resolveMitraFonts(),
+    })
+  }
+
+  /**
+   * Pratinjau PKWT — mesin yang sama dengan generate (`createPkwtPdfBuffer`).
+   *
+   * PKWT bilingual: kolom kiri `languages.id`, kolom kanan `languages.en`, baris
+   * terkunci oleh engine. Kedua kolom memakai kumpulan nilai contoh yang sama.
+   */
+  private renderPkwtPreview(blocks: any[], content: any): Promise<Buffer> {
+    const assetRoot = resolve(process.cwd(), 'assets')
+    const logoPath = resolvePkwtLogoPath(assetRoot)
+    const values = { ...PKWT_PREVIEW_VALUES }
+    const numberLabel = `${PKWT_HEADER_CHROME.numberPrefix} ${values['contract.contractNo']}`
+
+    return createPkwtPdfBuffer({
+      blocks,
+      blocksEn: content?.languages?.en ?? [],
+      values,
+      orgLines: [...PKWT_HEADER_CHROME.org],
+      addressLines: [...PKWT_HEADER_CHROME.address],
+      contactLine: PKWT_HEADER_CHROME.contactLine,
+      numberLabel,
+      logoPath: existsSync(logoPath) ? logoPath : undefined,
+      fonts: resolvePkwtFonts(),
+      signature: {
+        leftTitle: PKWT_HEADER_CHROME.signature.leftTitle,
+        rightTitle: PKWT_HEADER_CHROME.signature.rightTitle,
+        leftName: values['employee.fullName'],
+        leftRole: values['employee.jobRole'],
+        rightName: values['settings.cooperativeChairmanName'],
+        rightRole: PKWT_HEADER_CHROME.signature.rightRoleLabel,
+      },
     })
   }
 

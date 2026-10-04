@@ -112,4 +112,4 @@ top=754.0  <name left>          <name right>       (9.75 pt)
 | 7 | Header rules | 2 rules, 2.85 + 0.95 pt | 1+1 pt, decorative | `drawCorporateHeader` |
 | 8 | Box on continuation pages | present, top=31.53 | none | renderer never strokes boxes |
 | 9 | AI-invented sections | none | openingLine/recitals/`Para Pihak`/`Ruang Lingkup dan Posisi`/`Jangka Waktu` | `contract-document-definitions.ts` fields |
-| 10 | Whitespace between words stripped | normal | `3.AtasPekerjaanyangdilakukanPIHAKKEDUA` | renderer wrapping bug |
+| 10 | ~~Whitespace between words stripped~~ | normal | ~~`3.AtasPekerjaanyangdilakukanPIHAKKEDUA`~~ | **RETRACTED — no such defect.** That string is only what a raw content-stream dump of a *justified* line shows: pdfkit writes the inter-word gap as a numeric offset inside the `TJ` operator, not as a space glyph (0x20). The rendered PDF and pdfplumber's `extract_text()` both keep all spaces. MITRA paragraphs are justified (`mitra-layout.engine.ts`), and that is correct. |

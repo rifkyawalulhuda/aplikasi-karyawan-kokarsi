@@ -169,11 +169,10 @@ function confirmRollback(v: Version) {
  * Buka pratinjau.
  *
  * 1. Validasi backend (`POST .../preview`) → mengisi panel status di modal.
- * 2. MITRA: ambil PDF asli dari mesin render yang sama dengan Generate Kontrak
- *    (1:1). `contentDefinition` draft dikirim di body, jadi editan yang BELUM
- *    disimpan tetap terlihat dan DB tidak perlu ditulis lebih dulu.
- *
- * PKWT belum punya mesin pratinjau: modal menampilkan keterangan, tanpa PDF.
+ * 2. Ambil PDF asli dari mesin render yang SAMA dengan Generate Kontrak (1:1),
+ *    baik untuk MITRA maupun PKWT. `contentDefinition` draft dikirim di body,
+ *    jadi editan yang BELUM disimpan tetap terlihat dan DB tidak perlu ditulis
+ *    lebih dulu.
  */
 async function openPreview(v: Version) {
   previewOpen.value = true
@@ -187,8 +186,6 @@ async function openPreview(v: Version) {
     preview.value = null
     toast.add({ title: 'Validasi gagal', description: apiErrorMessage(e), color: 'warning' })
   }
-
-  if (isPkwt.value) return
 
   previewPdfLoading.value = true
   try {
@@ -1222,8 +1219,9 @@ function removeInvalidBlock(index: number) {
     <template #body>
       <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
         <div class="max-h-[70vh] overflow-auto rounded-lg bg-neutral-200 p-3">
-          <!-- MITRA: PDF asli -->
-          <div v-if="!isPkwt" class="h-[68vh] rounded-lg bg-white">
+          <!-- PDF asli dari mesin render yang sama dengan Generate Kontrak (1:1),
+               untuk MITRA maupun PKWT. -->
+          <div class="h-[68vh] rounded-lg bg-white">
             <div v-if="previewPdfLoading" class="flex h-full items-center justify-center">
               <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-muted" />
             </div>
@@ -1233,20 +1231,6 @@ function removeInvalidBlock(index: number) {
             <PdfViewer v-else-if="previewPdfBlob" :src="previewPdfBlob" />
             <div v-else class="flex h-full items-center justify-center text-sm text-muted">
               Pratinjau belum tersedia.
-            </div>
-          </div>
-
-          <!-- PKWT: belum ada mesin pratinjau PDF -->
-          <div v-else class="flex h-[68vh] items-center justify-center rounded-lg bg-white p-6 text-center text-sm text-muted">
-            <div>
-              <UIcon name="i-lucide-file-text" class="mx-auto mb-2 size-8" />
-              <p class="font-medium text-highlighted">
-                Pratinjau PDF belum tersedia untuk template PKWT
-              </p>
-              <p class="mt-1">
-                Pratinjau dokumen saat ini hanya mendukung Perjanjian Kemitraan (MITRA).
-                Generate kontrak PKWT tetap berjalan normal.
-              </p>
             </div>
           </div>
         </div>
@@ -1264,12 +1248,11 @@ function removeInvalidBlock(index: number) {
             <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
           </div>
           <UAlert
-            v-if="!isPkwt"
             icon="i-lucide-info"
             color="neutral"
             variant="subtle"
             title="1:1 dengan dokumen asli"
-            description="PDF ini dirender mesin yang sama dengan Generate Kontrak, memakai data contoh. Field yang kosong tampil sebagai titik-titik."
+            description="PDF ini dirender mesin yang sama dengan Generate Kontrak, memakai data contoh. Field yang kosong tampil sebagai penanda, bukan teks kasar."
           />
         </aside>
       </div>

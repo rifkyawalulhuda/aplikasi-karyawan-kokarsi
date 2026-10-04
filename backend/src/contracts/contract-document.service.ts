@@ -7,43 +7,14 @@ import { PrismaService } from '../prisma/prisma.service'
 import { getContractDocumentDefinition, mergeDefinition } from './contract-document-definitions'
 import { definitionToContentDefinition } from '../contract-templates/default-template-definition'
 import { SettingsService } from '../settings/settings.service'
-import { buildValueMap, renderBlocks, interpolate } from './contract-block-renderer'
+import { buildValueMap, interpolate } from './contract-block-renderer'
 import { MITRA_HEADER_CHROME } from './mitra-layout.engine'
 import { renderMitraDocumentInto } from './mitra-document.renderer'
+import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
+import { resolvePkwtFonts, renderPkwtDocumentInto } from './pkwt-document.renderer'
 
 type RenderEngine = 'PDF_NATIVE'
 type LayoutMode = 'LEGAL_PDF_TEMPLATE'
-type HeaderVariant = 'PKWT' | 'MITRA'
-
-type TextAlign = 'left' | 'center' | 'justify'
-
-interface SignaturePillar {
-  header: string
-  org?: string
-  name: string
-  role: string
-}
-
-interface TextBlock {
-  text: string
-  font: string
-  fontSize: number
-  align?: TextAlign
-  gapBefore?: number
-  gapAfter?: number
-  sigPillar?: SignaturePillar
-}
-
-interface LayoutContext {
-  pageWidth: number
-  pageHeight: number
-  leftX: number
-  rightX: number
-  columnWidth: number
-  topY: number
-  bottomY: number
-  headerBottomY: number
-}
 
 @Injectable()
 export class ContractDocumentService {
@@ -313,191 +284,6 @@ export class ContractDocumentService {
     }
   }
 
-  private buildPkwtIndonesianBlocks(payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>): TextBlock[] {
-    const genderLabel = payload.employee.gender === 'MALE' ? 'Laki-Laki' : 'Perempuan'
-    const blocks: TextBlock[] = [
-      {
-        text: `Pada hari ini, ${payload.meta.signedDate}, yang bertanda tangan di bawah ini :`,
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 10,
-      },
-      {
-        text: `I. Koperasi Karyawan PT. Sankyu Indonesia International – Unit Kantor Pusat, berkedudukan di Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20 Cikarang Pusat Bekasi, yang selanjutnya disebut PERUSAHAAN.`,
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 8,
-      },
-      {
-        text: '__PARTY_II_BLOCK__',
-        font: 'Times-Bold',
-        fontSize: 10.2,
-        gapAfter: 10,
-        partyII: {
-          name: payload.employee.fullName,
-          birthInfo: `${payload.employee.birthPlace ?? '-'}, ${this.formatDate(payload.employee.birthDate)}`,
-          gender: genderLabel,
-          address: payload.employee.address ?? '-',
-        },
-      } as any,
-      {
-        text: 'Kedua belah pihak telah menyetujui untuk mengadakan Kesepakatan Kerja untuk Waktu Tertentu dengan syarat-syarat sebagai berikut:',
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 10,
-      },
-    ]
-
-    for (const section of payload.definition.sections) {
-      // Replace placeholders with actual data
-      const resolvedParagraphs = section.paragraphs.map(p => {
-        if (p === '__TERM_DATE__') {
-          return `1. Kesepakatan Kerja ini berlaku sejak tanggal ${payload.meta.startDate} sampai dengan tanggal ${payload.meta.endDate}.`
-        }
-        if (p === '__WAGE_AMOUNT__') {
-          return `1. Karyawan akan menerima upah sebesar : ${payload.meta.compensation}.`
-        }
-        if (p.includes('__ROLE_LABEL__')) {
-          return p.replace('__ROLE_LABEL__', payload.definition.roleLabel)
-        }
-        return p
-      })
-      
-      blocks.push({
-        text: section.heading,
-        font: 'Times-Bold',
-        fontSize: 11,
-        align: 'center',
-        gapBefore: 8,
-        gapAfter: 6,
-      })
-      blocks.push({
-        text: resolvedParagraphs.join('\n'),
-        font: 'Times-Roman',
-        fontSize: 10.4,
-        align: 'justify',
-        gapAfter: 8,
-      })
-    }
-
-    // Closing paragraph (Indonesia) — dirender di dalam kolom, setelah pasal terakhir
-    blocks.push({
-      text: payload.definition.closingParagraphs.join('\n'),
-      font: 'Times-Roman',
-      fontSize: 10,
-      align: 'justify',
-      gapBefore: 12,
-      gapAfter: 8,
-    })
-
-    return blocks
-  }
-
-  private buildPkwtEnglishBlocks(payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>): TextBlock[] {
-    const genderLabel = payload.employee.gender === 'MALE' ? 'Male' : 'Female'
-    const blocks: TextBlock[] = [
-      {
-        text: `Today, ${payload.meta.signedDateEn}, who undersign below :`,
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 10,
-      },
-      {
-        text: `I. Koperasi Karyawan PT. Sankyu Indonesia International - Unit Kantor Pusat, In Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20 Cikarang Pusat Bekasi, hereinafter refer to Company`,
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 8,
-      },
-      {
-        text: '__PARTY_II_BLOCK__',
-        font: 'Times-Bold',
-        fontSize: 10.2,
-        gapAfter: 10,
-        partyII: {
-          name: payload.employee.fullName,
-          birthInfo: `${payload.employee.birthPlace ?? '-'}, ${this.formatEnglishDate(payload.employee.birthDate)}`,
-          gender: genderLabel,
-          address: payload.employee.address ?? '-',
-          labels: ['Name', 'Birth date', 'Gender', 'Address'],
-          suffix: 'Hereinafter refer to EMPLOYEE',
-        },
-      } as any,
-      {
-        text: 'Both parties have been agreed to engage Stated Periods Labour Agreement by requirements as follows :',
-        font: 'Times-Roman',
-        fontSize: 10.5,
-        align: 'justify',
-        gapAfter: 10,
-      },
-    ]
-
-    for (const section of payload.definition.sections) {
-      const translationHeading = section.heading
-        .replace('Pasal', 'Article')
-        .replace('Maksud Kesepakatan', 'Agreement Purpose')
-        .replace('Masa Berlakunya Kesepakatan Kerja', 'Period Time of Agreement')
-        .replace('Pengupahan', 'Remuneration')
-        .replace('Waktu Kerja', 'Working Time')
-        .replace('Pembebasan dari Kewajiban Bekerja', 'Acquitted from Work Obligation')
-        .replace('Tata Tertib Kerja', 'Working Rule')
-        .replace('Disiplin Kerja', 'Work Discipline')
-        .replace('Mangkir', 'Absent')
-        .replace('Berakhirnya Kesepakatan', 'End of Agreement')
-        .replace('Tugas dan Tanggung Jawab', 'Duty and Responsible')
-        .replace('Penyelesaian Keluh Kesah', 'Completion of Complain')
-
-      blocks.push({
-        text: translationHeading,
-        font: 'Times-Bold',
-        fontSize: 11,
-        align: 'center',
-        gapBefore: 8,
-        gapAfter: 6,
-      })
-
-      const translatedParagraphs = (payload.definition.englishSections?.[section.heading])
-        ?? this.pkwtEnglishSectionMap[section.heading]
-        ?? section.paragraphs
-      // Replace placeholders with actual data (English)
-      const resolvedTranslated = translatedParagraphs.map(p => {
-        if (p === '__TERM_DATE__') {
-          return `1. This agreement is effective since ${payload.meta.startDateEn} up to ${payload.meta.endDateEn}.`
-        }
-        if (p === '__WAGE_AMOUNT__') {
-          return `1. The employee shall accept wage amount : ${payload.meta.compensation}.`
-        }
-        if (p.includes('__ROLE_LABEL__')) {
-          return p.replace('__ROLE_LABEL__', payload.definition.roleLabel)
-        }
-        return p
-      })
-      blocks.push({
-        text: resolvedTranslated.join('\n'),
-        font: 'Times-Roman',
-        fontSize: 10.3,
-        align: 'justify',
-        gapAfter: 8,
-      })
-    }
-
-    // Closing paragraph (English) — dirender di dalam kolom, setelah article terakhir
-    blocks.push({
-      text: 'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.',
-      font: 'Times-Roman',
-      fontSize: 10,
-      align: 'justify',
-      gapBefore: 12,
-      gapAfter: 8,
-    })
-
-    return blocks
-  }
-
   private createPdfBuffer(payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({
@@ -552,33 +338,67 @@ export class ContractDocumentService {
       return
     }
 
-    this.drawCorporateHeader(doc, 'PKWT')
-    const headerBottomY = this.drawSnapshotTitleBlock(doc, payload, values)
+    this.renderPkwtLayoutFromBlocks(doc, payload, content?.languages?.id ?? [])
+  }
 
-    const opts = {
-      leftX: 34,
-      rightX: 310,
-      columnWidth: 252,
-      topY: headerBottomY + 108,
-      bottomY: doc.page.height - 50,
-      fontRegular: 'Times-Roman',
-      fontBold: 'Times-Bold',
-      fontItalic: 'Times-Italic',
-    }
+  /**
+   * Render "Kesepakatan Kerja Waktu Tertentu" memakai mesin layout master.
+   *
+   * Delegasi ke `renderPkwtDocumentInto` (pintu tunggal yang juga dipakai
+   * pratinjau editor), supaya hasil generate dan pratinjau tidak mungkin
+   * menyimpang — persis pola `renderMitraLayoutFromBlocks`.
+   *
+   * Kenapa BUKAN `renderBlocks` inline seperti sebelumnya:
+   *  1. **Font.** `renderBlocks` dipanggil dengan `'Times-Roman'`/`'Times-Bold'`
+   *     (builtin PDFKit), padahal master memakai Lucida Sans Typewriter untuk
+   *     badan, judul, dan tanda tangan. TTF Lucida memang sudah di-bundle
+   *     (`PKWT_FONT_NAMES`), jadi ini murni salah wiring.
+   *  2. **Row-locking.** Jalur lama merender kolom ID dan EN sebagai DUA aliran
+   *     independen (masing-masing `renderBlocks`), sehingga baris ID/EN tidak
+   *     pernah terkunci pada y yang sama — sifat paling menonjol dari master.
+   *     `buildPkwtRows` mengunci per baris.
+   *  3. **Justify.** `renderBlocks` membungkus paragraf sendiri lalu menggambar
+   *     rata kiri; engine PKWT mengukur dan menggambar PER-BARIS, sehingga ia
+   *     dapat menjustifikasi semua baris paragraf KECUALI baris terakhirnya —
+   *     persis seperti master (69% baris master berakhir pada tepi kanan yang
+   *     sama persis). (Catatan: klaim lama bahwa `align: 'justify'` pdfkit
+   *     "menjatuhkan glyph spasi" sudah terbukti KELIRU — lihat
+   *     `drawJustifiedLine` di `table-layout.helpers.ts`.)
+   */
+  private renderPkwtLayoutFromBlocks(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, blocks: any[]) {
+    const values = buildValueMap((payload.contract as any).resolvedTemplateData)
+    const snapshot = (payload.contract as any).templateSnapshot
+    const content = snapshot?.contentDefinition ?? {}
+    const definition = payload.definition
+    const meta = payload.meta
+    const employee = payload.employee
 
-    const blocksId: any[] = content?.languages?.id ?? []
-    const blocksEn: any[] = content?.languages?.en ?? []
+    const numberLabel = meta?.contractNo ? `${PKWT_HEADER_CHROME.numberPrefix} ${meta.contractNo}` : undefined
 
-    if (blocksEn.length > 0) {
-      // Dua kolom: kiri ID, kanan EN — dirender paralel dari atas
-      const leftY = headerBottomY + 108
-      renderBlocks(doc, blocksId, { values }, { ...opts, topY: leftY })
-      this.renderBlocksInSingleColumn(doc, blocksEn, values, opts.rightX, leftY, opts.columnWidth)
-    } else {
-      renderBlocks(doc, blocksId, { values }, opts)
-    }
-
-    this.renderSnapshotSignature(doc, payload, blocksId)
+    renderPkwtDocumentInto(doc, {
+      blocks,
+      blocksEn: content?.languages?.en ?? [],
+      values,
+      // Kop dari CHROME, bukan dari redaksi template (aturan passthrough).
+      orgLines: [...PKWT_HEADER_CHROME.org],
+      addressLines: [...PKWT_HEADER_CHROME.address],
+      contactLine: PKWT_HEADER_CHROME.contactLine,
+      numberLabel,
+      logoPath: existsSync(this.pkwtLogoPath) ? this.pkwtLogoPath : undefined,
+      fallbackTitle: definition?.title || payload.contract.template?.name,
+      fallbackTitleEn: definition?.subtitle,
+      fonts: resolvePkwtFonts(),
+      // Nama karyawan/ketua diambil dari record bila placeholder resolved
+      // kosong (kontrak lama dengan snapshot parsial).
+      signature: {
+        leftTitle: PKWT_HEADER_CHROME.signature.leftTitle,
+        rightTitle: PKWT_HEADER_CHROME.signature.rightTitle,
+        leftName: values['employee.fullName'] || employee?.fullName || '',
+        leftRole: meta?.positionLabel || employee?.jobRole?.name || '',
+        rightName: values['settings.cooperativeChairmanName'] || meta?.cooperativeChairmanName || '',
+        rightRole: PKWT_HEADER_CHROME.signature.rightRoleLabel,
+      },
+    })
   }
 
   /**
@@ -617,383 +437,25 @@ export class ContractDocumentService {
     })
   }
 
-  /** Render blok hanya pada satu kolom mulai dari Y tertentu (untuk kolom EN). */
-  private renderBlocksInSingleColumn(doc: any, blocks: any[], values: Record<string, string>, x: number, startY: number, width: number) {
-    renderBlocks(doc, blocks, { values }, {
-      leftX: x,
-      rightX: x,
-      columnWidth: width,
-      topY: startY,
-      bottomY: doc.page.height - 50,
-      fontRegular: 'Times-Roman',
-      fontBold: 'Times-Bold',
-      fontItalic: 'Times-Italic',
-      pageBottomPadding: 50,
-    })
-  }
-
-  /** Judul dari blok title pada snapshot; fallback ke nama template. */
-  private drawSnapshotTitleBlock(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, values: Record<string, string>): number {
-    // Cari blok title pertama dari snapshot
-    const snapshot = (payload.contract as any).templateSnapshot
-    const blocks: any[] = snapshot?.contentDefinition?.languages?.id ?? []
-    const title = blocks.find(b => b?.type === 'title')?.text
-    const subtitle = blocks.find(b => b?.type === 'subtitle')?.text
-    const headerBottomY = this.drawSnapshotHeader(
-      doc,
-      title ? interpolate(title, values) : (payload.contract.template?.name ?? ''),
-      subtitle ? interpolate(subtitle, values) : undefined,
-    )
-    return headerBottomY
-  }
-
-  private drawSnapshotHeader(doc: any, title: string, subtitle?: string): number {
-    const pageWidth = doc.page.width
-    doc.font('Times-Bold').fontSize(14).text(title, 0, 60, { width: pageWidth, align: 'center' })
-    if (subtitle) {
-      doc.font('Times-Roman').fontSize(10).text(subtitle, 0, doc.y + 4, { width: pageWidth, align: 'center' })
-    }
-    return doc.y
-  }
-
-  /** Tanda tangan dari blok signature snapshot (dua pilar). */
-  private renderSnapshotSignature(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, blocks: any[]) {
-    const sig = blocks.find(b => b?.type === 'signature')
-    if (!sig) return
-    const values = buildValueMap((payload.contract as any).resolvedTemplateData)
-    // Teks statis dapat dikonfigurasi per-template (sama seperti MITRA):
-    // label pilar (`leftRole`/`rightRole`), nama pihak (`leftHeader`/`rightHeader`),
-    // jabatan (`leftParty`/`rightParty`). Kosong → fallback bawaan.
-    const text = (v: unknown): string | undefined =>
-      typeof v === 'string' && v.trim() ? v.trim() : undefined
-    const leftLabel = text(sig.leftRole) ?? 'PIHAK PERTAMA'
-    const rightLabel = text(sig.rightRole) ?? 'PIHAK KEDUA'
-    const leftHeader = text(sig.leftHeader) ?? "KOPERASI PT. SANKYU INT'L"
-    const rightHeader = text(sig.rightHeader) ?? 'MITRA'
-    const leftRole = text(sig.leftParty) ?? '(Ketua Koperasi)'
-    const rightRole = text(sig.rightParty) ?? '(Mitra)'
-    const chairman = values['settings.cooperativeChairmanName'] ?? ''
-    const employeeName = values['employee.fullName'] ?? payload.employee.fullName
-
-    const pageWidth = doc.page.width
-    const pageHeight = doc.page.height
-    const y = pageHeight - 150
-
-    doc.font('Times-Roman').fontSize(10)
-    // Label pilar
-    doc.text(leftLabel, 34, y - 14, { width: 240, align: 'center' })
-    doc.text(rightLabel, pageWidth - 274, y - 14, { width: 240, align: 'center' })
-    // Nama perusahaan/pihak
-    doc.text(leftHeader, 34, y, { width: 240, align: 'center' })
-    doc.text(rightHeader, pageWidth - 274, y, { width: 240, align: 'center' })
-    doc.text('', 34, y + 40)
-    // Nama orang (dari data kontrak)
-    doc.font('Times-Bold').text(chairman || '(...........................)', 34, y + 48, { width: 240, align: 'center' })
-    doc.font('Times-Roman').text(leftRole, 34, y + 62, { width: 240, align: 'center' })
-    doc.font('Times-Bold').text(employeeName || '(...........................)', pageWidth - 274, y + 48, { width: 240, align: 'center' })
-    doc.font('Times-Roman').text(rightRole, pageWidth - 274, y + 62, { width: 240, align: 'center' })
-  }
-
-  private buildLayoutContext(doc: any, headerBottomY: number, hasTitleBlock: boolean = false, hasHeader: boolean = true): LayoutContext {
-    const pageWidth = doc.page.width
-    const pageHeight = doc.page.height
-    const leftX = 34
-    const rightX = 310
-    const columnWidth = 252
-    // On first page (with title block), content starts lower.
-    // On subsequent pages without header, start from a small top margin.
-    let topY: number
-    if (hasTitleBlock) {
-      topY = headerBottomY + 108
-    } else if (hasHeader) {
-      topY = headerBottomY + 20
-    } else {
-      topY = 40
-    }
-    const bottomY = pageHeight - 72
-
-    return {
-      pageWidth,
-      pageHeight,
-      leftX,
-      rightX,
-      columnWidth,
-      topY,
-      bottomY,
-      headerBottomY,
-    }
-  }
-
-  private drawCorporateHeader(doc: any, variant: HeaderVariant) {
-    const logoPath = variant === 'PKWT' ? this.pkwtLogoPath : this.mitraLogoPath
-    if (existsSync(logoPath)) {
-      doc.image(logoPath, 34, 22, { width: 84, height: 84 })
-    }
-
-    doc.font('Times-Bold').fontSize(16)
-    doc.text('KOPERASI KARYAWAN', 0, 24, { width: doc.page.width, align: 'center' })
-    doc.text('PT. SANKYU INDONESIA INTERNASIONAL', 0, 44, { width: doc.page.width, align: 'center' })
-    doc.text('UNIT KANTOR PUSAT', 0, 64, { width: doc.page.width, align: 'center' })
-
-    doc.font('Times-Roman').fontSize(10.8)
-    doc.text('Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20', 134, 85, { width: 335, align: 'center' })
-    doc.text('GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330', 134, 99, { width: 335, align: 'center' })
-    doc.text('TELP. 021 - 50555340, FAX. 021- 50555341', 134, 113, { width: 335, align: 'center' })
-
-    doc.lineWidth(2).moveTo(34, 132).lineTo(561, 132).stroke()
-    doc.lineWidth(1).moveTo(34, 137).lineTo(561, 137).stroke()
-
-    return 137
-  }
-
-  private drawTitleBlock(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, headerBottomY: number) {
-    const family = payload.contract.template?.family
-    if (family === 'PKWT') {
-      doc.font('Times-Bold').fontSize(14)
-      doc.text(payload.definition.title.toUpperCase(), 0, headerBottomY + 34, { width: doc.page.width, align: 'center' })
-      if (payload.definition.subtitle) {
-        doc.text(payload.definition.subtitle.toUpperCase(), 0, headerBottomY + 52, { width: doc.page.width, align: 'center' })
-      }
-      doc.font('Times-Bold').fontSize(12)
-      doc.text(`No. : ${payload.meta.contractNo}`, 0, headerBottomY + 76, { width: doc.page.width, align: 'center' })
-    } else {
-      doc.font('Times-Bold').fontSize(16)
-      doc.text(payload.definition.title.toUpperCase(), 0, headerBottomY + 36, { width: doc.page.width, align: 'center' })
-      doc.font('Times-Roman').fontSize(12)
-      doc.text(`Nomor: ${payload.meta.contractNo}`, 0, headerBottomY + 58, { width: doc.page.width, align: 'center' })
-      doc.text(`Tanggal: ${payload.meta.signedDate}`, 0, headerBottomY + 76, { width: doc.page.width, align: 'center' })
-    }
-  }
-
-  private renderBlockInColumn(
-    doc: any,
-    block: TextBlock,
-    x: number,
-    y: number,
-    width: number,
-  ) {
-    const effectiveY = y + (block.gapBefore ?? 0)
-    doc.font(block.font).fontSize(block.fontSize)
-
-    // Special handling for party II tabular block
-    const anyBlock = block as any
-    if (anyBlock.partyII) {
-      const data = anyBlock.partyII
-      const labelX = x + 18 // indent after "II."
-      const colonX = x + 100 // fixed colon position
-      const valueX = x + 108 // value starts after ": "
-      const valueWidth = width - (valueX - x)
-      const lineHeight = 14
-      const suffixX = x + 18
-      const suffixWidth = width - 18
-
-      let currentY = effectiveY
-
-      // "II." prefix
-      doc.text('II.', x, currentY)
-
-      // Determine labels (Indonesian or English)
-      const labels = data.labels ?? ['Nama', 'Tgl. Lahir', 'Jenis Kelamin', 'Alamat']
-      const values = [data.name, data.birthInfo, data.gender, data.address]
-      const suffix = data.suffix ?? 'Selanjutnya disebut KARYAWAN'
-
-      // Render each row; advance by the actual wrapped height so long values
-      // (e.g. a long address) never overlap the following content.
-      for (let i = 0; i < labels.length; i++) {
-        doc.text(labels[i], labelX, currentY)
-        doc.text(':', colonX, currentY)
-        doc.text(values[i], valueX, currentY, { width: valueWidth })
-        const rowHeight = Math.max(lineHeight, doc.heightOfString(values[i], { width: valueWidth }))
-        currentY += rowHeight
-      }
-
-      // Empty line + suffix
-      currentY += 6
-      doc.text(suffix, suffixX, currentY, { width: suffixWidth })
-      currentY += Math.max(lineHeight, doc.heightOfString(suffix, { width: suffixWidth }))
-
-      return currentY + (block.gapAfter ?? 0)
-    }
-
-    const height = doc.heightOfString(block.text, {
-      width,
-      align: block.align ?? 'left',
-      lineGap: 2,
-    })
-
-    doc.text(block.text, x, effectiveY, {
-      width,
-      align: block.align ?? 'left',
-      lineGap: 2,
-    })
-
-    return effectiveY + height + (block.gapAfter ?? 0)
-  }
-
-  private computeBlockHeight(doc: any, block: TextBlock, columnWidth: number): number {
-    const gapBefore = block.gapBefore ?? 0
-    const gapAfter = block.gapAfter ?? 0
-    const anyBlock = block as any
-    if (anyBlock.partyII) {
-      const data = anyBlock.partyII
-      doc.font(block.font).fontSize(block.fontSize)
-      const valueWidth = columnWidth - 108
-      const lineHeight = 14
-      const labels = data.labels ?? ['Nama', 'Tgl. Lahir', 'Jenis Kelamin', 'Alamat']
-      const values = [data.name, data.birthInfo, data.gender, data.address]
-      const suffix = data.suffix ?? 'Selanjutnya disebut KARYAWAN'
-
-      const rowsHeight = labels.reduce((sum, _, i) => {
-        const rowH = doc.heightOfString(values[i], { width: valueWidth })
-        return sum + Math.max(lineHeight, rowH)
-      }, 0)
-      const suffixH = Math.max(lineHeight, doc.heightOfString(suffix, { width: columnWidth - 18 }))
-      return gapBefore + rowsHeight + 6 + suffixH + gapAfter
-    }
-    doc.font(block.font).fontSize(block.fontSize)
-    return gapBefore + doc.heightOfString(block.text, { width: columnWidth, align: block.align ?? 'left', lineGap: 2 }) + gapAfter
-  }
-
-  private renderParallelColumns(
-    doc: any,
-    payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>
-  ) {
-    const leftBlocks = this.buildPkwtIndonesianBlocks(payload)
-    const rightBlocks = this.buildPkwtEnglishBlocks(payload)
-    // Pasangkan blok Indonesia (kiri) dengan blok Inggris (kanan) secara berurutan
-    const pairs = leftBlocks.map((left, i) => ({ left, right: rightBlocks[i] ?? left }))
-    let pairIndex = 0
-    let firstPage = true
-
-    while (pairIndex < pairs.length) {
-      if (!firstPage) {
-        doc.addPage()
-      }
-
-      let headerBottomY = 0
-      // Corporate header only on first page
-      if (firstPage) {
-        headerBottomY = this.drawCorporateHeader(doc, 'PKWT')
-        this.drawTitleBlock(doc, payload, headerBottomY)
-      }
-
-      const layout = this.buildLayoutContext(doc, headerBottomY, firstPage, firstPage)
-
-      let leftY = layout.topY
-      let rightY = layout.topY
-
-      // Render tiap pasangan (ID | EN) pada posisi Y yang SAMA agar sejajar
-      while (pairIndex < pairs.length) {
-        const { left, right } = pairs[pairIndex]
-        const leftH = this.computeBlockHeight(doc, left, layout.columnWidth)
-        const rightH = this.computeBlockHeight(doc, right, layout.columnWidth)
-        const maxH = Math.max(leftH, rightH)
-
-        if (Math.max(leftY, rightY) + maxH > layout.bottomY) break
-
-        leftY = this.renderBlockInColumn(doc, left, layout.leftX, leftY, layout.columnWidth)
-        rightY = this.renderBlockInColumn(doc, right, layout.rightX, rightY, layout.columnWidth)
-
-        // Sinkronkan posisi kedua kolom agar pasal berikutnya sejajar
-        const syncedY = Math.max(leftY, rightY)
-        leftY = syncedY
-        rightY = syncedY
-        pairIndex += 1
-      }
-
-      // Draw borders ONLY to where content actually ends (not full page height)
-      const maxContentY = Math.max(leftY, rightY) + 5
-      doc.rect(layout.leftX - 10, layout.topY - 10, layout.columnWidth + 20, maxContentY - layout.topY + 15).lineWidth(1).stroke()
-      doc.rect(layout.rightX - 10, layout.topY - 10, layout.columnWidth + 20, maxContentY - layout.topY + 15).lineWidth(1).stroke()
-
-      // Set doc.y to just below the borders so signature renders outside
-      doc.y = maxContentY + 10
-
-      // On the LAST page (all blocks rendered), render closing + signature below the borders
-      if (pairIndex >= pairs.length) {
-        this.renderClosingAndSignature(doc, payload, maxContentY + 15)
-      }
-
-      firstPage = false
-    }
-  }
-
-  private renderClosingAndSignature(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, startY: number) {
-    const pageBottom = doc.page.height - 50
-    let y = startY + 20
-    
-    // Check if there's enough space for signature, if not add new page
-    if (y + 150 > pageBottom) {
-      doc.addPage()
-      y = 40
-    }
-    
-    // === STANDALONE FULL-WIDTH SIGNATURE BLOCK ===
-    
-    // Line 1: Date
-    doc.font('Times-Roman').fontSize(10)
-    doc.text(`Bekasi, ${payload.meta.signedDate}`, 68, y)
-    y += 20
-    
-    // Line 2: Company main header (centered, full width)
-    doc.font('Times-Bold').fontSize(10)
-    doc.text('KOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL', 68, y, { width: 459, align: 'center' })
-    y += 14
-    
-    // Line 3: Company sub-header (centered, full width)
-    doc.text('UNIT KANTOR PUSAT', 68, y, { width: 459, align: 'center' })
-    y += 25
-    
-    // === Signature Table Box (2-column with border) ===
-    const tableX = 68
-    const tableWidth = 459
-    const colWidth = tableWidth / 2
-    const cellPadding = 10
-    const labelHeight = 20
-    const signatureSpace = 60  // blank space for physical signature
-    const nameHeight = 20
-    const tableHeight = labelHeight + signatureSpace + nameHeight + (cellPadding * 2)
-    
-    // Draw outer border
-    doc.lineWidth(1)
-    doc.rect(tableX, y, tableWidth, tableHeight).stroke()
-    
-    // Draw vertical divider line
-    const dividerX = tableX + colWidth
-    doc.moveTo(dividerX, y).lineTo(dividerX, y + tableHeight).stroke()
-    
-    // Top row cells - labels
-    doc.font('Times-Bold').fontSize(10.5)
-    doc.text('Karyawan/employee', tableX, y + cellPadding, { width: colWidth, align: 'center' })
-    doc.text('Pengusaha/Perusahaan', dividerX, y + cellPadding, { width: colWidth, align: 'center' })
-    
-    // Bottom row cells - names (Uppercase, Bold, Underlined)
-    const nameY = y + cellPadding + labelHeight + signatureSpace
-    const empName = (payload.employee.fullName || '').toUpperCase()
-    const mgrName = (payload.meta.cooperativeChairmanName || '(...........................)').toUpperCase()
-    
-    doc.font('Times-Bold').fontSize(11)
-    
-    // Underline + name for left cell (Karyawan)
-    const empNameWidth = doc.widthOfString(empName)
-    const empNameX = tableX + (colWidth - empNameWidth) / 2
-    doc.text(empName, tableX, nameY, { width: colWidth, align: 'center' })
-    doc.moveTo(empNameX, nameY + 14).lineTo(empNameX + empNameWidth, nameY + 14).lineWidth(1).stroke()
-    doc.font('Times-Roman').fontSize(9)
-    doc.text('KARYAWAN', tableX, nameY + 16, { width: colWidth, align: 'center' })
-    
-    // Underline + name for right cell (Ketua Koperasi)
-    doc.font('Times-Bold').fontSize(11)
-    const mgrNameWidth = doc.widthOfString(mgrName)
-    const mgrNameX = dividerX + (colWidth - mgrNameWidth) / 2
-    doc.text(mgrName, dividerX, nameY, { width: colWidth, align: 'center' })
-    doc.moveTo(mgrNameX, nameY + 14).lineTo(mgrNameX + mgrNameWidth, nameY + 14).lineWidth(1).stroke()
-    doc.font('Times-Roman').fontSize(9)
-    doc.text('KETUA KOPERASI', dividerX, nameY + 16, { width: colWidth, align: 'center' })
-  }
-
+  /**
+   * Render "Kesepakatan Kerja Waktu Tertentu" untuk kontrak LEGACY tanpa snapshot.
+   *
+   * Sama seperti `renderMitraPdf`: konten dibangun dari DEFINISI template
+   * (`definitionToContentDefinition`), bukan dari teks hard-code di layanan ini.
+   * Sesudah itu jalurnya menyatu dengan kontrak ber-snapshot lewat
+   * `renderPkwtLayoutFromBlocks` — satu mesin, satu pintu.
+   *
+   * Sebelumnya jalur ini memakai `renderParallelColumns` (renderer blok generik,
+   * font Times builtin, tanpa penguncian baris) sehingga kontrak legacy dan
+   * kontrak ber-snapshot menghasilkan PDF yang berbeda. Itu kini tidak mungkin.
+   */
   private renderPkwtPdf(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>) {
-    this.renderParallelColumns(doc, payload)
+    const definition = payload.definition
+    if (!definition) {
+      throw new BadRequestException('Definisi template Kesepakatan Kerja Waktu Tertentu tidak ditemukan')
+    }
+    const content = definitionToContentDefinition(definition)
+    this.renderPkwtLayoutFromBlocks(doc, payload, content.languages.id ?? [])
   }
   /**
    * Render "Perjanjian Kemitraan".

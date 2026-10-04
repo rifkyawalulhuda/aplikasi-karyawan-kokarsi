@@ -16,10 +16,21 @@ export interface SeedContentDefinition {
   }
 }
 
+/**
+ * Token legacy → placeholder final.
+ *
+ * Token `__EN_*` dipakai oleh data pasal Inggris (`PKWT_EN_ARTICLE_BODIES`).
+ * Token itu WAJIB punya redaksi Inggris sendiri: `__TERM_DATE__` dan
+ * `__WAGE_AMOUNT__` berisi KALIMAT, bukan sekadar placeholder. Tanpa cabang
+ * ini, Pasal 2 ayat 1 dan Pasal 3 ayat 1 kolom kanan akan tetap berbahasa
+ * Indonesia di tengah naskah Inggris.
+ */
 const replaceLegacyTokens = (text: string): string => text
   .replace(/__ROLE_LABEL__/g, '{{employee.jobRole}}')
   .replace(/__TERM_DATE__/g, '1. Jangka waktu kesepakatan mengikuti {{contract.termRange}}.')
   .replace(/__WAGE_AMOUNT__/g, '1. Upah/imbalan yang disepakati adalah {{contract.baseCompensation}}.')
+  .replace(/__EN_TERM_DATE__/g, '1. This agreement is effective since {{contract.termRange}}.')
+  .replace(/__EN_WAGE_AMOUNT__/g, '1. The employee shall accept wage amount : {{contract.baseCompensation}}.')
 
 function article(id: string, heading: string, paragraphs: string[]) {
   return {
@@ -81,28 +92,67 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
     blocks.push(signatureBlock(definition))
     return blocks
   }
-  blocks.push({ id: 'opening', type: 'paragraph', text: replaceLegacyTokens(definition.openingLine) })
-  blocks.push(article('recitals', 'Para Pihak', definition.recitals))
-  blocks.push(article('role', 'Ruang Lingkup dan Posisi', [definition.roleLabel, definition.locationLine]))
-  blocks.push(article('term', 'Jangka Waktu', [definition.termLine]))
-  blocks.push(article('compensation', definition.compensationLabel, [`{{contract.baseCompensation}}`]))
+  // PKWT — struktur mengikuti master: pembuka, para pihak, ruang lingkup,
+  // jangka waktu, pengupahan, PASAL 1..N, penutup.
+  //
+  // Kolom KANAN memakai judul + redaksi dari `definition.englishBody`. Sebelum
+  // ini judul blok non-Pasal selalu hardcode bahasa Indonesia ('Para Pihak',
+  // 'Ruang Lingkup dan Posisi', 'Jangka Waktu', 'Penutup') dan teksnya diambil
+  // dari field Indonesia — itulah sebabnya sisi kanan pratinjau PKWT berbahasa
+  // Indonesia walau kolom itu dimaksudkan Inggris.
+  //
+  // CATATAN BUG (jangan dihapus): fallback `?? definition.*` HANYA benar untuk
+  // kolom INDONESIA. Untuk kolom Inggris, jatuh ke teks Indonesia berarti kolom
+  // kanan memakai redaksi ID. Itu juga membuat jumlah paragraf `recitals`/`role`/
+  // `closing` kolom EN mengikuti definisi ID — padahal override legacy bisa
+  // memendekkannya, sehingga timbul selisih paragraf ID vs EN yang menggeser
+  // seluruh dokumen (lihat `buildPkwtRowsFromStructuredParagraphs`).
+  // Karena itu: untuk bahasa Inggris TIDAK ADA fallback ke teks ID. Bila sebuah
+  // bagian belum diterjemahkan, bagian itu dibiarkan kosong daripada mencetak
+  // bahasa Indonesia di kolom Inggris.
+  const en = english ? definition.englishBody : undefined
+  blocks.push({
+    id: 'opening',
+    type: 'paragraph',
+    text: replaceLegacyTokens(english ? (en?.openingLine ?? '') : definition.openingLine),
+  })
+  blocks.push(article(
+    'recitals',
+    english ? (en?.recitalsHeading ?? '') : 'Para Pihak',
+    english ? (en?.recitals ?? []) : definition.recitals,
+  ))
+  blocks.push(article(
+    'role',
+    english ? (en?.roleHeading ?? '') : 'Ruang Lingkup dan Posisi',
+    english ? [en?.roleLabel ?? '', en?.locationLine ?? ''].filter(s => s.length > 0) : [definition.roleLabel, definition.locationLine],
+  ))
+  blocks.push(article('term', english ? (en?.termHeading ?? '') : 'Jangka Waktu', [english ? (en?.termLine ?? '') : definition.termLine]))
+  blocks.push(article(
+    'compensation',
+    english ? (en?.compensationLabel ?? '') : definition.compensationLabel,
+    [`{{contract.baseCompensation}}`],
+  ))
   definition.sections.forEach((section, index) => blocks.push(article(`section-${index + 1}`, section.heading, section.paragraphs)))
-  blocks.push(article('closing', 'Penutup', definition.closingParagraphs))
+  blocks.push(article('closing', english ? (en?.closingHeading ?? '') : 'Penutup', english ? (en?.closingParagraphs ?? []) : definition.closingParagraphs))
   blocks.push(signatureBlock(definition))
   return blocks
 }
 
 export function definitionToContentDefinition(definition: ContractDocumentDefinition): SeedContentDefinition {
   const id = toLanguageBlocks(definition)
+  // Kolom kanan PKWT: judul pasal diambil dari `englishSections[key].heading`,
+  // BUKAN dari kunci `Record`-nya. Kunci itu heading Indonesia dan hanya
+  // berfungsi sebagai pasangan — inilah bug yang membuat kolom kanan mencetak
+  // `Pasal 1\nMaksud Kesepakatan` alih-alih `Article 1\nAgreement Purpose`.
   const en = definition.family === 'PKWT' && definition.englishSections
     ? toLanguageBlocks({
       ...definition,
       title: definition.subtitle ?? definition.title,
       subtitle: undefined,
-      sections: Object.entries(definition.englishSections).map(([heading, paragraphs]) => ({ heading, paragraphs })),
-      openingLine: definition.openingLine,
-      recitals: definition.recitals,
-      closingParagraphs: definition.closingParagraphs,
+      sections: Object.entries(definition.englishSections).map(([key, body]) => ({
+        heading: body.heading,
+        paragraphs: body.paragraphs,
+      })),
     }, true)
     : []
   return { languages: { id, en } }

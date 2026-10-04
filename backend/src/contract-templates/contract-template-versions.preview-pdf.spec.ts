@@ -19,6 +19,34 @@ const MITRA_CONTENT = {
   },
 }
 
+/** Konten PKWT bilingual — kolom kiri ID, kolom kanan EN. */
+const PKWT_CONTENT = {
+  languages: {
+    id: [
+      { id: 'title', type: 'title', text: 'KESEPAKATAN KERJA WAKTU TERTENTU' },
+      { id: 'subtitle', type: 'subtitle', text: 'STATED PERIODS LABOUR AGREEMENT' },
+      { id: 'p1', type: 'paragraph', text: 'Pada hari ini, Kamis, 2 Juli 2026.' },
+      {
+        id: 'a1',
+        type: 'article',
+        heading: 'Pasal 1\nMaksud Kesepakatan',
+        paragraphs: ['1. Perusahaan mempekerjakan Karyawan sebagai {{employee.jobRole}}.'],
+      },
+      { id: 'sig', type: 'signature', leftRole: 'Karyawan/employee', rightRole: 'Pengusaha/Perusahaan' },
+    ],
+    en: [
+      { id: 'title', type: 'title', text: 'STATED PERIODS LABOUR AGREEMENT' },
+      { id: 'p1', type: 'paragraph', text: 'Today Thursday, dated july 02, 2026,' },
+      {
+        id: 'a1',
+        type: 'article',
+        heading: 'Article 1\nPurpose of Agreement',
+        paragraphs: ['1. Company employ the Employee for stated periods.'],
+      },
+    ],
+  },
+}
+
 function makeService(version: any) {
   const client = {
     contractTemplateVersion: {
@@ -35,7 +63,7 @@ function makeService(version: any) {
 }
 
 describe('ContractTemplateVersionsService.renderPreviewPdf', () => {
-  it('menolak template non-MITRA dengan pesan jelas', async () => {
+  it('menolak keluarga template tanpa mesin layout master', async () => {
     const service = makeService({
       id: 1,
       templateId: 5,
@@ -43,7 +71,9 @@ describe('ContractTemplateVersionsService.renderPreviewPdf', () => {
       status: 'PUBLISHED',
       contentDefinition: MITRA_CONTENT,
       fieldDefinitions: [],
-      template: { id: 5, code: 'PKWT_DRIVER', name: 'PKWT Driver', family: 'PKWT' },
+      // `ContractFamily` hanya berisi MITRA/PKWT, jadi nilai lain hanya bisa
+      // muncul dari data rusak — guard-nya diuji lewat cast.
+      template: { id: 5, code: 'MAGANG_2026', name: 'Magang', family: 'MAGANG' as any },
     })
 
     await expect(service.renderPreviewPdf(1, {})).rejects.toBeInstanceOf(BadRequestException)
@@ -99,6 +129,39 @@ describe('ContractTemplateVersionsService.renderPreviewPdf', () => {
         ],
       },
     }
+
+    const buffer = await service.renderPreviewPdf(1, { contentDefinition: edited })
+    expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+  })
+
+  maybe('PKWT: mengembalikan buffer PDF sah dari contentDefinition tersimpan', async () => {
+    const service = makeService({
+      id: 1,
+      templateId: 7,
+      versionNumber: 1,
+      status: 'PUBLISHED',
+      contentDefinition: PKWT_CONTENT,
+      fieldDefinitions: [],
+      template: { id: 7, code: 'PKWT_DRIVER', name: 'PKWT Driver', family: 'PKWT' },
+    })
+
+    const buffer = await service.renderPreviewPdf(1, {})
+    expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+  })
+
+  maybe('PKWT: contentDefinition dari body dipakai (editan belum tersimpan)', async () => {
+    const service = makeService({
+      id: 1,
+      templateId: 7,
+      versionNumber: 1,
+      status: 'DRAFT',
+      contentDefinition: PKWT_CONTENT,
+      fieldDefinitions: [],
+      template: { id: 7, code: 'PKWT_DRIVER', name: 'PKWT Driver', family: 'PKWT' },
+    })
+
+    const edited = JSON.parse(JSON.stringify(PKWT_CONTENT))
+    edited.languages.id[2].text = 'PARAGRAF HASIL EDIT BELUM DISIMPAN.'
 
     const buffer = await service.renderPreviewPdf(1, { contentDefinition: edited })
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')

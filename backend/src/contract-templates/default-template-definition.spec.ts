@@ -114,3 +114,131 @@ describe('Perjanjian Kemitraan — identitas PIHAK KEDUA memuat tanggal terbit K
     expect(filled).not.toContain('«custom.ktp_issued_date»')
   })
 })
+
+/**
+ * Penanda redaksi Indonesia yang TIDAK boleh muncul di kolom kanan PKWT.
+ *
+ * Sengaja memakai frasa yang hanya ada di definisi Indonesia (bukan kata umum
+ * seperti `Karyawan` yang memang bagian dari `Koperasi Karyawan`).
+ */
+const INDONESIAN_MARKERS = [
+  'Pada hari ini',
+  'Demikian Kesepakatan',
+  'Para Pihak',
+  'Ruang Lingkup',
+  'Jangka Waktu',
+  'Upah Karyawan',
+  'Penutup',
+  'PIHAK PERTAMA adalah',
+  'PIHAK KEDUA adalah',
+  'Perusahaan mempekerjakan',
+  'Jangka waktu kesepakatan',
+  'Upah/imbalan yang disepakati',
+  'Kesepakatan kerja ini berlaku',
+  'Dengan lokasi kerja',
+  'dibuat tanpa adanya desakan',
+  'Maksud Kesepakatan',
+  'Masa Berlakunya',
+  'Pengupahan',
+  'Waktu Kerja',
+  'Tata Tertib',
+  'Disiplin Kerja',
+  'Mangkir',
+  'Berakhirnya',
+  'Tugas dan Tanggung',
+  'Penyelesaian Keluh',
+]
+
+/**
+ * Regresi: kolom KANAN (EN) template PKWT harus berbahasa Inggris.
+ *
+ * Dulu `englishSections` bertipe `Record<string, string[]>` sehingga KUNCI-nya
+ * ikut dipakai sebagai judul pasal — dan kuncinya adalah heading Indonesia. Jadi
+ * kolom kanan mencetak `Pasal 1\nMaksud Kesepakatan` walau paragrafnya sudah
+ * Inggris. Selain itu `openingLine`/`recitals`/`closingParagraphs` Indonesia
+ * diteruskan apa adanya ke kolom kanan, dan `__TERM_DATE__`/`__WAGE_AMOUNT__`
+ * juga menghasilkan kalimat Indonesia di tengah naskah Inggris.
+ */
+describe('PKWT — kolom kanan (EN) berbahasa Inggris', () => {
+  const pkwtDefinitions = Object.values(CONTRACT_DOCUMENT_DEFINITIONS).filter(
+    definition => definition.family === 'PKWT',
+  )
+
+  it('mencakup seluruh template keluarga PKWT', () => {
+    expect(pkwtDefinitions.length).toBeGreaterThan(0)
+  })
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: tidak ada redaksi Indonesia di kolom kanan',
+    (_key, definition) => {
+      const en = definitionToContentDefinition(definition).languages.en as any[]
+      expect(en.length).toBeGreaterThan(0)
+      const text = JSON.stringify(en)
+      for (const marker of INDONESIAN_MARKERS) {
+        expect(text).not.toContain(marker)
+      }
+    },
+  )
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: judul pasal memakai "Article N", bukan "Pasal N"',
+    (_key, definition) => {
+      const en = definitionToContentDefinition(definition).languages.en as any[]
+      // Blok non-Pasal memang berjudul deskriptif (mis. "The Parties"),
+      // bukan "Article N" — hanya pasal yang diperiksa di sini.
+      const nonPasal = new Set(['recitals', 'role', 'term', 'compensation', 'closing'])
+      const headings = en
+        .filter(block => block?.type === 'article' && !nonPasal.has(String(block.id)))
+        .map(block => String(block.heading))
+
+      expect(headings.length).toBeGreaterThan(0)
+      for (const heading of headings) expect(heading).toMatch(/^Article \d+\n/)
+      expect(headings.join(' ')).not.toMatch(/Pasal \d/)
+    },
+  )
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: bentuk badan ID dan EN sejajar (baris terkunci tetap aman)',
+    (_key, definition) => {
+      const content = definitionToContentDefinition(definition)
+      // Engine memasangkan baris ID/EN PER BLOK, jadi selisih jumlah paragraf di
+      // dalam satu blok tidak lagi menggeser blok berikutnya. Meski begitu,
+      // konten ID dan EN yang dikirim template bawaan harus tetap SEPADAN:
+      // selisih bentuk menandakan terjemahan yang hilang, bukan sekadar beda
+      // panjang kalimat.
+      const shape = (blocks: any[]) =>
+        blocks
+          .filter(block => block?.type === 'paragraph' || block?.type === 'article')
+          .map(block => (block.type === 'article' ? `a:${(block.paragraphs ?? []).length}` : 'p'))
+          .join(',')
+
+      expect(shape(content.languages.en)).toBe(shape(content.languages.id))
+    },
+  )
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: kolom EN memakai jumlah paragraf per blok yang sama dengan kolom ID',
+    (_key, definition) => {
+      // REGRESI: `toLanguageBlocks(..., english=true)` dulu jatuh ke field ID
+      // (`en?.recitals ?? definition.recitals`). Akibatnya jumlah paragraf kolom
+      // kanan mengikuti definisi ID, padahal override legacy bisa memendekkan
+      // `definition.recitals` — timbul selisih paragraf ID vs EN yang dulu
+      // menggeser seluruh dokumen.
+      //
+      // Catatan: teksnya TIDAK dibandingkan, karena beberapa paragraf memang
+      // identik antar bahasa secara sah (`Driver`, `{{contract.baseCompensation}}`).
+      // Yang diuji adalah BENTUKNYA per blok.
+      const content = definitionToContentDefinition(definition)
+      const idByBlock = new Map<string, any>()
+      for (const block of content.languages.id as any[]) idByBlock.set(String(block.id), block)
+
+      const enArticles = (content.languages.en as any[]).filter(b => b?.type === 'article')
+      expect(enArticles.length).toBeGreaterThan(0)
+      for (const enBlock of enArticles) {
+        const idBlock = idByBlock.get(String(enBlock.id))
+        expect(idBlock).toBeDefined()
+        expect(enBlock.paragraphs?.length ?? 0).toBe(idBlock.paragraphs?.length ?? 0)
+      }
+    },
+  )
+})

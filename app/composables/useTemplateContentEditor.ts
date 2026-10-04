@@ -3,6 +3,33 @@ export interface SectionOverride {
   paragraphs: string[]
 }
 
+/**
+ * Pasal versi Inggris.
+ *
+ * `heading` = judul Inggris (`Article 1\nAgreement Purpose`). Sebelumnya tipe
+ * state ini `Record<string, string[]>` sehingga judulnya TIDAK tersimpan sama
+ * sekali — kolom kanan memakai kunci Indonesia sebagai judul.
+ */
+export interface EnglishSectionOverride {
+  heading: string
+  paragraphs: string[]
+}
+
+/** Redaksi Inggris blok non-Pasal PKWT (kolom kanan). */
+export interface EnglishBodyOverride {
+  openingLine: string
+  recitalsHeading: string
+  recitals: string[]
+  roleHeading: string
+  roleLabel: string
+  locationLine: string
+  termHeading: string
+  termLine: string
+  compensationLabel: string
+  closingHeading: string
+  closingParagraphs: string[]
+}
+
 export interface TemplateContentEditorState {
   // Tab 1: Teks Umum
   title: string
@@ -22,7 +49,15 @@ export interface TemplateContentEditorState {
   sections: SectionOverride[]
 
   // Tab 4: Pasal English (hanya PKWT)
-  englishSections: Record<string, string[]>
+  englishSections: Record<string, EnglishSectionOverride>
+  /**
+   * Blok non-Pasal kolom kanan: pembuka, para pihak, ruang lingkup/posisi,
+   * jangka waktu, pengupahan, dan penutup.
+   *
+   * `null` untuk template MITRA (tidak bilingual) dan untuk definisi lama yang
+   * belum punya `englishBody`.
+   */
+  englishBody: EnglishBodyOverride | null
 }
 
 // Placeholder yang wajib dipertahankan
@@ -56,9 +91,30 @@ export function useTemplateContentEditor() {
       })),
       englishSections: definition.englishSections
         ? Object.fromEntries(
-            Object.entries(definition.englishSections).map(([k, v]) => [k, [...(v as string[])]])
+            Object.entries(definition.englishSections).map(([k, v]) => {
+              const body = v as any
+              // Toleransi data lama bertipe `string[]`: judulnya jatuh ke kunci.
+              return Array.isArray(body)
+                ? [k, { heading: k, paragraphs: [...body] }]
+                : [k, { heading: String(body?.heading ?? k), paragraphs: [...(body?.paragraphs ?? [])] }]
+            })
           )
         : {},
+      englishBody: definition.englishBody
+        ? {
+            openingLine: definition.englishBody.openingLine ?? '',
+            recitalsHeading: definition.englishBody.recitalsHeading ?? '',
+            recitals: [...(definition.englishBody.recitals ?? [])],
+            roleHeading: definition.englishBody.roleHeading ?? '',
+            roleLabel: definition.englishBody.roleLabel ?? '',
+            locationLine: definition.englishBody.locationLine ?? '',
+            termHeading: definition.englishBody.termHeading ?? '',
+            termLine: definition.englishBody.termLine ?? '',
+            compensationLabel: definition.englishBody.compensationLabel ?? '',
+            closingHeading: definition.englishBody.closingHeading ?? '',
+            closingParagraphs: [...(definition.englishBody.closingParagraphs ?? [])],
+          }
+        : null,
     }
   }
 
@@ -107,17 +163,32 @@ export function useTemplateContentEditor() {
       overrides.sections = changedSections
     }
 
-    // englishSections — hanya kirim pasal yang berubah
-    const changedEnglish: Record<string, string[]> = {}
-    for (const [heading, paras] of Object.entries(editorState.englishSections)) {
-      const origParas = (hardcoded.englishSections ?? {})[heading] as string[] | undefined
-      if (!origParas) continue
-      if (JSON.stringify(paras) !== JSON.stringify(origParas)) {
-        changedEnglish[heading] = paras
+    // englishSections — hanya kirim pasal yang berubah.
+    // Perbandingan mencakup JUDUL Inggris: dulu judul tidak tersimpan di state,
+    // jadi perubahan judul tidak pernah ikut terkirim.
+    const changedEnglish: Record<string, EnglishSectionOverride> = {}
+    for (const [key, entry] of Object.entries(editorState.englishSections)) {
+      const orig = (hardcoded.englishSections ?? {})[key] as any
+      if (!orig) continue
+      const origHeading = Array.isArray(orig) ? key : String(orig.heading ?? key)
+      const origParas = Array.isArray(orig) ? orig : (orig.paragraphs ?? [])
+      const headingChanged = entry.heading !== origHeading
+      const parasChanged = JSON.stringify(entry.paragraphs) !== JSON.stringify(origParas)
+      if (headingChanged || parasChanged) {
+        changedEnglish[key] = entry
       }
     }
     if (Object.keys(changedEnglish).length > 0) {
       overrides.englishSections = changedEnglish
+    }
+
+    // englishBody — kirim bila ada perbedaan pada salah satu field.
+    if (editorState.englishBody) {
+      const origBody = hardcoded.englishBody ?? null
+      const changedBody = JSON.stringify(editorState.englishBody) !== JSON.stringify(origBody)
+      if (changedBody) {
+        overrides.englishBody = editorState.englishBody
+      }
     }
 
     return overrides

@@ -1,0 +1,36 @@
+/**
+ * Nilai contoh (dummy) untuk pratinjau dokumen PKWT di editor template.
+ *
+ * Editor template belum terikat kontrak/karyawan mana pun, jadi pratinjau harus
+ * memakai data contoh. Sama seperti `MITRA_PREVIEW_VALUES`, nilai di sini
+ * sengaja "wajar" (bukan PII karyawan nyata) dan mencakup SEMUA placeholder yang
+ * dipakai template PKWT, sehingga tidak ada fallback field kosong yang muncul
+ * hanya karena data contoh kurang.
+ *
+ * PKWT bersifat BILINGUAL: `contentDefinition.languages.id` dan `.en` dirender
+ * berdampingan, dan keduanya memakai kumpulan nilai yang sama ini.
+ */
+export const PKWT_PREVIEW_VALUES: Record<string, string> = {
+  // Kontrak
+  'contract.contractNo': '174/KUKP-SII/VII/2026',
+  'contract.startDate': '2 Juli 2026',
+  'contract.endDate': '1 Juli 2027',
+  'contract.signedDate': '2 Juli 2026',
+  'contract.termRange': '2 Juli 2026 - 1 Juli 2027',
+  'contract.baseCompensation': 'Rp 5.500.000',
+  'contract.duration': '12 (dua belas) bulan',
+  // Karyawan
+  'employee.fullName': 'Ibad Ubaidillah',
+  'employee.employeeNo': 'KOK-0002',
+  'employee.nik': '3214031603910002',
+  'employee.birthPlace': 'Bekasi',
+  'employee.birthDate': '2 Juli 1996',
+  'employee.address': 'KP Kertajaya Rt/Rw 12/06 Desa Sukajadi Kec. Pondok Salam Purwakarta',
+  'employee.phoneNumber': '081234567891',
+  'employee.email': 'ibad@example.com',
+  'employee.jobRole': 'Driver',
+  // Dokumen & pengaturan
+  'doc.hariTanggal': 'Kamis, 2 Juli 2026',
+  'doc.docDate': '2 Juli 2026',
+  'settings.cooperativeChairmanName': 'Hari Suhono',
+}

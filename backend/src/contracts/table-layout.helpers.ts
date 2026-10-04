@@ -88,3 +88,58 @@ export function wrapCellLines(doc: any, text: string, width: number, font: strin
   }
   return lines.length ? lines : ['']
 }
+
+/**
+ * Gambar SATU baris rata kanan-kiri (justified).
+ *
+ * RIWAYAT BUG (penting): pernah tercatat bahwa `doc.text({align:'justify'})`
+ * pada pdfkit 0.19.1 "membuang glyph spasi" sehingga muncul
+ * `3.AtasPekerjaanyangdilakukan`. Itu **KELIRU**. Justifikasi pdfkit menulis
+ * celah antar-kata sebagai **offset numerik di dalam operator `TJ`**
+ * (`<-wordSpacing>`, lihat pdfkit.js:3717), bukan sebagai glyph spasi (0x20).
+ * Jadi, per byte, memang tidak ada byte spasi — padahal secara visual maupun
+ * saat diekstrak oleh pembaca PDF nyata (pdfplumber/PyMuPDF), spasinya UTUH.
+ *
+ * Konsekuensinya untuk kode di bawah: jarak antar-kata diukur ulang secara
+ * eksplisit (jarak = (width - natural) / jumlahCelah), bukan mengandalkan
+ * glyph spasi tetap, sehingga hasilnya identik dengan justifikasi pdfkit.
+ *
+ * Bila lebar natural baris sudah melebihi `width`, justifikasi dilewati
+ * (jarak negatif akan menumpuk kata) dan baris digambar apa adanya.
+ *
+ * @returns `true` bila baris benar-benar dijustifikasi.
+ */
+export function drawJustifiedLine(
+  doc: any,
+  line: string,
+  x: number,
+  y: number,
+  width: number,
+  opts: { font?: string; size?: number } = {},
+): boolean {
+  const text = String(line ?? '')
+  const words = text.split(/\s+/).filter(Boolean)
+  if (opts.font) doc.font(opts.font)
+  if (opts.size != null) doc.fontSize(opts.size)
+
+  // Tanpa kata atau hanya satu kata, tidak ada celah yang bisa direntangkan.
+  if (words.length <= 1) {
+    doc.text(text, x, y)
+    return false
+  }
+
+  const natural = words.reduce((acc, w) => acc + doc.widthOfString(w), 0)
+  const gap = (width - natural) / (words.length - 1)
+  if (!Number.isFinite(gap) || gap <= 0) {
+    doc.text(text, x, y)
+    return false
+  }
+
+  let cx = x
+  for (let i = 0; i < words.length; i++) {
+    doc.text(words[i], cx, y, { lineBreak: false })
+    cx += doc.widthOfString(words[i])
+    if (i < words.length - 1) cx += gap
+  }
+  return true
+}
