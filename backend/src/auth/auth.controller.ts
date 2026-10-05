@@ -20,6 +20,10 @@ class ChangePasswordDto {
   @IsString() @MinLength(6) newPassword: string
 }
 
+class RefreshTokenDto {
+  @IsString() @MinLength(10) refreshToken: string
+}
+
 function profilePhotoDir() {
   const dir = join(process.cwd(), 'uploads', 'profile-photos')
   if (!existsSync(dir)) {
@@ -41,6 +45,21 @@ export class AuthController {
   async login(@Body() dto: LoginDto) {
     const admin = await this.auth.validateAdmin(dto.employeeNo, dto.password)
     return this.auth.login(admin)
+  }
+
+  /** Sliding session: tukar refresh token valid dengan pasangan token baru. */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('refresh')
+  async refresh(@Body() dto: RefreshTokenDto) {
+    return this.auth.refreshSession(dto.refreshToken)
+  }
+
+  /** Cabut seluruh sesi akun pemilik refresh token (dipakai saat logout). */
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('revoke')
+  async revoke(@Body() dto: RefreshTokenDto) {
+    await this.auth.revokeByRefreshToken(dto.refreshToken)
+    return { success: true }
   }
 
   @UseGuards(AuthGuard('jwt'))
