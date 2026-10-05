@@ -15,12 +15,19 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import {
   PKWT_GEOMETRY,
+  PKWT_HEADER_CHROME,
   buildPkwtRows,
   buildPkwtRowsFromStructuredParagraphs,
   pkwtColumnInnerWidth,
   pkwtSignatureHeight
 } from './pkwt-layout.engine'
-import { createPkwtPdfBuffer } from './pkwt-document.renderer'
+import { createPkwtPdfBuffer, resolvePkwtFonts } from './pkwt-document.renderer'
+import { PKWT_PREVIEW_VALUES } from './pkwt-preview-sample'
+import {
+  CONTRACT_DOCUMENT_DEFINITIONS,
+  getContractDocumentDefinition
+} from './contract-document-definitions'
+import { definitionToContentDefinition, type SeedContentDefinition } from '../contract-templates/default-template-definition'
 
 describe('PKWT layout engine — geometri master', () => {
   it('geometri cocok dengan hasil pengukuran master', () => {
@@ -205,6 +212,113 @@ describe('buildPkwtRowsFromStructuredParagraphs — pasangan ID/EN per blok', ()
     )
     expect(rows.map(r => r.en)).toEqual(['en a', 'en b'])
     expect(rows[1].id).toBe('')
+  })
+})
+
+describe('PKWT layout engine — jarak antar-blok', () => {
+  const stubDoc = {
+    font() { return this },
+    fontSize() { return this },
+    widthOfString(s: string) { return String(s).length * 5 }
+  }
+  // `stubDoc.widthOfString` = 5pt/char, jadi setiap teks pendek di bawah
+  // `opts.width` menyatu menjadi SATU baris (aturan `cur === ''` pada
+  // `wrapCellLines` memaksa minimal satu kata per baris). Karena itu satu
+  // paragraf == satu baris, dan index baris keluaran == index input.
+  const opts = { width: 1000, size: 9 }
+  const para = (blockId: string, blockIndex: number, text: string, bold = false) =>
+    ({ blockId, blockIndex, text, bold })
+
+  it('konstanta gap benar-benar hidup (dulu dideklarasikan tanpa satu pun pemakai)', () => {
+    // `paragraphGap` pernah ada di geometri tetapi TIDAK PERNAH dibaca renderer,
+    // sehingga blok tercetak rapat. Tes ini menahan pemutusan sambungan itu.
+    expect(PKWT_GEOMETRY.blockGap).toBeGreaterThan(0)
+    // 10 = nilai terbesar yang masih menahan dokumen pada 4 halaman untuk
+    // keempat varian PKWT bawaan; 11 sudah mendorong semuanya ke 5 halaman.
+    expect(PKWT_GEOMETRY.blockGap).toBe(10)
+    // Antar-blok harus JELAS lebih besar daripada jarak setelah judul, kalau
+    // tidak batas blok tidak terbaca sebagai pemisah (bug yang dilaporkan:
+    // "belum melihat spacing antar blok" walau gap 4pt sudah tercetak).
+    expect(PKWT_GEOMETRY.blockGap).toBeGreaterThan(PKWT_GEOMETRY.headingGapAfter)
+  })
+
+  it('gap hanya di baris PERTAMA tiap blok, tidak di baris pembuka dokumen', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'aa'), para('b', 1, 'bb'), para('c', 2, 'cc')],
+      [para('a', 0, '11'), para('b', 1, '22'), para('c', 2, '33')],
+      opts
+    )
+    expect(rows.map(r => r.id)).toEqual(['aa', 'bb', 'cc'])
+    expect(rows[0].gapBefore).toBeUndefined()
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+    expect(rows[2].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('baris lanjutan dalam SATU blok tidak diberi jarak (daftar tetap utuh)', () => {
+    // Blok `list` mengalirkan banyak paragraf dengan `blockIndex` sama; mereka
+    // satu daftar dan justru HARUS rapat.
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('list', 0, 'satu'), para('list', 0, 'dua'), para('list', 0, 'tiga')],
+      [para('list', 0, 'one'), para('list', 0, 'two'), para('list', 0, 'three')],
+      opts
+    )
+    expect(rows).toHaveLength(3)
+    expect(rows.map(r => r.gapBefore)).toEqual([undefined, undefined, undefined])
+  })
+
+  it('jarak dipasang per BLOK, bukan per paragraf', () => {
+    // Kasus nyata: blok `list` 3 item di antara dua blok lain. Kalau jaraknya
+    // salah dipasang per paragraf, akan muncul 4 jarak, bukan 2.
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [
+        para('a', 0, 'buka'),
+        para('list', 1, 'satu'),
+        para('list', 1, 'dua'),
+        para('list', 1, 'tiga'),
+        para('b', 2, 'tutup')
+      ],
+      [
+        para('a', 0, 'open'),
+        para('list', 1, 'one'),
+        para('list', 1, 'two'),
+        para('list', 1, 'three'),
+        para('b', 2, 'close')
+      ],
+      opts
+    )
+    expect(rows.map(r => r.id)).toEqual(['buka', 'satu', 'dua', 'tiga', 'tutup'])
+    const gapped = rows.map((r, i) => (r.gapBefore ? i : -1)).filter(i => i >= 0)
+    // Baris pembuka blok ke-2 (`satu`) dan blok ke-3 (`tutup`).
+    expect(gapped).toEqual([1, 4])
+  })
+
+  it('blok yang tidak menghasilkan baris tidak menyerap jarak (start duplikat dibuang)', () => {
+    // Blok `title`/`signature` tidak menghasilkan baris, sehingga blok
+    // berikutnya menyumbang start yang SAMA; tanpa dedup jaraknya mengena
+    // baris yang salah.
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'aa'), para('b', 1, 'bb')],
+      [para('a', 0, '11')],
+      opts
+    )
+    expect(rows.map(r => r.id)).toEqual(['aa', 'bb'])
+    expect(rows[0].gapBefore).toBeUndefined()
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('`buildPkwtRows` (jalur stream) menandai batas paragraf sebagai batas blok', () => {
+    // Di jalur ini elemen input ADALAH satu paragraf, bukan satu blok: API-nya
+    // hanya menerima string plat, tanpa identitas blok. Jadi dua elemen =
+    // dua blok, dan jaraknya jatuh di baris pembuka elemen ke-2 dan ke-3.
+    const rows = buildPkwtRows(stubDoc, ['a1', 'a2', 'a3'], ['b1', 'b2', 'b3'], opts)
+    expect(rows).toHaveLength(3)
+    expect(rows[0].gapBefore).toBeUndefined()
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+    expect(rows[2].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
   })
 })
 
@@ -510,5 +624,162 @@ print(json.dumps(out))
     const rightTops = new Set(p0.chars.filter(c => c.x0 > midX).map(c => Math.round(c.top)))
     const shared = [...leftTops].filter(t => rightTops.has(t))
     expect(shared.length).toBeGreaterThanOrEqual(1)
+  })
+
+  /**
+   * Bukti end-to-end bahwa jarak antar-blok BENAR-BENAR tercetak.
+   *
+   * Caranya membandingkan dua dokumen dengan isi yang SAMA PERSIS, hanya
+   * berbeda cara membungkusnya:
+   *   A. dua blok `paragraph`  -> ada satu batas blok  -> satu `blockGap`
+   *   B. satu blok `article` dengan dua paragraf -> TIDAK ada batas blok
+   * Karena teksnya identik, tinggi barisnya identik, sehingga selisih posisi
+   * baris kedua HARUS tepat sebesar `blockGap`. Kalau `gapBefore` diputus dari
+   * `renderPkwtLayout`, selisih ini menjadi 0 dan tes gagal.
+   */
+  it('jarak antar-blok benar-benar tercetak di PDF (dua blok vs satu blok dua paragraf)', async () => {
+    const G = PKWT_GEOMETRY
+    const base = {
+      values: {} as Record<string, string>,
+      titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+      titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+      numberLabel: 'No. : 1/KUKP-SII/I/2026',
+      orgLines: ['KOPERASI KARYAWAN'],
+      addressLines: ['Jl. Contoh No. 1'],
+      contactLine: 'TELP. 021 - 0',
+      signature: { leftTitle: 'PIHAK PERTAMA', rightTitle: 'PIHAK KEDUA' }
+    }
+
+    const twoBlocks = path.join(tmpDir, 'gap-two-blocks.pdf')
+    fs.writeFileSync(twoBlocks, await createPkwtPdfBuffer({
+      ...base,
+      blocks: [
+        { type: 'paragraph', text: 'PARA-SATU' },
+        { type: 'paragraph', text: 'PARA-DUA' }
+      ]
+    }))
+
+    const oneBlock = path.join(tmpDir, 'gap-one-block.pdf')
+    fs.writeFileSync(oneBlock, await createPkwtPdfBuffer({
+      ...base,
+      blocks: [
+        { type: 'article', paragraphs: ['PARA-SATU', 'PARA-DUA'] }
+      ]
+    }))
+
+    /**
+     * Top baris kolom KIRI yang benar-benar memuat teks paragraf uji.
+     *
+     * Tidak boleh sekadar mengambil N baris teratas: pada dokumen pendek blok
+     * TANDA TANGAN juga berada di halaman 1 dan kolom kirinya, jadi ia ikut
+     * terhitung. Karena teksnya satu kata tanpa spasi (`PARA-SATU`), justifikasi
+     * tidak menyisipkan celah, sehingga `join('')` merekonstruksinya utuh.
+     */
+    const paraRowTops = (file: string) => {
+      const p0 = measure(file).pages[0]
+      const midX = (G.left.x1 + G.right.x0) / 2
+      const tops: number[] = []
+      for (const c of p0.chars) {
+        if (c.x0 > midX) continue
+        if (!tops.some(t => Math.abs(t - c.top) < 2)) tops.push(c.top)
+      }
+      return tops
+        .map(top => ({
+          top,
+          text: p0.chars
+            .filter(c => c.x0 <= midX && Math.abs(c.top - top) < 2)
+            .map(c => c.text)
+            .join('')
+        }))
+        .filter(r => r.text.includes('PARA'))
+        .sort((a, b) => a.top - b.top)
+        .map(r => r.top)
+    }
+
+    const a = paraRowTops(twoBlocks)
+    const b = paraRowTops(oneBlock)
+    expect(a).toHaveLength(2)
+    expect(b).toHaveLength(2)
+
+    // Baris pertama identik: keduanya mulai di `boxTop + PAD_TOP`.
+    expect(a[0]).toBeCloseTo(b[0], 1)
+    // Baris kedua pada dokumen DUA-BLOK turun tepat sebesar `blockGap`.
+    expect(a[1] - b[1]).toBeCloseTo(G.blockGap, 1)
+    expect(a[1] - a[0]).toBeGreaterThan(b[1] - b[0])
+  })
+})
+
+/**
+ * Invarian ANGGARAN HALAMAN.
+ *
+ * `blockGap` dinaikkan menjadi 10 pt supaya batas blok terlihat jelas. Kenaikan
+ * itu dibayar dari ruang halaman: 16 batas blok × 6 pt tambahan = +96 pt,
+ * sedangkan halaman 2–3 nyaris penuh (sisa ~4.85 pt masing-masing). Sisa ruang
+ * halaman terakhir yang menyerapnya, jadi **10 pt adalah plafon**: 11 pt sudah
+ * memaksa keempat varian PKWT bawaan ke halaman 5 (terukur).
+ *
+ * Sebelum ini tidak ada satu pun tes yang menahan invarian tersebut. Menambah
+ * satu halaman pada kontrak legal berarti menambah satu lembar yang ikut
+ * ditandatangani, jadi plafon ini harus dijaga eksplisit.
+ */
+describeGeometric('PKWT — jumlah halaman tidak bertambah (plafon blockGap)', () => {
+  jest.setTimeout(180_000)
+
+  /**
+   * Mengukur jumlah halaman sebuah buffer PDF. Sengaja lewat pdfplumber, bukan
+   * menebak dari `doc.bufferedPageRange()`: yang diuji adalah PDF yang
+   * benar-benar ditulis, bukan state internal PDFKit.
+   */
+  const PAGES_PY = `
+import sys, pdfplumber
+with pdfplumber.open(sys.argv[1]) as pdf:
+    print(len(pdf.pages))
+`
+
+  function countPages(buffer: Buffer, tmpDir: string, name: string): number {
+    const file = path.join(tmpDir, `${name}.pdf`)
+    fs.writeFileSync(file, buffer)
+    return Number(execFileSync('python', ['-c', PAGES_PY, file]).toString().trim())
+  }
+
+  it('keempat varian PKWT bawaan tetap 4 halaman pada blockGap sekarang', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkwt-pages-'))
+    try {
+      const keys = Object.keys(CONTRACT_DOCUMENT_DEFINITIONS).filter(k => k.startsWith('PKWT_'))
+      expect(keys.length).toBeGreaterThanOrEqual(4)
+
+      for (const key of keys) {
+        const content: SeedContentDefinition = definitionToContentDefinition(getContractDocumentDefinition(key))
+        const buffer = await createPkwtPdfBuffer({
+          blocks: content?.languages?.id ?? [],
+          blocksEn: content?.languages?.en ?? [],
+          values: { ...PKWT_PREVIEW_VALUES },
+          orgLines: [...PKWT_HEADER_CHROME.org],
+          addressLines: [...PKWT_HEADER_CHROME.address],
+          contactLine: PKWT_HEADER_CHROME.contactLine,
+          titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+          titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+          numberLabel: `${PKWT_HEADER_CHROME.numberPrefix} 174/KUKP-SII/VII/2026`,
+          fonts: resolvePkwtFonts(),
+          signature: {
+            leftTitle: PKWT_HEADER_CHROME.signature.leftTitle,
+            rightTitle: PKWT_HEADER_CHROME.signature.rightTitle,
+            leftName: PKWT_PREVIEW_VALUES['employee.fullName'],
+            leftRole: PKWT_PREVIEW_VALUES['employee.jobRole'],
+            rightName: PKWT_PREVIEW_VALUES['settings.cooperativeChairmanName'],
+            rightRole: PKWT_HEADER_CHROME.signature.rightRoleLabel
+          }
+        })
+        // Bila ini gagal: `blockGap` sudah melewati plafon dan dokumen legal
+        // bertambah satu lembar. Turunkan `blockGap`, jangan naikkan angka ini.
+        expect({ key, pages: countPages(buffer, tmpDir, key) }).toEqual({ key, pages: 4 })
+      }
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      } catch {
+        // Direktori sementara OS; gagal bersih-bersih tidak boleh menggagalkan tes.
+      }
+    }
   })
 })

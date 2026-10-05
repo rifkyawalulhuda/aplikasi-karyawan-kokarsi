@@ -187,7 +187,54 @@ export const PKWT_GEOMETRY = {
   listHangingIndent: 13.5,
   /** Tambahan leading: badan 9pt di master berspasi baris cukup lega. */
   lineGap: 1.6,
-  paragraphGap: 4,
+  /**
+   * Jarak VERTIKAL TAMBAHAN antar-BLOK di dalam kotak kolom (pt).
+   *
+   * Dulu konstanta ini bernama `paragraphGap` dan **tidak pernah dibaca**
+   * siapa pun: `renderPkwtLayout` hanya menambah `headingGapAfter` setelah baris
+   * judul, sehingga batas blok tercetak sama persis dengan pemisah baris biasa
+   * dan dokumen tampak sesak. Sekarang ia benar-benar dipakai lewat
+   * `PkwtRow.gapBefore`.
+   *
+   * Diterapkan pada baris PERTAMA tiap blok, bukan pada setiap paragraf. Itu
+   * disengaja: satu blok `list` menghasilkan banyak paragraf yang justru HARUS
+   * rapat (mereka satu daftar), sedangkan ANTAR-blok memang perlu jarak. Karena
+   * itulah namanya `blockGap`, bukan `paragraphGap` — supaya tidak mengundang
+   * penerapan per-paragraf yang justru salah di sini.
+   *
+   * Beda dengan MITRA: `MITRA_GEOMETRY.paragraphGap` dipakai sebagai `gapAfter`
+   * tiap paragraf karena MITRA mengalirkan paragraf, bukan blok.
+   *
+   * --- Mengapa 10 ---
+   *
+   * Master (`docs/sample-legal-doc/pdf/PKWT DRIVER 2026.pdf`, diukur pdfplumber
+   * pada selisih glyph-top kolom kiri) memberi jarak yang jauh lebih tegas
+   * daripada nilai 4 yang dipakai sebelumnya:
+   *
+   *   - pitch baris badan ....................... 10.50 pt
+   *   - sebelum paragraf berikutnya (1 baris kosong) . 21.02 pt
+   *   - sebelum judul pasal `Pasal N` (2 baris kosong) 31.55 pt
+   *
+   * Kita TIDAK bisa memakai 21 pt seperti master. Sebabnya jarak baris kita
+   * sendiri sudah lebih lega daripada master: pitch badan kita **12.17 pt**
+   * (9 pt + `lineGap` 1.6) versus master 10.50 pt. Anggaran halaman itu
+   * nol-sum — 16 batas blok × kenaikan sekian pt harus dibayar dari sisa ruang
+   * halaman 4 yang hanya ~135 pt.
+   *
+   * 10 pt adalah nilai TERBESAR yang masih menahan dokumen pada **4 halaman
+   * untuk keempat varian PKWT bawaan** (DRIVER, KASIR, STAFF, WAREHOUSE);
+   * 11 pt sudah mendorong semuanya ke 5 halaman (terukur). Dengan 10 pt
+   * hierarki jaraknya menjadi jelas dan bertingkat:
+   *
+   *   - antar-baris dalam blok ......... 3.17 pt
+   *   - judul blok -> paragrafnya ...... 7.17 pt  (`headingGapAfter`)
+   *   - antar-blok ..................... 13.17 pt (`blockGap`)
+   *
+   * 13.17 pt itu juga menyamai jarak antar-paragraf master (12.02 pt), jadi
+   * dokumen tetap terasa sepola dengan master, hanya tidak se-longgar `Pasal N`
+   * master yang memakai dua baris kosong.
+   */
+  blockGap: 10,
   headingGapAfter: 4
 } as const
 
@@ -252,6 +299,45 @@ export interface PkwtRow {
    * (lihat `buildPkwtRowsFromParagraphs`) yang menyalakan opsi ini.
    */
   justify?: boolean
+  /**
+   * Jarak vertikal TAMBAHAN sebelum baris ini digambar (pt).
+   *
+   * Diisi oleh `buildPkwtRows*` pada baris PERTAMA setiap blok — kecuali blok
+   * pertama dokumen — dengan `PKWT_GEOMETRY.blockGap`, supaya blok tidak
+   * tercetak rapat. Baris lanjutan (masih di dalam blok yang sama) selalu `0`,
+   * jadi satu blok `list` tetap tampil sebagai satu daftar yang utuh.
+   *
+   * `renderPkwtLayout` memakainya SEBELUM uji luber halaman, sehingga jaraknya
+   * ikut dipertimbangkan saat memutuskan pindah halaman; bila baris ternyata
+   * pindah ke halaman baru, jaraknya dibuang (jarak di puncak halaman tidak ada
+   * gunanya dan hanya mendorong teks turun dari `boxTop`).
+   */
+  gapBefore?: number
+}
+
+/**
+ * Tandai baris pembuka tiap blok dengan `gapBefore = PKWT_GEOMETRY.blockGap`.
+ *
+ * `blockStartRows[k]` = index baris PERTAMA blok ke-`k` (diambil sebagai
+ * `rows.length` tepat sebelum blok itu di-emit). Baris indeks 0 sengaja
+ * DILEWATI: itu baris pembuka dokumen, tidak ada blok di atasnya untuk
+ * dipisahkan, dan memberi jarak di situ hanya mendorong badan turun dari
+ * `boxTop + PAD_TOP`.
+ *
+ * Dua penjagaan lain:
+ *  - `at >= limit` → blok yang tidak menghasilkan baris apa pun menyumbang
+ *    start yang sama dengan blok berikutnya (atau tepat `rows.length` di akhir);
+ *    keduanya bukan baris nyata, jadi tidak boleh ditandai.
+ *  - `seen` → buang start duplikat agar satu baris tidak diproses berulang.
+ */
+function markBlockGaps(rows: PkwtRow[], blockStartRows: number[], limit: number): void {
+  const seen = new Set<number>()
+  for (const at of blockStartRows) {
+    if (at === 0 || at >= limit || seen.has(at)) continue
+    seen.add(at)
+    const row = rows[at]
+    if (row) row.gapBefore = PKWT_GEOMETRY.blockGap
+  }
 }
 
 /**
@@ -291,15 +377,21 @@ export function buildPkwtRows(
   const enLines = wrap(enBlocks)
 
   const rows: PkwtRow[] = []
+  const blockStartRows: number[] = []
   const n = Math.max(idLines.length, enLines.length)
   for (let i = 0; i < n; i++) {
     const a = idLines[i] ?? []
     const b = enLines[i] ?? []
     const m = Math.max(a.length, b.length)
+    // Di jalur ini setiap elemen input ADALAH satu paragraf (API-nya hanya
+    // menerima string, tanpa identitas blok), jadi tiap iterasi membuka blok
+    // baru — batas paragraf == batas blok.
+    blockStartRows.push(rows.length)
     for (let j = 0; j < m; j++) {
       rows.push({ id: a[j] ?? '', en: b[j] ?? '', kind: 'body' })
     }
   }
+  markBlockGaps(rows, blockStartRows, rows.length)
   return rows
 }
 
@@ -355,18 +447,23 @@ export function buildPkwtRowsFromParagraphs(
   }
 
   const rows: PkwtRow[] = []
+  const blockStartRows: number[] = []
   const n = Math.max(idLines.length, enLines.length)
   let globalIdx = 0
   for (let i = 0; i < n; i++) {
     const a = idLines[i] ?? []
     const b = enLines[i] ?? []
     const m = Math.max(a.length, b.length)
+    // Di sini tiap elemen input ADALAH satu paragraf, jadi tiap iterasi
+    // membuka blok baru — batas paragraf == batas blok.
+    blockStartRows.push(rows.length)
     for (let j = 0; j < m; j++) {
       const isLastOfPara = lastIdIdx.has(globalIdx) || lastEnIdx.has(globalIdx)
       rows.push({ id: a[j] ?? '', en: b[j] ?? '', kind: 'body', justify: !isLastOfPara })
       globalIdx += 1
     }
   }
+  markBlockGaps(rows, blockStartRows, rows.length)
   return rows
 }
 
@@ -472,9 +569,19 @@ export function buildPkwtRowsFromStructuredParagraphs(
   }
 
   // Blok menurut urutan kolom ID (kolom kiri = acuan tata letak dokumen).
-  for (const blockIndex of idGroup.keys()) emitBlock(blockIndex)
+  const starts: number[] = []
+  for (const blockIndex of idGroup.keys()) {
+    starts.push(rows.length)
+    emitBlock(blockIndex)
+  }
   // Blok EN tanpa padanan ID tetap dihormati — jangan hilangkan konten legal.
-  for (const blockIndex of enGroup.keys()) if (!idGroup.has(blockIndex)) emitBlock(blockIndex)
+  for (const blockIndex of enGroup.keys()) {
+    if (idGroup.has(blockIndex)) continue
+    starts.push(rows.length)
+    emitBlock(blockIndex)
+  }
+
+  markBlockGaps(rows, starts, rows.length)
 
   return rows
 }
@@ -949,12 +1056,20 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
 
   for (const row of opts.rows ?? []) {
     const h = measureRow(row)
+    // Jarak antar-blok diukur SEBELUM uji luber: kalau tidak, baris terakhir
+    // sebuah blok bisa lolos uji (muat), lalu jaraknya "tumpah" ke luar kotak.
+    const gap = row.gapBefore ?? 0
     // Hormati batas bawah kotak halaman berjalan.
-    if (y + h > boxBottomFor(pageIndex) - PAD_TOP) {
+    if (y + gap + h > boxBottomFor(pageIndex) - PAD_TOP) {
       doc.addPage()
       pageIndex += 1
       y = boxTopFor(pageIndex) + PAD_TOP
       contentBottoms[pageIndex] = y
+      // Jarak dibuang di puncak halaman: blok pertama tiap halaman memang
+      // dimulai tepat di `boxTop + PAD_TOP`, dan blok yang baris pertamanya
+      // pindah halaman sudah terpisah jelas oleh garis kotak halaman.
+    } else {
+      y += gap
     }
     // Bold & justify PER-KOLOM. `justify` (row-level) tetap dihormati sebagai
     // fallback untuk pemanggil lama.
