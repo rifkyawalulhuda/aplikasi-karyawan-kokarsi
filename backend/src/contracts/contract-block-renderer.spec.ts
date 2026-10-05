@@ -42,6 +42,29 @@ describe('buildValueMap', () => {
     expect(buildValueMap(null)).toEqual({})
     expect(buildValueMap(undefined)).toEqual({})
   })
+
+  it('default bahasa Indonesia: displayValueEn diabaikan', () => {
+    // Pemanggil lama (MITRA satu kolom) tidak boleh ikut berubah.
+    const map = buildValueMap({
+      'employee.gender': { value: 'MALE', displayValue: 'Laki-laki', displayValueEn: 'Male' },
+    })
+    expect(map['employee.gender']).toBe('Laki-laki')
+  })
+
+  it("bahasa 'EN': memakai displayValueEn bila ada, jatuh ke displayValue bila tidak", () => {
+    // Inti fitur gender bilingual: kolom kanan PKWT harus "Male", sementara
+    // field lain (yang teksnya tidak bergantung bahasa) tetap satu nilai.
+    const map = buildValueMap({
+      'employee.gender': { value: 'MALE', displayValue: 'Laki-laki', displayValueEn: 'Male' },
+      'employee.fullName': { value: 'Budi', displayValue: 'Budi' },
+      'contract.contractNo': { value: 'X', displayValue: 'X' },
+    }, 'EN')
+    expect(map).toEqual({
+      'employee.gender': 'Male',
+      'employee.fullName': 'Budi',
+      'contract.contractNo': 'X',
+    })
+  })
 })
 
 describe('formatCell', () => {

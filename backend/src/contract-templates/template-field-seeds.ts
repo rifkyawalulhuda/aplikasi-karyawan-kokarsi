@@ -34,6 +34,11 @@ export const SYSTEM_FIELD_SEEDS: SystemFieldSeed[] = [
   { key: 'employee.birthPlace', label: 'Tempat Lahir', dataType: 'TEXT', sourceType: 'SYSTEM' },
   { key: 'employee.birthDate', label: 'Tanggal Lahir', dataType: 'DATE', sourceType: 'SYSTEM' },
   { key: 'employee.address', label: 'Alamat Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
+  // Blok identitas PIHAK KEDUA pada template PKWT memuat baris `Jenis Kelamin`.
+  // Tanpa entri katalog di sini, placeholder `{{employee.gender}}` tidak muncul
+  // di picker editor dan publish ditolak `validateContentDefinition` dengan
+  // "Placeholder ... tidak terdaftar di katalog field".
+  { key: 'employee.gender', label: 'Jenis Kelamin', dataType: 'TEXT', sourceType: 'SYSTEM' },
   { key: 'employee.jobRole', label: 'Jabatan', dataType: 'TEXT', sourceType: 'SYSTEM' },
   // Dipakai PASAL 12 (PEMBERITAHUAN) sebagai alamat PIHAK KEDUA. Tanpa entri
   // katalog di sini, publish versi template yang memuat {{employee.phoneNumber}}

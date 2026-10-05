@@ -205,7 +205,7 @@ export const PKWT_GEOMETRY = {
    * Beda dengan MITRA: `MITRA_GEOMETRY.paragraphGap` dipakai sebagai `gapAfter`
    * tiap paragraf karena MITRA mengalirkan paragraf, bukan blok.
    *
-   * --- Mengapa 10 ---
+   * --- Mengapa 8 ---
    *
    * Master (`docs/sample-legal-doc/pdf/PKWT DRIVER 2026.pdf`, diukur pdfplumber
    * pada selisih glyph-top kolom kiri) memberi jarak yang jauh lebih tegas
@@ -218,23 +218,40 @@ export const PKWT_GEOMETRY = {
    * Kita TIDAK bisa memakai 21 pt seperti master. Sebabnya jarak baris kita
    * sendiri sudah lebih lega daripada master: pitch badan kita **12.17 pt**
    * (9 pt + `lineGap` 1.6) versus master 10.50 pt. Anggaran halaman itu
-   * nol-sum — 16 batas blok × kenaikan sekian pt harus dibayar dari sisa ruang
-   * halaman 4 yang hanya ~135 pt.
+   * nol-sum — setiap batas blok × kenaikan sekian pt harus dibayar dari sisa
+   * ruang halaman 4 yang hanya ~135 pt.
    *
-   * 10 pt adalah nilai TERBESAR yang masih menahan dokumen pada **4 halaman
-   * untuk keempat varian PKWT bawaan** (DRIVER, KASIR, STAFF, WAREHOUSE);
-   * 11 pt sudah mendorong semuanya ke 5 halaman (terukur). Dengan 10 pt
-   * hierarki jaraknya menjadi jelas dan bertingkat:
+   * NILAI INI TURUN dari 10 ke 8 saat blok identitas PIHAK KEDUA dikodekan
+   * (`identityBlocks` di `default-template-definition.ts`). Blok itu memang ada
+   * di master — ketiadaannya dulu yang membuat dokumen kita kebetulan muat 4
+   * halaman. Menambahkannya menambah satu blok di SETIAP kolom (batas blok
+   * menjadi 17), dan itu memakan seluruh sisa anggaran: pada 10 pt keempat
+   * varian langsung menjadi 5 halaman.
+   *
+   * 8 pt adalah nilai TERBESAR yang masih menahan dokumen pada **4 halaman untuk
+   * keempat varian PKWT bawaan** (DRIVER, KASIR, STAFF, WAREHOUSE). Ambangnya
+   * terukur dan tajam — 8.5 pt sudah mendorong semuanya ke 5 halaman — jadi
+   * jangan dibulatkan ke atas tanpa mengukur ulang:
+   *
+   *   npx ts-node --transpile-only scripts/measure-pkwt-page-budget.ts
+   *
+   * Dengan 8 pt hierarki jaraknya tetap jelas dan bertingkat:
    *
    *   - antar-baris dalam blok ......... 3.17 pt
    *   - judul blok -> paragrafnya ...... 7.17 pt  (`headingGapAfter`)
-   *   - antar-blok ..................... 13.17 pt (`blockGap`)
+   *   - antar-blok ..................... 11.17 pt (`blockGap`)
    *
-   * 13.17 pt itu juga menyamai jarak antar-paragraf master (12.02 pt), jadi
-   * dokumen tetap terasa sepola dengan master, hanya tidak se-longgar `Pasal N`
-   * master yang memakai dua baris kosong.
+   * 11.17 pt masih menyamai jarak antar-paragraf master (12.02 pt), jadi dokumen
+   * tetap terasa sepola dengan master, hanya tidak se-longgar `Pasal N` master
+   * yang memakai dua baris kosong.
+   *
+   * Alternatif yang SENGAJA tidak diambil: menurunkan `lineGap` (1.6 → ~0 akan
+   * menyamai pitch master 10.50 pt dan memberi banyak ruang). Itu mengubah
+   * kerapatan SELURUH badan kontrak, bukan hanya batas blok, sehingga lebih
+   * layak diputuskan setelah ada perbandingan visual — bukan sebagai efek
+   * samping dari penambahan satu blok.
    */
-  blockGap: 10,
+  blockGap: 8,
   headingGapAfter: 4
 } as const
 

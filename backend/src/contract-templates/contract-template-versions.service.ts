@@ -15,7 +15,7 @@ import { createMitraPdfBuffer, resolveMitraFonts, resolveMitraLogoPath } from '.
 import { MITRA_PREVIEW_VALUES } from '../contracts/mitra-preview-sample'
 import { PKWT_HEADER_CHROME } from '../contracts/pkwt-layout.engine'
 import { createPkwtPdfBuffer, resolvePkwtFonts, resolvePkwtLogoPath } from '../contracts/pkwt-document.renderer'
-import { PKWT_PREVIEW_VALUES } from '../contracts/pkwt-preview-sample'
+import { PKWT_PREVIEW_VALUES, PKWT_PREVIEW_VALUES_EN } from '../contracts/pkwt-preview-sample'
 
 interface CreateDraftDto {
   changeSummary?: string
@@ -362,18 +362,22 @@ export class ContractTemplateVersionsService {
    * Pratinjau PKWT — mesin yang sama dengan generate (`createPkwtPdfBuffer`).
    *
    * PKWT bilingual: kolom kiri `languages.id`, kolom kanan `languages.en`, baris
-   * terkunci oleh engine. Kedua kolom memakai kumpulan nilai contoh yang sama.
+   * terkunci oleh engine. Kedua kolom memakai nilai contoh yang sama KECUALI
+   * placeholder ber-label per-bahasa (mis. `employee.gender` → "Laki-laki" di
+   * kiri, "Male" di kanan) — lihat `PKWT_PREVIEW_VALUES_EN`.
    */
   private renderPkwtPreview(blocks: any[], content: any): Promise<Buffer> {
     const assetRoot = resolve(process.cwd(), 'assets')
     const logoPath = resolvePkwtLogoPath(assetRoot)
     const values = { ...PKWT_PREVIEW_VALUES }
+    const valuesEn = { ...PKWT_PREVIEW_VALUES_EN }
     const numberLabel = `${PKWT_HEADER_CHROME.numberPrefix} ${values['contract.contractNo']}`
 
     return createPkwtPdfBuffer({
       blocks,
       blocksEn: content?.languages?.en ?? [],
       values,
+      valuesEn,
       orgLines: [...PKWT_HEADER_CHROME.org],
       addressLines: [...PKWT_HEADER_CHROME.address],
       contactLine: PKWT_HEADER_CHROME.contactLine,

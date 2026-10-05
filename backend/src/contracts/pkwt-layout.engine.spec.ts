@@ -233,9 +233,11 @@ describe('PKWT layout engine — jarak antar-blok', () => {
     // `paragraphGap` pernah ada di geometri tetapi TIDAK PERNAH dibaca renderer,
     // sehingga blok tercetak rapat. Tes ini menahan pemutusan sambungan itu.
     expect(PKWT_GEOMETRY.blockGap).toBeGreaterThan(0)
-    // 10 = nilai terbesar yang masih menahan dokumen pada 4 halaman untuk
-    // keempat varian PKWT bawaan; 11 sudah mendorong semuanya ke 5 halaman.
-    expect(PKWT_GEOMETRY.blockGap).toBe(10)
+    // 8 = nilai terbesar yang masih menahan dokumen pada 4 halaman untuk
+    // keempat varian PKWT bawaan SETELAH blok identitas PIHAK KEDUA dikodekan
+    // (sebelumnya 10; blok itu memakan seluruh sisa anggaran halaman).
+    // Ambangnya tajam: 8.5 sudah mendorong semuanya ke 5 halaman.
+    expect(PKWT_GEOMETRY.blockGap).toBe(8)
     // Antar-blok harus JELAS lebih besar daripada jarak setelah judul, kalau
     // tidak batas blok tidak terbaca sebagai pemisah (bug yang dilaporkan:
     // "belum melihat spacing antar blok" walau gap 4pt sudah tercetak).
@@ -712,11 +714,15 @@ print(json.dumps(out))
 /**
  * Invarian ANGGARAN HALAMAN.
  *
- * `blockGap` dinaikkan menjadi 10 pt supaya batas blok terlihat jelas. Kenaikan
- * itu dibayar dari ruang halaman: 16 batas blok × 6 pt tambahan = +96 pt,
- * sedangkan halaman 2–3 nyaris penuh (sisa ~4.85 pt masing-masing). Sisa ruang
- * halaman terakhir yang menyerapnya, jadi **10 pt adalah plafon**: 11 pt sudah
- * memaksa keempat varian PKWT bawaan ke halaman 5 (terukur).
+ * `blockGap` memberi jarak nyata antar blok supaya batas blok terlihat jelas.
+ * Kenaikan itu dibayar dari ruang halaman: setiap batas blok × tambahan pt,
+ * sedangkan halaman 2–3 nyaris penuh. Sisa ruang halaman terakhir yang
+ * menyerapnya, jadi `blockGap` punya **plafon keras**.
+ *
+ * Plafon itu bergerak setiap kali jumlah blok berubah: setelah blok identitas
+ * PIHAK KEDUA dikodekan (17 batas blok, dari 16), plafonnya turun 10 → 8 pt.
+ * Ambangnya tajam — 8.5 pt sudah memaksa keempat varian ke halaman 5 (terukur
+ * lewat `scripts/measure-pkwt-page-budget.ts`).
  *
  * Sebelum ini tidak ada satu pun tes yang menahan invarian tersebut. Menambah
  * satu halaman pada kontrak legal berarti menambah satu lembar yang ikut

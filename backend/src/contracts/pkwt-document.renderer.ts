@@ -84,8 +84,15 @@ export interface PkwtDocumentRenderOptions {
   blocks: any[]
   /** Blok konten bahasa Inggris (`contentDefinition.languages.en`). */
   blocksEn?: any[]
-  /** Nilai placeholder (key → displayValue). */
+  /** Nilai placeholder (key → displayValue) untuk kolom INDONESIA. */
   values: Record<string, string>
+  /**
+   * Nilai placeholder untuk kolom INGGRIS. Bila kosong, kolom kanan memakai
+   * `values` yang sama — perilaku lama untuk semua field yang teksnya tidak
+   * bergantung bahasa. Hanya field dengan label per-bahasa (mis.
+   * `employee.gender` → "Laki-laki"/"Male") yang mengisi peta ini berbeda.
+   */
+  valuesEn?: Record<string, string>
   /** Baris kop organisasi (dari template, bukan redaksi hardcode). */
   orgLines?: string[]
   addressLines?: string[]
@@ -199,7 +206,7 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
   const { title: enTitle } = extractTitle(opts.blocksEn ?? [])
 
   const idParas = blocksToPkwtParagraphs(opts.blocks, values)
-  const enParas = blocksToPkwtParagraphs(opts.blocksEn ?? [], values)
+  const enParas = blocksToPkwtParagraphs(opts.blocksEn ?? [], opts.valuesEn ?? values)
 
   // Body master = 9pt; engine memakai font yang sudah terdaftar di atas.
   doc.font(PKWT_FONT_NAMES.regular).fontSize(PKWT_GEOMETRY.font.body)

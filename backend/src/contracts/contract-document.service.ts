@@ -366,7 +366,12 @@ export class ContractDocumentService {
    *     `drawJustifiedLine` di `table-layout.helpers.ts`.)
    */
   private renderPkwtLayoutFromBlocks(doc: any, payload: Awaited<ReturnType<ContractDocumentService['loadContract']>>, blocks: any[]) {
-    const values = buildValueMap((payload.contract as any).resolvedTemplateData)
+    const resolved = (payload.contract as any).resolvedTemplateData
+    const values = buildValueMap(resolved, 'ID')
+    // Kolom kanan memakai varian Inggris HANYA untuk field ber-label per-bahasa
+    // (mis. `employee.gender` → "Male"). Dihitung dari snapshot yang sama, bukan
+    // query ulang, supaya peta turunan ini ikut membeku bersama kontrak.
+    const valuesEn = buildValueMap(resolved, 'EN')
     const snapshot = (payload.contract as any).templateSnapshot
     const content = snapshot?.contentDefinition ?? {}
     const definition = payload.definition
@@ -379,6 +384,7 @@ export class ContractDocumentService {
       blocks,
       blocksEn: content?.languages?.en ?? [],
       values,
+      valuesEn,
       // Kop dari CHROME, bukan dari redaksi template (aturan passthrough).
       orgLines: [...PKWT_HEADER_CHROME.org],
       addressLines: [...PKWT_HEADER_CHROME.address],

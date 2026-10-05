@@ -40,6 +40,23 @@ describe('katalog field system mencakup semua placeholder SYSTEM template bawaan
     expect(catalog.has('employee.email')).toBe(true)
   })
 
+  /**
+   * Regresi: blok identitas PIHAK KEDUA pada draft PKWT memuat baris
+   * `Jenis Kelamin : {{employee.gender}}`. Bila key itu tidak ada di katalog,
+   * `validateContentDefinition()` menolak publish dengan "Placeholder ...
+   * tidak terdaftar di katalog field", dan picker field di editor template tidak
+   * pernah menampilkannya. Nilainya enum Prisma (`MALE`/`FEMALE`), jadi label
+   * katalognya juga dipakai `resolvePlaceholderValue()` untuk mencetak
+   * "Laki-laki"/"Male" — lihat `genderLabel`.
+   */
+  it('menyediakan employee.gender untuk blok identitas PIHAK KEDUA PKWT', () => {
+    const seed = SYSTEM_FIELD_SEEDS.find(item => item.key === 'employee.gender')
+
+    expect(seed).toBeDefined()
+    expect(seed!.label).toBe('Jenis Kelamin')
+    expect(seed!.dataType).toBe('TEXT')
+  })
+
   it('setiap placeholder non-custom definisi bawaan terdaftar di katalog seed', () => {
     for (const definition of Object.values(CONTRACT_DOCUMENT_DEFINITIONS)) {
       const content = definitionToContentDefinition(definition)
@@ -239,6 +256,52 @@ describe('PKWT — kolom kanan (EN) berbahasa Inggris', () => {
         expect(idBlock).toBeDefined()
         expect(enBlock.paragraphs?.length ?? 0).toBe(idBlock.paragraphs?.length ?? 0)
       }
+    },
+  )
+
+  /**
+   * Regresi: blok identitas PIHAK KEDUA harus ada di KEDUA kolom PKWT dan memuat
+   * baris gender.
+   *
+   * Sebelumnya blok ini hanya hidup di draft yang diketik manual lewat editor —
+   * padahal master memilikinya. Akibatnya `{{employee.gender}}`, walau sudah
+   * terdaftar di katalog, tidak punya tempat di versi yang dibuat dari definisi
+   * kode (`createDraft`), sehingga field itu praktis tidak pernah terpakai.
+   *
+   * CATATAN: menambah blok ini menambah satu batas blok, jadi `blockGap` harus
+   * turun bersamaan supaya dokumen tetap 4 halaman. Lihat invarian anggaran
+   * halaman di `pkwt-layout.engine.spec.ts`.
+   */
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: blok identitas PIHAK KEDUA ada di kedua kolom dan memuat baris gender',
+    (_key, definition) => {
+      const content = definitionToContentDefinition(definition)
+      const identity = (lang: 'id' | 'en') =>
+        (content.languages[lang] as any[]).find(block => block?.id === 'identity-employee')
+
+      const id = identity('id')
+      const en = identity('en')
+      expect(id).toBeDefined()
+      expect(en).toBeDefined()
+
+      // Placeholder yang SAMA di kedua kolom — yang berbeda hanya label nilainya,
+      // dan itu urusan resolver (`genderLabel`), bukan urusan konten.
+      expect(id.text).toContain('{{employee.gender}}')
+      expect(en.text).toContain('{{employee.gender}}')
+      expect(id.text).toContain('Jenis Kelamin :')
+      expect(en.text).toContain('Gender :')
+
+      // Identitas karyawan harus lengkap, bukan hanya baris gender.
+      for (const key of ['{{employee.fullName}}', '{{employee.birthPlace}}', '{{employee.birthDate}}']) {
+        expect(id.text).toContain(key)
+        expect(en.text).toContain(key)
+      }
+
+      // Kolom Inggris tidak boleh memakai label Indonesia — termasuk label
+      // `N a m a` yang masih ada di master.
+      expect(en.text).not.toContain('Jenis Kelamin')
+      expect(en.text).not.toContain('N a m a')
+      expect(en.text).not.toContain('Tgl. Lahir')
     },
   )
 })

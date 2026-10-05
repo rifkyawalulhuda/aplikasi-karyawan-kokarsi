@@ -10,6 +10,10 @@
  *  - Layout tetap milik renderer (margin, kolom, font) — admin hanya mengatur konten.
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
+// Tipe saja (`import type`): helper resolver adalah modul daun tanpa dependency
+// NestJS/Prisma, jadi memakai tipe bahasanya di sini tidak menimbulkan siklus
+// modul walau `contract-templates` sendiri bergantung pada `contracts`.
+import type { DocumentLanguage } from '../contract-templates/template-value-resolver.helpers'
 
 export interface RenderedBlockContext {
   /** Map placeholder key → displayValue */
@@ -39,12 +43,21 @@ export function interpolate(text: string, values: Record<string, string>): strin
   })
 }
 
-export function buildValueMap(resolved: any): Record<string, string> {
+/**
+ * Peta `key -> teks cetak` dari `resolvedTemplateData`.
+ *
+ * `language` menentukan varian label: `EN` memakai `displayValueEn` bila field
+ * itu punya label Inggris sendiri (mis. `employee.gender` → "Male") dan jatuh ke
+ * `displayValue` untuk semua field lain. `ID` selalu `displayValue`, jadi
+ * pemanggil lama (MITRA, satu kolom) tidak berubah perilakunya.
+ */
+export function buildValueMap(resolved: any, language: DocumentLanguage = 'ID'): Record<string, string> {
   const out: Record<string, string> = {}
   if (!resolved || typeof resolved !== 'object') return out
   for (const [key, entry] of Object.entries(resolved as Record<string, any>)) {
     if (entry && typeof entry === 'object' && 'displayValue' in entry) {
-      out[key] = String((entry as any).displayValue ?? '')
+      const display = language === 'EN' ? (entry.displayValueEn ?? entry.displayValue) : entry.displayValue
+      out[key] = String(display ?? '')
     } else {
       out[key] = String(entry ?? '')
     }

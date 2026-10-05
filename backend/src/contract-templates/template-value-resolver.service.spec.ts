@@ -1,9 +1,12 @@
 import {
   numberToIndonesianWords,
   deriveTermRange,
+  deriveTermRangeEn,
   deriveDuration,
   deriveHariTanggal,
   formatIndonesianDate,
+  formatEnglishDate,
+  genderLabel,
   resolvePlaceholderValue,
   resolvePlaceholders,
 } from './template-value-resolver.helpers'
@@ -13,6 +16,27 @@ function d(iso: string): Date {
   const [y, m, day] = iso.split('-').map(Number)
   return new Date(y, m - 1, day)
 }
+
+describe('genderLabel', () => {
+  it('menerjemahkan enum Gender ke label per bahasa', () => {
+    expect(genderLabel('MALE', 'ID')).toBe('Laki-laki')
+    expect(genderLabel('FEMALE', 'ID')).toBe('Perempuan')
+    expect(genderLabel('MALE', 'EN')).toBe('Male')
+    expect(genderLabel('FEMALE', 'EN')).toBe('Female')
+  })
+  it('default bahasa adalah Indonesia (mayoritas dokumen satu kolom)', () => {
+    expect(genderLabel('MALE')).toBe('Laki-laki')
+  })
+  it('nilai di luar enum dikembalikan apa adanya, bukan dilempar', () => {
+    expect(genderLabel('OTHER', 'ID')).toBe('OTHER')
+    expect(genderLabel('OTHER', 'EN')).toBe('OTHER')
+  })
+  it('null/undefined/string kosong → undefined', () => {
+    expect(genderLabel(null)).toBeUndefined()
+    expect(genderLabel(undefined)).toBeUndefined()
+    expect(genderLabel('')).toBeUndefined()
+  })
+})
 
 describe('numberToIndonesianWords', () => {
   it('angka dasar', () => {
@@ -35,6 +59,23 @@ describe('deriveTermRange', () => {
   it('format dd MMMM yyyy - dd MMMM yyyy', () => {
     expect(deriveTermRange(d('2026-09-01'), d('2027-03-31'))).toBe(
       '01 September 2026 - 31 Maret 2027',
+    )
+  })
+})
+
+describe('deriveTermRangeEn', () => {
+  /**
+   * `{{contract.termRange}}` juga dipakai kolom EN (Pasal 2 ayat 1 versi
+   * Inggris). Tanpa varian ini, bulan Indonesia bocor ke naskah Inggris.
+   */
+  it('memakai nama bulan Inggris, tanpa leading zero day', () => {
+    expect(deriveTermRangeEn(d('2026-09-01'), d('2027-03-31'))).toBe(
+      '01 September 2026 - 31 March 2027',
+    )
+  })
+  it('mempertahankan leading zero pada tanggal (seperti versi Indonesia)', () => {
+    expect(deriveTermRangeEn(d('2026-07-02'), d('2027-07-01'))).toBe(
+      '02 July 2026 - 01 July 2027',
     )
   })
 })
@@ -90,6 +131,7 @@ describe('resolvePlaceholderValue', () => {
       fullName: 'Budi Santoso',
       jobRole: { name: 'Driver' },
       birthDate: d('1991-03-16'),
+      gender: 'MALE',
     },
     templateData: { ktp_issued_date: d('2024-08-08') },
     settings: { cooperativeChairmanName: 'Hari Suhono' },
@@ -123,6 +165,48 @@ describe('resolvePlaceholderValue', () => {
   it('employee date formatted', () => {
     const r = resolvePlaceholderValue('employee.birthDate', baseCtx as any)!
     expect(r.displayValue).toBe('16 Maret 1991')
+  })
+  it('employee.gender memakai label per bahasa, bukan enum mentah', () => {
+    // Regresi: blok identitas PIHAK KEDUA PKWT memakai {{employee.gender}} di
+    // KEDUA kolom. Tanpa cabang eksplisit, jalur generik `employee.*` mencetak
+    // `MALE`; tanpa `displayValueEn`, kolom Inggris ikut mencetak "Laki-laki".
+    const male = resolvePlaceholderValue('employee.gender', baseCtx as any)!
+    expect(male.displayValue).toBe('Laki-laki')
+    expect(male.displayValueEn).toBe('Male')
+
+    const female = resolvePlaceholderValue('employee.gender', {
+      ...baseCtx,
+      employee: { ...baseCtx.employee, gender: 'FEMALE' },
+    } as any)!
+    expect(female.displayValue).toBe('Perempuan')
+    expect(female.displayValueEn).toBe('Female')
+  })
+  it('field selain gender tidak punya varian Inggris (satu nilai untuk dua kolom)', () => {
+    // Menjaga agar `displayValueEn` tetap opt-in: kalau suatu saat ada yang
+    // mengisinya untuk SEMUA field, kolom EN diam-diam berubah untuk field yang
+    // teksnya tidak bergantung bahasa.
+    expect(resolvePlaceholderValue('employee.fullName', baseCtx as any)!.displayValueEn).toBeUndefined()
+    expect(resolvePlaceholderValue('contract.contractNo', baseCtx as any)!.displayValueEn).toBeUndefined()
+  })
+  it('tanggal memakai varian Inggris di displayValueEn, Indonesia tetap di displayValue', () => {
+    // Blok identitas PIHAK KEDUA ada di KEDUA kolom, jadi `employee.birthDate`
+    // juga tercetak di kolom Inggris. Tanpa varian ini muncul "16 Maret 1991"
+    // di tengah naskah Inggris.
+    const birth = resolvePlaceholderValue('employee.birthDate', baseCtx as any)!
+    expect(birth.displayValue).toBe('16 Maret 1991')
+    expect(birth.displayValueEn).toBe('16 March 1991')
+  })
+  it('rentang periode punya varian Inggris (dipakai Pasal 2 versi Inggris)', () => {
+    const term = resolvePlaceholderValue('contract.termRange', baseCtx as any)!
+    expect(term.displayValue).toContain('Maret')
+    expect(term.displayValueEn).toContain('March')
+    expect(term.displayValueEn).not.toContain('Maret')
+  })
+  it('employee.gender kosong → undefined (bukan "undefined" tercetak)', () => {
+    expect(resolvePlaceholderValue('employee.gender', {
+      ...baseCtx,
+      employee: { ...baseCtx.employee, gender: null },
+    } as any)).toBeUndefined()
   })
   it('custom field dari templateData', () => {
     const r = resolvePlaceholderValue('custom.ktp_issued_date', baseCtx as any)!
@@ -161,5 +245,14 @@ describe('resolvePlaceholders', () => {
 describe('formatIndonesianDate', () => {
   it('single digit day tanpa leading zero', () => {
     expect(formatIndonesianDate(d('2026-03-05'))).toBe('5 Maret 2026')
+  })
+})
+
+describe('formatEnglishDate', () => {
+  it('single digit day tanpa leading zero, bulan Inggris', () => {
+    expect(formatEnglishDate(d('2026-03-05'))).toBe('5 March 2026')
+  })
+  it('mencakup bulan Juli (bukan "Juli" yang lolos dari peta ID)', () => {
+    expect(formatEnglishDate(d('1996-07-02'))).toBe('2 July 1996')
   })
 })

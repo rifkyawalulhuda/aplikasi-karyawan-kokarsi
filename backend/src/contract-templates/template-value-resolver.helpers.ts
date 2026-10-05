@@ -8,6 +8,20 @@ const MONTHS_ID = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ]
 
+/**
+ * Nama bulan Inggris untuk kolom EN PKWT.
+ *
+ * Master (`PKWT DRIVER 2026.pdf`) masih mencetak bulan Indonesia di kolom kanan
+ * (`Sukabumi, 20 Mei 1980`), jadi ini SENGAJA menyimpang dari master: kolom
+ * Inggris tidak boleh memuat kata Indonesia. Alasan yang sama dipakai untuk
+ * label `Name`/`Gender` di blok identitas — lihat `identityBlocks` di
+ * `default-template-definition.ts`.
+ */
+const MONTHS_EN = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
 const DAYS_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
 
 const NUMBER_WORDS_ID: Record<number, string> = {
@@ -45,6 +59,15 @@ export function formatIndonesianDate(d: Date): string {
   return `${d.getDate()} ${MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`
 }
 
+/**
+ * "31 August 2026" — pasangan Inggris dari `formatIndonesianDate`.
+ *
+ * Dipakai HANYA untuk kolom EN; lihat `MONTHS_EN` soal penyimpangan dari master.
+ */
+export function formatEnglishDate(d: Date): string {
+  return `${d.getDate()} ${MONTHS_EN[d.getMonth()]} ${d.getFullYear()}`
+}
+
 /** "Senin" */
 export function getIndonesianDayName(d: Date): string {
   return DAYS_ID[d.getDay()]
@@ -60,6 +83,17 @@ function isLastDayOfMonth(d: Date): boolean {
  */
 export function deriveTermRange(start: Date, end: Date): string {
   return `${pad2(start.getDate())} ${MONTHS_ID[start.getMonth()]} ${start.getFullYear()} - ${pad2(end.getDate())} ${MONTHS_ID[end.getMonth()]} ${end.getFullYear()}`
+}
+
+/**
+ * "01 September 2026 - 31 March 2027" — pasangan Inggris dari `deriveTermRange`.
+ *
+ * `{{contract.termRange}}` dipakai di kolom EN juga (Pasal 2 ayat 1 versi
+ * Inggris: "This agreement is effective since {{contract.termRange}}."), jadi
+ * tanpa varian ini bulan Indonesia bocor ke naskah Inggris.
+ */
+export function deriveTermRangeEn(start: Date, end: Date): string {
+  return `${pad2(start.getDate())} ${MONTHS_EN[start.getMonth()]} ${start.getFullYear()} - ${pad2(end.getDate())} ${MONTHS_EN[end.getMonth()]} ${end.getFullYear()}`
 }
 
 /**
@@ -93,9 +127,49 @@ export function formatRupiah(n: number): string {
   return `Rp ${new Intl.NumberFormat('id-ID').format(Math.round(n))}`
 }
 
+/**
+ * Label untuk enum `Gender` (`MALE`/`FEMALE`).
+ *
+ * Nilai mentah kolom `Employee.gender` adalah enum Prisma, sehingga mencetaknya
+ * apa adanya menghasilkan `MALE` di tengah naskah. Karena PKWT itu BILINGUAL —
+ * `languages.id` dan `languages.en` dirender berdampingan — satu nilai tidak
+ * cukup: kolom kiri harus "Laki-laki" sementara kolom kanan "Male". Peta per
+ * bahasa inilah jawabannya.
+ *
+ * Label ID sengaja SAMA dengan konvensi UI lain (`SummaryCards.vue`,
+ * `useExport.ts`, `CvDocument.vue`) supaya satu karyawan tidak pernah tampil
+ * dengan dua label berbeda antar dokumen.
+ *
+ * Nilai di luar peta dikembalikan apa adanya — bukan dilempar — agar data lama
+ * yang tidak terduga tetap tercetak dan tidak menggagalkan pembuatan kontrak.
+ */
+const GENDER_LABELS: Record<DocumentLanguage, Record<string, string>> = {
+  ID: { MALE: 'Laki-laki', FEMALE: 'Perempuan' },
+  EN: { MALE: 'Male', FEMALE: 'Female' },
+}
+
+/** Bahasa kolom yang sedang dirender. Default `ID` (mayoritas dokumen satu kolom). */
+export type DocumentLanguage = 'ID' | 'EN'
+
+export function genderLabel(raw: unknown, language: DocumentLanguage = 'ID'): string | undefined {
+  if (raw == null || raw === '') return undefined
+  const map = GENDER_LABELS[language] ?? GENDER_LABELS.ID
+  return map[String(raw)] ?? String(raw)
+}
+
 export interface ResolvedValue {
   value: any
   displayValue: string
+  /**
+   * Label untuk kolom bahasa Inggris, HANYA bila teksnya memang berbeda dari
+   * `displayValue`. Kosong berarti kolom EN memakai `displayValue` yang sama —
+   * perilaku lama untuk semua field.
+   *
+   * Dipisah dari `displayValue` (bukan di-resolve dua kali per bahasa) supaya
+   * `resolvedTemplateData` yang sudah tersimpan di kontrak lama tetap sah:
+   * snapshot tanpa field ini otomatis jatuh ke perilaku lama, tanpa migrasi.
+   */
+  displayValueEn?: string
 }
 
 export interface ResolveContext {
@@ -128,13 +202,22 @@ export function resolvePlaceholderValue(key: string, ctx: ResolveContext): Resol
     case 'contract.contractNo':
       return { value: contract.contractNo, displayValue: contract.contractNo }
     case 'contract.startDate':
-      return { value: contract.startDate.toISOString(), displayValue: formatIndonesianDate(contract.startDate) }
+      return {
+        value: contract.startDate.toISOString(),
+        displayValue: formatIndonesianDate(contract.startDate),
+        displayValueEn: formatEnglishDate(contract.startDate),
+      }
     case 'contract.endDate':
-      return { value: contract.endDate.toISOString(), displayValue: formatIndonesianDate(contract.endDate) }
+      return {
+        value: contract.endDate.toISOString(),
+        displayValue: formatIndonesianDate(contract.endDate),
+        displayValueEn: formatEnglishDate(contract.endDate),
+      }
     case 'contract.termRange':
       return {
         value: deriveTermRange(contract.startDate, contract.endDate),
         displayValue: deriveTermRange(contract.startDate, contract.endDate),
+        displayValueEn: deriveTermRangeEn(contract.startDate, contract.endDate),
       }
     case 'contract.duration':
       return {
@@ -146,11 +229,19 @@ export function resolvePlaceholderValue(key: string, ctx: ResolveContext): Resol
       return { value: contract.baseCompensation, displayValue: formatRupiah(contract.baseCompensation) }
     case 'contract.signedDate':
       if (!contract.signedDate) return undefined
-      return { value: contract.signedDate.toISOString(), displayValue: formatIndonesianDate(contract.signedDate) }
+      return {
+        value: contract.signedDate.toISOString(),
+        displayValue: formatIndonesianDate(contract.signedDate),
+        displayValueEn: formatEnglishDate(contract.signedDate),
+      }
     case 'doc.docDate': {
       // Tanggal dokumen = tanggal tanda tangan jika ada, else tanggal mulai
       const docDate = contract.signedDate ?? contract.startDate
-      return { value: docDate.toISOString(), displayValue: formatIndonesianDate(docDate) }
+      return {
+        value: docDate.toISOString(),
+        displayValue: formatIndonesianDate(docDate),
+        displayValueEn: formatEnglishDate(docDate),
+      }
     }
     case 'doc.hariTanggal': {
       const d = contract.signedDate ?? contract.startDate
@@ -164,9 +255,31 @@ export function resolvePlaceholderValue(key: string, ctx: ResolveContext): Resol
   if (key.startsWith('employee.')) {
     if (!employee) return undefined
     const path = key.slice('employee.'.length)
+    // `gender` adalah enum Prisma (`MALE`/`FEMALE`) yang labelnya HARUS berbeda
+    // per kolom: "Laki-laki" di kolom Indonesia, "Male" di kolom Inggris.
+    // `displayValueEn` HANYA diisi bila labelnya benar-benar berbeda, sehingga
+    // field lain tetap satu nilai seperti sebelumnya.
+    // Tanpa cabang eksplisit ini, jalur generik di bawah mencetak enum mentahnya.
+    if (path === 'gender') {
+      const id = genderLabel(employee.gender, 'ID')
+      if (id == null) return undefined
+      const en = genderLabel(employee.gender, 'EN')
+      const out: ResolvedValue = { value: employee.gender, displayValue: id }
+      if (en != null && en !== id) out.displayValueEn = en
+      return out
+    }
     const raw = path.split('.').reduce((acc: any, part) => (acc == null ? undefined : acc[part]), employee)
     if (raw == null) return undefined
-    if (raw instanceof Date) return { value: raw.toISOString(), displayValue: formatIndonesianDate(raw) }
+    if (raw instanceof Date) {
+      // Tanggal karyawan (mis. `employee.birthDate`) ikut kolom EN, jadi
+      // varian Inggrisnya wajib ada — kalau tidak, "2 Juli 1996" tercetak di
+      // tengah naskah Inggris.
+      return {
+        value: raw.toISOString(),
+        displayValue: formatIndonesianDate(raw),
+        displayValueEn: formatEnglishDate(raw),
+      }
+    }
     if (typeof raw === 'object' && raw.name != null) return { value: raw.id ?? raw.name, displayValue: String(raw.name) }
     return { value: raw, displayValue: String(raw) }
   }

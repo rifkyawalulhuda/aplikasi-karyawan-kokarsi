@@ -66,6 +66,56 @@ function signatureBlock(definition: ContractDocumentDefinition) {
   }
 }
 
+/**
+ * Blok identitas PIHAK KEDUA (Karyawan) — tempat baris `Jenis Kelamin` berada.
+ *
+ * Kenapa ada di definisi kode: tanpa blok ini, `{{employee.gender}}` hanya hidup
+ * di draft yang diketik manual lewat editor. Versi baru yang dibuat dari definisi
+ * kode (`createDraft`) tidak akan punya baris itu sama sekali, sehingga field
+ * gender yang sudah didaftarkan di katalog praktis tidak terpakai.
+ *
+ * Master memang punya blok ini di KEDUA kolom (`PKWT DRIVER 2026.pdf` halaman 1,
+ * y=311.9 `II. N a m a : IBAD UBAIDILLAH` di kiri dan kolom kanan sejajar).
+ *
+ * Baris `Gender`/`Jenis Kelamin` memakai placeholder yang SAMA di kedua kolom;
+ * yang berbeda adalah nilainya — resolver menerjemahkan enum `MALE`/`FEMALE`
+ * menjadi "Laki-laki" (ID) dan "Male" (EN). Lihat `genderLabel` di
+ * `template-value-resolver.helpers.ts`.
+ *
+ * Redaksi EN mengikuti master kolom kanan, dengan dua koreksi yang disengaja
+ * supaya kolom Inggris bersih dari redaksi Indonesia:
+ *   1. master masih menulis label `N a m a`; di sini `Name`.
+ *   2. master masih menulis bulan Indonesia (`20 Mei 1980`); di sini tanggalnya
+ *      memakai format Inggris lewat `displayValueEn` resolver (`2 July 1996`).
+ *
+ * CATATAN BENTUK (jangan diubah tanpa mengukur ulang halaman): blok ini menambah
+ * satu blok di SETIAP kolom, sehingga `blockGap` harus diturunkan bersamaan
+ * supaya dokumen tetap 4 halaman seperti master. Lihat `PKWT_GEOMETRY.blockGap`.
+ *
+ * Catatan: master juga memuat blok identitas PIHAK PERTAMA (perusahaan) sebelum
+ * blok ini. Blok itu SENGAJA belum dikodekan di sini, dan bukan karena lupa —
+ * sudah diukur: menambahkannya menuntut `lineGap` turun 1.6 → 1.2 **dan**
+ * `blockGap` 8 → 6 agar tetap 4 halaman, yaitu mengubah kerapatan SELURUH badan
+ * kontrak, bukan hanya jarak antar-blok. Perubahan sebesar itu perlu
+ * perbandingan visual lebih dulu. Bila nanti ditambahkan, tambahkan untuk KEDUA
+ * bahasa sekaligus supaya bentuk ID/EN tetap sejajar.
+ */
+function identityBlocks(english: boolean): any[] {
+  const text = english
+    ? [
+      'II.\tName          :  {{employee.fullName}}',
+      'Birth date          :  {{employee.birthPlace}},  {{employee.birthDate}}',
+      'Gender : {{employee.gender}}',
+    ]
+    : [
+      'II.\tN a m a          :  {{employee.fullName}}',
+      'Tgl. Lahir          :  {{employee.birthPlace}},  {{employee.birthDate}}',
+      'Jenis Kelamin : {{employee.gender}}',
+    ]
+
+  return [{ id: 'identity-employee', type: 'paragraph', text: replaceLegacyTokens(text.join('\n')) }]
+}
+
 function toLanguageBlocks(definition: ContractDocumentDefinition, english = false): any[] {
   const blocks: any[] = [
     { id: 'title', type: 'title', text: replaceLegacyTokens(english ? (definition.subtitle ?? definition.title) : definition.title) },
@@ -116,6 +166,12 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
     type: 'paragraph',
     text: replaceLegacyTokens(english ? (en?.openingLine ?? '') : definition.openingLine),
   })
+  // Identitas PIHAK KEDUA harus ada di KEDUA kolom dengan bentuk yang sama,
+  // supaya engine tetap memasangkan baris ID/EN per blok (lihat
+  // `buildPkwtRowsFromStructuredParagraphs`). Di sinilah `{{employee.gender}}`
+  // berada; menambahkannya hanya di satu kolom akan menggeser seluruh pasangan
+  // baris setelahnya.
+  blocks.push(...identityBlocks(english))
   blocks.push(article(
     'recitals',
     english ? (en?.recitalsHeading ?? '') : 'Para Pihak',
@@ -165,6 +221,7 @@ const FIELD_LABELS: Record<string, string> = {
   'employee.nik': 'NIK Karyawan',
   'employee.birthPlace': 'Tempat Lahir',
   'employee.birthDate': 'Tanggal Lahir',
+  'employee.gender': 'Jenis Kelamin',
   'employee.address': 'Alamat Karyawan',
   'employee.phoneNumber': 'Nomor Telepon Karyawan',
   'employee.email': 'E-mail Karyawan',
@@ -196,6 +253,7 @@ const FIELD_DATA_TYPES: Record<string, SeedFieldDefinition['dataType']> = {
   'employee.phoneNumber': 'TEXT',
   'employee.email': 'TEXT',
   'employee.address': 'TEXT',
+  'employee.gender': 'TEXT',
   'employee.birthPlace': 'TEXT',
   'employee.nik': 'TEXT',
   'employee.fullName': 'TEXT',

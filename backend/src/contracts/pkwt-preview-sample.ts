@@ -8,7 +8,9 @@
  * hanya karena data contoh kurang.
  *
  * PKWT bersifat BILINGUAL: `contentDefinition.languages.id` dan `.en` dirender
- * berdampingan, dan keduanya memakai kumpulan nilai yang sama ini.
+ * berdampingan. Sebagian besar nilai sama untuk kedua kolom; yang teksnya
+ * memang berbeda antar bahasa punya variannya sendiri di
+ * `PKWT_PREVIEW_VALUES_EN` di bawah.
  */
 export const PKWT_PREVIEW_VALUES: Record<string, string> = {
   // Kontrak
@@ -25,6 +27,7 @@ export const PKWT_PREVIEW_VALUES: Record<string, string> = {
   'employee.nik': '3214031603910002',
   'employee.birthPlace': 'Bekasi',
   'employee.birthDate': '2 Juli 1996',
+  'employee.gender': 'Laki-laki',
   'employee.address': 'KP Kertajaya Rt/Rw 12/06 Desa Sukajadi Kec. Pondok Salam Purwakarta',
   'employee.phoneNumber': '081234567891',
   'employee.email': 'ibad@example.com',
@@ -33,4 +36,30 @@ export const PKWT_PREVIEW_VALUES: Record<string, string> = {
   'doc.hariTanggal': 'Kamis, 2 Juli 2026',
   'doc.docDate': '2 Juli 2026',
   'settings.cooperativeChairmanName': 'Hari Suhono',
+}
+
+/**
+ * Varian INGGRIS dari nilai contoh — HANYA untuk placeholder yang teksnya
+ * berbeda antar kolom.
+ *
+ * Sengaja di-`spread` dari versi Indonesia alih-alih ditulis ulang penuh, supaya
+ * kedua peta tidak mungkin lepas sinkron saat placeholder baru ditambahkan; yang
+ * di-override hanya key yang memang bilingual. Dipakai kolom kanan pratinjau;
+ * lihat `valuesEn` di `PkwtDocumentRenderOptions`.
+ *
+ * Isi override ini harus MENCERMINKAN `displayValueEn` resolver — kalau pratinjau
+ * dan dokumen asli berbeda, editor akan menyetujui sesuatu yang tidak pernah
+ * tercetak:
+ *   - `employee.gender`   → `genderLabel(raw, 'EN')`
+ *   - tanggal & rentang   → `formatEnglishDate` / `deriveTermRangeEn`
+ */
+export const PKWT_PREVIEW_VALUES_EN: Record<string, string> = {
+  ...PKWT_PREVIEW_VALUES,
+  'employee.gender': 'Male',
+  'employee.birthDate': '2 July 1996',
+  'contract.startDate': '2 July 2026',
+  'contract.endDate': '1 July 2027',
+  'contract.signedDate': '2 July 2026',
+  'contract.termRange': '2 July 2026 - 1 July 2027',
+  'doc.docDate': '2 July 2026',
 }
