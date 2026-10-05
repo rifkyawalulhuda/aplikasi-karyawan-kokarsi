@@ -8,12 +8,24 @@
  *  - Nilai placeholder diambil dari resolvedTemplateData kontrak; tidak ada
  *    query DB dan tidak ada master template yang dibaca saat render.
  *  - Layout tetap milik renderer (margin, kolom, font) — admin hanya mengatur konten.
+ *  - Pemformatan inline (`**bold**`, `*italic*`, `__underline__`) dan perataan blok
+ *    (`align`) diterapkan HANYA pada `paragraph`/`article`. Teks TANPA mark tetap
+ *    lewat jalur `doc.text` lama, sehingga template yang sudah ada menghasilkan PDF
+ *    yang sama persis (pola dua-sumbu yang sama dengan engine PKWT/MITRA).
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
 // Tipe saja (`import type`): helper resolver adalah modul daun tanpa dependency
 // NestJS/Prisma, jadi memakai tipe bahasanya di sini tidak menimbulkan siklus
 // modul walau `contract-templates` sendiri bergantung pada `contracts`.
 import type { DocumentLanguage } from '../contract-templates/template-value-resolver.helpers'
+import { hasInlineMarks, parseInlineRuns } from './inline-marks'
+import {
+  drawRunsLine,
+  measureRunsLine,
+  wrapRunsToLines,
+  type InlineRunAlign,
+  type RunFonts
+} from './inline-run-layout'
 
 export interface RenderedBlockContext {
   /** Map placeholder key → displayValue */
@@ -29,10 +41,30 @@ export interface BlockRendererOptions {
   fontRegular: string
   fontBold: string
   fontItalic: string
+  /** Opsional: dipakai run `bold+italic`. Bila kosong, jatuh ke `fontBold`. */
+  fontBoldItalic?: string
   pageBottomPadding?: number
 }
 
+/**
+ * Opsi satu panggilan tulis-teks. Diekstrak agar `writeText` (jalur lama) dan
+ * `writeRuns` (jalur bermark) memakai bentuk opsi yang sama.
+ */
+interface BlockTextOptions {
+  font?: string
+  size?: number
+  /** Perataan blok. `right` baru ditambahkan; `undefined` → `justify` (perilaku lama). */
+  align?: InlineRunAlign
+  gapBefore?: number
+  gapAfter?: number
+  indent?: number
+  width?: number
+}
+
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)\s*\}\}/g
+
+/** Jarak antar-baris jalur lama; jalur bermark memakai angka yang SAMA agar tinggi baris identik. */
+const LINE_GAP = 0.6
 
 /** Ganti semua {{key}} dengan nilai dari context. Placeholder tanpa nilai dibiarkan terlihat (fail-visible). */
 export function interpolate(text: string, values: Record<string, string>): string {
@@ -92,6 +124,19 @@ interface RenderState {
 }
 
 /**
+ * `block.align` yang sah untuk jalur ini.
+ *
+ * Hanya `paragraph`/`article` yang membawa `align` (lihat `ALIGN_CAPABLE_BLOCKS`
+ * di validator). Nilai tak dikenal — termasuk `undefined` — diabaikan supaya
+ * perilaku lama tidak berubah (jaring pengaman, sama seperti `pkwtBlockAlign`).
+ */
+function blockAlign(value: unknown): InlineRunAlign | undefined {
+  return value === 'left' || value === 'center' || value === 'right' || value === 'justify'
+    ? value
+    : undefined
+}
+
+/**
  * Render daftar blok ke dokumen PDFKit. Mendukung alur dua kolom
  * (kolom kiri penuh → kolom kanan → halaman baru) seperti dokumen legal asli.
  */
@@ -126,15 +171,7 @@ export function renderBlocks(
     }
   }
 
-  const writeText = (text: string, opts2: {
-    font?: string
-    size?: number
-    align?: 'left' | 'justify' | 'center'
-    gapBefore?: number
-    gapAfter?: number
-    indent?: number
-    width?: number
-  } = {}) => {
+  const writeText = (text: string, opts2: BlockTextOptions = {}) => {
     const size = opts2.size ?? 9.5
     const font = opts2.font ?? opts.fontRegular
     doc.font(font).fontSize(size)
@@ -148,9 +185,85 @@ export function renderBlocks(
     doc.text(text, x, state.y, {
       width: textWidth,
       align: opts2.align ?? 'justify',
-      lineGap: 0.6,
+      lineGap: LINE_GAP,
     })
     state.y = doc.y + (opts2.gapAfter ?? 4)
+  }
+
+  /**
+   * Tulis satu blok teks BER-MARK (bold/italic/underline), meniru `writeText`
+   * baris demi baris.
+   *
+   * KAPAN DIPAKAI: hanya bila teksnya benar-benar bermark. Bila tidak, fungsi ini
+   * mendelegasikan ke `writeText`, sehingga template yang sudah ada memakai jalur
+   * kode yang SAMA PERSIS seperti sebelum fitur ini ditambahkan.
+   *
+   * Urutan penting: interpolasi dulu, baru mark di-parse — supaya
+   * `**{{employee.fullName}}**` membuat NILAI-nya bold, bukan nama placeholder.
+   * Karena itu `text` yang diterima fungsi ini sudah terinterpolasi.
+   *
+   * CATATAN jalur ini: baris digambar satu per satu, jadi keputusan pindah
+   * kolom/halaman dibuat di sini.
+   *
+   * Aturan keputusan itu **disamakan dengan jalur lama** (`writeText`), bukan
+   * diciptakan baru:
+   *  - Paragraf yang MASIH MUAT dalam satu kolom dipindahkan **UTUH** — persis
+   *    seperti `ensureSpace(height)` di `writeText`. Ini penting: kalau paragraf
+   *    bermark mengisi sisa kolom sementara paragraf polos dipindahkan, dokumen
+   *    yang sama bisa berbeda jumlah halaman hanya karena ada/tidaknya mark.
+   *  - Paragraf yang LEBIH TINGGI dari satu kolom **dicicil per baris** mengikuti
+   *    alur dua kolom. Jalur lama menyerahkan kasus ini ke PDFKit (`doc.text`
+   *    menambah halaman sendiri di luar alur kolom); perilaku itu tidak ditiru,
+   *    dan hanya kasus inilah yang boleh berbeda.
+   */
+  const writeRuns = (text: string, opts2: BlockTextOptions = {}) => {
+    if (!hasInlineMarks(text)) {
+      writeText(text, opts2)
+      return
+    }
+
+    const size = opts2.size ?? 9.5
+    const font = opts2.font ?? opts.fontRegular
+    const width = opts2.width ?? opts.columnWidth
+    const indent = opts2.indent ?? 0
+    const textWidth = width - indent
+    const align: InlineRunAlign = opts2.align ?? 'justify'
+    const fonts: RunFonts = {
+      regular: opts.fontRegular,
+      bold: opts.fontBold,
+      italic: opts.fontItalic,
+      boldItalic: opts.fontBoldItalic,
+    }
+
+    // Tinggi baris SAMA dengan jalur lama: bersumber dari font ACUAN, bukan dari
+    // mark. Inilah yang membuat baris bermark setinggi baris tanpa mark sehingga
+    // paginasi tidak bergeser.
+    const lineHeight = measureRunsLine(doc, font, size, LINE_GAP)
+    // Bungkus LEBIH DULU supaya keputusan pindah kolom/halaman memakai jumlah baris nyata.
+    const lines = wrapRunsToLines(doc, parseInlineRuns(text), textWidth, fonts, size)
+
+    // Paragraf yang muat dalam satu kolom dipindahkan UTUH (lihat catatan di atas):
+    // hanya paragraf yang lebih tinggi dari satu kolom yang dicicil per baris.
+    const paragraphHeight = lines.length * lineHeight
+    const fitsInOneColumn = paragraphHeight <= pageBottom() - opts.topY
+
+    if (opts2.gapBefore) {
+      ensureSpace(opts2.gapBefore)
+      state.y += opts2.gapBefore
+    }
+    if (fitsInOneColumn) ensureSpace(paragraphHeight)
+
+    lines.forEach((line, index) => {
+      if (!fitsInOneColumn) ensureSpace(lineHeight)
+      const isLast = index === lines.length - 1
+      // Baris terakhir paragraf tidak direntangkan — sama seperti Word/LaTeX dan
+      // sama dengan perilaku `doc.text` bawaan PDFKit.
+      const lineAlign: InlineRunAlign = align === 'justify' && isLast ? 'left' : align
+      drawRunsLine(doc, line, currentX + indent, state.y, textWidth, fonts, size, lineAlign)
+      state.y += lineHeight
+    })
+
+    state.y += opts2.gapAfter ?? 4
   }
 
   for (const block of blocks ?? []) {
@@ -173,22 +286,33 @@ export function renderBlocks(
         })
         break
 
-      case 'paragraph':
-        writeText(interpolate(block.text ?? '', values), { gapAfter: 5 })
+      case 'paragraph': {
+        const align = blockAlign(block?.align)
+        writeRuns(
+          interpolate(block.text ?? '', values),
+          align ? { gapAfter: 5, align } : { gapAfter: 5 },
+        )
         break
+      }
 
       case 'article': {
+        const align = blockAlign(block?.align)
+        // `headingAlign`: perataan khusus judul pasal, terpisah dari `align`
+        // blok (yang tetap hanya berlaku untuk uraian). Tanpa keduanya, judul
+        // tetap `left` seperti sebelumnya (perilaku lama jalur legacy).
+        const headingAlign = blockAlign(block?.headingAlign)
         if (block.heading) {
           writeText(interpolate(block.heading, values), {
             font: opts.fontBold,
             size: 10,
-            align: 'left',
+            align: headingAlign ?? align ?? 'left',
             gapBefore: 6,
             gapAfter: 3,
           })
         }
         for (const p of block.paragraphs ?? []) {
-          writeText(interpolate(String(p), values), { gapAfter: 3 })
+          const text = interpolate(String(p), values)
+          writeRuns(text, align ? { gapAfter: 3, align } : { gapAfter: 3 })
         }
         break
       }

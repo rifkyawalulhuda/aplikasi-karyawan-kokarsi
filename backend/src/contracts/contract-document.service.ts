@@ -9,7 +9,7 @@ import { definitionToContentDefinition } from '../contract-templates/default-tem
 import { SettingsService } from '../settings/settings.service'
 import { buildValueMap, interpolate } from './contract-block-renderer'
 import { MITRA_HEADER_CHROME } from './mitra-layout.engine'
-import { renderMitraDocumentInto } from './mitra-document.renderer'
+import { renderMitraDocumentInto, resolveMitraFonts } from './mitra-document.renderer'
 import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
 import { resolvePkwtFonts, renderPkwtDocumentInto } from './pkwt-document.renderer'
 
@@ -429,11 +429,11 @@ export class ContractDocumentService {
       numberLabel,
       dateLabel,
       logoPath: existsSync(this.mitraLogoPath) ? this.mitraLogoPath : undefined,
-      fonts: {
-        regular: path.join(this.fontDir, 'times.ttf'),
-        bold: path.join(this.fontDir, 'timesbd.ttf'),
-        italic: path.join(this.fontDir, 'timesi.ttf'),
-      },
+      // resolveMitraFonts() = SATU sumber font yang sama dengan pratinjau editor
+      // (termasuk `boldItalic` + fallback bila `timesbi.ttf` tidak ada).
+      // Tanpa ini, run tebal+miring di jalur generate jatuh ke BOLD tanpa
+      // kemiringan, sementara pratinjau menampilkannya benar (bug nyata).
+      fonts: resolveMitraFonts(),
       // Nama karyawan/jabatan diambil dari record karyawan bila placeholder
       // resolved-nya kosong (kontrak lama dengan snapshot parsial).
       signature: {
@@ -520,11 +520,9 @@ export class ContractDocumentService {
       numberLabel: meta?.contractNo ? `${MITRA_HEADER_CHROME.numberPrefix} ${meta.contractNo}` : undefined,
       dateLabel: meta?.signedDate ? `${MITRA_HEADER_CHROME.datePrefix} ${meta.signedDate}` : undefined,
       logoPath: existsSync(this.mitraLogoPath) ? this.mitraLogoPath : undefined,
-      fonts: {
-        regular: path.join(this.fontDir, 'times.ttf'),
-        bold: path.join(this.fontDir, 'timesbd.ttf'),
-        italic: path.join(this.fontDir, 'timesi.ttf'),
-      },
+      // Satu sumber font dengan pratinjau — lihat catatan di
+      // `renderMitraLayoutFromBlocks`.
+      fonts: resolveMitraFonts(),
     })
   }
 

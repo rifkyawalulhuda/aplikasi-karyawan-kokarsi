@@ -275,7 +275,7 @@ export class ContractTemplateVersionsService {
   }
 
   /** Validasi draft tanpa mengubah status atau data database. */
-  async preview(versionId: number) {
+  async preview(versionId: number, contentDefinitionOverride?: unknown) {
     const version = await this.findOne(versionId)
     const catalog = await this.prisma.client.templateFieldDefinition.findMany({ where: { isActive: true }, select: { key: true } })
     const validKeys = new Set(catalog.map(field => field.key))
@@ -289,7 +289,7 @@ export class ContractTemplateVersionsService {
     this.validateFieldDefinitions(fieldDefinitions, validKeys)
     // Sama seperti publish(): perbaiki placeholder tanpa prefix `custom.` agar
     // pratinjau tidak melaporkan "sintaks rusak" untuk data lama.
-    const previewContent = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
+    const previewContent = JSON.parse(JSON.stringify(contentDefinitionOverride ?? version.contentDefinition ?? {}))
     normalizeCustomPlaceholders(previewContent, await this.fieldsService.findContractInputCatalogKeys())
     normalizeArticleHeadings(previewContent)
     this.addPlaceholderKeysFromDefinitions(previewContent, fieldDefinitions, validKeys)

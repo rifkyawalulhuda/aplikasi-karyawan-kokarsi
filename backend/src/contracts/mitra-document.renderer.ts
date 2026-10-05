@@ -34,10 +34,22 @@ export function resolveMitraFontDir(): string {
 /** Nama file font MITRA (relatif terhadap `resolveMitraFontDir()`). */
 export function resolveMitraFonts() {
   const dir = resolveMitraFontDir()
+
+  const fs = require('node:fs') as typeof import('node:fs')
+  const exists = (p: string) => {
+    try { return fs.existsSync(p) } catch { return false }
+  }
+
+  // `timesbi.ttf` (bold-italic) tidak selalu ada di semua paket msttcorefonts.
+  // Bila tidak ada, jatuh ke BOLD supaya teks yang diminta tebal tetap terlihat
+  // tebal — dokumen tetap terbentuk, hanya tanpa kemiringan.
+  const boldItalic = `${dir}/timesbi.ttf`
+
   return {
     regular: `${dir}/times.ttf`,
     bold: `${dir}/timesbd.ttf`,
     italic: `${dir}/timesi.ttf`,
+    boldItalic: exists(boldItalic) ? boldItalic : `${dir}/timesbd.ttf`,
   }
 }
 
@@ -60,7 +72,7 @@ export interface MitraDocumentRenderOptions {
   /** Label tanggal (mis. "Tanggal 31 Agustus 2026"). */
   dateLabel?: string
   logoPath?: string
-  fonts: { regular: string; bold: string; italic: string }
+  fonts: { regular: string; bold: string; italic: string; boldItalic?: string }
   /**
    * Override nama/jabatan pada blok tanda tangan. Dipakai jalur generate agar
    * tetap dapat jatuh ke data karyawan bila placeholder-nya kosong; pratinjau

@@ -2,13 +2,25 @@ import PDFDocument from 'pdfkit'
 import * as path from 'path'
 import {
   MITRA_GEOMETRY,
+  MITRA_FONT_NAMES,
+  MITRA_RUN_FONTS,
   mitraInterpolate,
+  mitraBlockAlign,
   scrubRawTokens,
   listPrefix,
   formatMitraCell,
   renderMitraLayout,
   renderMitraSignature,
 } from './mitra-layout.engine'
+import { createMitraPdfBuffer, resolveMitraFonts } from './mitra-document.renderer'
+import { parseInlineRuns, runsToText } from './inline-marks'
+import { wrapRunsToLines } from './inline-run-layout'
+import { MITRA_PREVIEW_VALUES } from './mitra-preview-sample'
+import {
+  CONTRACT_DOCUMENT_DEFINITIONS,
+  getContractDocumentDefinition,
+} from './contract-document-definitions'
+import { definitionToContentDefinition, type SeedContentDefinition } from '../contract-templates/default-template-definition'
 
 const FONT_DIR = process.platform === 'win32' ? 'C:/Windows/Fonts' : '/usr/share/fonts/truetype/msttcorefonts'
 
@@ -160,6 +172,7 @@ function fonts() {
     regular: path.join(FONT_DIR, 'times.ttf'),
     bold: path.join(FONT_DIR, 'timesbd.ttf'),
     italic: path.join(FONT_DIR, 'timesi.ttf'),
+    boldItalic: path.join(FONT_DIR, 'timesbi.ttf'),
   }
 }
 
@@ -598,6 +611,330 @@ describe('MITRA layout — blok title/subtitle dari editor', () => {
     expect(drawn.filter((t) => t === 'JUDUL_KOP_MARKER')).toHaveLength(1)
     expect(drawn).toContain('JUDUL_TAMBAHAN_MARKER')
     expect(drawn).toContain('SUBJUDUL_TAMBAHAN_MARKER')
+  })
+})
+
+describe('MITRA — mitraBlockAlign & font logical run', () => {
+  it('meneruskan keempat nilai sah apa adanya', () => {
+    for (const align of ['left', 'center', 'right', 'justify']) {
+      expect(mitraBlockAlign(align)).toBe(align)
+    }
+  })
+
+  it('nilai tak dikenal / kosong → undefined (perilaku lama)', () => {
+    // Jaring pengaman: data lama atau rusak tidak boleh mengubah perataan.
+    expect(mitraBlockAlign(undefined)).toBeUndefined()
+    expect(mitraBlockAlign(null)).toBeUndefined()
+    expect(mitraBlockAlign('')).toBeUndefined()
+    expect(mitraBlockAlign('middle')).toBeUndefined()
+    expect(mitraBlockAlign(1)).toBeUndefined()
+  })
+
+  it('MITRA_FONT_NAMES punya boldItalic dan MITRA_RUN_FONTS memetakannya', () => {
+    expect(MITRA_FONT_NAMES.boldItalic).toBe('MitraTimesBoldItalic')
+    expect(MITRA_RUN_FONTS).toEqual({
+      regular: 'MitraTimes',
+      bold: 'MitraTimesBold',
+      italic: 'MitraTimesItalic',
+      boldItalic: 'MitraTimesBoldItalic',
+    })
+  })
+})
+
+/**
+ * Gerbang Fase 2c: mark & perataan TIDAK BOLEH mengubah paginasi.
+ *
+ * Diukur pada definisi PRODUKSI (4 varian MITRA) dan dibandingkan RELATIF
+ * (dengan mark vs tanpa mark pada definisi yang sama), sehingga tes tidak
+ * bergantung pada jumlah halaman dasar yang bisa berubah bila template disunting.
+ *
+ * Jumlah halaman dihitung dari penanda `/Type /Page` di buffer — pola yang sudah
+ * dipakai spec MITRA lainnya. Karena perbandingannya RELATIF, kelemahan
+ * penghitungan semacam itu tidak memengaruhi kesimpulan.
+ */
+describe('MITRA — mark & perataan tidak menggeser paginasi (definisi produksi)', () => {
+  jest.setTimeout(120_000)
+
+  const countPages = (buffer: Buffer) =>
+    (buffer.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length
+
+  /** Tandai kata PERTAMA tiap paragraf bold (perubahan lebar minimal) + beri align. */
+  const decorate = (blocks: any[], align: string) =>
+    (blocks ?? []).map((block: any) => {
+      if (block.type === 'paragraph') {
+        const text = String(block.text ?? '')
+        return { ...block, text: text.replace(/^(\S+)/, '**$1**'), align }
+      }
+      if (block.type === 'article') {
+        return { ...block, align }
+      }
+      return block
+    })
+
+  it('mark + keempat nilai perataan tidak menambah/mengurangi halaman', async () => {
+    const keys = Object.keys(CONTRACT_DOCUMENT_DEFINITIONS).filter(k => k.startsWith('MITRA_'))
+    expect(keys.length).toBeGreaterThanOrEqual(4)
+
+    for (const key of keys) {
+      const content: SeedContentDefinition = definitionToContentDefinition(getContractDocumentDefinition(key))
+      const base = {
+        values: { ...MITRA_PREVIEW_VALUES },
+        fonts: resolveMitraFonts(),
+        title: 'PERJANJIAN KEMITRAAN',
+        numberLabel: 'Nomor: 1/X/2026',
+        dateLabel: 'Tanggal 1 Januari 2026',
+      }
+      const plainPages = countPages(await createMitraPdfBuffer({
+        ...base,
+        blocks: (content?.languages?.id ?? []) as any,
+      }))
+
+      for (const align of ['left', 'center', 'right', 'justify']) {
+        const marked = await createMitraPdfBuffer({
+          ...base,
+          blocks: decorate(content?.languages?.id, align) as any,
+        })
+        expect({ key, align, pages: countPages(marked) }).toEqual({ key, align, pages: plainPages })
+      }
+    }
+  })
+})
+
+describe('MITRA — mark di PDF NYATA', () => {
+  /**
+   * Sadap pemanggilan `doc.font()` DAN `doc.text()`.
+   *
+   * Memeriksa nama font di byte PDF TIDAK dapat diandalkan: PDFKit menuliskan
+   * nama INTERNAL font dari TTF (`TimesNewRomanPS-BoldMT`), bukan nama logis yang
+   * kita daftarkan (`MitraTimesBold`). Menyadap `doc.font()` menguji hal yang
+   * benar-benar kita kendalikan: font logis mana yang DIMINTA renderer.
+   */
+  async function draw(
+    blocks: any[],
+    values: Record<string, string> = {},
+  ): Promise<{ buf: Buffer; drawn: string[]; fontsUsed: string[]; texts: Array<{ text: string; x: number; y: number; align?: string }> }> {
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>((res) => doc.on('end', () => res()))
+    const drawn: string[] = []
+    const fontsUsed: string[] = []
+    const texts: Array<{ text: string; x: number; y: number; align?: string }> = []
+
+    const realFont = doc.font.bind(doc)
+    ;(doc as any).font = (name: any, ...rest: any[]) => {
+      if (typeof name === 'string') fontsUsed.push(name)
+      return realFont(name, ...rest)
+    }
+
+    const realText = doc.text.bind(doc)
+    ;(doc as any).text = (text: any, x?: any, ...rest: any[]) => {
+      if (typeof text === 'string') {
+        drawn.push(text)
+        // `rest[1]` = options PDFKit — opsi `align` dipakai regresi perataan
+        // (renderer selalu menggambar dari colX, jadi x tidak membedakan align).
+        if (typeof x === 'number') {
+          texts.push({
+            text,
+            x,
+            y: typeof rest[0] === 'number' ? rest[0] : -1,
+            align: (rest[1] as any)?.align,
+          })
+        }
+      }
+      return realText(text, x, ...rest)
+    }
+
+    renderMitraLayout(doc, blocks, {
+      values,
+      title: 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fonts(),
+    })
+    doc.end()
+    await done
+    const buf = Buffer.concat(buffers)
+    expect(buf.subarray(0, 5).toString()).toBe('%PDF-')
+    return { buf, drawn, fontsUsed, texts }
+  }
+
+  const withSig = (text: string) => [
+    { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+    { type: 'paragraph', text },
+    { type: 'signature' },
+  ]
+
+  it('meminta font BOLD logis saat teks bermark', async () => {
+    const { fontsUsed } = await draw(withSig('Kata **tebal** di sini.'))
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.bold)
+  })
+
+  it('meminta font BOLDITALIC logis untuk mark bold+italic', async () => {
+    const { fontsUsed } = await draw(withSig('Kata ***tebal miring*** di sini.'))
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.boldItalic)
+  })
+
+  it('meminta font ITALIC logis untuk mark italic', async () => {
+    const { fontsUsed } = await draw(withSig('Kata *miring* di sini.'))
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.italic)
+  })
+
+  /**
+   * Regresi `headingAlign`: perataan khusus JUDUL pasal yang terpisah dari
+   * `align` blok. Pola ukur: bandingkan OPSI `align` hasil sapuan `doc.text()`
+   * antara definisi dengan `headingAlign: 'left'` vs tanpa `headingAlign`
+   * (perilaku lama: judul ikut `align` blok). Uraian HARUS sama di kedua versi.
+   */
+  it('headingAlign mengatur judul pasal sendiri; uraian tetap ikut align blok', async () => {
+    const article = (headingAlign?: string) => [
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      {
+        type: 'article',
+        heading: 'PASAL 1',
+        headingAlign,
+        align: 'center',
+        paragraphs: ['Isi pasal yang cukup panjang agar perataannya terlihat.'],
+      },
+      { type: 'signature' },
+    ]
+    const baseline = await draw(article(undefined) as any)
+    const left = await draw(article('left') as any)
+    const findText = (result: Awaited<ReturnType<typeof draw>>, needle: string) =>
+      result.texts.find((t: { text: string }) => t.text.includes(needle))
+
+    // `writeText` selalu menggambar dari colX dengan align sebagai OPSI PDFKit,
+    // jadi yang diuji adalah align yang DIMINTA renderer — bukan koordinat x.
+    const headingBase = findText(baseline, 'PASAL 1')
+    const headingLeft = findText(left, 'PASAL 1')
+    expect(headingBase).toBeDefined()
+    expect(headingLeft).toBeDefined()
+    // Baseline (tanpa headingAlign): judul ikut align blok 'center'.
+    expect(headingBase!.align).toBe('center')
+    // Dengan headingAlign 'left': judul minta 'left'.
+    expect(headingLeft!.align).toBe('left')
+
+    // Uraian TIDAK terpengaruh headingAlign: align sama di kedua versi.
+    const bodyBase = findText(baseline, 'Isi pasal')
+    const bodyLeft = findText(left, 'Isi pasal')
+    expect(bodyBase).toBeDefined()
+    expect(bodyLeft).toBeDefined()
+    expect(bodyLeft!.align).toBe(bodyBase!.align)
+  })
+
+  it('TIDAK meminta font mark saat teksnya polos (jalur lama)', async () => {
+    const { fontsUsed } = await draw(withSig('Kata biasa saja.'))
+    expect(fontsUsed).not.toContain(MITRA_FONT_NAMES.italic)
+    expect(fontsUsed).not.toContain(MITRA_FONT_NAMES.boldItalic)
+  })
+
+  it('mark TIDAK pernah membuang teks dan tidak mencetak penandanya', async () => {
+    const { drawn } = await draw(withSig('**satu** dua *tiga* empat'))
+    // `drawRunsLine` menggambar per potongan, jadi teksnya terpecah.
+    const joined = drawn.join('')
+    for (const word of ['satu', 'dua', 'tiga', 'empat']) expect(joined).toContain(word)
+    expect(joined).not.toContain('**')
+    expect(joined).not.toContain('__')
+  })
+
+  it('placeholder diinterpolasi SEBELUM mark di-parse (nilainya yang bold)', async () => {
+    const { drawn, fontsUsed } = await draw(
+      withSig('Halo **{{employee.fullName}}**!'),
+      { 'employee.fullName': 'Budi' },
+    )
+    expect(drawn.join('')).toContain('Budi')
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.bold)
+  })
+
+  it('paragraf bernomor BER-MARK tetap memakai hanging indent', async () => {
+    // Regresi yang dicegah: kalau `writeRuns` tidak mendukung hanging indent,
+    // paragraf bernomor kehilangan indentasi gantungnya saat diberi mark.
+    //
+    // Diukur lewat POSISI X AWAL TIAP BARIS (y unik), bukan jumlah potongan:
+    // teks bermark dipecah menjadi banyak potongan, sehingga menghitung potongan
+    // tidak sama dengan menghitung baris.
+    //
+    // PENTING: awal baris ≠ posisi kata pertama. Pada baris 1 teks diawali
+    // penanda `"1. "`, jadi kata `kata` pertama berada ~12.95pt lebih kanan dari
+    // awal baris. Karena itu x minimum diambil dari SELURUH potongan pada y itu
+    // (termasuk `"1."`), bukan hanya potongan yang memuat `kata`.
+    //
+    // CATATAN: jumlah baris bermark BOLEH berbeda dari baris polos — teks bold
+    // memang lebih lebar dari regular. Yang harus IDENTIK adalah GEOMETRI
+    // indentasinya, dan itulah yang diuji di sini.
+    const lineStarts = (texts: Array<{ text: string; x: number; y: number }>) => {
+      const bodyYs = new Set(
+        texts.filter(t => t.text.includes('kata') && t.y >= 0).map(t => t.y),
+      )
+      const byY = new Map<number, number>()
+      for (const t of texts) {
+        if (!bodyYs.has(t.y)) continue
+        const cur = byY.get(t.y)
+        if (cur === undefined || t.x < cur) byY.set(t.y, t.x)
+      }
+      return [...byY.entries()].sort((a, b) => a[0] - b[0]).map(([, x]) => x)
+    }
+
+    const marked = await draw(withSig('1. ' + '**kata** '.repeat(40)))
+    const plain = await draw(withSig('1. ' + 'kata '.repeat(40)))
+    const markedX = lineStarts(marked.texts)
+    const plainX = lineStarts(plain.texts)
+
+    // Keduanya benar-benar membungkus ke banyak baris.
+    expect(markedX.length).toBeGreaterThan(1)
+    expect(plainX.length).toBeGreaterThan(1)
+
+    for (const xs of [plainX, markedX]) {
+      // Baris lanjutan menjorok LEBIH DALAM dari baris pertama ...
+      expect(xs[1]).toBeGreaterThan(xs[0])
+      // ... dengan besar indentasi PERSIS `listHangingIndent`.
+      expect(xs[1] - xs[0]).toBeCloseTo(MITRA_GEOMETRY.listHangingIndent, 6)
+      // ... dan SEMUA baris lanjutan rata pada kolom yang sama.
+      for (const x of xs.slice(1)) expect(x).toBeCloseTo(xs[1], 6)
+    }
+
+    // Awal baris pertama IDENTIK antara jalur polos dan jalur run.
+    expect(markedX[0]).toBeCloseTo(plainX[0], 6)
+    // Kolom baris lanjutan juga IDENTIK (bukan sekadar "lebih menjorok").
+    expect(markedX[1]).toBeCloseTo(plainX[1], 6)
+  })
+
+  it('pembungkus run identik dengan algoritma baris-lama untuk teks POLOS', async () => {
+    // Uji inti korektnes `wrapRunsToLines`: untuk teks tanpa mark, hasil
+    // pembungkusan HARUS persis sama dengan rumus word-wrap lama di
+    // `writeText` (jumlah lebar kata + spasi antar-kata). Bila berbeda,
+    // paragraf polos yang kebetulan bermark akan berubah paginasinya.
+    const { doc } = makeDoc()
+    const f = fonts()
+    doc.registerFont(MITRA_RUN_FONTS.regular, f.regular)
+
+    const width = 250
+    const size = 11
+    const text = ('lorem ipsum dolor sit amet consectetur adipiscing elit sed do ' +
+      'eiusmod tempor incididunt ut labore et dolore magna aliqua ').repeat(3).trim()
+
+    doc.font(MITRA_RUN_FONTS.regular).fontSize(size)
+    const spaceW = doc.widthOfString(' ')
+    const legacy: string[] = []
+    {
+      const words = text.split(/\s+/).filter(Boolean)
+      let cur: string[] = []
+      for (const w of words) {
+        const test = [...cur, w]
+        const wTest =
+          test.reduce((a, x) => a + doc.widthOfString(x), 0) + Math.max(0, test.length - 1) * spaceW
+        if (wTest <= width || cur.length === 0) cur = test
+        else {
+          legacy.push(cur.join(' '))
+          cur = [w]
+        }
+      }
+      if (cur.length) legacy.push(cur.join(' '))
+    }
+
+    const runs = parseInlineRuns(text)
+    expect(runsToText(runs)).toBe(text)
+    const lines = wrapRunsToLines(doc, runs, width, MITRA_RUN_FONTS, size)
+    expect(lines.length).toBe(legacy.length)
+    expect(lines.map(l => runsToText(l).replace(/\s+/g, ' ').trim())).toEqual(legacy)
   })
 })
 

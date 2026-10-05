@@ -18,6 +18,7 @@
     "contract-templates:repair-contamination": "ts-node scripts/repair-contamination.ts",
     "contract-templates:verify-contamination": "ts-node scripts/verify-contamination-fix.ts",
     "contract-templates:backfill-snapshots": "ts-node scripts/backfill-legacy-snapshots.ts",
+    "contract-templates:scan-inline-collisions": "ts-node scripts/scan-inline-mark-collisions.ts",
     "prisma:studio": "npx prisma studio",
     "test": "jest",
     "test:watch": "jest --watch",

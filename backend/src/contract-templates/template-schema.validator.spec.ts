@@ -52,6 +52,133 @@ describe('validateContentDefinition', () => {
   it('menerima konten valid minimal', () => {
     const result = validateContentDefinition(baseContent(), VALID_FIELD_KEYS, 'MITRA')
     expect(result.blockCount).toBe(2)
+    expect(result.markedBlockCount).toBe(0)
+    expect(result.alignedBlockCount).toBe(0)
+    expect(result.inlineMarkWarnings).toEqual([])
+  })
+
+  it('menerima mark di paragraph dan article paragraphs serta menghitung blok unik', () => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: '**Tebal** dan *miring*' },
+      { id: 'article', type: 'article', heading: 'PASAL 1', paragraphs: ['__garis__', '**tebal**'] },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.markedBlockCount).toBe(2)
+    expect(result.inlineMarkWarnings).toEqual([])
+  })
+
+  it.each([
+    ['article heading', { id: 'article', type: 'article', heading: '**PASAL 1**', paragraphs: ['Teks'] }, /\.heading$/],
+    ['title text', { id: 'title', type: 'title', text: '**JUDUL**' }, /\.text$/],
+    ['list item', { id: 'list', type: 'list', style: 'bullet', items: ['**item**'] }, /items\[0\]/],
+    ['table cell', {
+      id: 'table', type: 'table', columns: [{ key: 'value', label: 'Nilai' }], rows: [{ value: '**sel**' }],
+    }, /rows\[0\]\.value/],
+    ['signature text', { id: 'sig', type: 'signature', text: '**Nama**' }, /\.text$/],
+    ['page break text', { id: 'break', type: 'pageBreak', text: '**halaman baru**' }, /\.text$/],
+  ])('menolak mark di %s', (_label, disallowedBlock, fieldPathPattern) => {
+    const content = baseContent(blocks => [
+      ...blocks.filter(block => block.type !== 'signature'),
+      disallowedBlock,
+      ...(disallowedBlock.type === 'signature' ? [] : blocks.filter(block => block.type === 'signature')),
+    ])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+      throw new Error('Expected validator to reject inline marks')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ fieldPath: expect.stringMatching(fieldPathPattern) }),
+      ]))
+    }
+  })
+
+  it.each(['middle', '', 1, null])('rejects invalid block alignment %p', align => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Body', align },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).toThrow(/align/)
+  })
+
+  it('menolak align pada jenis blok yang tidak mendukung dan tidak menghitungnya', () => {
+    const content = baseContent(blocks => [
+      { id: 'title-aligned', type: 'title', text: 'Title', align: 'center' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+      throw new Error('Expected validator to reject alignment on title')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ fieldPath: 'languages.id[0].align', message: expect.stringMatching(/tidak didukung/) }),
+      ]))
+    }
+  })
+
+  it('menghitung hanya alignment paragraph/article yang valid', () => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Body', align: 'right' },
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], align: 'justify' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.alignedBlockCount).toBe(2)
+  })
+
+  it('menerima headingAlign pada blok article', () => {
+    const content = baseContent(blocks => [
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], headingAlign: 'center' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
+  })
+
+  it('menolak headingAlign dengan nilai tidak valid', () => {
+    const content = baseContent(blocks => [
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], headingAlign: 'middle' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+      throw new Error('Expected validator to reject invalid headingAlign')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'languages.id[0].headingAlign',
+          message: expect.stringMatching(/headingAlign/),
+        }),
+      ]))
+    }
+  })
+
+  it('menolak headingAlign pada blok selain article', () => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Body', headingAlign: 'center' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+      throw new Error('Expected validator to reject headingAlign on paragraph')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'languages.id[0].headingAlign',
+          message: expect.stringMatching(/hanya didukung pada blok article/),
+        }),
+      ]))
+    }
+  })
+
+  it('melaporkan delimiter tak berpasangan sebagai warning tanpa menggagalkan validasi', () => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Asterisk *literal' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.inlineMarkWarnings).toEqual([
+      expect.objectContaining({ blockId: 'p', fieldPath: 'languages.id[0].text', message: expect.stringMatching(/tidak memiliki pasangan/) }),
+    ])
   })
 
   it('menolak tanpa signature', () => {

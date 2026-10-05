@@ -16,6 +16,13 @@
  * atau menulis ulang konten legal.
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
+import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
+import {
+  drawRunsLine,
+  wrapRunsToLines,
+  type InlineRunAlign,
+  type RunFonts,
+} from './inline-run-layout'
 import PDFDocument from 'pdfkit'
 
 /** Lebar dalam kolom (di dalam border & padding). */
@@ -162,7 +169,7 @@ export interface MitraLayoutOptions {
   numberLabel?: string
   dateLabel?: string
   logoPath?: string
-  fonts: { regular: string; bold: string; italic: string }
+  fonts: { regular: string; bold: string; italic: string; boldItalic?: string }
   /**
    * Bila true, halaman terakhir boleh dipendekkan agar blok tanda tangan muat
    * DI BAWAH kotak pada halaman yang sama (mencegah tanda tangan menimpa teks).
@@ -257,7 +264,38 @@ export const MITRA_FONT_NAMES = {
   regular: 'MitraTimes',
   bold: 'MitraTimesBold',
   italic: 'MitraTimesItalic',
+  boldItalic: 'MitraTimesBoldItalic',
 } as const
+
+/**
+ * Perataan teks MITRA.
+ *
+ * Alias dari `InlineRunAlign` supaya hanya ada SATU daftar nilai yang sah di
+ * seluruh sistem (dipakai juga oleh `PkwtAlign` dan `BLOCK_ALIGN_VALUES` di
+ * `template-schema.validator.ts`).
+ */
+export type MitraAlign = InlineRunAlign
+
+/**
+ * Font logical untuk jalur run (mark).
+ *
+ * Memakai NAMA LOGIS yang sudah didaftarkan `renderMitraPass()`, bukan path TTF.
+ * `boldItalic` opsional: `timesbi.ttf` tidak selalu ada di semua paket
+ * msttcorefonts, dan `runFont()` sudah menjatuhkannya ke `bold` bila kosong.
+ */
+export const MITRA_RUN_FONTS: RunFonts = {
+  regular: MITRA_FONT_NAMES.regular,
+  bold: MITRA_FONT_NAMES.bold,
+  italic: MITRA_FONT_NAMES.italic,
+  boldItalic: MITRA_FONT_NAMES.boldItalic,
+}
+
+/** `block.align` yang sah. Nilai lain (termasuk `undefined`) → perilaku lama. */
+export function mitraBlockAlign(value: unknown): MitraAlign | undefined {
+  return value === 'left' || value === 'center' || value === 'right' || value === 'justify'
+    ? value
+    : undefined
+}
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)\s*\}\}/g
 
@@ -396,6 +434,9 @@ function renderMitraPass(
   doc.registerFont(F.regular, opts.fonts.regular)
   doc.registerFont(F.bold, opts.fonts.bold)
   doc.registerFont(F.italic, opts.fonts.italic)
+  // Bold-italic opsional: `timesbi.ttf` tidak selalu tersedia. Jatuh ke BOLD
+  // (bukan italic) supaya teks yang diminta tebal tetap terlihat tebal.
+  doc.registerFont(F.boldItalic, opts.fonts.boldItalic ?? opts.fonts.bold)
 
   /**
    * Blok `title` PERTAMA = judul dokumen yang sudah digambar di KOP (header
@@ -545,7 +586,7 @@ function renderMitraPass(
     o: {
       font?: string
       size?: number
-      align?: 'left' | 'center' | 'justify'
+      align?: MitraAlign
       gapBefore?: number
       gapAfter?: number
       indent?: number
@@ -697,11 +738,100 @@ function renderMitraPass(
     noteDeepest()
   }
 
+  /**
+   * Tulis satu paragraf BER-MARK (bold/italic/underline), meniru `writeText`
+   * baris demi baris.
+   *
+   * KAPAN DIPAKAI: hanya bila teksnya benar-benar bermark. Bila tidak, fungsi ini
+   * langsung mendelegasikan ke `writeText`, sehingga template yang sudah ada
+   * memakai jalur kode yang SAMA PERSIS seperti sebelum fitur ini ditambahkan.
+   *
+   * Urutan penting: interpolasi dulu, baru mark di-parse — supaya
+   * `**{{employee.fullName}}**` membuat NILAI-nya bold, bukan nama placeholder.
+   *
+   * Hanging indent didukung karena `paragraphOpts()` memberikannya kepada
+   * paragraf bernomor (mis. `"1. Perusahaan..."`), bukan hanya blok `list`.
+   * Tanpa dukungan ini, paragraf bernomor yang diberi mark akan kehilangan
+   * indentasi gantungnya.
+   */
+  const writeRuns = (
+    rawText: string,
+    o: {
+      font?: string
+      size?: number
+      align?: MitraAlign
+      gapBefore?: number
+      gapAfter?: number
+      indent?: number
+      hangingIndent?: number
+      keepWithNextLines?: number
+    } = {},
+  ) => {
+    const text = scrubRawTokens(mitraInterpolate(rawText, opts.values))
+    if (!text) return
+    if (!hasInlineMarks(text)) {
+      writeText(rawText, o)
+      return
+    }
+
+    const runs = parseInlineRuns(text)
+    const font = o.font ?? F.regular
+    const size = o.size ?? G.font.body
+    const align = o.align ?? 'justify'
+    const indent = o.indent ?? 0
+    const hang = o.hangingIndent ?? 0
+    const s = currentStream
+
+    doc.font(font).fontSize(size)
+    // Tinggi baris SAMA dengan jalur lama: bersumber dari font acuan, BUKAN dari
+    // mark. Inilah yang membuat baris bermark setinggi baris tanpa mark sehingga
+    // paginasi tidak bergeser (dibuktikan uji jumlah halaman).
+    const lineHeight = doc.heightOfString('Xg', { lineGap: G.lineGap })
+    const fullWidth = colInnerWidth(s)
+
+    const firstWidth = fullWidth - indent
+    const restWidth = fullWidth - indent - hang
+    // Bungkus LEBIH DULU supaya keputusan pindah halaman memakai jumlah baris nyata.
+    const lines = hang > 0
+      ? wrapRunsToLines(doc, runs, restWidth, MITRA_RUN_FONTS, size, { firstLineWidth: firstWidth })
+      : wrapRunsToLines(doc, runs, firstWidth, MITRA_RUN_FONTS, size)
+
+    if (o.gapBefore) {
+      ensureSpace(o.gapBefore)
+      y += o.gapBefore
+    }
+    if (o.keepWithNextLines) {
+      const needed = Math.max(lines.length * lineHeight, lineHeight * o.keepWithNextLines)
+      if (y + needed > boxBottom(streamPage[s])) nextPageForStream(s)
+    }
+    if (y + lineHeight > boxBottom(streamPage[s])) nextPageForStream(s)
+
+    for (let li = 0; li < lines.length; li++) {
+      if (y + lineHeight > boxBottom(streamPage[s])) nextPageForStream(s)
+      const isFirst = li === 0
+      const isLast = li === lines.length - 1
+      const lineWidth = hang > 0 && !isFirst ? restWidth : firstWidth
+      const lineX = colX(s) + (hang > 0 && !isFirst ? indent + hang : indent)
+      // Baris terakhir paragraf tidak direntangkan — sama seperti Word/LaTeX dan
+      // sama dengan `writeText`.
+      const lineAlign: MitraAlign = align === 'justify' && isLast ? 'left' : align
+      drawRunsLine(doc, lines[li], lineX, y, lineWidth, MITRA_RUN_FONTS, size, lineAlign)
+      y += lineHeight
+    }
+
+    y += o.gapAfter ?? G.paragraphGap
+    noteDeepest()
+  }
+
   const NUMBERED_ITEM = /^(?:\d{1,2}|[a-z])\.\s/
-  const paragraphOpts = (text: string) =>
-    NUMBERED_ITEM.test(mitraInterpolate(text, opts.values))
+  const paragraphOpts = (text: string, align?: MitraAlign) => {
+    const base = NUMBERED_ITEM.test(mitraInterpolate(text, opts.values))
       ? { gapAfter: G.paragraphGap, hangingIndent: G.listHangingIndent }
       : { gapAfter: G.paragraphGap }
+    // `align` sengaja TIDAK ditulis bila tidak ada, supaya `writeText`/`writeRuns`
+    // memakai default `'justify'` — perilaku lama yang tidak boleh berubah.
+    return align ? { ...base, align } : base
+  }
 
   const renderBlock = (block: any) => {
     switch (block?.type) {
@@ -735,22 +865,29 @@ function renderMitraPass(
         break
 
       case 'paragraph':
-        writeText(block.text ?? '', paragraphOpts(block.text ?? ''))
+        writeRuns(block.text ?? '', paragraphOpts(block.text ?? '', mitraBlockAlign(block?.align)))
         break
 
       case 'article': {
+        const align = mitraBlockAlign(block?.align)
+        // `headingAlign`: perataan KHUSUS judul pasal (PASAL 1 ...), terpisah
+        // dari `align` blok yang tetap hanya berlaku untuk uraian. Urutan
+        // prioritas: headingAlign → align (perilaku Fase 2d) → 'center'
+        // (perilaku asli, tanpa properti apa pun).
+        const headingAlign = mitraBlockAlign(block?.headingAlign)
         if (block.heading) {
           writeText(block.heading, {
             font: F.bold,
             size: G.font.body,
-            align: 'center',
+            // Tanpa keduanya, judul tetap center seperti sebelumnya.
+            align: headingAlign ?? align ?? 'center',
             gapBefore: 2,
             gapAfter: G.headingGapAfter,
             keepWithNextLines: 3,
           })
         }
         for (const p of block.paragraphs ?? []) {
-          writeText(String(p), paragraphOpts(String(p)))
+          writeRuns(String(p), paragraphOpts(String(p), align))
         }
         break
       }

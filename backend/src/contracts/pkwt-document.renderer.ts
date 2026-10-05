@@ -13,6 +13,7 @@
  */
 import PDFDocument from 'pdfkit'
 import { interpolate } from './contract-block-renderer'
+import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
 import {
   PKWT_FONT_NAMES,
   PKWT_GEOMETRY,
@@ -20,6 +21,7 @@ import {
   pkwtColumnInnerWidth,
   registerPkwtFonts,
   renderPkwtLayout,
+  type PkwtAlign,
   type PkwtParagraph,
   type PkwtSignatureOptions
 } from './pkwt-layout.engine'
@@ -112,6 +114,29 @@ export interface PkwtDocumentRenderOptions {
 }
 
 /**
+ * Run ber-mark untuk teks yang SUDAH diinterpolasi.
+ *
+ * Urutan penting: interpolasi dulu, baru parse. Placeholder `{{...}}` diganti
+ * nilainya sebelum mark dibaca, sehingga `**{{employee.fullName}}**` menjadi
+ * `**Budi**` dan `Budi` benar-benar bold. Kalau dibalik, mark akan menempel pada
+ * teks placeholder, bukan pada nilainya.
+ *
+ * `undefined` (bukan array kosong) bila teksnya tidak bermark — itu sinyal bagi
+ * engine untuk memakai jalur lama, sehingga template yang sudah ada tidak
+ * berubah sama sekali.
+ */
+function markedRuns(text: string): InlineRun[] | undefined {
+  return hasInlineMarks(text) ? parseInlineRuns(text) : undefined
+}
+
+/** `block.align` yang sah. Nilai lain (termasuk `undefined`) → perilaku lama. */
+function pkwtBlockAlign(value: unknown): PkwtAlign | undefined {
+  return value === 'left' || value === 'center' || value === 'right' || value === 'justify'
+    ? value
+    : undefined
+}
+
+/**
  * Ubah blok konten menjadi larik paragraf siap-render, lengkap dengan id blok.
  *
  * ATURAN PASSTHROUGH: tidak ada redaksi yang dibangkitkan atau diringkas.
@@ -136,18 +161,34 @@ export function blocksToPkwtParagraphs(
   for (const block of blocks ?? []) {
     // Identitas blok untuk penelusuran; blok tanpa id tetap diberi label unik.
     const blockId = String(block?.id ?? `__anon-${anon++}`)
-    const local: { text: string, bold: boolean }[] = []
+    const local: { text: string, bold: boolean, runs?: InlineRun[], align?: PkwtAlign }[] = []
+    // Perataan hanya diambil untuk blok yang MEMANG mendukungnya (`paragraph`
+    // dan `article`). `list`/`table` punya perataan sendiri; validator menolak
+    // `align` di sana, dan di sini dijaga agar tidak ikut terbawa.
+    let localAlign: PkwtAlign | undefined
 
     switch (block?.type) {
-      case 'paragraph':
-        local.push({ text: interpolate(String(block.text ?? ''), values), bold: false })
+      case 'paragraph': {
+        const text = interpolate(String(block.text ?? ''), values)
+        localAlign = pkwtBlockAlign(block?.align)
+        local.push({ text, bold: false, runs: markedRuns(text) })
         break
+      }
 
       case 'article': {
+        localAlign = pkwtBlockAlign(block?.align)
+        // `headingAlign`: perataan KHUSUS judul pasal, lepas dari `align` blok
+        // (yang tetap berlaku untuk uraian). Tanpa keduanya → `undefined` =
+        // rumus lama di `resolveCellAlign` (baris bold → 'left').
+        const headingAlign = pkwtBlockAlign(block?.headingAlign)
         const heading = interpolate(String(block.heading ?? ''), values)
-        if (heading) local.push({ text: heading, bold: true })
+        // Judul pasal TIDAK pernah diberi runs: ia sudah bold penuh dan tingginya
+        // dijaga maksimal 2 baris. Perataannya miliknya sendiri (headingAlign),
+        // bukan `localAlign` blok.
+        if (heading) local.push({ text: heading, bold: true, align: headingAlign })
         for (const p of block.paragraphs ?? []) {
-          local.push({ text: interpolate(String(p ?? ''), values), bold: false })
+          const text = interpolate(String(p ?? ''), values)
+          local.push({ text, bold: false, runs: markedRuns(text) })
         }
         break
       }
@@ -169,7 +210,18 @@ export function blocksToPkwtParagraphs(
     // `subtitle` hanya ada di kolom ID), dan kalau blok kosong ikut dihitung
     // maka penomoran kedua kolom langsung bergeser satu.
     if (local.length === 0) continue
-    for (const p of local) out.push({ text: p.text, bold: p.bold, blockId, blockIndex: ordinal })
+    for (const p of local) {
+      out.push({
+        text: p.text,
+        bold: p.bold,
+        runs: p.runs,
+        // `align` per-paragraf (untuk judul pasal = headingAlign); jatuh ke
+        // `localAlign` blok bila paragrafnya tidak membawa align sendiri.
+        align: p.align ?? localAlign,
+        blockId,
+        blockIndex: ordinal,
+      })
+    }
     ordinal += 1
   }
   return out

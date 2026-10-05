@@ -26,6 +26,13 @@ function countPages(buffer: Buffer): number {
   return (buffer.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length
 }
 
+/**
+ * Font Times New Roman wajib ada agar PDFKit bisa mengukur teks. Bila tidak ada,
+ * tes yang merender PDF di-skip dengan jelas (bukan gagal) — pola yang sama
+ * dengan `pkwt-document.renderer.spec.ts`.
+ */
+const maybe = fontsAvailable() ? it : it.skip
+
 const blocks = [
   { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
   { id: 'p1', type: 'paragraph', text: 'Dibuat pada {{doc.hariTanggal}} oleh:' },
@@ -40,6 +47,16 @@ describe('mitra-document.renderer', () => {
     expect(fonts.bold).toContain('timesbd.ttf')
     expect(fonts.italic).toContain('timesi.ttf')
     expect(resolveMitraFontDir()).toBeTruthy()
+  })
+
+  it('resolveMitraFonts menyediakan boldItalic (jatuh ke BOLD bila tidak ada)', () => {
+    // `timesbi.ttf` tidak selalu tersedia di paket msttcorefonts. Yang penting:
+    // `boldItalic` SELALU terisi, sehingga registrasi font tidak pernah kosong
+    // dan teks bold+italic tetap terbentuk (minimal sebagai bold).
+    const fonts = resolveMitraFonts()
+    expect(typeof fonts.boldItalic).toBe('string')
+    expect(fonts.boldItalic).toBeTruthy()
+    expect(fonts.boldItalic).toMatch(/timesbi\.ttf|timesbd\.ttf/)
   })
 
   const maybe = fontsAvailable() ? it : it.skip
@@ -73,6 +90,66 @@ describe('mitra-document.renderer', () => {
     })
     // PDF terkompresi; kehadiran `%PDF-` cukup untuk memastikan render selesai
     // tanpa melempar. Kebocoran token diuji terpisah di mitra-layout.engine.spec.ts.
+    expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+  })
+})
+
+describe('MITRA document renderer — mark & perataan di PDF NYATA', () => {
+  const base = () => ({
+    values: { ...MITRA_PREVIEW_VALUES },
+    fonts: resolveMitraFonts(),
+    title: 'PERJANJIAN KEMITRAAN',
+    numberLabel: 'Nomor: 1/X/2026',
+    dateLabel: 'Tanggal 1 Januari 2026',
+  })
+
+  const withBlocks = (text: string, extra: Record<string, unknown> = {}) => [
+    { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+    { id: 'p1', type: 'paragraph', text, ...extra },
+    { id: 'sig', type: 'signature' },
+  ]
+
+  maybe('mark tidak mengubah jumlah halaman', async () => {
+    const plain = await createMitraPdfBuffer({ ...base(), blocks: withBlocks('Dibuat oleh para pihak.') })
+    const marked = await createMitraPdfBuffer({ ...base(), blocks: withBlocks('Dibuat oleh **para pihak**.') })
+    expect(countPages(marked)).toBe(countPages(plain))
+  })
+
+  maybe('keempat nilai perataan tidak mengubah jumlah halaman', async () => {
+    const plain = await createMitraPdfBuffer({ ...base(), blocks: withBlocks('Dibuat oleh para pihak.') })
+    for (const align of ['left', 'center', 'right', 'justify']) {
+      const aligned = await createMitraPdfBuffer({
+        ...base(),
+        blocks: withBlocks('Dibuat oleh para pihak.', { align }),
+      })
+      expect(countPages(aligned)).toBe(countPages(plain))
+    }
+  })
+
+  maybe('mark + perataan bersamaan tetap menghasilkan PDF sah', async () => {
+    const buffer = await createMitraPdfBuffer({
+      ...base(),
+      blocks: withBlocks('**Tebal** dan *miring* __garis__.', { align: 'center' }),
+    })
+    expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+    expect(buffer.length).toBeGreaterThan(1000)
+  })
+
+  maybe('perataan center pada blok article tetap menghasilkan PDF sah', async () => {
+    const buffer = await createMitraPdfBuffer({
+      ...base(),
+      blocks: [
+        { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+        {
+          id: 'a1',
+          type: 'article',
+          heading: 'PASAL 1\nRUANG LINGKUP',
+          paragraphs: ['1. Nama mitra {{employee.fullName}}.'],
+          align: 'center',
+        },
+        { id: 'sig', type: 'signature' },
+      ],
+    })
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
   })
 })

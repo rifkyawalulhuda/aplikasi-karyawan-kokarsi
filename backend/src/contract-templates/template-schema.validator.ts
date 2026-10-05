@@ -1,4 +1,6 @@
 import { BadRequestException } from '@nestjs/common'
+import { hasInlineMarks, validateInlineMarks } from '../contracts/inline-marks'
+import { INLINE_RUN_ALIGN_VALUES, type InlineRunAlign } from '../contracts/inline-run-layout'
 
 /** Tipe blok yang didukung renderer V1 */
 export const BLOCK_TYPES = [
@@ -16,8 +18,44 @@ export type BlockType = (typeof BLOCK_TYPES)[number]
 export const LIST_STYLES = ['bullet', 'numbered', 'alphabetic'] as const
 export const TABLE_FORMATS = ['text', 'number', 'currency', 'date'] as const
 
+/**
+ * Nilai `align` yang sah untuk properti blok.
+ *
+ * Dialias ke `INLINE_RUN_ALIGN_VALUES` supaya hanya ada SATU daftar nilai yang
+ * sah di seluruh kodebase — pola yang sama dengan `PkwtAlign` dan `MitraAlign`
+ * yang juga mengalias `InlineRunAlign`. Bila daftar di renderer berubah, di
+ * sini pun ikut berubah tanpa risiko dua daftar menyimpang.
+ */
+export const BLOCK_ALIGN_VALUES = INLINE_RUN_ALIGN_VALUES
+export type BlockAlign = InlineRunAlign
+
+/**
+ * Hanya blok ini yang boleh membawa properti `align`.
+ *
+ * `list` dan `table` punya perataan sendiri per-item/per-kolom, dan
+ * `title`/`subtitle`/`signature`/`pageBreak` perataannya milik renderer
+ * (judul selalu center, tanda tangan milik layout footer). Menerima `align` di
+ * sana hanya akan membuat admin mengira perubahannya berpengaruh.
+ */
+export const ALIGN_CAPABLE_BLOCKS = ['paragraph', 'article'] as const
+
+/** Normalisasi `block.align`; nilai tak dikenal → `undefined` (perilaku lama). */
+export function blockAlign(value: unknown): BlockAlign | undefined {
+  return typeof value === 'string' && (BLOCK_ALIGN_VALUES as readonly string[]).includes(value)
+    ? (value as BlockAlign)
+    : undefined
+}
+
 export interface BlockValidationIssue {
   blockId: string
+  message: string
+  /** Lokasi spesifik pada contentDefinition, mis. languages.id[2].text. */
+  fieldPath?: string
+}
+
+export interface InlineMarkWarning {
+  blockId: string
+  fieldPath: string
   message: string
 }
 
@@ -119,11 +157,61 @@ export function validateContentDefinition(
   content: any,
   fieldKeys: string[],
   family: 'MITRA' | 'PKWT',
-): { placeholderCount: number; blockCount: number } {
+): {
+  placeholderCount: number
+  blockCount: number
+  markedBlockCount: number
+  alignedBlockCount: number
+  inlineMarkWarnings: InlineMarkWarning[]
+} {
   const issues: BlockValidationIssue[] = []
+  const inlineMarkWarnings: InlineMarkWarning[] = []
   const validKeys = new Set(fieldKeys)
   let placeholderCount = 0
   let blockCount = 0
+  let markedBlockCount = 0
+  let alignedBlockCount = 0
+
+  const validateText = (blockId: string, text: string, fieldPath: string, allowMarks: boolean): boolean => {
+    const result = validateInlineMarks(text, { allowMarks, location: fieldPath })
+    for (const markIssue of result.issues) {
+      if (markIssue.severity === 'error') {
+        issues.push({ blockId, fieldPath, message: markIssue.message })
+      } else {
+        inlineMarkWarnings.push({ blockId, fieldPath, message: markIssue.message })
+      }
+    }
+    return allowMarks && hasInlineMarks(text)
+  }
+
+  const validateAlign = (block: any, id: string, fieldPath: string) => {
+    if (block.align === undefined) return
+    if (blockAlign(block.align) === undefined) {
+      issues.push({ blockId: id, fieldPath, message: `Nilai align "${String(block.align)}" tidak valid. Gunakan left, center, right, atau justify.` })
+      return
+    }
+    if (!(ALIGN_CAPABLE_BLOCKS as readonly string[]).includes(block.type)) {
+      issues.push({ blockId: id, fieldPath, message: `Properti align tidak didukung pada blok ${block.type}. Hanya paragraph dan article yang dapat diratakan.` })
+      return
+    }
+    alignedBlockCount += 1
+  }
+
+  /**
+   * `headingAlign` (khusus blok `article`): perataan judul pasal yang LEPAS
+   * dari `align` blok, sehingga admin bisa menengahkan HANYA judul "PASAL 1"
+   * tanpa menggeser perataan uraian. Nilai sah sama dengan `align`.
+   */
+  const validateHeadingAlign = (block: any, id: string, fieldPath: string) => {
+    if (block.headingAlign === undefined) return
+    if (blockAlign(block.headingAlign) === undefined) {
+      issues.push({ blockId: id, fieldPath, message: `Nilai headingAlign "${String(block.headingAlign)}" tidak valid. Gunakan left, center, right, atau justify.` })
+      return
+    }
+    if (block.type !== 'article') {
+      issues.push({ blockId: id, fieldPath, message: `Properti headingAlign hanya didukung pada blok article (judul pasal).` })
+    }
+  }
 
   if (!content || typeof content !== 'object' || !content.languages) {
     throw new BadRequestException('contentDefinition harus memiliki struktur { languages: { id: [], en: [] } }')
@@ -153,6 +241,55 @@ export function validateContentDefinition(
         issues.push({ blockId: id, message: `Tipe blok "${block?.type}" tidak didukung` })
         return
       }
+
+      const blockPath = `languages.${lang}[${idx}]`
+      validateAlign(block, id, `${blockPath}.align`)
+      validateHeadingAlign(block, id, `${blockPath}.headingAlign`)
+      let blockHasInlineMarks = false
+
+      if (block.type === 'signature' || block.type === 'pageBreak') {
+        for (const [key, value] of Object.entries(block)) {
+          if (typeof value === 'string') validateText(id, value, `${blockPath}.${key}`, false)
+        }
+      }
+
+      if ((block.type === 'title' || block.type === 'subtitle') && typeof block.text === 'string') {
+        validateText(id, block.text, `${blockPath}.text`, false)
+      }
+
+      if (block.type === 'article' && typeof block.heading === 'string') {
+        validateText(id, block.heading, `${blockPath}.heading`, false)
+      }
+      if (block.type === 'list' && Array.isArray(block.items)) {
+        for (const [itemIndex, item] of block.items.entries()) {
+          const text = typeof item === 'string' ? item : item?.text
+          const itemPath = `${blockPath}.items[${itemIndex}]${typeof item === 'string' ? '' : '.text'}`
+          if (typeof text === 'string') validateText(id, text, itemPath, false)
+        }
+      }
+      if (block.type === 'table') {
+        for (const [columnIndex, column] of (block.columns ?? []).entries()) {
+          if (typeof column?.label === 'string') {
+            validateText(id, column.label, `${blockPath}.columns[${columnIndex}].label`, false)
+          }
+        }
+        for (const [rowIndex, row] of (block.rows ?? []).entries()) {
+          for (const [key, value] of Object.entries(row ?? {})) {
+            if (typeof value === 'string') validateText(id, value, `${blockPath}.rows[${rowIndex}].${key}`, false)
+          }
+        }
+      }
+      if (block.type === 'paragraph' && typeof block.text === 'string') {
+        blockHasInlineMarks = validateText(id, block.text, `${blockPath}.text`, true) || blockHasInlineMarks
+      }
+      if (block.type === 'article') {
+        for (const [paragraphIndex, paragraph] of (block.paragraphs ?? []).entries()) {
+          if (typeof paragraph === 'string') {
+            blockHasInlineMarks = validateText(id, paragraph, `${blockPath}.paragraphs[${paragraphIndex}]`, true) || blockHasInlineMarks
+          }
+        }
+      }
+      if (blockHasInlineMarks) markedBlockCount += 1
 
       if (block.type === 'signature') {
         hasSignature = true
@@ -300,7 +437,7 @@ export function validateContentDefinition(
     throw error
   }
 
-  return { placeholderCount, blockCount }
+  return { placeholderCount, blockCount, markedBlockCount, alignedBlockCount, inlineMarkWarnings }
 }
 
 /** Ambil semua placeholder dari contentDefinition (untuk matching dengan fieldDefinitions). */

@@ -7,6 +7,8 @@
  * Indonesia, ringkasan isi, dan hanya mengungkap detail teknis lewat
  * bagian "Detail teknis" yang tertutup.
  */
+import { stripInlineMarks } from '~/utils/inline-marks'
+
 interface Props {
   block: any
   index: number
@@ -14,12 +16,18 @@ interface Props {
   editable: boolean
   collapsed: boolean
   selected: boolean
+  /** Default "Perataan judul" — HARUS sama dengan fallback renderer keluarga
+   *  template: MITRA → 'center', PKWT → 'left' (rumus lama baris bold).
+   *  Kalau tidak sama, tombol default-nya menghapus properti padahal renderer
+   *  memakai nilai lain — pengaturan itu lalu "tidak berpengaruh". */
+  headingAlignDefault?: 'left' | 'center'
   /** Sedang ditarik (drag) — kartu diredupkan. */
   dragging?: boolean
   /** Garis sisip: di atas kartu (`before`) atau di bawahnya (`after`). */
   dropIndicator?: 'none' | 'before' | 'after'
 }
 const props = withDefaults(defineProps<Props>(), {
+  headingAlignDefault: 'center',
   dragging: false,
   dropIndicator: 'none'
 })
@@ -107,7 +115,8 @@ const summary = computed(() => {
     case 'title':
     case 'subtitle':
     case 'paragraph':
-      return clean(b.text) || 'Belum ada teks'
+      // Ringkasan kartu tanpa markup (`**`) supaya tetap terbaca wajar.
+      return clean(stripInlineMarks(b.text)) || 'Belum ada teks'
     case 'article':
       return clean(b.heading) || 'Belum ada judul pasal'
     case 'list':
@@ -126,7 +135,8 @@ const summary = computed(() => {
 /** Peringatan halus bila ada isi yang masih kosong. */
 const emptyWarnings = computed(() => {
   const b = props.block ?? {}
-  const blank = (v: any) => !String(v ?? '').trim()
+  // "Kosong" dihitung pada teks tanpa mark — `****` saja dianggap kosong.
+  const blank = (v: any) => !stripInlineMarks(String(v ?? '')).trim()
   const warns: string[] = []
   if (b.type === 'article') {
     if (blank(b.heading)) warns.push('Judul pasal kosong')
@@ -322,15 +332,29 @@ function addColumn() {
         description="Versi ini sudah dipublish. Buat draft baru untuk mengubah isi."
       />
 
-      <template v-if="['title', 'subtitle', 'paragraph'].includes(block.type)">
-        <UFormField :label="block.type === 'paragraph' ? 'Teks paragraf' : 'Teks'">
+      <template v-if="['title', 'subtitle'].includes(block.type)">
+        <UFormField label="Teks">
           <div @click="markBlockOnly()" @focusin="markBlockOnly()">
-            <UTextarea
+            <KontrakRichTextField
               v-model="block.text"
               :disabled="!editable"
               :rows="3"
-              autoresize
-              class="w-full"
+              placeholder="Tulis teks di sini&#8230;"
+            />
+          </div>
+        </UFormField>
+      </template>
+
+      <template v-else-if="block.type === 'paragraph'">
+        <UFormField label="Teks paragraf">
+          <div @click="markBlockOnly()" @focusin="markBlockOnly()">
+            <KontrakRichTextField
+              v-model="block.text"
+              v-model:align="block.align"
+              :disabled="!editable"
+              :rows="3"
+              show-align
+              default-align="justify"
               placeholder="Tulis teks di sini&#8230;"
             />
           </div>
@@ -342,6 +366,18 @@ function addColumn() {
           label="Judul pasal"
           hint="Maks. 2 baris. Tekan Enter untuk memisah, mis. PASAL 1 / RUANG LINGKUP"
         >
+          <!-- Perataan khusus JUDUL (`headingAlign`): lepas dari perataan uraian,
+               sehingga judul bisa di-center sendiri tanpa menggeser isi pasal.
+               Default tombol IKUT fallback renderer keluarga template (MITRA =
+               center, PKWT = left) — lihat prop `headingAlignDefault`. -->
+          <div v-if="editable" class="mb-1 flex items-center gap-2">
+            <span class="text-xs text-muted">Perataan judul:</span>
+            <KontrakAlignButtonGroup
+              :align="block.headingAlign"
+              :default-align="headingAlignDefault"
+              @update:align="block.headingAlign = $event"
+            />
+          </div>
           <UTextarea
             v-model="block.heading"
             :disabled="!editable"
@@ -355,6 +391,16 @@ function addColumn() {
         </UFormField>
         <UFormField label="Uraian pasal">
           <div class="space-y-2">
+            <!-- Perataan milik BLOK (`align` di tingkat pasal), bukan per paragraf:
+                 satu grup radio untuk seluruh uraian, default renderer = justify. -->
+            <div v-if="editable" class="flex items-center gap-2">
+              <span class="text-xs text-muted">Perataan:</span>
+              <KontrakAlignButtonGroup
+                :align="block.align"
+                default-align="justify"
+                @update:align="block.align = $event"
+              />
+            </div>
             <div
               v-for="(_, p) in paragraphList"
               :key="p"
@@ -363,11 +409,10 @@ function addColumn() {
               @focusin="markFocus(`art:${p}`)"
             >
               <span class="mt-2 w-5 shrink-0 text-right text-xs text-muted">{{ p + 1 }}.</span>
-              <UTextarea
+              <KontrakRichTextField
                 v-model="block.paragraphs[p]"
                 :disabled="!editable"
                 :rows="3"
-                autoresize
                 class="flex-1"
                 placeholder="Tulis isi pasal&#8230;"
               />

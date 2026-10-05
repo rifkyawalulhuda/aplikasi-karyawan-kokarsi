@@ -87,9 +87,9 @@ export class ContractTemplateVersionsController {
   }
 
   @Post('contract-template-versions/:versionId/preview')
-  preview(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
+  preview(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number, @Body() dto: VersionContentDto) {
     this.ensureAdmin(req.user?.role)
-    return this.service.preview(versionId)
+    return this.service.preview(versionId, dto.contentDefinition)
   }
 
   /**

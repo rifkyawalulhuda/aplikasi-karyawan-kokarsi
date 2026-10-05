@@ -19,8 +19,10 @@ import {
   buildPkwtRows,
   buildPkwtRowsFromStructuredParagraphs,
   pkwtColumnInnerWidth,
-  pkwtSignatureHeight
+  pkwtSignatureHeight,
+  resolveCellAlign
 } from './pkwt-layout.engine'
+import { parseInlineRuns } from './inline-marks'
 import { createPkwtPdfBuffer, resolvePkwtFonts } from './pkwt-document.renderer'
 import { PKWT_PREVIEW_VALUES } from './pkwt-preview-sample'
 import {
@@ -787,5 +789,241 @@ with pdfplumber.open(sys.argv[1]) as pdf:
         // Direktori sementara OS; gagal bersih-bersih tidak boleh menggagalkan tes.
       }
     }
+  })
+})
+
+/**
+ * Gerbang Fase 2b: mark & perataan TIDAK BOLEH mengubah paginasi dokumen legal.
+ *
+ * Diuji pada definisi PRODUKSI (`CONTRACT_DOCUMENT_DEFINITIONS`), bukan fixture
+ * kecil, dan memakai perbandingan RELATIF (dengan mark vs tanpa mark pada
+ * definisi yang sama) supaya tes ini tidak bergantung pada jumlah halaman dasar
+ * yang bisa berubah bila template bawaan disunting.
+ */
+describeGeometric('PKWT — mark & perataan tidak menggeser paginasi (definisi produksi)', () => {
+  jest.setTimeout(180_000)
+
+  const PAGES_PY = `
+import sys, pdfplumber
+with pdfplumber.open(sys.argv[1]) as pdf:
+    print(len(pdf.pages))
+`
+
+  function countPages(buffer: Buffer, tmpDir: string, name: string): number {
+    const file = path.join(tmpDir, `${name}.pdf`)
+    fs.writeFileSync(file, buffer)
+    return Number(execFileSync('python', ['-c', PAGES_PY, file]).toString().trim())
+  }
+
+  const headerOpts = () => ({
+    values: { ...PKWT_PREVIEW_VALUES },
+    orgLines: [...PKWT_HEADER_CHROME.org],
+    addressLines: [...PKWT_HEADER_CHROME.address],
+    contactLine: PKWT_HEADER_CHROME.contactLine,
+    titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+    titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+    numberLabel: `${PKWT_HEADER_CHROME.numberPrefix} 174/KUKP-SII/VII/2026`,
+    fonts: resolvePkwtFonts(),
+    signature: {
+      leftTitle: PKWT_HEADER_CHROME.signature.leftTitle,
+      rightTitle: PKWT_HEADER_CHROME.signature.rightTitle,
+      leftName: PKWT_PREVIEW_VALUES['employee.fullName'],
+      leftRole: PKWT_PREVIEW_VALUES['employee.jobRole'],
+      rightName: PKWT_PREVIEW_VALUES['settings.cooperativeChairmanName'],
+      rightRole: PKWT_HEADER_CHROME.signature.rightRoleLabel
+    }
+  })
+
+  /**
+   * Tandai kata PERTAMA tiap paragraf sebagai bold (perubahan lebar minimal) dan
+   * beri perataan pada blok `paragraph`/`article`.
+   */
+  const decorate = (blocks: any[], align: string) =>
+    (blocks ?? []).map((block: any) => {
+      if (block.type === 'paragraph') {
+        const text = String(block.text ?? '')
+        const marked = text.replace(/^(\S+)/, '**$1**')
+        return { ...block, text: marked, align }
+      }
+      if (block.type === 'article') {
+        return { ...block, align }
+      }
+      return block
+    })
+
+  it('mark + keempat nilai perataan tidak menambah/mengurangi halaman', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkwt-pages-mark-'))
+    try {
+      const keys = Object.keys(CONTRACT_DOCUMENT_DEFINITIONS).filter(k => k.startsWith('PKWT_'))
+      expect(keys.length).toBeGreaterThanOrEqual(4)
+
+      for (const key of keys) {
+        const content: SeedContentDefinition = definitionToContentDefinition(getContractDocumentDefinition(key))
+        const base = {
+          ...headerOpts(),
+          blocks: content?.languages?.id ?? [],
+          blocksEn: content?.languages?.en ?? []
+        }
+        const plainPages = countPages(await createPkwtPdfBuffer(base), tmpDir, `${key}-plain`)
+
+        for (const align of ['left', 'center', 'right', 'justify']) {
+          const marked = await createPkwtPdfBuffer({
+            ...base,
+            blocks: decorate(content?.languages?.id, align),
+            blocksEn: decorate(content?.languages?.en, align)
+          })
+          expect({ key, align, pages: countPages(marked, tmpDir, `${key}-${align}`) })
+            .toEqual({ key, align, pages: plainPages })
+        }
+      }
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      } catch {
+        // Direktori sementara OS; gagal bersih-bersih tidak boleh menggagalkan tes.
+      }
+    }
+  })
+})
+
+describe('resolveCellAlign — prioritas perataan (kunci nol regresi)', () => {
+  it('tanpa align eksplisit, mereproduksi rumus lama PERSIS', () => {
+    // Perilaku lama: `idJustify = idBold ? false : row.idJustify`, lalu
+    // `justify ? drawJustifiedLine : doc.text(align:'left')`.
+    expect(resolveCellAlign(undefined, false, true)).toBe('justify')
+    expect(resolveCellAlign(undefined, false, false)).toBe('left')
+    // Baris bold tidak pernah direntangkan, walau `justify` true.
+    expect(resolveCellAlign(undefined, true, true)).toBe('left')
+    expect(resolveCellAlign(undefined, true, false)).toBe('left')
+  })
+
+  it('align eksplisit MENANG atas bold dan justify', () => {
+    // Inilah yang membuat "Rata Tengah" pada pasal menengahkan judulnya juga.
+    expect(resolveCellAlign('center', true, true)).toBe('center')
+    expect(resolveCellAlign('right', true, false)).toBe('right')
+    expect(resolveCellAlign('left', false, true)).toBe('left')
+    expect(resolveCellAlign('justify', true, true)).toBe('justify')
+  })
+
+  it('nilai align yang tidak dikenal diperlakukan sebagai tidak ada', () => {
+    // Jaring pengaman: data lama/rusak tidak boleh mengubah perataan.
+    expect(resolveCellAlign('middle' as never, false, true)).toBe('justify')
+    expect(resolveCellAlign(null as never, false, false)).toBe('left')
+    expect(resolveCellAlign(undefined, true, true)).toBe('left')
+  })
+
+  it('keempat nilai sah diteruskan apa adanya', () => {
+    for (const align of ['left', 'center', 'right', 'justify'] as const) {
+      expect(resolveCellAlign(align, false, false)).toBe(align)
+      expect(resolveCellAlign(align, true, true)).toBe(align)
+    }
+  })
+})
+
+describe('buildPkwtRowsFromStructuredParagraphs — runs & align', () => {
+  const stubDoc = {
+    font() { return this },
+    fontSize() { return this },
+    widthOfString(s: string) { return String(s).length * 5 }
+  }
+  const opts = { width: 1000, size: 9 }
+
+  const para = (blockId: string, blockIndex: number, text: string, extra: Record<string, unknown> = {}) =>
+    ({ blockId, blockIndex, text, bold: false, ...extra })
+
+  it('paragraf TANPA runs tidak menghasilkan idRuns/enRuns (jalur lama utuh)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'teks polos')],
+      [para('a', 0, 'plain text')],
+      opts
+    )
+    expect(rows[0].idRuns).toBeUndefined()
+    expect(rows[0].enRuns).toBeUndefined()
+    expect(rows[0].id).toBe('teks polos')
+    expect(rows[0].en).toBe('plain text')
+  })
+
+  it('paragraf BER-runs menghasilkan idRuns yang cocok dengan teks polosnya', () => {
+    const text = 'Halo **dunia**'
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, text, { runs: parseInlineRuns(text) })],
+      [],
+      opts
+    )
+    expect(rows[0].id).toBe('Halo dunia')
+    expect(rows[0].idRuns).toEqual([
+      { text: 'Halo ', bold: false, italic: false, underline: false },
+      { text: 'dunia', bold: true, italic: false, underline: false },
+    ])
+  })
+
+  it('perataan blok diteruskan ke idAlign/enAlign', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'isi id', { align: 'center' })],
+      [para('a', 0, 'body en', { align: 'center' })],
+      opts
+    )
+    expect(rows[0].idAlign).toBe('center')
+    expect(rows[0].enAlign).toBe('center')
+  })
+
+  it('tanpa align, idAlign/enAlign tetap undefined', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'isi id')],
+      [para('a', 0, 'body en')],
+      opts
+    )
+    expect(rows[0].idAlign).toBeUndefined()
+    expect(rows[0].enAlign).toBeUndefined()
+  })
+
+  it('perataan tetap mengikuti baris judul pasal (bold)', () => {
+    // "Rata Tengah" pada sebuah pasal harus menengahkan judul DAN uraiannya.
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [
+        { blockId: 'a', blockIndex: 0, text: 'Pasal 1', bold: true, align: 'center' },
+        para('a', 0, 'uraian pasal', { align: 'center' }),
+      ],
+      [],
+      opts
+    )
+    expect(rows[0].idBold).toBe(true)
+    expect(rows[0].idAlign).toBe('center')
+    expect(resolveCellAlign(rows[0].idAlign, true, false)).toBe('center')
+  })
+
+  it('runs ikut terpecah bila paragrafnya lebih panjang dari lebar kolom', () => {
+    // Lebar 100 / 5 = 20 karakter per baris.
+    const text = '**satu dua tiga empat lima enam tujuh delapan**'
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'satu dua tiga empat lima enam tujuh delapan', { runs: parseInlineRuns(text) })],
+      [],
+      { width: 100, size: 9 }
+    )
+    expect(rows.length).toBeGreaterThan(1)
+    // Setiap baris membawa run-nya sendiri dan tetap bold.
+    for (const row of rows) {
+      expect(row.idRuns).toBeDefined()
+      expect(row.idRuns!.every(run => run.bold)).toBe(true)
+    }
+    // Teks polos gabungan == teks asli tanpa mark.
+    expect(rows.map(r => r.id).join(' ')).toBe('satu dua tiga empat lima enam tujuh delapan')
+  })
+
+  it('kolom ID dan EN boleh punya perataan berbeda (per-kolom)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para('a', 0, 'id center', { align: 'center' })],
+      [para('a', 0, 'en right', { align: 'right' })],
+      opts
+    )
+    expect(rows[0].idAlign).toBe('center')
+    expect(rows[0].enAlign).toBe('right')
   })
 })

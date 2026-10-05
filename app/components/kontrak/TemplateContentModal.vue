@@ -7,6 +7,16 @@ import {
   uniqueBlockLabels
 } from '~/utils/field-usage'
 
+type InlineMarkWarning = { blockId: string; fieldPath: string; message: string }
+type TemplateValidationPreview = {
+  valid: boolean
+  placeholderCount: number
+  blockCount: number
+  markedBlockCount: number
+  alignedBlockCount: number
+  inlineMarkWarnings: InlineMarkWarning[]
+}
+
 interface Template { id: number, name: string, family: 'PKWT' | 'MITRA' }
 interface Version { id: number, versionNumber: number, status: string, contentDefinition: any, fieldDefinitions: any, changeSummary?: string }
 const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
@@ -14,7 +24,7 @@ const open = computed({ get: () => props.open, set: v => emit('update:open', v) 
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const { confirmActionToast } = useConfirmActionToast()
 const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
-const lang = ref<'id' | 'en'>('id'); const preview = ref<any>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
+const lang = ref<'id' | 'en'>('id'); const preview = ref<TemplateValidationPreview | null>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
 /** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
 const previewPdfBlob = ref<Blob | null>(null); const previewPdfLoading = ref(false); const previewPdfError = ref('')
 const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>>({}); const focusedBlockId = ref<string | null>(null)
@@ -181,7 +191,10 @@ async function openPreview(v: Version) {
 
   // Validasi (dipakai panel status). Kegagalan validasi tidak memblokir PDF.
   try {
-    preview.value = await $fetch<any>(`/api/contract-template-versions/${v.id}/preview`, { method: 'POST' })
+    preview.value = await $fetch<any>(`/api/contract-template-versions/${v.id}/preview`, {
+      method: 'POST',
+      body: { contentDefinition: draft.value?.contentDefinition ?? v.contentDefinition },
+    })
   } catch (e: any) {
     preview.value = null
     toast.add({ title: 'Validasi gagal', description: apiErrorMessage(e), color: 'warning' })
@@ -969,6 +982,11 @@ function removeInvalidBlock(index: number) {
                 {{ blocksCount }} blok pada versi {{ lang === 'id' ? 'Indonesia' : 'English' }}
               </p>
             </div>
+            <p class="border-b border-default px-1 pb-1.5 pt-1.5 text-xs text-muted">
+              Pemformatan teks:
+              <b>**tebal**</b>, <i>*miring*</i>, <u>__garis bawah__</u>
+              — atau gunakan tombol di atas setiap field teks.
+            </p>
           </div>
 
           <!-- Daftar blok -->
@@ -1037,6 +1055,7 @@ function removeInvalidBlock(index: number) {
                 :index="entry.index"
                 :total="blocksCount"
                 :editable="!!draft"
+                :heading-align-default="isPkwt ? 'left' : 'center'"
                 :collapsed="collapsedBlocks[entry.block.id] ?? true"
                 :selected="focusedBlockId === entry.block.id"
                 :dragging="dragIndex === entry.index"
@@ -1176,6 +1195,7 @@ function removeInvalidBlock(index: number) {
               </p>
               <p><span class="text-muted">Placeholder:</span> {{ preview.placeholderCount }}</p>
               <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
+              <p><span class="text-muted">Blok berformat:</span> {{ preview.markedBlockCount }}</p>
             </div>
             <p v-else class="mt-2 text-xs text-muted">
               Klik <b>Pratinjau</b> untuk menjalankan validasi backend.
@@ -1246,7 +1266,17 @@ function removeInvalidBlock(index: number) {
           <div v-if="preview" class="space-y-1 text-sm">
             <p><span class="text-muted">Placeholder:</span> {{ preview.placeholderCount }}</p>
             <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
+            <p><span class="text-muted">Blok dengan pemformatan:</span> {{ preview.markedBlockCount }}</p>
+            <p><span class="text-muted">Blok diratakan:</span> {{ preview.alignedBlockCount }}</p>
           </div>
+          <UAlert
+            v-if="preview?.inlineMarkWarnings?.length"
+            icon="i-lucide-triangle-alert"
+            color="warning"
+            variant="subtle"
+            title="Penanda format tanpa pasangan"
+            :description="preview.inlineMarkWarnings.map(warning => `${warning.fieldPath}: ${warning.message}`).join(' · ')"
+          />
           <UAlert
             icon="i-lucide-info"
             color="neutral"

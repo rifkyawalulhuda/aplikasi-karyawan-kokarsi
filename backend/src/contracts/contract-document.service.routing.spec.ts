@@ -120,4 +120,16 @@ describe('ContractDocumentService — routing keluarga PKWT', () => {
     p.definition = null
     expect(() => (service as any).renderPkwtPdf(stubDoc(), p)).toThrow(BadRequestException)
   })
+
+  it('jalur generate MITRA memakai resolveMitraFonts (font sama dengan pratinjau)', () => {
+    // Regresi: kedua jalur generate MITRA dulu meng-hardcode 3 font TANPA
+    // `boldItalic`, sehingga run tebal+miring di PDF hasil generate jatuh ke
+    // BOLD tanpa kemiringan — padahal pratinjau editor (yang memakai
+    // `resolveMitraFonts()`, lengkap dengan `timesbi.ttf`) menampilkannya benar.
+    const source = readFileSync(join(__dirname, 'contract-document.service.ts'), 'utf8')
+    expect(source).toContain('import { renderMitraDocumentInto, resolveMitraFonts }')
+    // Tepat dua panggilan: `renderMitraLayoutFromBlocks` (snapshot) dan
+    // `renderMitraPdf` (legacy) — sama seperti pratinjau editor.
+    expect(source.match(/fonts: resolveMitraFonts\(\)/g)?.length).toBe(2)
+  })
 })

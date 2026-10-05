@@ -574,6 +574,55 @@ describe('ContractTemplateVersionsService.publish (overlay binding katalog)', ()
   })
 })
 
+describe('ContractTemplateVersionsService.preview (validation of editor draft)', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { ContractTemplateVersionsService } = require('./contract-template-versions.service')
+  const { TemplateFieldsService } = require('./template-fields.service')
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
+  function build(client: unknown) {
+    return new ContractTemplateVersionsService({ client } as never, new TemplateFieldsService({ client } as never), {} as never)
+  }
+
+  const version = {
+    id: 51,
+    status: 'DRAFT',
+    templateId: 9,
+    contentDefinition: {
+      languages: { id: [
+        { id: 'p', type: 'paragraph', text: 'Saved content' },
+        { id: 'sig', type: 'signature' },
+      ] },
+    },
+    fieldDefinitions: [],
+    template: { id: 9, code: 'MITRA_DRIVER', family: 'MITRA' },
+  }
+
+  it('validates submitted unsaved content and returns formatting counts', async () => {
+    const { client } = makeService({ template: version.template, existingDraft: version, catalog: [] })
+    const result = await build(client).preview(51, {
+      languages: { id: [
+        { id: 'p', type: 'paragraph', text: '**Unsaved**', align: 'right' },
+        { id: 'sig', type: 'signature' },
+      ] },
+    })
+
+    expect(result.valid).toBe(true)
+    expect(result.markedBlockCount).toBe(1)
+    expect(result.alignedBlockCount).toBe(1)
+  })
+
+  it('rejects invalid formatting in submitted content before preview reports valid', async () => {
+    const { client } = makeService({ template: version.template, existingDraft: version, catalog: [] })
+    await expect(build(client).preview(51, {
+      languages: { id: [
+        { id: 'p', type: 'paragraph', text: 'Unsaved', align: 'sideways' },
+        { id: 'sig', type: 'signature' },
+      ] },
+    })).rejects.toThrow(/align/)
+  })
+})
+
 describe('ContractTemplateVersionsService.updateDraft (normalisasi judul pasal)', () => {
   /* eslint-disable @typescript-eslint/no-require-imports */
   const { ContractTemplateVersionsService } = require('./contract-template-versions.service')

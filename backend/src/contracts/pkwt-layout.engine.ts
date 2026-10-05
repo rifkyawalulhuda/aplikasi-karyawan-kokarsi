@@ -27,6 +27,13 @@ import {
   drawJustifiedLine,
   wrapCellLines
 } from './table-layout.helpers'
+import type { InlineRun } from './inline-marks'
+import {
+  drawRunsLine,
+  wrapRunsToLines,
+  type InlineRunAlign,
+  type RunFonts,
+} from './inline-run-layout'
 import PDFDocument from 'pdfkit'
 
 /** Geometri master (satuan: PDF point, origin kiri-atas). */
@@ -270,6 +277,30 @@ export const PKWT_FONT_NAMES = {
   headerRegular: 'PKWT-HeaderRegular'
 } as const
 
+/**
+ * Perataan teks PKWT.
+ *
+ * Alias dari `InlineRunAlign` supaya hanya ada SATU daftar nilai yang sah di
+ * seluruh sistem (dipakai juga oleh `template-schema.validator.ts` lewat
+ * `BLOCK_ALIGN_VALUES`). Mendefinisikan ulang daftarnya di sini akan membuat dua
+ * sumber kebenaran yang bisa menyimpang.
+ */
+export type PkwtAlign = InlineRunAlign
+
+/**
+ * Font logical untuk jalur run (mark).
+ *
+ * Memakai NAMA LOGIS yang sudah didaftarkan `registerPkwtFonts()`, bukan path
+ * TTF. Alasannya: `wrapRunsToLines`/`drawRunsLine` menerima `doc` dan memanggil
+ * `doc.font(...)` sendiri, sedangkan engine tidak pernah menyentuh path font.
+ */
+export const PKWT_RUN_FONTS: RunFonts = {
+  regular: PKWT_FONT_NAMES.regular,
+  bold: PKWT_FONT_NAMES.bold,
+  italic: PKWT_FONT_NAMES.italic,
+  boldItalic: PKWT_FONT_NAMES.boldItalic,
+}
+
 /** Lebar dalam kolom (di dalam border & padding). */
 
 /* ------------------------------------------------------------------ *
@@ -298,6 +329,29 @@ export interface PkwtRow {
    */
   idJustify?: boolean
   enJustify?: boolean
+  /**
+   * Run ber-mark (bold/italic/underline) PER-KOLOM.
+   *
+   * `undefined` berarti teks kolom itu TIDAK bermark, sehingga renderer memakai
+   * jalur lama (`doc.text` / `drawJustifiedLine`) apa adanya — inilah yang
+   * menjamin template yang sudah ada menghasilkan PDF yang sama persis.
+   *
+   * Bila terisi, `id`/`en` tetap berisi teks polos gabungan run-nya (dipakai
+   * untuk pengukuran tinggi baris), sedangkan penggambaran memakai
+   * `drawRunsLine()`.
+   */
+  idRuns?: InlineRun[]
+  enRuns?: InlineRun[]
+  /**
+   * Perataan PER-KOLOM dari properti blok (`block.align`).
+   *
+   * `undefined` = pakai rumus lama (`idJustify`/`enJustify`), sehingga template
+   * lama tidak berubah. Nilai eksplisit menang dan berlaku untuk SELURUH baris
+   * blok itu — termasuk baris judul pasal, supaya "Rata Tengah" menengahkan
+   * pasal secara utuh.
+   */
+  idAlign?: PkwtAlign
+  enAlign?: PkwtAlign
   /** Untuk `list`: label nomor ("1.", "a.") agar hanging indent konsisten. */
   idLabel?: string
   enLabel?: string
@@ -502,6 +556,16 @@ export function pkwtRowIsHeading(row: PkwtRow): boolean {
 export interface PkwtParagraph {
   text: string
   bold: boolean
+  /**
+   * Run ber-mark dari paragraf ini. `undefined` = teks polos (tanpa mark),
+   * sehingga engine memakai `wrapCellLines` seperti sebelumnya.
+   */
+  runs?: InlineRun[]
+  /**
+   * Perataan dari `block.align`. `undefined` = pakai rumus lama (`!lastOfPara`),
+   * sehingga template lama tidak berubah perilakunya.
+   */
+  align?: PkwtAlign
   /** Id blok sumber (`opening`, `recitals`, `section-3`, …); untuk debug saja. */
   blockId: string
   /** Nomor urut blok (0-based) di antara blok yang menghasilkan paragraf. */
@@ -535,14 +599,37 @@ export function buildPkwtRowsFromStructuredParagraphs(
   const font = opts.font ?? PKWT_FONT_NAMES.regular
 
   /** Satu baris keluaran dalam sebuah blok, lengkap dengan gaya per-kolom. */
-  type BlockLine = { text: string, bold: boolean, lastOfPara: boolean }
+  type BlockLine = {
+    text: string
+    /** Terisi hanya bila paragraf sumbernya bermark (bold/italic/underline). */
+    runs?: InlineRun[]
+    bold: boolean
+    lastOfPara: boolean
+    /** Perataan dari `block.align`; `undefined` = rumus lama. */
+    align?: PkwtAlign
+  }
 
   const toLines = (paras: PkwtParagraph[]): BlockLine[] => {
     const out: BlockLine[] = []
     for (const p of paras) {
+      // Jalur run HANYA dipakai bila paragrafnya benar-benar bermark. Teks polos
+      // tetap lewat `wrapCellLines`, sehingga template lama tidak berubah.
+      if (p.runs && p.runs.length > 0) {
+        const runLines = wrapRunsToLines(doc, p.runs, opts.width, PKWT_RUN_FONTS, opts.size)
+        runLines.forEach((lineRuns, i) => {
+          out.push({
+            text: lineRuns.map(run => run.text).join(''),
+            runs: lineRuns,
+            bold: p.bold,
+            lastOfPara: i === runLines.length - 1,
+            align: p.align,
+          })
+        })
+        continue
+      }
       const lines = wrapCellLines(doc, p.text, opts.width, font, opts.size)
       lines.forEach((text, i) => {
-        out.push({ text, bold: p.bold, lastOfPara: i === lines.length - 1 })
+        out.push({ text, bold: p.bold, lastOfPara: i === lines.length - 1, align: p.align })
       })
     }
     return out
@@ -578,6 +665,11 @@ export function buildPkwtRowsFromStructuredParagraphs(
         kind: isHeading ? 'heading' : 'body',
         idBold,
         enBold,
+        // Run & perataan hanya ikut bila ada; `undefined` = jalur lama.
+        idRuns: left?.runs,
+        enRuns: right?.runs,
+        idAlign: left?.align,
+        enAlign: right?.align,
         // Baris judul tidak pernah direntangkan (lihat `renderPkwtLayout`).
         idJustify: !idBold && left !== undefined && !left.lastOfPara,
         enJustify: !enBold && right !== undefined && !right.lastOfPara
@@ -1018,6 +1110,34 @@ export interface PkwtLayoutMeta {
  * Berbeda dari MITRA, TIDAK ada split-stream: pasangan baris sudah sejajar
  * secara semantik, jadi tidak ada pencarian titik potong.
  */
+/**
+ * Tentukan perataan satu sel dari `align` eksplisit + rumus lama.
+ *
+ * PRIORITAS (penting untuk nol regresi):
+ *  1. `explicit` terisi  → pakai itu, apa pun nilai `bold`/`justify`-nya.
+ *     Termasuk baris judul pasal: "Rata Tengah" pada sebuah pasal harus
+ *     menengahkan judul DAN uraiannya, bukan hanya uraiannya.
+ *  2. `bold` benar       → `'left'` (perilaku lama: baris bold tidak pernah
+ *     direntangkan).
+ *  3. `justify` benar    → `'justify'` (perilaku lama).
+ *  4. selain itu         → `'left'`.
+ *
+ * Tanpa `explicit`, fungsi ini mereproduksi rumus lama PERSIS:
+ * `idJustify = idBold ? false : row.idJustify`, lalu
+ * `justify ? drawJustifiedLine : doc.text(align:'left')`.
+ */
+export function resolveCellAlign(
+  explicit: PkwtAlign | undefined,
+  bold: boolean,
+  justify: boolean,
+): PkwtAlign {
+  if (explicit === 'left' || explicit === 'center' || explicit === 'right' || explicit === 'justify') {
+    return explicit
+  }
+  if (bold) return 'left'
+  return justify ? 'justify' : 'left'
+}
+
 export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
   const G = PKWT_GEOMETRY
   const F = PKWT_FONT_NAMES
@@ -1057,18 +1177,46 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
    * Geometri tetap milik `measureRow`: tinggi baris TIDAK dihitung ulang, jadi
    * pagination identik dengan sebelum justifikasi ditambahkan.
    */
-  const drawCell = (cell: string, x: number, w: number, bold: boolean, justify: boolean) => {
-    const font = bold ? F.bold : F.regular
-    doc.font(font).fontSize(G.font.body).fillColor('#000000')
-    if (!justify) {
-      // Jalur rata-kiri: sama persis dengan sebelum justifikasi ada.
-      doc.text(cell, x, y, { width: w, lineGap: G.lineGap, align: 'left' })
+  /**
+   * Gambar satu baris pada satu kolom.
+   *
+   * PENTING: satu `PkwtRow` sudah merepresentasikan SATU baris keluaran —
+   * `buildPkwtRows*` memanggil `wrapCellLines`/`wrapRunsToLines` lebih dulu, jadi
+   * `cell` di sini tidak perlu dibungkus lagi. Itulah kenapa perataan
+   * diputuskan di tingkat BARIS, bukan di sini.
+   *
+   * Tiga jalur, dipilih agar template lama TIDAK berubah:
+   *  1. `runs` terisi   → `drawRunsLine()` (mark + perataan 4 arah).
+   *  2. `align='justify'` → `drawJustifiedLine()` — persis perilaku lama.
+   *  3. selain itu      → `doc.text({ align })`; untuk `'left'` ini identik
+   *     dengan jalur rata-kiri lama.
+   *
+   * Geometri tetap milik `measureRow`: tinggi baris TIDAK dihitung ulang, jadi
+   * pagination identik dengan sebelum fitur ini ditambahkan.
+   */
+  const drawCell = (
+    cell: string,
+    runs: InlineRun[] | undefined,
+    x: number,
+    w: number,
+    bold: boolean,
+    align: PkwtAlign,
+  ) => {
+    // Jalur run hanya aktif bila teksnya benar-benar bermark.
+    if (runs && runs.length > 0) {
+      drawRunsLine(doc, runs, x, y, w, PKWT_RUN_FONTS, G.font.body, align)
       return
     }
-    // `drawJustifiedLine` otomatis jatuh kembali ke rata-kiri bila baris hanya
-    // punya <= 1 kata atau ruangnya sudah negatif (tidak ada celah untuk
-    // direntangkan), sehingga tidak pernah menumpuk kata.
-    drawJustifiedLine(doc, cell, x, y, w, { font, size: G.font.body })
+    const font = bold ? F.bold : F.regular
+    doc.font(font).fontSize(G.font.body).fillColor('#000000')
+    if (align === 'justify') {
+      // `drawJustifiedLine` otomatis jatuh kembali ke rata-kiri bila baris hanya
+      // punya <= 1 kata atau ruangnya sudah negatif (tidak ada celah untuk
+      // direntangkan), sehingga tidak pernah menumpuk kata.
+      drawJustifiedLine(doc, cell, x, y, w, { font, size: G.font.body })
+      return
+    }
+    doc.text(cell, x, y, { width: w, lineGap: G.lineGap, align })
   }
 
   for (const row of opts.rows ?? []) {
@@ -1088,16 +1236,14 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     } else {
       y += gap
     }
-    // Bold & justify PER-KOLOM. `justify` (row-level) tetap dihormati sebagai
-    // fallback untuk pemanggil lama.
+    // Bold & perataan PER-KOLOM. `align` eksplisit menang; bila tidak ada, rumus
+    // lama dipakai apa adanya sehingga template lama tidak berubah.
     const idBold = row.idBold === true
     const enBold = row.enBold === true
-    const idJustify
-      = idBold ? false : row.idJustify ?? (row.justify === true)
-    const enJustify
-      = enBold ? false : row.enJustify ?? (row.justify === true)
-    if (row.id) drawCell(row.id, G.left.x0 + G.textPaddingLeft, innerW0, idBold, idJustify)
-    if (row.en) drawCell(row.en, G.right.x0 + G.textPaddingLeft, innerW1, enBold, enJustify)
+    const idAlign = resolveCellAlign(row.idAlign, idBold, row.idJustify ?? (row.justify === true))
+    const enAlign = resolveCellAlign(row.enAlign, enBold, row.enJustify ?? (row.justify === true))
+    if (row.id) drawCell(row.id, row.idRuns, G.left.x0 + G.textPaddingLeft, innerW0, idBold, idAlign)
+    if (row.en) drawCell(row.en, row.enRuns, G.right.x0 + G.textPaddingLeft, innerW1, enBold, enAlign)
     y += h + (row.kind === 'heading' ? G.headingGapAfter : 0)
     contentBottoms[pageIndex] = y
   }
