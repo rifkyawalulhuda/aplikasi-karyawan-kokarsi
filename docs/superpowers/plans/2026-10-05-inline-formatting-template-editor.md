@@ -1238,4 +1238,26 @@ Fitur kini **aktif di aplikasi**: `RichTextField` + `AlignButtonGroup` terpasang
 1. Validasi eksplisit atas editan draft yang belum disimpan pada endpoint validasi JSON (saat ini ia memvalidasi versi tersimpan; preview PDF menerima konten draft).
 2. `insertField()` menyisipkan `{{key}}` di posisi kursor `RichTextField` — masih menyisip di akhir string.
 
+---
+
+## Perbaikan bug (2026-10-05): `{{employee.gender}}` tampil `...............` di Pratinjau MITRA
+
+**Gejala.** Sample "Draft v9 Mitra Driver" — baris `Jenis Kelamin` pada blok identitas PIHAK KEDUA menampilkan `...............` di Pratinjau, padahal kontrak yang di-generate dari data nyata sudah benar.
+
+**Akar masalah.** Bukan di renderer. `mitraInterpolate()` (MITRA) dan padanannya di PKWT sengaja menjatuhkan placeholder tanpa nilai ke `MITRA_EMPTY_FALLBACK` (`...............`) — itu perilaku yang benar. Masalahnya: `employee.gender` ada di katalog field (`SYSTEM_FIELD_SEEDS`, sehingga BISA disisipkan admin lewat picker) tetapi **tidak ada** di `MITRA_PREVIEW_VALUES` (`mitra-preview-sample.ts`), peta nilai contoh yang dipakai `renderMitraPreview()`. Jalur generate nyata sudah benar sejak awal: `resolvePlaceholderValue()` → cabang eksplisit `path === 'gender'` → `genderLabel(employee.gender, 'ID')` → "Laki-laki".
+
+**Perbaikan.**
+
+1. `mitra-preview-sample.ts` — tambah `'employee.gender': 'Laki-laki'` (label ID, konsisten dengan `PKWT_PREVIEW_VALUES`; varian EN PKWT sudah ada di `PKWT_PREVIEW_VALUES_EN` → "Male").
+2. `pkwt-preview-sample.ts` — tambah `'custom.ktp_issued_date'` untuk paritas: katalog field itu GLOBAL (dipakai MITRA dan PKWT), jadi picker PKWT juga menawarkan field ini dan pratinjau PKWT harus punya nilainya.
+3. Penjaga kelas bug (agar field katalog baru otomatis terjaga, bukan daftar hardcode):
+   - `mitra-document.renderer.spec.ts` — spec baru: SELURUH key `SYSTEM_FIELD_SEEDS` + `custom.*` dari `CONTRACT_INPUT_FIELD_SEEDS` wajib ada di `MITRA_PREVIEW_VALUES`.
+   - `pkwt-document.renderer.spec.ts` — spec padanannya untuk `PKWT_PREVIEW_VALUES` + asersi bilingual gender ("Laki-laki" ID / "Male" EN).
+
+**Verifikasi.**
+
+- Spec MITRA + PKWT + default-template-definition: **72/72 PASS**; `tsc --noEmit` exit 0.
+- End-to-end pada PDF sungguhan: `createMitraPdfBuffer` dengan blok identitas + `MITRA_PREVIEW_VALUES`; `PDFDocument.prototype.text` disadap (teks dibaca sebelum encoding glyph, menghindari kerumitan CMap) — terbukti `Jenis Kelamin: Laki-laki` DIGAMBAR, `employee.gender` tidak pernah muncul, dan field tak dikenal tetap `...............` (fallback utuh).
+- Audit paritas katalog (21 field): MITRA kurang 0, PKWT kurang 0 (setelah poin 2).
+
 

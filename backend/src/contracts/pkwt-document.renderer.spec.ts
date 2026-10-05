@@ -18,6 +18,11 @@ import {
   blocksToPkwtParagraphs
 } from './pkwt-document.renderer'
 import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
+import { PKWT_PREVIEW_VALUES, PKWT_PREVIEW_VALUES_EN } from './pkwt-preview-sample'
+import {
+  CONTRACT_INPUT_FIELD_SEEDS,
+  SYSTEM_FIELD_SEEDS,
+} from '../contract-templates/template-field-seeds'
 
 const fonts = resolvePkwtFonts()
 // Bila Lucida tidak ada di host, renderer jatuh ke Times â€” dokumen tetap jadi,
@@ -333,5 +338,28 @@ describe('PKWT logo & chrome', () => {
     expect(PKWT_HEADER_CHROME.org).toHaveLength(3)
     expect(PKWT_HEADER_CHROME.org[0]).toBe('KOPERASI KARYAWAN')
     expect(PKWT_HEADER_CHROME.contactLine).toContain('TELP.')
+  })
+})
+
+/**
+ * Penjaga kelas bug pratinjau: field yang terdaftar di katalog (dan karena itu
+ * BISA disisipkan admin lewat picker editor) tetapi tidak punya nilai contoh
+ * akan tampil sebagai `...............` di Pratinjau — persis kasus
+ * `{{employee.gender}}` MITRA. Diuji terhadap katalog seed, bukan daftar
+ * hardcode, supaya field katalog baru otomatis ikut terjaga di kedua family.
+ */
+describe('PKWT_PREVIEW_VALUES', () => {
+  it('mencakup SELURUH field katalog yang bisa disisipkan dari picker editor', () => {
+    const keys = [
+      ...SYSTEM_FIELD_SEEDS.map(seed => seed.key),
+      ...CONTRACT_INPUT_FIELD_SEEDS.map(seed => `custom.${seed.key}`),
+    ]
+    const missing = keys.filter(key => !PKWT_PREVIEW_VALUES[key])
+    expect(missing).toEqual([])
+  })
+
+  it('employee.gender tampil "Laki-laki" di kolom ID dan "Male" di kolom EN', () => {
+    expect(PKWT_PREVIEW_VALUES['employee.gender']).toBe('Laki-laki')
+    expect(PKWT_PREVIEW_VALUES_EN['employee.gender']).toBe('Male')
   })
 })

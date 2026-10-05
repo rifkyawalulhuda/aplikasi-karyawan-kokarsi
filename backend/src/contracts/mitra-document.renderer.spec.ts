@@ -5,6 +5,10 @@ import {
   resolveMitraFonts,
 } from './mitra-document.renderer'
 import { MITRA_PREVIEW_VALUES } from './mitra-preview-sample'
+import {
+  CONTRACT_INPUT_FIELD_SEEDS,
+  SYSTEM_FIELD_SEEDS,
+} from '../contract-templates/template-field-seeds'
 
 /**
  * Regresi pintu tunggal render MITRA.
@@ -163,12 +167,30 @@ describe('MITRA_PREVIEW_VALUES', () => {
       'contract.termRange',
       'employee.fullName',
       'employee.nik',
+      'employee.gender',
       'employee.jobRole',
       'settings.cooperativeChairmanName',
       'doc.hariTanggal',
     ]) {
       expect(MITRA_PREVIEW_VALUES[key]).toBeTruthy()
     }
+  })
+
+  it('mencakup SELURUH field katalog yang bisa disisipkan dari picker editor', () => {
+    // Penjaga kelas bug: field yang terdaftar di katalog (dan karena itu BISA
+    // disisipkan admin lewat picker) tetapi tidak punya nilai contoh akan tampil
+    // sebagai `...............` di Pratinjau, sehingga terlihat seperti renderer
+    // rusak padahal hanya sample-nya kurang. Diuji terhadap katalog, bukan
+    // terhadap satu daftar hardcode, supaya field baru otomatis ikut terjaga.
+    const missingSystem = SYSTEM_FIELD_SEEDS
+      .map(seed => seed.key)
+      .filter(key => !MITRA_PREVIEW_VALUES[key])
+    expect(missingSystem).toEqual([])
+
+    const missingContractInput = CONTRACT_INPUT_FIELD_SEEDS
+      .map(seed => `custom.${seed.key}`)
+      .filter(key => !MITRA_PREVIEW_VALUES[key])
+    expect(missingContractInput).toEqual([])
   })
 
   it('memakai key custom tanpa prefix ganda', () => {

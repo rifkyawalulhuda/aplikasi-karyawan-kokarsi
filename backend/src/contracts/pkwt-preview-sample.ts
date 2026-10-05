@@ -36,6 +36,10 @@ export const PKWT_PREVIEW_VALUES: Record<string, string> = {
   'doc.hariTanggal': 'Kamis, 2 Juli 2026',
   'doc.docDate': '2 Juli 2026',
   'settings.cooperativeChairmanName': 'Hari Suhono',
+  // Field dinamis (CONTRACT_INPUT). Katalog field GLOBAL (dipakai MITRA dan
+  // PKWT), jadi picker editor PKWT juga menawarkan field ini — bila admin
+  // menyisipkannya, pratinjau harus tetap menampilkan nilai, bukan titik-titik.
+  'custom.ktp_issued_date': '08 Agustus 2024',
 }
 
 /**
