@@ -26,16 +26,17 @@ interface Props {
   /** Garis sisip: di atas kartu (`before`) atau di bawahnya (`after`). */
   dropIndicator?: 'none' | 'before' | 'after'
   /**
-   * Keluarga template mendukung "Spasi antar blok" (`spaceAfter`). Hanya MITRA
-   * yang punya dukungan ini; PKWT memakai penguncian baris dua kolom.
+   * Tipe blok yang mendukung "Spasi antar blok" (`spaceAfter`) untuk keluarga
+   * template ini. Kosong/absen → kontrol tidak ditampilkan (mis. blok yang tidak
+   * mengalir ke dokumen).
    */
-  supportsSpacing?: boolean
+  spaceTypes?: string[]
 }
 const props = withDefaults(defineProps<Props>(), {
   headingAlignDefault: 'center',
   dragging: false,
   dropIndicator: 'none',
-  supportsSpacing: false
+  spaceTypes: () => []
 })
 const emit = defineEmits<{
   'move': [direction: number]
@@ -67,11 +68,11 @@ const columnList = computed<TableColumn[]>(() => props.block?.columns ?? [])
 const rowList = computed<Record<string, string>[]>(() => props.block?.rows ?? [])
 
 /**
- * Tipe blok yang mendukung `spaceAfter`. Disamakan dengan
- * `SPACE_CAPABLE_BLOCKS` di `backend/.../template-schema.validator.ts`.
+ * Tipe blok yang mendukung `spaceAfter` untuk keluarga template ini, dikirim
+ * induk lewat prop `spaceTypes` (MITRA vs PKWT berbeda). Disamakan dengan
+ * `spaceCapableBlocks()` di `backend/.../template-schema.validator.ts`.
  */
-const SPACE_CAPABLE = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table']
-const showSpacing = computed(() => props.supportsSpacing && SPACE_CAPABLE.includes(props.block?.type))
+const showSpacing = computed(() => (props.spaceTypes ?? []).includes(props.block?.type))
 
 /** Label ringkas jarak aktif untuk badge kepala kartu. */
 const spaceBadge = computed<string | null>(() => {

@@ -206,20 +206,51 @@ describe('validateContentDefinition', () => {
     }
   })
 
-  it('menolak spaceAfter pada template PKWT', () => {
+  it('menerima spaceAfter pada blok konten PKWT (paragraph/article/list)', () => {
     const content = {
       languages: {
         id: [
           { id: 'p', type: 'paragraph', text: 'Body', spaceAfter: 10 },
+          { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], spaceAfter: 0 },
+          { id: 'l', type: 'list', style: 'bullet', items: ['a'], spaceAfter: 8 },
           { id: 'sig', type: 'signature' },
         ],
         en: [
           { id: 'p-en', type: 'paragraph', text: 'Body' },
+          { id: 'a-en', type: 'article', heading: 'ARTICLE 1', paragraphs: ['Body'] },
+          { id: 'l-en', type: 'list', style: 'bullet', items: ['a'] },
           { id: 'sig-en', type: 'signature' },
         ],
       },
     }
-    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'PKWT')).toThrow(/spaceAfter/)
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'PKWT')
+    expect(result.spacedBlockCount).toBe(3)
+  })
+
+  it('menolak spaceAfter pada blok PKWT yang tidak mengalir ke kolom (title)', () => {
+    const content = {
+      languages: {
+        id: [
+          { id: 'title', type: 'title', text: 'JUDUL', spaceAfter: 10 },
+          { id: 'sig', type: 'signature' },
+        ],
+        en: [
+          { id: 'title-en', type: 'title', text: 'TITLE' },
+          { id: 'sig-en', type: 'signature' },
+        ],
+      },
+    }
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'PKWT')
+      throw new Error('Expected validator to reject spaceAfter on PKWT title')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'languages.id[0].spaceAfter',
+          message: expect.stringMatching(/tidak didukung pada blok title/),
+        }),
+      ]))
+    }
   })
 
   it('melaporkan delimiter tak berpasangan sebagai warning tanpa menggagalkan validasi', () => {

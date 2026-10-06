@@ -509,6 +509,18 @@ const BLOCK_PICKER = [
   { type: 'pageBreak', label: 'Ganti Halaman', icon: 'i-lucide-scissors', desc: 'Paksa halaman baru di PDF' }
 ] as const
 
+/**
+ * Tipe blok yang menampilkan kontrol "Spasi antar blok" (`spaceAfter`) per
+ * keluarga. Disamakan dengan `spaceCapableBlocks()` di
+ * `backend/src/contract-templates/template-schema.validator.ts`.
+ *
+ * MITRA mengalirkan blok (semua blok konten); PKWT mengunci baris ID/EN per blok
+ * dan hanya `paragraph`/`article`/`list` yang benar-benar masuk kolom —
+ * `title`/`subtitle` jadi kop dan `table` dilewati.
+ */
+const MITRA_SPACE_TYPES = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table']
+const PKWT_SPACE_TYPES = ['paragraph', 'article', 'list']
+
 /** Apakah draft punya perubahan yang belum disimpan. */
 const draftDirty = ref(false)
 const originalDraftJson = ref('')
@@ -1335,7 +1347,7 @@ function removeInvalidBlock(index: number) {
                 :total="blocksCount"
                 :editable="!!draft"
                 :heading-align-default="isPkwt ? 'left' : 'center'"
-                :supports-spacing="!isPkwt"
+                :space-types="isPkwt ? PKWT_SPACE_TYPES : MITRA_SPACE_TYPES"
                 :collapsed="collapsedBlocks[entry.block.id] ?? true"
                 :selected="focusedBlockId === entry.block.id"
                 :dragging="dragIndex === entry.index"

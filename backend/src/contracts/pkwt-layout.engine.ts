@@ -28,6 +28,7 @@ import {
   wrapCellLines
 } from './table-layout.helpers'
 import type { InlineRun } from './inline-marks'
+import { blockSpaceAfterPts } from './block-spacing'
 import {
   drawRunsLine,
   wrapRunsToLines,
@@ -412,6 +413,46 @@ function markBlockGaps(rows: PkwtRow[], blockStartRows: number[], limit: number)
 }
 
 /**
+ * Tambahkan jarak PER-BLOK (`block.spaceAfter`) pada baris pembuka blok
+ * BERIKUTNYA.
+ *
+ * `spaceAfter` blok ke-`i` menambah `gapBefore` baris pertama blok ke-`i+1`, di
+ * atas `PKWT_GEOMETRY.blockGap` yang sudah dipasang `markBlockGaps`. Karena
+ * jarak hanya bermakna DI ANTARA dua blok, blok terakhir tidak menyumbang apa
+ * pun (tidak ada blok setelahnya).
+ *
+ * @param blockSpaces jarak blok, sejajar indeks dengan `blockStartRows`.
+ */
+function applyBlockSpaceAfter(rows: PkwtRow[], blockStartRows: number[], blockSpaces: number[]): void {
+  for (let i = 1; i < blockStartRows.length; i++) {
+    const extra = blockSpaces[i - 1] ?? 0
+    if (extra <= 0) continue
+    const at = blockStartRows[i]
+    if (at <= 0 || at >= rows.length) continue
+    const row = rows[at]
+    if (!row) continue
+    row.gapBefore = (row.gapBefore ?? 0) + extra
+  }
+}
+
+/**
+ * Jarak blok dari sekumpulan paragraf satu blok.
+ *
+ * Kolom ID dan EN terkunci per baris, jadi jaraknya SATU nilai untuk baris
+ * gabungan. Bila admin menyetel `spaceAfter` hanya di salah satu bahasa (atau
+ * berbeda), nilai TERBESAR yang dipakai — jarak tetap terasa walau hanya satu
+ * kolom yang disetel.
+ */
+function blockSpaceAfterOf(paras: PkwtParagraph[] | undefined): number {
+  let max = 0
+  for (const p of paras ?? []) {
+    const v = blockSpaceAfterPts(p.spaceAfter)
+    if (v > max) max = v
+  }
+  return max
+}
+
+/**
  * Bangun daftar baris paralel dari dua stream terpisah.
  *
  * Stream `id` dan `en` TIDAK dijamin punya jumlah baris sama (redaksi bisa
@@ -570,6 +611,15 @@ export interface PkwtParagraph {
   blockId: string
   /** Nomor urut blok (0-based) di antara blok yang menghasilkan paragraf. */
   blockIndex: number
+  /**
+   * Jarak vertikal TAMBAHAN setelah blok ini (`block.spaceAfter`, pt).
+   *
+   * Bersifat aditif di atas `PKWT_GEOMETRY.blockGap`. Karena kolom ID dan EN
+   * terkunci per baris, jarak blok adalah SATU nilai untuk baris gabungan —
+   * engine memakai `max` dari kedua kolom (lihat
+   * `buildPkwtRowsFromStructuredParagraphs`).
+   */
+  spaceAfter?: number
 }
 
 /**
@@ -679,18 +729,27 @@ export function buildPkwtRowsFromStructuredParagraphs(
 
   // Blok menurut urutan kolom ID (kolom kiri = acuan tata letak dokumen).
   const starts: number[] = []
+  const blockSpaces: number[] = []
   for (const blockIndex of idGroup.keys()) {
     starts.push(rows.length)
+    // Kolom ID & EN terkunci per baris: jarak blok = max kedua kolom, supaya
+    // `spaceAfter` yang disetel hanya di satu bahasa tetap terasa.
+    blockSpaces.push(Math.max(
+      blockSpaceAfterOf(idGroup.get(blockIndex)),
+      blockSpaceAfterOf(enGroup.get(blockIndex)),
+    ))
     emitBlock(blockIndex)
   }
   // Blok EN tanpa padanan ID tetap dihormati — jangan hilangkan konten legal.
   for (const blockIndex of enGroup.keys()) {
     if (idGroup.has(blockIndex)) continue
     starts.push(rows.length)
+    blockSpaces.push(blockSpaceAfterOf(enGroup.get(blockIndex)))
     emitBlock(blockIndex)
   }
 
   markBlockGaps(rows, starts, rows.length)
+  applyBlockSpaceAfter(rows, starts, blockSpaces)
 
   return rows
 }

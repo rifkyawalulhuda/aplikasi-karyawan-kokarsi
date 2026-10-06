@@ -258,6 +258,28 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
       ['p2', 1],
     ])
   })
+
+  it('spaceAfter dibawa tiap paragraf blok (0 bila tidak diset)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [
+        { id: 'p1', type: 'paragraph', text: 'satu', spaceAfter: 12 },
+        { id: 'p2', type: 'paragraph', text: 'dua' },
+      ],
+      values
+    )
+    expect(paras.map(p => p.spaceAfter)).toEqual([12, 0])
+  })
+
+  it('spaceAfter diabaikan bila nilainya tidak sah (perilaku lama)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [
+        { id: 'p1', type: 'paragraph', text: 'satu', spaceAfter: 999 },
+        { id: 'p2', type: 'paragraph', text: 'dua', spaceAfter: -3 },
+      ],
+      values
+    )
+    expect(paras.map(p => p.spaceAfter)).toEqual([0, 0])
+  })
 })
 
 describe('PKWT document renderer — mark & perataan di PDF NYATA', () => {

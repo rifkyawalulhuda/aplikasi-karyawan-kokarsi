@@ -16,6 +16,7 @@
  * atau menulis ulang konten legal.
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
+import { blockSpaceAfterPts } from './block-spacing'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
 import {
   drawRunsLine,
@@ -298,28 +299,17 @@ export function mitraBlockAlign(value: unknown): MitraAlign | undefined {
 }
 
 /**
- * Batas atas `spaceAfter` (pt) — SAMA dengan `MAX_BLOCK_SPACE_AFTER` di
- * `template-schema.validator.ts`. Digandakan (bukan diimpor) karena modul ini
- * berada di `contracts/`, sedangkan validator di `contract-templates/` yang
- * bergantung pada `contracts/` — mengimpor ke arah sebaliknya akan membuat
- * siklus modul.
- */
-export const MITRA_MAX_BLOCK_SPACE_AFTER = 40
-
-/**
  * Jarak vertikal TAMBAHAN di bawah satu blok (`block.spaceAfter`), satuan pt.
  *
  * Bersifat ADITIF di atas jarak bawaan renderer: nilai tak sah / `undefined` /
  * `<= 0` → `0` (tanpa jarak tambahan), sehingga template lama menghasilkan PDF
  * yang sama persis. Diterapkan hanya bila blok berikutnya masih berada di
  * kolom/halaman yang sama — lihat `renderMitraPass`.
+ *
+ * Normalisasi berasal dari modul bersama `contracts/block-spacing.ts` (dipakai
+ * juga oleh validator dan engine PKWT).
  */
-export function mitraBlockSpaceAfter(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
-  const n = Math.round(value)
-  if (n <= 0 || n > MITRA_MAX_BLOCK_SPACE_AFTER) return 0
-  return n
-}
+export const mitraBlockSpaceAfter = blockSpaceAfterPts
 
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)\s*\}\}/g
 

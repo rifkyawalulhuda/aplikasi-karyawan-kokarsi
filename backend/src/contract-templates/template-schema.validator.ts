@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common'
 import { hasInlineMarks, validateInlineMarks } from '../contracts/inline-marks'
 import { INLINE_RUN_ALIGN_VALUES, type InlineRunAlign } from '../contracts/inline-run-layout'
+import { MAX_BLOCK_SPACE_AFTER, normalizeBlockSpaceAfter } from '../contracts/block-spacing'
 
 /** Tipe blok yang didukung renderer V1 */
 export const BLOCK_TYPES = [
@@ -47,8 +48,8 @@ export function blockAlign(value: unknown): BlockAlign | undefined {
 }
 
 /**
- * Blok konten yang boleh membawa `spaceAfter` (jarak vertikal tambahan di bawah
- * blok, satuan pt).
+ * Blok konten MITRA yang boleh membawa `spaceAfter` (jarak vertikal tambahan di
+ * bawah blok, satuan pt).
  *
  * `pageBreak` dikecualikan karena ia sendiri sudah memaksa halaman baru, dan
  * `signature` dikecualikan karena dirender di luar kotak kolom (footer). Jarak
@@ -56,22 +57,33 @@ export function blockAlign(value: unknown): BlockAlign | undefined {
  */
 export const SPACE_CAPABLE_BLOCKS = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table'] as const
 
-/** Batas atas `spaceAfter` (pt). Cukup lega untuk jarak antar-pasal, tetap aman. */
-export const MAX_BLOCK_SPACE_AFTER = 40
+/**
+ * Blok konten PKWT yang boleh membawa `spaceAfter`.
+ *
+ * Hanya blok yang BENAR-BENAR mengalir ke kolom: `blocksToPkwtParagraphs`
+ * mengubah `paragraph`/`article`/`list` menjadi paragraf ber-kolom, sedangkan
+ * `title`/`subtitle` menjadi kop (chrome) dan `table` dilewati. Memberi jarak
+ * pada yang tidak dirender hanya akan membuat admin mengira perubahannya
+ * berpengaruh.
+ */
+export const PKWT_SPACE_CAPABLE_BLOCKS = ['paragraph', 'article', 'list'] as const
 
 /**
- * Normalisasi `block.spaceAfter`.
+ * Blok yang mendukung `spaceAfter` untuk keluarga tertentu.
  *
- * Hanya bilangan bulat `0..MAX_BLOCK_SPACE_AFTER` yang sah; selain itu →
- * `undefined` (perilaku lama: tanpa jarak tambahan). Nilai `0` sah dan berarti
- * "rapat" (eksplisit tanpa jarak tambahan).
+ * MITRA dan PKWT mengalirkan konten dengan cara berbeda (MITRA mengalirkan blok
+ * dua-kolom; PKWT mengunci baris ID/EN per blok), jadi himpunan tipe yang
+ * bermakna pun berbeda.
  */
-export function blockSpaceAfter(value: unknown): number | undefined {
-  if (typeof value !== 'number' || !Number.isInteger(value)) return undefined
-  if (value < 0 || value > MAX_BLOCK_SPACE_AFTER) return undefined
-  return value
+export function spaceCapableBlocks(family: 'MITRA' | 'PKWT'): readonly string[] {
+  return family === 'PKWT' ? PKWT_SPACE_CAPABLE_BLOCKS : SPACE_CAPABLE_BLOCKS
 }
 
+/**
+ * Normalisasi `block.spaceAfter` — dialias ke modul bersama `contracts/block-spacing.ts`
+ * supaya validator dan engine tata letak memakai SATU sumber kebenaran.
+ */
+export { MAX_BLOCK_SPACE_AFTER, normalizeBlockSpaceAfter as blockSpaceAfter } from '../contracts/block-spacing'
 export interface BlockValidationIssue {
   blockId: string
   message: string
@@ -242,14 +254,13 @@ export function validateContentDefinition(
   }
 
   /**
-   * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok, di atas
-   * jarak bawaan renderer. Hanya blok konten (`SPACE_CAPABLE_BLOCKS`) dan hanya
-   * keluarga MITRA — PKWT punya penguncian baris dua kolom yang tidak menerima
-   * jarak per blok.
+   * `spaceAfter`: jarak vertikal TAMBAHAN di bawah blok, di atas jarak bawaan
+   * renderer. Hanya blok konten yang benar-benar mengalir ke dokumen — himpunan
+   * tipe berbeda per keluarga (`spaceCapableBlocks`).
    */
   const validateSpaceAfter = (block: any, id: string, fieldPath: string) => {
     if (block.spaceAfter === undefined) return
-    if (blockSpaceAfter(block.spaceAfter) === undefined) {
+    if (normalizeBlockSpaceAfter(block.spaceAfter) === undefined) {
       issues.push({
         blockId: id,
         fieldPath,
@@ -257,12 +268,12 @@ export function validateContentDefinition(
       })
       return
     }
-    if (!(SPACE_CAPABLE_BLOCKS as readonly string[]).includes(block.type)) {
-      issues.push({ blockId: id, fieldPath, message: `Properti spaceAfter tidak didukung pada blok ${block.type}.` })
-      return
-    }
-    if (family !== 'MITRA') {
-      issues.push({ blockId: id, fieldPath, message: 'Properti spaceAfter hanya didukung pada template Perjanjian Kemitraan (MITRA).' })
+    if (!spaceCapableBlocks(family).includes(block.type)) {
+      issues.push({
+        blockId: id,
+        fieldPath,
+        message: `Properti spaceAfter tidak didukung pada blok ${block.type} untuk template ${family}.`,
+      })
       return
     }
     spacedBlockCount += 1

@@ -649,11 +649,6 @@ describe('MITRA — mitraBlockSpaceAfter', () => {
     expect(mitraBlockSpaceAfter(40)).toBe(40)
   })
 
-  it('membulatkan nilai pecahan', () => {
-    expect(mitraBlockSpaceAfter(12.4)).toBe(12)
-    expect(mitraBlockSpaceAfter(12.6)).toBe(13)
-  })
-
   it('nilai tak sah / di luar rentang → 0 (perilaku lama)', () => {
     expect(mitraBlockSpaceAfter(undefined)).toBe(0)
     expect(mitraBlockSpaceAfter(null)).toBe(0)
@@ -661,6 +656,10 @@ describe('MITRA — mitraBlockSpaceAfter', () => {
     expect(mitraBlockSpaceAfter(41)).toBe(0)
     expect(mitraBlockSpaceAfter('12')).toBe(0)
     expect(mitraBlockSpaceAfter(Number.NaN)).toBe(0)
+    // Non-integer ditolak (bukan dibulatkan) supaya engine dan validator sepakat:
+    // validator hanya menerima bilangan bulat 0–40.
+    expect(mitraBlockSpaceAfter(12.4)).toBe(0)
+    expect(mitraBlockSpaceAfter(12.6)).toBe(0)
   })
 })
 

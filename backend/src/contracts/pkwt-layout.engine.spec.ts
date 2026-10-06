@@ -326,6 +326,75 @@ describe('PKWT layout engine — jarak antar-blok', () => {
   })
 })
 
+describe('PKWT layout engine — spaceAfter per blok (aditif di atas blockGap)', () => {
+  const stubDoc = {
+    font() { return this },
+    fontSize() { return this },
+    widthOfString(s: string) { return String(s).length * 5 }
+  }
+  const opts = { width: 1000, size: 9 }
+  const para = (blockIndex: number, text: string, spaceAfter?: number, bold = false) =>
+    ({ blockId: `b${blockIndex}`, blockIndex, text, bold, spaceAfter })
+
+  it('menambah gapBefore blok berikutnya tepat sebesar spaceAfter', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para(0, 'aa', 12), para(1, 'bb'), para(2, 'cc')],
+      [para(0, '11', 12), para(1, '22'), para(2, '33')],
+      opts
+    )
+    expect(rows.map(r => r.id)).toEqual(['aa', 'bb', 'cc'])
+    // Blok 0: baris pertama dokumen (tanpa gap). Blok 1: blockGap + 12.
+    expect(rows[0].gapBefore).toBeUndefined()
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap + 12)
+    // Blok 1 tidak punya spaceAfter → blok 2 hanya blockGap.
+    expect(rows[2].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('tanpa spaceAfter, gap tetap persis blockGap (tidak ada regresi)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para(0, 'aa'), para(1, 'bb')],
+      [para(0, '11'), para(1, '22')],
+      opts
+    )
+    expect(rows[0].gapBefore).toBeUndefined()
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('spaceAfter blok TERAKHIR diabaikan (tidak ada blok setelahnya)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para(0, 'aa'), para(1, 'bb', 20)],
+      [para(0, '11'), para(1, '22', 20)],
+      opts
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('kolom ID & EN terkunci: jarak = nilai TERBESAR kedua kolom', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para(0, 'aa', 12), para(1, 'bb')],
+      [para(0, '11', 20), para(1, '22')],
+      opts
+    )
+    // max(12, 20) = 20.
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap + 20)
+  })
+
+  it('spaceAfter di satu kolom saja tetap berlaku (kolom lain tanpa nilai)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [para(0, 'aa', 16), para(1, 'bb')],
+      [para(0, '11'), para(1, '22')],
+      opts
+    )
+    expect(rows[1].gapBefore).toBe(PKWT_GEOMETRY.blockGap + 16)
+  })
+})
+
 /** Apakah pdfplumber tersedia untuk uji geometris? */
 function hasPdfplumber(): boolean {
   try {

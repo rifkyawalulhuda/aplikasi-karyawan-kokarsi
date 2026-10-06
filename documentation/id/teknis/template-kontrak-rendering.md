@@ -48,7 +48,7 @@ contentDefinition = {
 
 Setiap blok memiliki `id` unik (tidak boleh duplikat dalam satu bahasa).
 
-> `spaceAfter` hanya berlaku pada keluarga **MITRA** (lihat [Spasi Antar Blok](#spasi-antar-blok-khusus-mitra)).
+> `spaceAfter` hanya berlaku pada blok yang benar-benar mengalir ke dokumen (lihat [Spasi Antar Blok](#spasi-antar-blok-spaceafter)).
 
 ## Pemformatan Inline (Bold / Italic / Underline)
 
@@ -131,25 +131,28 @@ Kedua sumbu punya jalur masing-masing agar nol regresi pada template lama:
 
 Template tanpa mark **dan** tanpa `align` mengeksekusi kode yang sama seperti sebelum fitur → output byte/paginasi identik.
 
-## Spasi Antar Blok (`spaceAfter`, khusus MITRA)
+## Spasi Antar Blok (`spaceAfter`)
 
-`spaceAfter` adalah **properti tingkat blok** berupa bilangan bulat **0–40 pt** — jarak vertikal **tambahan** di bawah blok, di atas jarak bawaan renderer (`paragraphGap`, `headingGapAfter`, `gapAfter` per tipe). Hanya berlaku pada keluarga **MITRA**; PKWT tidak mendukungnya (penguncian baris dua kolom).
+`spaceAfter` adalah **properti tingkat blok** berupa bilangan bulat **0–40 pt** — jarak vertikal **tambahan** di bawah blok, di atas jarak bawaan renderer. Berlaku untuk **kedua keluarga**, tetapi himpunan tipe blok yang bermakna berbeda karena cara kedua engine mengalirkan konten berbeda.
 
 - **Aditif, bukan menimpa.** `spaceAfter: 12` berarti "tambah 12 pt", bukan "set jarak menjadi 12 pt". Nilai `undefined`/`0` → tidak ada jarak tambahan (perilaku lama persis).
-- **Hanya blok konten.** Berlaku untuk `title`, `subtitle`, `paragraph`, `article`, `list`, `table` (`SPACE_CAPABLE_BLOCKS`). `pageBreak` dan `signature` ditolak validator.
-- **Titik penerapan (engine).** `renderMitraPass` menambahkan jarak tepat **sebelum blok berikutnya**, dan hanya bila:
-  1. blok berikutnya benar-benar menggambar konten (bukan `signature`/`pageBreak`, bukan blok `title` pertama yang dikonsumsi sebagai judul kop);
-  2. blok berikutnya masih di **kolom/halaman yang sama** — bila blok sebelumnya sudah mengisi penuh kolom, jarak dilewati agar tidak menyisakan ruang kosong di puncak kolom baru.
-- **Ikut terukur.** `planMitraLayout` menjalankan engine asli pada dokumen scratch, sehingga jarak memengaruhi pemilihan split, jumlah halaman, dan reservasi tanda tangan — paginasi selalu konsisten dengan hasil akhir.
-- **Nol regresi template lama.** Bila tidak ada blok ber-`spaceAfter`, `renderSequence` tidak menambahkan apa pun → output identik.
+- **Titik penerapan berbeda per engine:**
+  - **MITRA** (`mitra-layout.engine.ts`) mengalirkan blok dua-kolom. `renderMitraPass` menambahkan jarak tepat **sebelum blok berikutnya**, dan hanya bila (1) blok berikutnya benar-benar menggambar konten (bukan `signature`/`pageBreak`, bukan blok `title` pertama yang jadi kop), dan (2) blok berikutnya masih di **kolom/halaman yang sama**.
+  - **PKWT** (`pkwt-layout.engine.ts`) mengunci baris ID/EN per blok. `buildPkwtRowsFromStructuredParagraphs` menambahkan `spaceAfter` blok ke-`i` pada `gapBefore` baris pembuka blok ke-`i+1`, di atas `PKWT_GEOMETRY.blockGap`. Blok terakhir tidak menyumbang apa pun. Karena baris ID/EN terkunci, jarak blok = **max** `spaceAfter` kedua kolom (bila hanya satu bahasa disetel, nilai itu tetap berlaku).
+- **Himpunan tipe yang didukung** (`spaceCapableBlocks(family)`):
+  - MITRA (`SPACE_CAPABLE_BLOCKS`): `title`, `subtitle`, `paragraph`, `article`, `list`, `table`.
+  - PKWT (`PKWT_SPACE_CAPABLE_BLOCKS`): `paragraph`, `article`, `list` — `title`/`subtitle` jadi kop (chrome) dan `table` tidak dirender di kolom.
+  - `pageBreak` & `signature` ditolak validator (struktural / footer).
+- **Ikut terukur.** MITRA mengukur lewat `planMitraLayout`; PKWT menghitung ulang paginasi per baris. Paginasi selalu konsisten dengan hasil akhir.
+- **Nol regresi template lama.** Tanpa blok ber-`spaceAfter`, tidak ada jarak yang ditambahkan → output identik.
 
 | Aspek | Nilai |
 |---|---|
 | Properti | `block.spaceAfter` (integer pt) |
 | Rentang sah | `0`–`40` |
 | Preset editor | Rapat `0`, Normal `undefined`, Renggang `12`, Ekstra `20`, Kustom `0–40` |
-| Normalisasi engine | `mitraBlockSpaceAfter()` (`mitra-layout.engine.ts`) |
-| Batas maksimum | `MAX_BLOCK_SPACE_AFTER` (`template-schema.validator.ts`) = `MITRA_MAX_BLOCK_SPACE_AFTER` (engine) |
+| Normalisasi bersama | `contracts/block-spacing.ts` (`normalizeBlockSpaceAfter`, `blockSpaceAfterPts`) |
+| Batas maksimum | `MAX_BLOCK_SPACE_AFTER` (`block-spacing.ts`) |
 
 ## Validasi (`template-schema.validator.ts`)
 
@@ -161,7 +164,7 @@ Aturan utama:
 - Setiap bahasa: minimal satu blok konten **dan** tepat satu blok `signature`.
 - `id` blok tidak boleh duplikat; `type` harus salah satu dari `BLOCK_TYPES`.
 - `align`/`headingAlign` harus bernilai sah dan pada tipe blok yang mendukungnya.
-- `spaceAfter` harus bilangan bulat 0–40, hanya pada blok konten (`SPACE_CAPABLE_BLOCKS`), dan hanya untuk keluarga MITRA.
+- `spaceAfter` harus bilangan bulat 0–40, hanya pada blok yang mengalir ke dokumen (`spaceCapableBlocks(family)`), untuk keluarga MITRA maupun PKWT.
 - Mark hanya boleh pada `paragraph.text` dan `article.paragraphs[]`.
 - Placeholder harus terdaftar di katalog field; sintaks `&#123;&#123;...&#125;&#125;` yang rusak ditolak.
 - Judul pasal dinormalisasi maksimal 2 baris (`normalizeArticleHeadings`) — menutup celah paste dari Word.
@@ -211,6 +214,7 @@ Status versi: `DRAFT` → `PUBLISHED` → `ARCHIVED`.
 | Engine MITRA | `backend/src/contracts/mitra-layout.engine.ts` |
 | Renderer jalur legacy | `backend/src/contracts/contract-block-renderer.ts` |
 | Validasi | `backend/src/contract-templates/template-schema.validator.ts` |
+| Normalisasi spasi blok (bersama) | `backend/src/contracts/block-spacing.ts` |
 | Versioning / preview | `backend/src/contract-templates/contract-template-versions.service.ts` |
 | Helper mark (FE) | `app/utils/inline-marks.ts` |
 | Field berformat (FE) | `app/components/kontrak/RichTextField.vue`, `AlignButtonGroup.vue` |

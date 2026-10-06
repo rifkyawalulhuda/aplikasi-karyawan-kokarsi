@@ -197,9 +197,9 @@ Blok **Paragraf** dan **Pasal** memiliki empat tombol perataan (radio, saling ek
 Bila tidak ada perataan yang dipilih, teks memakai perilaku bawaan sistem: **justified** untuk paragraf dan uraian pasal. Untuk judul pasal, default mengikuti keluarga template — **rata tengah** untuk MITRA dan **rata kiri** untuk PKWT.
 :::
 
-## Spasi Antar Blok (Khusus MITRA)
+## Spasi Antar Blok
 
-Setiap blok konten pada template **Perjanjian Kemitraan (MITRA)** memiliki kontrol **Spasi antar blok** — jarak vertikal **tambahan** di bawah blok tersebut, di atas jarak bawaan dokumen. Berguna untuk merenggangkan antar-pasal atau memberi napas pada bagian tertentu.
+Setiap blok konten memiliki kontrol **Spasi antar blok** — jarak vertikal **tambahan** di bawah blok tersebut, di atas jarak bawaan dokumen. Berguna untuk merenggangkan antar-pasal atau memberi napas pada bagian tertentu.
 
 | Tombol | Efek |
 |---|---|
@@ -211,11 +211,15 @@ Setiap blok konten pada template **Perjanjian Kemitraan (MITRA)** memiliki kontr
 
 - Nilai bersifat **tambahan** — jarak bawaan blok tetap dipakai.
 - Bila blok berada tepat di puncak kolom/halaman baru (karena blok sebelumnya sudah penuh), jarak **tidak** diterapkan agar tidak menyisakan ruang kosong di atas.
-- Blok yang dapat diatur: **Paragraf**, **Pasal**, **Daftar**, **Tabel**, **Judul Dokumen**, dan **Subjudul**. **Tanda Tangan** dan **Ganti Halaman** tidak memiliki kontrol ini.
+- Blok yang dapat diatur:
+  - **MITRA** (Perjanjian Kemitraan): **Paragraf**, **Pasal**, **Daftar**, **Tabel**, **Judul Dokumen**, dan **Subjudul**.
+  - **PKWT** (Kesepakatan Kerja Waktu Tertentu): **Paragraf**, **Pasal**, dan **Daftar** (blok yang benar-benar mengalir ke kolom; judul/subjudul jadi kop dan tabel tidak dirender di kolom).
+- Pada **PKWT** (dua kolom ID/EN yang terkunci per baris), bila jarak disetel hanya di salah satu bahasa atau berbeda antar bahasa, nilai **terbesar** yang dipakai — jarak tetap terasa.
+- **Tanda Tangan** dan **Ganti Halaman** tidak memiliki kontrol ini.
 - Saat sebuah blok memiliki jarak tambahan, kepala kartunya menampilkan penanda, mis. **+12 pt**.
 
-::: info Khusus MITRA & tidak mengubah kontrak lama
-Kontrol ini hanya muncul pada template keluarga **MITRA** (PKWT memakai penguncian baris dua kolom, sehingga tidak mendukung jarak per blok). Menambah spasi dapat menggeser paginasi PDF — sistem menghitung ulang jumlah halaman dan posisi tanda tangan secara otomatis. Kontrak yang **sudah dibuat** tidak terpengaruh karena memakai snapshot versi saat dibuat; perubahan berlaku untuk **kontrak baru** atau setelah versi template di-publish ulang.
+::: info Tidak mengubah kontrak lama
+Menambah spasi dapat menggeser paginasi PDF — sistem menghitung ulang jumlah halaman dan posisi tanda tangan secara otomatis. Kontrak yang **sudah dibuat** tidak terpengaruh karena memakai snapshot versi saat dibuat; perubahan berlaku untuk **kontrak baru** atau setelah versi template di-publish ulang.
 :::
 
 ## Field Dinamis

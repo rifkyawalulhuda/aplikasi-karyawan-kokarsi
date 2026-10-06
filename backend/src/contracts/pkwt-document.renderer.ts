@@ -14,6 +14,7 @@
 import PDFDocument from 'pdfkit'
 import { interpolate } from './contract-block-renderer'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
+import { blockSpaceAfterPts } from './block-spacing'
 import {
   PKWT_FONT_NAMES,
   PKWT_GEOMETRY,
@@ -210,6 +211,9 @@ export function blocksToPkwtParagraphs(
     // `subtitle` hanya ada di kolom ID), dan kalau blok kosong ikut dihitung
     // maka penomoran kedua kolom langsung bergeser satu.
     if (local.length === 0) continue
+    // Jarak blok (`block.spaceAfter`) dibawa tiap paragraf; engine memakainya
+    // untuk menambah `gapBefore` baris pembuka blok berikutnya.
+    const blockSpaceAfter = blockSpaceAfterPts(block?.spaceAfter)
     for (const p of local) {
       out.push({
         text: p.text,
@@ -220,6 +224,7 @@ export function blocksToPkwtParagraphs(
         align: p.align ?? localAlign,
         blockId,
         blockIndex: ordinal,
+        spaceAfter: blockSpaceAfter,
       })
     }
     ordinal += 1
