@@ -35,6 +35,12 @@ export const MITRA_PREVIEW_VALUES: Record<string, string> = {
   'employee.phoneNumber': '081234567890',
   'employee.email': 'ikhsan@example.com',
   'employee.jobRole': 'Driver',
+  // Data bank PIHAK KEDUA (Master Data Bank + No. Rekening karyawan). "Atas Nama"
+  // memakai {{employee.fullName}}. Nilai contoh wajib ada agar placeholder yang
+  // disisipkan admin lewat editor tidak tampil `...............` di Pratinjau.
+  'employee.bank': 'Mandiri',
+  'employee.bank.branch': 'Deltamas',
+  'employee.bankAccountNumber': '1730011451375',
   // Dokumen & pengaturan
   'doc.hariTanggal': 'Senin, 31 Agustus 2026',
   'doc.docDate': '31 Agustus 2026',

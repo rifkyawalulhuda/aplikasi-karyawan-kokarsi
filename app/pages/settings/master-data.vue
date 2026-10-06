@@ -21,6 +21,12 @@ interface CompanyItem {
   phone?: string | null
 }
 
+interface BankItem {
+  id: number
+  name: string
+  branch?: string | null
+}
+
 interface LookupsResponse {
   workLocations: LookupItem[]
   jobRoles: LookupItem[]
@@ -28,6 +34,7 @@ interface LookupsResponse {
   taxStatus: LookupItem[]
   contractTypes: LookupItem[]
   departments: LookupItem[]
+  banks?: BankItem[]
 }
 
 const workLocations = ref<LookupItem[]>([])
@@ -38,13 +45,14 @@ const contractTypes = ref<LookupItem[]>([])
 const departments = ref<LookupItem[]>([])
 const documentTypes = ref<DocumentTypeItem[]>([])
 const companies = ref<CompanyItem[]>([])
+const banks = ref<BankItem[]>([])
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const UIcon = resolveComponent('UIcon')
 
 // ── Generic CRUD state ──────────────────────────────────────────────
-type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments' | 'document-types' | 'companies'
+type ResourceKey = 'work-locations' | 'job-roles' | 'job-levels' | 'tax-status' | 'contract-types' | 'departments' | 'document-types' | 'companies' | 'banks'
 
 interface EditState {
   open: boolean
@@ -99,7 +107,7 @@ function sortableHeader(label: string, key: string) {
   ])
 }
 
-type MasterRow = LookupItem | DocumentTypeItem | CompanyItem
+type MasterRow = LookupItem | DocumentTypeItem | CompanyItem | BankItem
 
 const filteredData = computed(() => {
   let list: MasterRow[] = []
@@ -112,6 +120,7 @@ const filteredData = computed(() => {
   else if (activeTab.value === 'departments') list = departments.value
   else if (activeTab.value === 'document-types') list = documentTypes.value as unknown as MasterRow[]
   else if (activeTab.value === 'companies') list = companies.value as unknown as MasterRow[]
+  else if (activeTab.value === 'banks') list = banks.value as unknown as MasterRow[]
 
   // Search filter
   if (searchQuery.value.trim()) {
@@ -124,6 +133,13 @@ const filteredData = computed(() => {
           (c.email ?? '').toLowerCase().includes(q) ||
           (c.phone ?? '').toLowerCase().includes(q) ||
           (c.address ?? '').toLowerCase().includes(q)
+        )
+      }
+      if (activeTab.value === 'banks') {
+        const b = item as BankItem
+        return (
+          b.name.toLowerCase().includes(q) ||
+          (b.branch ?? '').toLowerCase().includes(q)
         )
       }
       if (activeTab.value === 'document-types') {
@@ -184,7 +200,8 @@ const resourceLabelMap: Record<ResourceKey, string> = {
   'contract-types': 'Tipe Kontrak',
   'departments': 'Departement',
   'document-types': 'Dokumen',
-  'companies': 'Perusahaan'
+  'companies': 'Perusahaan',
+  'banks': 'Bank'
 }
 
 const resourceIconMap: Record<ResourceKey, string> = {
@@ -195,7 +212,8 @@ const resourceIconMap: Record<ResourceKey, string> = {
   'contract-types': 'i-lucide-file-text',
   'departments': 'i-lucide-building-2',
   'document-types': 'i-lucide-file-text',
-  'companies': 'i-lucide-building-2'
+  'companies': 'i-lucide-building-2',
+  'banks': 'i-lucide-landmark'
 }
 
 const resourceDescMap: Record<ResourceKey, string> = {
@@ -206,7 +224,8 @@ const resourceDescMap: Record<ResourceKey, string> = {
   'contract-types': 'Daftar tipe kontrak kerja',
   'departments': 'Daftar departement kerja',
   'document-types': 'Kelola master tipe dokumen',
-  'companies': 'Kelola master data perusahaan'
+  'companies': 'Kelola master data perusahaan',
+  'banks': 'Kelola master data bank & cabang untuk rekening karyawan'
 }
 
 const tabs = computed(() => [
@@ -217,11 +236,12 @@ const tabs = computed(() => [
   { key: 'contract-types' as ResourceKey, label: 'Tipe Kontrak', icon: 'i-lucide-file-text', count: contractTypes.value.length },
   { key: 'tax-status' as ResourceKey, label: 'Status Pajak', icon: 'i-lucide-receipt', count: taxStatuses.value.length },
   { key: 'document-types' as ResourceKey, label: 'Dokumen', icon: 'i-lucide-file-text', count: documentTypes.value.length },
-  { key: 'companies' as ResourceKey, label: 'Perusahaan', icon: 'i-lucide-building-2', count: companies.value.length }
+  { key: 'companies' as ResourceKey, label: 'Perusahaan', icon: 'i-lucide-building-2', count: companies.value.length },
+  { key: 'banks' as ResourceKey, label: 'Bank', icon: 'i-lucide-landmark', count: banks.value.length }
 ])
 
 const totalCount = computed(() =>
-  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length + documentTypes.value.length + companies.value.length
+  workLocations.value.length + jobRoles.value.length + jobLevels.value.length + taxStatuses.value.length + contractTypes.value.length + departments.value.length + documentTypes.value.length + companies.value.length + banks.value.length
 )
 
 async function loadAllLookups() {
@@ -240,6 +260,7 @@ async function loadAllLookups() {
     departments.value = data.departments ?? []
     documentTypes.value = docTypes
     companies.value = comp
+    banks.value = data.banks ?? []
   } catch (error) {
     console.error('Gagal memuat master data', error)
   } finally {
@@ -256,6 +277,7 @@ async function loadResource(resource: ResourceKey) {
   else if (resource === 'departments') departments.value = await $fetch<LookupItem[]>('/api/lookups/departments')
   else if (resource === 'document-types') documentTypes.value = await $fetch<DocumentTypeItem[]>('/api/lookups/document-types')
   else if (resource === 'companies') companies.value = await $fetch<CompanyItem[]>('/api/lookups/companies')
+  else if (resource === 'banks') banks.value = await $fetch<BankItem[]>('/api/lookups/banks')
 }
 
 onMounted(async () => {
@@ -342,6 +364,7 @@ const UButton = resolveComponent('UButton')
 function openEditFor(row: MasterRow) {
   if (activeTab.value === 'document-types') openEditDoc(row as DocumentTypeItem)
   else if (activeTab.value === 'companies') openEditCompany(row as CompanyItem)
+  else if (activeTab.value === 'banks') openEditBank(row as BankItem)
   else openEdit(row as LookupItem)
 }
 
@@ -523,9 +546,53 @@ const companyColumns = computed<TableColumn<MasterRow>[]>(() => [
   },
 ])
 
+const bankColumns = computed<TableColumn<MasterRow>[]>(() => [
+  {
+    accessorKey: 'no',
+    header: () => h('th', { class: 'w-10 text-center' }, '#'),
+    cell: ({ row }) => h('td', { class: 'text-center text-xs font-medium text-dimmed tabular-nums' }, getRowNumber(row.index)),
+  },
+  {
+    accessorKey: 'name',
+    header: () => sortableHeader('Nama Bank', 'name'),
+    cell: ({ row }) => h('td', { class: 'font-semibold text-highlighted truncate max-w-xs' }, (row.original as BankItem).name),
+  },
+  {
+    accessorKey: 'branch',
+    header: () => sortableHeader('Cabang', 'branch'),
+    cell: ({ row }) => {
+      const b = row.original as BankItem
+      return h('td', { class: 'text-muted truncate max-w-md' }, b.branch ?? '-')
+    },
+  },
+  {
+    accessorKey: 'actions',
+    header: () => h('th', { class: 'w-24 text-right' }, 'Aksi'),
+    cell: ({ row }) => h('td', { class: 'text-right' }, [
+      h(UButton, {
+        icon: 'i-lucide-pencil',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'neutral',
+        class: 'mr-1',
+        onClick: () => openEditFor(row.original),
+      }),
+      h(UButton, {
+        icon: 'i-lucide-trash',
+        size: 'xs',
+        variant: 'ghost',
+        color: 'error',
+        loading: deleteLoading.value === row.original.id,
+        onClick: () => doDelete(row.original.id),
+      }),
+    ]),
+  },
+])
+
 const columns = computed<TableColumn<MasterRow>[]>(() => {
   if (activeTab.value === 'document-types') return docColumns.value
   if (activeTab.value === 'companies') return companyColumns.value
+  if (activeTab.value === 'banks') return bankColumns.value
   return simpleColumns.value
 })
 
@@ -675,6 +742,70 @@ async function saveEditCompany() {
     editCompanyState.loading = false
   }
 }
+
+// ── Banks CRUD state ─────────────────────────────────────────────────
+const newBankName = ref('')
+const newBankBranch = ref('')
+const addBankLoading = ref(false)
+
+const editBankState = reactive({
+  open: false,
+  id: null as number | null,
+  name: '',
+  branch: '',
+  loading: false
+})
+
+async function doAddBank() {
+  if (!newBankName.value.trim()) return
+  addBankLoading.value = true
+  try {
+    await $fetch('/api/lookups/banks', {
+      method: 'POST',
+      body: {
+        name: newBankName.value.trim(),
+        branch: newBankBranch.value.trim() || undefined
+      }
+    })
+    toast.add({ title: 'Berhasil ditambahkan', color: 'success' })
+    newBankName.value = ''
+    newBankBranch.value = ''
+    addOpen.value = false
+    await loadResource('banks')
+  } catch (e: any) {
+    toast.add({ title: 'Gagal menambahkan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    addBankLoading.value = false
+  }
+}
+
+function openEditBank(item: BankItem) {
+  editBankState.id = item.id
+  editBankState.name = item.name
+  editBankState.branch = item.branch ?? ''
+  editBankState.open = true
+}
+
+async function saveEditBank() {
+  if (!editBankState.id) return
+  editBankState.loading = true
+  try {
+    await $fetch(`/api/lookups/banks/${editBankState.id}`, {
+      method: 'PUT',
+      body: {
+        name: editBankState.name.trim(),
+        branch: editBankState.branch.trim() || undefined
+      }
+    })
+    toast.add({ title: 'Berhasil diperbarui', color: 'success' })
+    editBankState.open = false
+    await loadResource('banks')
+  } catch (e: any) {
+    toast.add({ title: 'Gagal memperbarui', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } finally {
+    editBankState.loading = false
+  }
+}
 </script>
 
 <template>
@@ -812,7 +943,7 @@ async function saveEditCompany() {
                   </span>
                 </div>
                 <!-- Form: regular resources -->
-                <div v-if="activeTab !== 'document-types' && activeTab !== 'companies'" class="flex gap-2">
+                <div v-if="activeTab !== 'document-types' && activeTab !== 'companies' && activeTab !== 'banks'" class="flex gap-2">
                   <UInput
                     v-model="addName"
                     :placeholder="`Nama ${resourceLabelMap[activeTab]}...`"
@@ -881,6 +1012,40 @@ async function saveEditCompany() {
                       color="neutral"
                       variant="ghost"
                       @click="addOpen = false; newCompanyName = ''; newCompanyAddress = ''; newCompanyEmail = ''; newCompanyPhone = ''"
+                    />
+                  </div>
+                </div>
+
+                <!-- Form: banks (2 fields) -->
+                <div v-else-if="activeTab === 'banks'" class="flex flex-col gap-2">
+                  <div class="flex gap-2">
+                    <UInput
+                      v-model="newBankName"
+                      placeholder="Nama Bank (mis. Mandiri)"
+                      size="sm"
+                      class="flex-1"
+                    />
+                    <UInput
+                      v-model="newBankBranch"
+                      placeholder="Cabang (mis. Deltamas)"
+                      size="sm"
+                      class="flex-1"
+                    />
+                  </div>
+                  <div class="flex gap-2 justify-end">
+                    <UButton
+                      label="Simpan"
+                      size="sm"
+                      color="primary"
+                      :loading="addBankLoading"
+                      @click="doAddBank()"
+                    />
+                    <UButton
+                      icon="i-lucide-x"
+                      size="sm"
+                      color="neutral"
+                      variant="ghost"
+                      @click="addOpen = false; newBankName = ''; newBankBranch = ''"
                     />
                   </div>
                 </div>
@@ -1120,4 +1285,32 @@ async function saveEditCompany() {
     v-model:open="companyImportOpen"
     @imported="loadResource('companies')"
   />
+
+  <!-- Modal Edit Bank -->
+  <UModal v-model:open="editBankState.open" title="Edit Bank">
+    <template #body>
+      <div class="space-y-4">
+        <UFormField label="Nama Bank" required>
+          <UInput v-model="editBankState.name" class="w-full" autofocus />
+        </UFormField>
+        <UFormField label="Cabang">
+          <UInput v-model="editBankState.branch" class="w-full" placeholder="mis. Deltamas" />
+        </UFormField>
+        <div class="flex justify-end gap-2 pt-2">
+          <UButton
+            label="Batal"
+            color="neutral"
+            variant="subtle"
+            @click="editBankState.open = false"
+          />
+          <UButton
+            label="Simpan"
+            color="primary"
+            :loading="editBankState.loading"
+            @click="saveEditBank"
+          />
+        </div>
+      </div>
+    </template>
+  </UModal>
 </template>

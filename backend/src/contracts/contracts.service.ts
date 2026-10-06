@@ -132,6 +132,7 @@ export class ContractsService {
         workLocation: { select: { id: true, name: true } },
         department: { select: { id: true, name: true } },
         jobLevel: { select: { id: true, name: true } },
+        bank: { select: { id: true, name: true, branch: true } },
       },
     })
     return this.templateSnapshot.buildSnapshot({

@@ -1,6 +1,6 @@
 ﻿import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString } from 'class-validator'
+import { IsString, IsEnum, IsEmail, IsOptional, IsInt, IsDateString, IsNotEmpty } from 'class-validator'
 import { EmploymentStatus, Gender, EducationLevel, TerminationType } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from './employment-status'
 import { DashboardCacheService } from '../shared/dashboard-cache.service'
@@ -26,6 +26,8 @@ export class CreateEmployeeDto {
   @IsInt() jobLevelId: number
   @IsInt() taxStatusId: number
   @IsInt() departmentId: number
+  @IsOptional() @IsInt() bankId?: number
+  @IsOptional() @IsString() bankAccountNumber?: string
   @IsOptional() @IsString() fotoKaryawan?: string
 }
 
@@ -35,6 +37,32 @@ export class OffboardingDto {
   @IsEnum(TerminationType) terminationType: TerminationType
   @IsDateString() terminationDate: string
   @IsOptional() @IsString() reason?: string
+}
+
+/**
+ * Satu baris update massal Data Bank. HANYA menyentuh `bankId` &
+ * `bankAccountNumber` — field karyawan lain tidak pernah diubah, sehingga
+ * operasi ini tidak mungkin menduplikasi/menimpa data yang sudah ada.
+ *
+ * Pencocokan memakai `employeeNo` (No. Induk Karyawan) yang selalu ada & unik.
+ */
+export class BulkUpdateBankRowDto {
+  @IsString() @IsNotEmpty() employeeNo: string
+  /** Nama bank atau label gabungan "Nama — Cabang" dari Master Bank. */
+  @IsOptional() @IsString() bank?: string
+  /** Cabang bank (opsional; dipakai bila file memisahkan kolom Bank & Cabang). */
+  @IsOptional() @IsString() bankBranch?: string
+  @IsOptional() @IsString() bankAccountNumber?: string
+  /** Nomor baris asli di file Excel — dipakai agar pesan error menunjuk baris tepat. */
+  @IsOptional() @IsInt() rowNumber?: number
+}
+
+/** Hasil ringkas update massal Data Bank. */
+export interface BulkUpdateBankResult {
+  updated: number
+  /** Baris valid yang tidak punya nilai bank/rekening untuk ditulis. */
+  skipped: number
+  details: Array<{ row: number; employeeNo: string; bank: string | null; bankAccountNumber: string | null }>
 }
 
 @Injectable()
@@ -52,6 +80,7 @@ export class EmployeesService {
     taxStatus: true,
     department: true,
     offboarding: true,
+    bank: true,
   }
 
   private mapContractsWithComputedStatus<T extends { status: any; startDate: Date; endDate: Date }>(
@@ -277,6 +306,143 @@ export class EmployeesService {
         details: err?.message ?? 'Unknown error',
       })
     }
+  }
+
+  /**
+   * Update massal Data Bank (bank + no. rekening) untuk karyawan yang SUDAH ada.
+   *
+   * Berbeda dari `bulkCreate` yang menambah karyawan baru (dan menolak batch bila
+   * ada duplikat), method ini HANYA menulis `bankId` & `bankAccountNumber` pada
+   * karyawan yang dicocokkan lewat `employeeNo`. Field lain tidak pernah disentuh.
+   *
+   * Kontrak (keputusan produk):
+   *  - **Overwrite**: nilai di file menimpa nilai lama.
+   *  - **Abaikan sel kosong / "-"**: kolom kosong TIDAK mengosongkan nilai lama.
+   *  - **Atomik**: bila ada SATU baris bermasalah, seluruh batch dibatalkan dan
+   *    semua kesalahan dilaporkan spesifik (baris + kolom + nilai).
+   */
+  async bulkUpdateBank(rows: BulkUpdateBankRowDto[]): Promise<BulkUpdateBankResult> {
+    if (!rows?.length) return { updated: 0, skipped: 0, details: [] }
+
+    // Export memakai "-" sebagai pengganti nilai kosong; perlakukan sebagai kosong.
+    const clean = (value: unknown): string => {
+      const text = String(value ?? '').trim()
+      return text === '' || text === '-' ? '' : text
+    }
+
+    const banks = await this.prisma.bank.findMany({ orderBy: { name: 'asc' } })
+    // Label persis seperti dropdown di template/editor: "Nama — Cabang" (bila ada
+    // cabang) atau "Nama" saja.
+    const labelToId = new Map<string, number>()
+    const nameToIds = new Map<string, number[]>()
+    for (const bank of banks) {
+      const label = bank.branch ? `${bank.name} — ${bank.branch}` : bank.name
+      labelToId.set(label, bank.id)
+      const list = nameToIds.get(bank.name) ?? []
+      list.push(bank.id)
+      nameToIds.set(bank.name, list)
+    }
+
+    const errors: Array<{ row: number; column: string; value: string; message: string }> = []
+    const seenEmployeeNos = new Map<string, number>()
+
+    // ── Tahap 1: validasi SEMUA baris (fail-fast) ──
+    const prepared: Array<{ row: number; employeeNo: string; bankId: number | null; bankLabel: string | null; bankAccountNumber: string | null }> = []
+    for (let i = 0; i < rows.length; i++) {
+      const row = Number(rows[i]?.rowNumber) || i + 2
+      const employeeNo = clean(rows[i]?.employeeNo)
+      const bankName = clean(rows[i]?.bank)
+      const bankBranch = clean(rows[i]?.bankBranch)
+      const accountNumber = clean(rows[i]?.bankAccountNumber)
+
+      if (!employeeNo) {
+        errors.push({ row, column: 'No. Induk Karyawan', value: '', message: 'No. Induk Karyawan wajib diisi' })
+        continue
+      }
+      const key = employeeNo.toLowerCase()
+      if (seenEmployeeNos.has(key)) {
+        errors.push({ row, column: 'No. Induk Karyawan', value: employeeNo, message: `No. Induk Karyawan "${employeeNo}" duplikat dengan baris ${seenEmployeeNos.get(key)}` })
+        continue
+      }
+      seenEmployeeNos.set(key, row)
+
+      let bankId: number | null = null
+      let bankLabel: string | null = null
+      if (bankName) {
+        // Prioritas: label gabungan "Nama — Cabang" (bila file memisahkan kolom,
+        // gabungkan dulu), lalu fallback ke nama tunggal yang unik.
+        const combined = bankBranch ? `${bankName} — ${bankBranch}` : bankName
+        if (labelToId.has(combined)) {
+          bankId = labelToId.get(combined)!
+          bankLabel = combined
+        } else if (!bankBranch && (nameToIds.get(bankName)?.length ?? 0) === 1) {
+          bankId = nameToIds.get(bankName)![0]!
+          bankLabel = combined
+        } else {
+          const hint = bankBranch
+            ? `"${bankName} — ${bankBranch}"`
+            : `"${bankName}"`
+          errors.push({
+            row,
+            column: 'Bank',
+            value: combined,
+            message: `Bank ${hint} tidak ditemukan di Master Bank. Daftarkan dulu di Master Data → Bank, atau perbaiki ejaannya.`,
+          })
+        }
+      }
+
+      if (accountNumber.length > 50) {
+        errors.push({ row, column: 'No. Rekening', value: accountNumber, message: 'No. Rekening maks. 50 karakter' })
+      }
+
+      prepared.push({ row, employeeNo, bankId, bankLabel, bankAccountNumber: accountNumber || null })
+    }
+
+    // Cocokkan employeeNo ke karyawan (satu query, hindari N+1).
+    const employeeNos = prepared.map(p => p.employeeNo)
+    const found = employeeNos.length
+      ? await this.prisma.employee.findMany({
+          where: { employeeNo: { in: employeeNos } },
+          select: { id: true, employeeNo: true },
+        })
+      : []
+    const idByEmployeeNo = new Map(found.map(e => [e.employeeNo, e.id]))
+
+    for (const item of prepared) {
+      if (!idByEmployeeNo.has(item.employeeNo)) {
+        errors.push({
+          row: item.row,
+          column: 'No. Induk Karyawan',
+          value: item.employeeNo,
+          message: `No. Induk Karyawan "${item.employeeNo}" tidak ditemukan di database`,
+        })
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException({
+        message: `Update dibatalkan. ${errors.length} baris bermasalah — tidak ada data yang diubah.`,
+        errors,
+      })
+    }
+
+    // ── Tahap 2: tulis (hanya baris yang punya sesuatu untuk diubah) ──
+    const toWrite = prepared.filter(p => p.bankId !== null || p.bankAccountNumber !== null)
+    const skipped = prepared.length - toWrite.length
+
+    const details: BulkUpdateBankResult['details'] = []
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of toWrite) {
+        const data: { bankId?: number; bankAccountNumber?: string } = {}
+        if (item.bankId !== null) data.bankId = item.bankId
+        if (item.bankAccountNumber !== null) data.bankAccountNumber = item.bankAccountNumber
+        await tx.employee.update({ where: { id: idByEmployeeNo.get(item.employeeNo)! }, data })
+        details.push({ row: item.row, employeeNo: item.employeeNo, bank: item.bankLabel, bankAccountNumber: item.bankAccountNumber })
+      }
+    })
+
+    this.dashboardCache.invalidate()
+    return { updated: toWrite.length, skipped, details }
   }
 
   async update(id: number, dto: UpdateEmployeeDto, actor: { name: string; role: string }) {
@@ -755,12 +921,13 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
   }
 
   async generateImportTemplate(): Promise<Buffer> {
-    const [workLocations, jobRoles, jobLevels, departments, taxStatus] = await Promise.all([
+    const [workLocations, jobRoles, jobLevels, departments, taxStatus, banks] = await Promise.all([
       this.prisma.workLocation.findMany(),
       this.prisma.jobRole.findMany(),
       this.prisma.jobLevel.findMany(),
       this.prisma.department.findMany(),
       this.prisma.taxStatus.findMany(),
+      this.prisma.bank.findMany({ orderBy: { name: 'asc' } }),
     ])
 
     const workbook = new ExcelJS.Workbook()
@@ -784,7 +951,13 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
       'Level Jabatan',
       'Departemen',
       'Status Pajak',
+      'Bank',
+      'No. Rekening',
     ]
+
+    // Label opsi Bank harus SAMA PERSIS dengan yang dibaca parser
+    // (`useImportTemplate.ts`) agar pencocokan nama → id konsisten.
+    const bankOptions = banks.map(b => b.branch ? `${b.name} — ${b.branch}` : b.name)
 
     const GENDER_LABELS = ['Laki-laki', 'Perempuan']
     const EDUCATION_LABELS = ['SMA', 'D3', 'S1', 'S2']
@@ -834,7 +1007,13 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
       const range = `${colLetter}2:${colLetter}${maxDataRow}`
       const formulaStr = `"${items.join(',')}"`
 
-      if (formulaStr.length <= 255) {
+      // Daftar inline hanya aman bila pendek DAN tidak memuat koma/petik —
+      // koma memecah daftar Excel, petik menutup formula lebih awal. Nama bank
+      // atau cabang bisa memuat koma (mis. "Jakarta, Selatan"), jadi fallback ke
+      // sheet RefData saat ada karakter berisiko.
+      const needsRefSheet = formulaStr.length > 255 || items.some(item => /[",]/.test(item))
+
+      if (!needsRefSheet) {
         ;(sheet as any).dataValidations.add(range, {
           type: 'list',
           allowBlank: false,
@@ -869,6 +1048,7 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
     addDropdown(15, 'Level', jobLevels.map(l => l.name), 'Level Jabatan Tidak Valid', 'Pilih dari daftar level jabatan yang tersedia.')
     addDropdown(16, 'Departemen', departments.map(l => l.name), 'Departemen Tidak Valid', 'Pilih dari daftar departemen yang tersedia.')
     addDropdown(17, 'Pajak', taxStatus.map(l => l.name), 'Status Pajak Tidak Valid', 'Pilih dari daftar status pajak yang tersedia.')
+    addDropdown(18, 'Bank', bankOptions, 'Bank Tidak Valid', 'Pilih dari daftar bank yang tersedia, atau kosongkan.')
 
     for (let i = 2; i <= 101; i++) {
       for (let col = 1; col <= COLUMN_HEADERS.length; col++) {
@@ -883,12 +1063,125 @@ const endOfSevenDaysWib = new Date(wibDayStartUtc + 7 * 24 * 60 * 60 * 1000 - wi
       // Set dd/mm/yyyy number format for date columns (F=6 birthDate, H=8 joinDate)
       sheet.getCell(i, 6).numFmt = 'dd/mm/yyyy'
       sheet.getCell(i, 8).numFmt = 'dd/mm/yyyy'
+      // No. Rekening = TEKS agar angka 0 di depan tidak hilang saat diketik.
+      sheet.getCell(i, 19).numFmt = '@'
     }
 
-    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18, 18]
+    const columnWidths = [22, 30, 22, 16, 18, 16, 40, 18, 30, 18, 14, 22, 22, 18, 22, 18, 18, 28, 22]
     COLUMN_HEADERS.forEach((_, i) => {
       sheet.getColumn(i + 1).width = columnWidths[i]
     })
+
+    // No. Rekening: paksa format kolom ke teks (leading zero) untuk seluruh kolom.
+    sheet.getColumn(19).numFmt = '@'
+
+    sheet.views = [{ state: 'frozen', ySplit: 1 }]
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    return Buffer.from(buffer)
+  }
+
+  /**
+   * Template Excel ringkas untuk UPDATE massal Data Bank karyawan yang sudah ada.
+   *
+   * Hanya memuat kolom yang relevan (`No. Induk Karyawan | Bank | No. Rekening`).
+   * Kolom Nama sengaja TIDAK disertakan: pencocokan murni memakai No. Induk
+   * Karyawan (unik), sehingga Nama hanya akan jadi kolom kosong yang membingungkan.
+   * Parser di frontend juga menerima file **Export Excel** apa adanya (baca per
+   * nama header), jadi template ini murni kemudahan.
+   *
+   * Gaya header sengaja disamakan dengan template import (fill biru `FF2563EB`).
+   */
+  async generateBankUpdateTemplate(): Promise<Buffer> {
+    const banks = await this.prisma.bank.findMany({ orderBy: { name: 'asc' } })
+    const bankOptions = banks.map(b => b.branch ? `${b.name} — ${b.branch}` : b.name)
+
+    const workbook = new ExcelJS.Workbook()
+    const sheet = workbook.addWorksheet('Update Data Bank')
+
+    const COLUMN_HEADERS = ['No. Induk Karyawan', 'Bank', 'No. Rekening']
+
+    const headerFill: ExcelJS.FillPattern = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF2563EB' },
+    }
+    const headerFont: Partial<ExcelJS.Font> = {
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+      size: 11,
+    }
+
+    const headerRow = sheet.addRow(COLUMN_HEADERS)
+    headerRow.eachCell((cell) => {
+      cell.fill = headerFill
+      cell.font = headerFont
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      }
+    })
+    sheet.getRow(1).height = 24
+
+    const maxDataRow = 501
+    const hiddenSheet = workbook.addWorksheet('RefData')
+    hiddenSheet.state = 'hidden'
+
+    // Dropdown Bank (kolom 2 / 'B') — label gabungan "Nama — Cabang" dari Master Bank.
+    if (bankOptions.length > 0) {
+      const colLetter = String.fromCharCode(64 + 2) // 'B'
+      const range = `${colLetter}2:${colLetter}${maxDataRow}`
+      const formulaStr = `"${bankOptions.join(',')}"`
+      const needsRefSheet = formulaStr.length > 255 || bankOptions.some(item => /[",]/.test(item))
+      if (!needsRefSheet) {
+        ;(sheet as any).dataValidations.add(range, {
+          type: 'list',
+          allowBlank: true,
+          showErrorMessage: true,
+          formulae: [formulaStr],
+          errorTitle: 'Bank Tidak Valid',
+          error: 'Pilih dari daftar bank yang tersedia, atau kosongkan.',
+        })
+      } else {
+        const refCol = hiddenSheet.getColumn(1)
+        refCol.header = 'Bank'
+        bankOptions.forEach((item, i) => {
+          hiddenSheet.getCell(i + 2, refCol.number).value = item
+        })
+        const refLetter = refCol.letter
+        const endRow = bankOptions.length + 1
+        ;(sheet as any).dataValidations.add(range, {
+          type: 'list',
+          allowBlank: true,
+          showErrorMessage: true,
+          formulae: [`=RefData!$${refLetter}$2:$${refLetter}$${endRow}`],
+          errorTitle: 'Bank Tidak Valid',
+          error: 'Pilih dari daftar bank yang tersedia, atau kosongkan.',
+        })
+      }
+    }
+
+    for (let i = 2; i <= maxDataRow; i++) {
+      for (let col = 1; col <= COLUMN_HEADERS.length; col++) {
+        sheet.getCell(i, col).border = {
+          top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+          right: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+        }
+      }
+      // No. Rekening = TEKS agar angka 0 di depan tidak hilang.
+      sheet.getCell(i, 3).numFmt = '@'
+    }
+
+    const columnWidths = [24, 30, 24]
+    COLUMN_HEADERS.forEach((_, i) => {
+      sheet.getColumn(i + 1).width = columnWidths[i]
+    })
+    sheet.getColumn(3).numFmt = '@'
 
     sheet.views = [{ state: 'frozen', ySplit: 1 }]
 

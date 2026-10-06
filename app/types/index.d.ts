@@ -29,6 +29,12 @@ export interface JobLevel {
   name: string
 }
 
+export interface Bank {
+  id: number
+  name: string
+  branch?: string | null
+}
+
 // --- Employee ---
 export type EmploymentStatus = 'AKTIF' | 'KONTRAK_EXPIRED' | 'RESIGN' | 'PHK'
 export type Gender = 'MALE' | 'FEMALE'
@@ -87,6 +93,9 @@ export interface Employee {
   phoneNumber?: string
   email: string
   fotoKaryawan?: string
+  bankId?: number | null
+  bank?: Bank | null
+  bankAccountNumber?: string | null
   contracts?: Contract[]
   offboarding?: EmployeeOffboarding | null
   statusHistory?: EmployeeStatusHistory[]

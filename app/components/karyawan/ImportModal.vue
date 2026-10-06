@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { EmployeeImportRow, InvalidImportRow } from '~/composables/useImportTemplate'
+import type {
+  EmployeeImportRow,
+  InvalidImportRow,
+  BankUpdateRow,
+  InvalidBankUpdateRow,
+} from '~/composables/useImportTemplate'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{
@@ -8,23 +13,55 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
-const { generateTemplate, parseAndValidate } = useImportTemplate()
+const {
+  generateTemplate,
+  parseAndValidate,
+  generateBankUpdateTemplate,
+  parseAndValidateBankUpdate,
+} = useImportTemplate()
+
+/**
+ * Dua mode:
+ *  - `create` : tambah karyawan baru (perilaku lama, wajib semua kolom).
+ *  - `bank`   : update massal Data Bank karyawan yang SUDAH ada, dicocokkan per
+ *               No. Induk Karyawan. Hanya menyentuh kolom bank + no. rekening.
+ */
+type EditorMode = 'create' | 'bank'
+const mode = ref<EditorMode>('create')
+const isBankMode = computed(() => mode.value === 'bank')
 
 const templateLoading = ref(false)
 const parsing = ref(false)
 const importing = ref(false)
 const selectedFile = ref<File | null>(null)
-const validRows = ref<EmployeeImportRow[]>([])
-const invalidRows = ref<InvalidImportRow[]>([])
+
+const createValid = ref<EmployeeImportRow[]>([])
+const createInvalid = ref<InvalidImportRow[]>([])
+const bankValid = ref<BankUpdateRow[]>([])
+const bankInvalid = ref<InvalidBankUpdateRow[]>([])
 const totalRows = ref(0)
 const dragOver = ref(false)
-const importResult = ref<{ imported: number; errors: Array<{ row: number; message: string }> } | null>(null)
-const importErrors = ref<Array<{ row: number; message: string }>>([])
 
+interface ResultState {
+  success: boolean
+  title: string
+  subtitle?: string
+  errors: Array<{ row: number; message: string }>
+}
+const result = ref<ResultState | null>(null)
+
+const validRows = computed<any[]>(() => (isBankMode.value ? bankValid.value : createValid.value))
+const invalidRows = computed<any[]>(() => (isBankMode.value ? bankInvalid.value : createInvalid.value))
 
 const hasPreview = computed(() => validRows.value.length > 0 || invalidRows.value.length > 0)
 const canImport = computed(() => validRows.value.length > 0 && invalidRows.value.length === 0 && !importing.value)
-const showResult = computed(() => importResult.value !== null)
+const showResult = computed(() => result.value !== null)
+
+function switchMode(next: EditorMode) {
+  if (mode.value === next) return
+  mode.value = next
+  resetFile()
+}
 
 watch(() => props.open, (isOpen) => {
   if (!isOpen) {
@@ -34,18 +71,23 @@ watch(() => props.open, (isOpen) => {
 
 function resetState() {
   selectedFile.value = null
-  validRows.value = []
-  invalidRows.value = []
+  createValid.value = []
+  createInvalid.value = []
+  bankValid.value = []
+  bankInvalid.value = []
   totalRows.value = 0
-  importResult.value = null
-  importErrors.value = []
+  result.value = null
   dragOver.value = false
 }
 
 async function handleDownloadTemplate() {
   templateLoading.value = true
   try {
-    await generateTemplate()
+    if (isBankMode.value) {
+      await generateBankUpdateTemplate()
+    } else {
+      await generateTemplate()
+    }
     toast.add({ title: 'Template berhasil diunduh', color: 'success' })
   } catch (e: any) {
     console.error('Template download error:', e)
@@ -75,7 +117,7 @@ function handleFileSelect(file: File | null) {
   }
 
   selectedFile.value = file
-  importResult.value = null
+  result.value = null
   parseFile()
 }
 
@@ -106,28 +148,39 @@ async function parseFile() {
   if (!selectedFile.value) return
 
   parsing.value = true
-  validRows.value = []
-  invalidRows.value = []
+  createValid.value = []
+  createInvalid.value = []
+  bankValid.value = []
+  bankInvalid.value = []
   totalRows.value = 0
 
-  try {
-    const result = await parseAndValidate(selectedFile.value)
-    validRows.value = result.validRows
-    invalidRows.value = result.invalidRows
-    totalRows.value = result.totalRows
+  const verb = isBankMode.value ? 'update' : 'import'
 
-    if (result.totalRows === 0) {
+  try {
+    if (isBankMode.value) {
+      const res = await parseAndValidateBankUpdate(selectedFile.value)
+      bankValid.value = res.validRows
+      bankInvalid.value = res.invalidRows
+      totalRows.value = res.totalRows
+    } else {
+      const res = await parseAndValidate(selectedFile.value)
+      createValid.value = res.validRows
+      createInvalid.value = res.invalidRows
+      totalRows.value = res.totalRows
+    }
+
+    if (totalRows.value === 0) {
       toast.add({ title: 'File tidak berisi data', description: 'Pastikan ada minimal 1 baris data karyawan', color: 'warning' })
-    } else if (result.invalidRows.length > 0) {
+    } else if (invalidRows.value.length > 0) {
       toast.add({
         title: 'Ditemukan error validasi',
-        description: `${result.invalidRows.length} dari ${result.totalRows} baris memiliki error. Perbaiki sebelum import.`,
+        description: `${invalidRows.value.length} dari ${totalRows.value} baris memiliki error. Perbaiki sebelum ${verb}.`,
         color: 'warning',
       })
     } else {
       toast.add({
         title: 'Semua data valid',
-        description: `${result.validRows.length} baris siap diimport`,
+        description: `${validRows.value.length} baris siap di${verb}`,
         color: 'success',
       })
     }
@@ -146,20 +199,57 @@ async function handleImport() {
   if (!canImport.value) return
 
   importing.value = true
-  importResult.value = null
+  result.value = null
 
   try {
+    if (isBankMode.value) {
+      const res = await $fetch<{ updated: number; skipped: number }>(
+        '/api/employees/bulk-update-bank',
+        {
+          method: 'POST',
+          body: {
+            employees: bankValid.value.map(row => ({
+              employeeNo: row.employeeNo,
+              bank: row.bank,
+              bankAccountNumber: row.bankAccountNumber,
+              rowNumber: row.rowNumber,
+            })),
+          },
+        },
+      )
+
+      result.value = {
+        success: true,
+        title: `${res.updated} karyawan berhasil diperbarui`,
+        subtitle: res.skipped > 0 ? `${res.skipped} baris dilewati (tidak ada bank/rekening untuk diisi)` : undefined,
+        errors: [],
+      }
+      toast.add({
+        title: 'Update berhasil',
+        description: `${res.updated} data bank diperbarui`,
+        color: 'success',
+      })
+      emit('imported')
+      emit('update:open', false)
+      return
+    }
+
     const res = await $fetch<{ imported: number; errors: Array<{ row: number; message: string }> }>(
       '/api/employees/bulk-import',
       {
         method: 'POST',
         body: {
-          employees: validRows.value.map(({ rowNumber, ...emp }) => emp),
+          employees: createValid.value.map(({ rowNumber, ...emp }) => emp),
         },
       },
     )
 
-    importResult.value = res
+    result.value = {
+      success: res.errors.length === 0,
+      title: `${res.imported} karyawan berhasil diimport`,
+      subtitle: res.errors.length > 0 ? `${res.errors.length} baris gagal` : undefined,
+      errors: res.errors,
+    }
 
     if (res.errors.length === 0) {
       toast.add({
@@ -177,17 +267,23 @@ async function handleImport() {
       })
     }
   } catch (e: any) {
-    const backendErrors: Array<{ row: number; message: string }> =
-      e?.data?.errors ?? e?.data?.data?.errors ?? []
-    const message: string =
-      e?.data?.message ?? e?.data?.data?.message ?? 'Terjadi kesalahan saat import'
+    // Nuxt membungkus error server: pesan/errors asli bisa berada di `e.data`
+    // atau `e.data.data` tergantung pembungkus proxy. Tangani keduanya.
+    const payload = e?.data?.data ?? e?.data ?? {}
+    const backendErrors: Array<{ row: number; message: string }> = payload?.errors ?? []
+    const message: string = payload?.message ?? 'Terjadi kesalahan saat memproses data'
 
-    importErrors.value = backendErrors
+    result.value = {
+      success: false,
+      title: isBankMode.value ? 'Update dibatalkan' : 'Import dibatalkan',
+      subtitle: message,
+      errors: backendErrors,
+    }
 
     toast.add({
-      title: 'Gagal import data',
+      title: isBankMode.value ? 'Gagal update data bank' : 'Gagal import data',
       description: backendErrors.length > 0
-        ? `${message} (${backendErrors.length} konflik ditemukan)`
+        ? `${message} (${backendErrors.length} baris bermasalah)`
         : message,
       color: 'error',
     })
@@ -198,29 +294,63 @@ async function handleImport() {
 
 function resetFile() {
   selectedFile.value = null
-  validRows.value = []
-  invalidRows.value = []
+  createValid.value = []
+  createInvalid.value = []
+  bankValid.value = []
+  bankInvalid.value = []
   totalRows.value = 0
-  importResult.value = null
+  result.value = null
 }
 </script>
 
 <template>
   <UModal
     :open="open"
-    title="Import Data Karyawan"
+    title="Import / Update Data Karyawan"
     :ui="{ content: 'max-w-4xl' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
       <div class="space-y-5">
+        <!-- Pilih mode -->
+        <div class="grid grid-cols-2 gap-1 rounded-xl border border-default p-1">
+          <UButton
+            label="Tambah Karyawan Baru"
+            icon="i-lucide-user-plus"
+            block
+            :color="mode === 'create' ? 'primary' : 'neutral'"
+            :variant="mode === 'create' ? 'solid' : 'ghost'"
+            @click="switchMode('create')"
+          />
+          <UButton
+            label="Update Data Bank"
+            icon="i-lucide-landmark"
+            block
+            :color="mode === 'bank' ? 'primary' : 'neutral'"
+            :variant="mode === 'bank' ? 'solid' : 'ghost'"
+            @click="switchMode('bank')"
+          />
+        </div>
+
+        <p v-if="isBankMode" class="text-xs text-muted">
+          Perbarui <b>Bank</b> & <b>No. Rekening</b> karyawan yang sudah ada, dicocokkan lewat
+          <b>No. Induk Karyawan</b>. Kolom karyawan lain tidak diubah. File <b>Export Excel</b> data karyawan
+          bisa langsung dipakai — cukup isi kolom Bank/Cabang & No. Rekening.
+        </p>
+
         <!-- Download Template -->
         <div class="flex items-center justify-between rounded-xl border border-default bg-elevated/30 p-4">
           <div class="flex items-center gap-3">
             <UIcon name="i-lucide-file-spreadsheet" class="w-6 h-6 text-success" />
             <div>
-              <p class="text-sm font-medium text-highlighted">Template Excel</p>
-              <p class="text-xs text-muted">Unduh template dengan dropdown validasi dari data master</p>
+              <p class="text-sm font-medium text-highlighted">
+                {{ isBankMode ? 'Template Update Data Bank' : 'Template Excel' }}
+              </p>
+              <p class="text-xs text-muted">
+                {{ isBankMode
+                  ? 'Kolom: No. Induk Karyawan, Bank, No. Rekening'
+                  : 'Unduh template dengan dropdown validasi dari data master' }}
+              </p>
             </div>
           </div>
           <UButton
@@ -313,7 +443,7 @@ function resetFile() {
                   <tr>
                     <th class="px-3 py-2 text-left font-medium text-muted">Baris</th>
                     <th class="px-3 py-2 text-left font-medium text-muted">No. Induk</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Nama</th>
+                    <th v-if="!isBankMode" class="px-3 py-2 text-left font-medium text-muted">Nama</th>
                     <th class="px-3 py-2 text-left font-medium text-muted">Error</th>
                   </tr>
                 </thead>
@@ -325,7 +455,7 @@ function resetFile() {
                   >
                     <td class="px-3 py-2 text-muted">{{ row.rowNumber }}</td>
                     <td class="px-3 py-2 font-mono text-xs">{{ row.data.employeeNo || '-' }}</td>
-                    <td class="px-3 py-2">{{ row.data.fullName || '-' }}</td>
+                    <td v-if="!isBankMode" class="px-3 py-2">{{ row.data.fullName || '-' }}</td>
                     <td class="px-3 py-2">
                       <ul class="space-y-0.5">
                         <li v-for="(err, i) in row.errors" :key="i" class="text-xs text-error">
@@ -353,10 +483,16 @@ function resetFile() {
                   <tr>
                     <th class="px-3 py-2 text-left font-medium text-muted">Baris</th>
                     <th class="px-3 py-2 text-left font-medium text-muted">No. Induk</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Nama</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Email</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Gender</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Jabatan</th>
+                    <th v-if="!isBankMode" class="px-3 py-2 text-left font-medium text-muted">Nama</th>
+                    <template v-if="isBankMode">
+                      <th class="px-3 py-2 text-left font-medium text-muted">Bank</th>
+                      <th class="px-3 py-2 text-left font-medium text-muted">No. Rekening</th>
+                    </template>
+                    <template v-else>
+                      <th class="px-3 py-2 text-left font-medium text-muted">Email</th>
+                      <th class="px-3 py-2 text-left font-medium text-muted">Gender</th>
+                      <th class="px-3 py-2 text-left font-medium text-muted">Jabatan</th>
+                    </template>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,10 +503,16 @@ function resetFile() {
                   >
                     <td class="px-3 py-2 text-muted">{{ row.rowNumber }}</td>
                     <td class="px-3 py-2 font-mono text-xs">{{ row.employeeNo }}</td>
-                    <td class="px-3 py-2">{{ row.fullName }}</td>
-                    <td class="px-3 py-2 text-xs">{{ row.email }}</td>
-                    <td class="px-3 py-2 text-xs">{{ row.gender === 'MALE' ? 'Laki-laki' : 'Perempuan' }}</td>
-                    <td class="px-3 py-2 text-xs">{{ row.jobRoleId }}</td>
+                    <td v-if="!isBankMode" class="px-3 py-2">{{ row.fullName || '-' }}</td>
+                    <template v-if="isBankMode">
+                      <td class="px-3 py-2 text-xs">{{ row.bank || '-' }}</td>
+                      <td class="px-3 py-2 text-xs">{{ row.bankAccountNumber || '-' }}</td>
+                    </template>
+                    <template v-else>
+                      <td class="px-3 py-2 text-xs">{{ row.email }}</td>
+                      <td class="px-3 py-2 text-xs">{{ row.gender === 'MALE' ? 'Laki-laki' : 'Perempuan' }}</td>
+                      <td class="px-3 py-2 text-xs">{{ row.jobRoleId }}</td>
+                    </template>
                   </tr>
                 </tbody>
               </table>
@@ -384,69 +526,46 @@ function resetFile() {
           <div v-if="invalidRows.length > 0" class="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4">
             <UIcon name="i-lucide-alert-triangle" class="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <div class="text-sm">
-              <p class="font-semibold text-warning">Semua baris harus valid sebelum import</p>
+              <p class="font-semibold text-warning">
+                Semua baris harus valid sebelum {{ isBankMode ? 'update' : 'import' }}
+              </p>
               <p class="mt-1 text-muted">
                 Perbaiki {{ invalidRows.length }} baris bermasalah di file Excel Anda, lalu unggah ulang.
-                Import hanya bisa dilakukan jika semua baris valid ({{ validRows.length }}/{{ totalRows }}).
+                {{ isBankMode ? 'Update' : 'Import' }} hanya bisa dilakukan jika semua baris valid
+                ({{ validRows.length }}/{{ totalRows }}).
               </p>
             </div>
-          </div>
-
-          <!-- Backend import errors (duplikat DB, konflik, dll) -->
-          <div v-if="importErrors.length > 0" class="rounded-xl border border-error/40 bg-error/10 p-4 space-y-3">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-x-circle" class="w-5 h-5 text-error shrink-0" />
-              <p class="text-sm font-semibold text-error">
-                Import dibatalkan — {{ importErrors.length }} data tidak dapat diimport
-              </p>
-            </div>
-            <p class="text-xs text-muted">
-              Data berikut sudah ada di database. Perbaiki file Excel Anda, lalu coba import ulang.
-            </p>
-            <div class="max-h-48 overflow-y-auto rounded-lg border border-error/20 bg-background divide-y divide-error/10">
-              <div
-                v-for="(err, idx) in importErrors"
-                :key="idx"
-                class="flex items-start gap-3 px-3 py-2.5"
-              >
-                <span class="inline-flex items-center justify-center rounded bg-error/15 text-error text-xs font-mono font-semibold px-1.5 py-0.5 shrink-0 mt-0.5">
-                  Baris {{ err.row }}
-                </span>
-                <span class="text-sm text-highlighted">{{ err.message }}</span>
-              </div>
-            </div>
-            <p class="text-xs text-muted">
-              Pastikan No. Induk Karyawan, Email, dan NIK tidak duplikat dengan data yang sudah ada.
-            </p>
           </div>
         </div>
 
-        <!-- Import Result -->
+        <!-- Hasil -->
         <div v-if="showResult" class="space-y-4">
           <div
             class="rounded-xl border p-6 text-center"
-            :class="importResult!.errors.length === 0
+            :class="result!.success
               ? 'border-success/40 bg-success/10'
-              : 'border-warning/40 bg-warning/10'"
+              : 'border-error/40 bg-error/10'"
           >
             <UIcon
-              :name="importResult!.errors.length === 0 ? 'i-lucide-check-circle' : 'i-lucide-alert-triangle'"
+              :name="result!.success ? 'i-lucide-check-circle' : 'i-lucide-x-circle'"
               class="w-12 h-12 mx-auto mb-3"
-              :class="importResult!.errors.length === 0 ? 'text-success' : 'text-warning'"
+              :class="result!.success ? 'text-success' : 'text-error'"
             />
             <p class="text-lg font-semibold text-highlighted">
-              {{ importResult!.imported }} karyawan berhasil diimport
+              {{ result!.title }}
             </p>
-            <p v-if="importResult!.errors.length > 0" class="text-sm text-muted mt-1">
-              {{ importResult!.errors.length }} baris gagal
+            <p v-if="result!.subtitle" class="text-sm text-muted mt-1">
+              {{ result!.subtitle }}
             </p>
           </div>
 
-          <div v-if="importResult!.errors.length > 0" class="rounded-xl border border-error/30 overflow-hidden">
+          <div v-if="result!.errors.length > 0" class="rounded-xl border border-error/30 overflow-hidden">
             <div class="bg-error/10 px-4 py-2 border-b border-error/30">
-              <p class="text-sm font-semibold text-error">Detail Error</p>
+              <p class="text-sm font-semibold text-error">
+                Detail Error ({{ result!.errors.length }})
+              </p>
             </div>
-            <div class="max-h-[200px] overflow-y-auto">
+            <div class="max-h-[240px] overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="bg-elevated/50 sticky top-0">
                   <tr>
@@ -456,7 +575,7 @@ function resetFile() {
                 </thead>
                 <tbody>
                   <tr
-                    v-for="(err, i) in importResult!.errors"
+                    v-for="(err, i) in result!.errors"
                     :key="i"
                     class="border-t border-default"
                   >
@@ -466,6 +585,15 @@ function resetFile() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div class="flex justify-end">
+            <UButton
+              label="Tutup"
+              color="neutral"
+              variant="subtle"
+              @click="emit('update:open', false)"
+            />
           </div>
         </div>
       </div>
@@ -481,8 +609,8 @@ function resetFile() {
         />
         <UButton
           v-if="hasPreview && !showResult"
-          :label="`Import ${validRows.length} Karyawan`"
-          icon="i-lucide-upload"
+          :label="isBankMode ? `Update ${validRows.length} Karyawan` : `Import ${validRows.length} Karyawan`"
+          :icon="isBankMode ? 'i-lucide-landmark' : 'i-lucide-upload'"
           color="primary"
           :loading="importing"
           :disabled="!canImport"

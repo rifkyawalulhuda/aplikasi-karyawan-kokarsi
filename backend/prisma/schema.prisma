@@ -39,6 +39,15 @@ model Department {
   @@map("departments")
 }
 
+model Bank {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  branch    String?    @db.VarChar(255)
+  employees Employee[]
+
+  @@map("banks")
+}
+
 model AppSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique @db.VarChar(100)
@@ -107,12 +116,15 @@ model Employee {
   phoneNumber      String?          @db.VarChar(50)
   email            String           @unique @db.VarChar(255)
   fotoKaryawan     String?
+  bankId           Int?
+  bankAccountNumber String?         @db.VarChar(50)
 
   taxStatus    TaxStatus    @relation(fields: [taxStatusId], references: [id])
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   workLocation WorkLocation @relation(fields: [workLocationId], references: [id])
   jobRole      JobRole      @relation(fields: [jobRoleId], references: [id])
   jobLevel     JobLevel     @relation(fields: [jobLevelId], references: [id])
+  bank         Bank?       @relation(fields: [bankId], references: [id], onDelete: SetNull)
 
   contracts         Contract[]
   statusHistory     EmployeeStatusHistory[]

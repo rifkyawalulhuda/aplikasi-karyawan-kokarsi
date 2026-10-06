@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe, Request, ForbiddenException, UploadedFile, UseInterceptors, BadRequestException, Res, Query } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
-import { LookupsService, CreateDocumentTypeDto, CreateCompanyDto } from './lookups.service'
+import { LookupsService, CreateDocumentTypeDto, CreateCompanyDto, CreateBankDto } from './lookups.service'
 import { IsNotEmpty, IsString } from 'class-validator'
 import * as XLSX from 'xlsx'
 
@@ -231,5 +231,29 @@ export class LookupsController {
   deleteCompany(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
     this.ensureMasterDataWriteAccess(req.user?.role)
     return this.service.deleteCompany(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
+  }
+
+  // ── Bank endpoints ───────────────────────────────────────────────────
+  @Get('banks')
+  getBanks() {
+    return this.service.getBanks()
+  }
+
+  @Post('banks')
+  createBank(@Request() req: any, @Body() dto: CreateBankDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.createBank(dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
+  }
+
+  @Put('banks/:id')
+  updateBank(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: CreateBankDto) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.updateBank(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
+  }
+
+  @Delete('banks/:id')
+  deleteBank(@Request() req: any, @Param('id', ParseIntPipe) id: number) {
+    this.ensureMasterDataWriteAccess(req.user?.role)
+    return this.service.deleteBank(id, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 }

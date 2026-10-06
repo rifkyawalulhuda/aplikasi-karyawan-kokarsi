@@ -46,6 +46,13 @@ export const SYSTEM_FIELD_SEEDS: SystemFieldSeed[] = [
   // "Field system ... tidak terdaftar di katalog".
   { key: 'employee.phoneNumber', label: 'Nomor Telepon Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
   { key: 'employee.email', label: 'E-mail Karyawan', dataType: 'TEXT', sourceType: 'SYSTEM' },
+  // Data bank PIHAK KEDUA untuk pasal pengupahan (transfer rekening). Bank &
+  // cabang berasal dari Master Data Bank (`Employee.bank`), sedangkan nomor
+  // rekening disimpan langsung di karyawan sebagai teks (leading zero aman).
+  // "Atas Nama" tidak punya field sendiri — memakai {{employee.fullName}}.
+  { key: 'employee.bank', label: 'Bank', dataType: 'TEXT', sourceType: 'SYSTEM' },
+  { key: 'employee.bank.branch', label: 'Cabang Bank', dataType: 'TEXT', sourceType: 'SYSTEM' },
+  { key: 'employee.bankAccountNumber', label: 'No. Rekening', dataType: 'TEXT', sourceType: 'SYSTEM' },
   // Doc & settings
   { key: 'doc.docDate', label: 'Tanggal Dokumen', dataType: 'DATE', sourceType: 'SYSTEM' },
   { key: 'doc.hariTanggal', label: 'Hari & Tanggal Tanda Tangan (auto)', dataType: 'TEXT', sourceType: 'SYSTEM' },

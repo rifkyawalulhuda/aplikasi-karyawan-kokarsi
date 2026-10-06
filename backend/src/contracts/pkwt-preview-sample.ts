@@ -32,6 +32,10 @@ export const PKWT_PREVIEW_VALUES: Record<string, string> = {
   'employee.phoneNumber': '081234567891',
   'employee.email': 'ibad@example.com',
   'employee.jobRole': 'Driver',
+  // Data bank PIHAK KEDUA (Master Data Bank + No. Rekening karyawan).
+  'employee.bank': 'Mandiri',
+  'employee.bank.branch': 'Deltamas',
+  'employee.bankAccountNumber': '1730011451375',
   // Dokumen & pengaturan
   'doc.hariTanggal': 'Kamis, 2 Juli 2026',
   'doc.docDate': '2 Juli 2026',

@@ -1,7 +1,48 @@
 ﻿import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import type ExcelJS from 'exceljs'
 import type { Employee, WarningLetter } from '~/types'
+
+/**
+ * Gaya header Excel export karyawan — SENGAJA disamakan dengan template import
+ * (`backend/src/employees/employees.service.ts` → `generateImportTemplate`):
+ * fill biru `FF2563EB` + teks putih tebal, agar file export dan import konsisten.
+ */
+const EXPORT_HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+const EXPORT_HEADER_FONT = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+
+/** Lebar kolom export karyawan, dipetakan per nama header agar tidak bergeser. */
+const EMPLOYEE_EXPORT_COLUMN_WIDTHS: Record<string, number> = {
+  'No': 5,
+  'No. Induk Karyawan': 18,
+  'No. Anggota': 18,
+  'Nama Lengkap': 30,
+  'NIK': 20,
+  'Status Kepegawaian': 18,
+  'Jenis Kelamin': 14,
+  'Tempat Lahir': 18,
+  'Tanggal Lahir': 14,
+  'Alamat': 36,
+  'Tanggal Bergabung': 16,
+  'Email': 30,
+  'No. HP': 16,
+  'Pendidikan': 14,
+  'Site': 16,
+  'Pekerjaan': 24,
+  'Level Jabatan': 16,
+  'Departement': 20,
+  'Status Pajak': 18,
+  'Bank': 22,
+  'Cabang': 22,
+  'No. Rekening': 22,
+  'No. Kontrak Aktif': 22,
+  'Tgl. Mulai Kontrak': 18,
+  'Tgl. Selesai Kontrak': 18,
+  'Status Kontrak': 16,
+  'Dibuat': 14,
+  'Diperbarui': 14,
+}
 
 export function useExport() {
   function employmentStatusLabel(status: string) {
@@ -83,6 +124,9 @@ export function useExport() {
       'Level Jabatan': e.jobLevel?.name ?? '-',
       ...(includeDepartment ? { 'Departement': e.department?.name ?? '-' } : {}),
       'Status Pajak': e.taxStatus?.name ?? '-',
+      'Bank': e.bank?.name ?? '-',
+      'Cabang': e.bank?.branch ?? '-',
+      'No. Rekening': e.bankAccountNumber ?? '-',
       ...(() => {
         const c = resolveActiveContract(e)
         return {
@@ -130,44 +174,54 @@ export function useExport() {
   async function exportExcel(filename = 'data-karyawan') {
     const employees = await fetchAllEmployees()
     const rows = toRows(employees, true)
-    const ws = XLSX.utils.json_to_sheet(rows)
 
-    // Manual column width (capped — mencegah kolom Alamat/Email terlalu lebar)
-    ws['!cols'] = [
-      { wch: 5 },  // No
-      { wch: 18 }, // No. Induk Karyawan
-      { wch: 30 }, // Nama Lengkap
-      { wch: 20 }, // NIK
-      { wch: 18 }, // Status Kepegawaian
-      { wch: 14 }, // Jenis Kelamin
-      { wch: 18 }, // Tempat Lahir
-      { wch: 14 }, // Tanggal Lahir
-      { wch: 36 }, // Alamat
-      { wch: 16 }, // Tanggal Bergabung
-      { wch: 30 }, // Email
-      { wch: 16 }, // No. HP
-      { wch: 14 }, // Pendidikan
-      { wch: 16 }, // Site
-      { wch: 24 }, // Pekerjaan
-      { wch: 16 }, // Level Jabatan
-      { wch: 20 }, // Departement
-      { wch: 18 }, // Status Pajak
-      { wch: 22 }, // No. Kontrak Aktif
-      { wch: 18 }, // Tgl. Mulai Kontrak
-      { wch: 18 }, // Tgl. Selesai Kontrak
-      { wch: 16 }, // Status Kontrak
-      { wch: 14 }, // Dibuat
-      { wch: 14 }, // Diperbarui
-    ]
+    const headers = Object.keys(rows[0] ?? {})
+    if (headers.length === 0) return
+
+    // ExcelJS dipakai (bukan SheetJS) karena hanya ExcelJS yang dapat menulis
+    // gaya sel (fill/font) — SheetJS Community mengabaikannya. Diimpor dinamis
+    // agar bundle-nya hanya dimuat saat export benar-benar dipakai.
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    const sheetName = `Karyawan ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    const ws = wb.addWorksheet(sheetName)
+
+    // Header dengan fill & font yang sama seperti template import.
+    const headerRow = ws.addRow(headers)
+    headerRow.eachCell((cell) => {
+      cell.fill = EXPORT_HEADER_FILL as ExcelJS.Fill
+      cell.font = EXPORT_HEADER_FONT as Partial<ExcelJS.Font>
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      }
+    })
+    headerRow.height = 24
+
+    for (const row of rows) {
+      ws.addRow(headers.map(header => (row as Record<string, unknown>)[header]))
+    }
+
+    headers.forEach((header, index) => {
+      ws.getColumn(index + 1).width = EMPLOYEE_EXPORT_COLUMN_WIDTHS[header] ?? 16
+    })
 
     // Freeze header row
-    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
 
-    const wb = XLSX.utils.book_new()
-    const sheetName = `Karyawan ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   async function exportPDF(filename = 'data-karyawan') {
