@@ -60,6 +60,41 @@ const itemList = computed<string[]>(() => props.block?.items ?? [])
 const columnList = computed<TableColumn[]>(() => props.block?.columns ?? [])
 const rowList = computed<Record<string, string>[]>(() => props.block?.rows ?? [])
 
+const toast = useToast()
+
+/** Aksi per blok dalam satu menu "…" agar kepala kartu tidak padat. */
+const blockActions = computed<Array<Array<{
+  label: string
+  icon: string
+  onSelect: () => void
+  disabled?: boolean
+  color?: 'error'
+}>>>(() => [
+  [
+    { label: 'Pindah ke atas', icon: 'i-lucide-arrow-up', disabled: !props.editable || props.index === 0, onSelect: () => emit('move', -1) },
+    { label: 'Pindah ke bawah', icon: 'i-lucide-arrow-down', disabled: !props.editable || props.index === props.total - 1, onSelect: () => emit('move', 1) },
+    { label: 'Duplikat blok', icon: 'i-lucide-copy', disabled: !props.editable, onSelect: () => emit('duplicate') }
+  ],
+  [
+    { label: 'Hapus blok', icon: 'i-lucide-trash-2', color: 'error', disabled: !props.editable, onSelect: () => emit('remove') }
+  ]
+])
+
+/**
+ * Pindahkan blok lewat keyboard (handle drag dapat difokus).
+ *
+ * Drag & drop HTML5 tidak dapat dioperasikan dengan keyboard — tanpa ini,
+ * menyusun ulang blok mustahil bagi pengguna keyboard/screen reader.
+ */
+function onHandleKeydown(event: KeyboardEvent) {
+  if (!props.editable) return
+  if (event.key === 'ArrowUp') { event.preventDefault(); emit('move', -1) }
+  else if (event.key === 'ArrowDown') { event.preventDefault(); emit('move', 1) }
+}
+
+/** "Kosong" dihitung pada teks tanpa mark — `****` saja dianggap kosong. */
+const isBlank = (v: any) => !stripInlineMarks(String(v ?? '')).trim()
+
 /**
  * Beri tahu induk blok mana (dan sub-bagian mana) yang sedang difokuskan.
  * `path === undefined` = sinyal "blok aktif" dari `focusin` umum; sub-bagian
@@ -153,12 +188,20 @@ const emptyWarnings = computed(() => {
 
 function removeParagraph(i: number) {
   const arr = props.block.paragraphs ?? []
-  if (arr.length <= 1) { arr[0] = ''; return }
+  if (arr.length <= 1) {
+    arr[0] = ''
+    toast.add({ title: 'Isi dikosongkan', description: 'Pasal harus punya minimal satu paragraf, jadi isinya dikosongkan.', color: 'warning' })
+    return
+  }
   arr.splice(i, 1)
 }
 function removeListItem(i: number) {
   const arr = props.block.items ?? []
-  if (arr.length <= 1) { arr[0] = ''; return }
+  if (arr.length <= 1) {
+    arr[0] = ''
+    toast.add({ title: 'Isi dikosongkan', description: 'Daftar harus punya minimal satu poin, jadi isinya dikosongkan.', color: 'warning' })
+    return
+  }
   arr.splice(i, 1)
 }
 
@@ -231,29 +274,37 @@ function addColumn() {
     <!-- Kepala kartu: identitas blok + aksi. Klik di mana pun pada kepala
          kartu memilih blok ini sebagai target sisipan field. -->
     <div class="flex items-center gap-2 px-3 py-2">
-      <!-- Handle drag: hanya aktif pada draft. -->
+      <!-- Handle drag: hanya aktif pada draft. Fokusable + panah ↑/↓ agar
+           penyusunan ulang bisa dilakukan tanpa mouse. -->
       <span
         v-if="editable"
-        class="flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-elevated hover:text-highlighted active:cursor-grabbing"
+        class="flex size-7 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-elevated hover:text-highlighted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:cursor-grabbing"
         draggable="true"
         role="button"
-        tabindex="-1"
-        title="Tarik untuk memindahkan blok"
-        aria-label="Tarik untuk memindahkan blok"
+        tabindex="0"
+        title="Tarik untuk memindahkan, atau fokus lalu tekan ↑ / ↓"
+        aria-label="Ubah urutan blok (tarik, atau tekan panah atas/bawah)"
         @dragstart="emit('dragstart', $event)"
         @dragend="emit('dragend')"
+        @keydown="onHandleKeydown"
         @click.stop
       >
         <UIcon name="i-lucide-grip-vertical" class="size-4" />
       </span>
       <UButton
-        :icon="collapsed ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
-        size="xs"
+        size="sm"
         variant="ghost"
         color="neutral"
         :aria-label="collapsed ? 'Buka blok' : 'Tutup blok'"
+        :aria-expanded="!collapsed"
         @click.stop="emit('update:collapsed', !collapsed)"
-      />
+      >
+        <UIcon
+          name="i-lucide-chevron-right"
+          class="size-4 transition-transform duration-200 motion-reduce:transition-none"
+          :class="collapsed ? '' : 'rotate-90'"
+        />
+      </UButton>
       <UIcon :name="meta.icon" class="size-4 shrink-0 text-primary" />
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -273,51 +324,18 @@ function addColumn() {
         </p>
       </div>
 
-      <div class="flex shrink-0 items-center gap-0.5">
-        <UTooltip text="Pindah ke atas">
+      <div class="shrink-0">
+        <UDropdownMenu :items="blockActions" :content="{ align: 'end' }">
           <UButton
-            icon="i-lucide-arrow-up"
-            size="xs"
+            icon="i-lucide-ellipsis-vertical"
+            size="sm"
             variant="ghost"
             color="neutral"
-            aria-label="Pindah ke atas"
-            :disabled="!editable || index === 0"
-            @click.stop="emit('move', -1)"
-          />
-        </UTooltip>
-        <UTooltip text="Pindah ke bawah">
-          <UButton
-            icon="i-lucide-arrow-down"
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            aria-label="Pindah ke bawah"
-            :disabled="!editable || index === total - 1"
-            @click.stop="emit('move', 1)"
-          />
-        </UTooltip>
-        <UTooltip text="Duplikat blok">
-          <UButton
-            icon="i-lucide-copy"
-            size="xs"
-            variant="ghost"
-            color="neutral"
-            aria-label="Duplikat blok"
             :disabled="!editable"
-            @click.stop="emit('duplicate')"
+            :aria-label="`Aksi untuk blok ${index + 1}`"
+            @click.stop
           />
-        </UTooltip>
-        <UTooltip text="Hapus blok">
-          <UButton
-            icon="i-lucide-trash-2"
-            size="xs"
-            variant="ghost"
-            color="error"
-            aria-label="Hapus blok"
-            :disabled="!editable"
-            @click.stop="emit('remove')"
-          />
-        </UTooltip>
+        </UDropdownMenu>
       </div>
     </div>
 
@@ -342,6 +360,9 @@ function addColumn() {
               placeholder="Tulis teks di sini&#8230;"
             />
           </div>
+          <p v-if="editable && isBlank(block.text)" class="mt-1 text-xs text-warning" aria-live="polite">
+            Teks masih kosong.
+          </p>
         </UFormField>
       </template>
 
@@ -358,6 +379,9 @@ function addColumn() {
               placeholder="Tulis teks di sini&#8230;"
             />
           </div>
+          <p v-if="editable && isBlank(block.text)" class="mt-1 text-xs text-warning" aria-live="polite">
+            Teks paragraf masih kosong.
+          </p>
         </UFormField>
       </template>
 
@@ -388,6 +412,9 @@ function addColumn() {
             placeholder="PASAL 1&#10;RUANG LINGKUP"
             @keydown.enter="onHeadingKeydown"
           />
+          <p v-if="editable && isBlank(block.heading)" class="mt-1 text-xs text-warning" aria-live="polite">
+            Judul pasal masih kosong.
+          </p>
         </UFormField>
         <UFormField label="Uraian pasal">
           <div class="space-y-2">
@@ -409,13 +436,18 @@ function addColumn() {
               @focusin="markFocus(`art:${p}`)"
             >
               <span class="mt-2 w-5 shrink-0 text-right text-xs text-muted">{{ p + 1 }}.</span>
-              <KontrakRichTextField
-                v-model="block.paragraphs[p]"
-                :disabled="!editable"
-                :rows="3"
-                class="flex-1"
-                placeholder="Tulis isi pasal&#8230;"
-              />
+              <div class="min-w-0 flex-1">
+                <KontrakRichTextField
+                  v-model="block.paragraphs[p]"
+                  :disabled="!editable"
+                  :rows="3"
+                  class="w-full"
+                  placeholder="Tulis isi pasal&#8230;"
+                />
+                <p v-if="editable && isBlank(block.paragraphs[p])" class="mt-1 text-xs text-warning" aria-live="polite">
+                  Uraian ini masih kosong.
+                </p>
+              </div>
               <UButton
                 icon="i-lucide-x"
                 size="xs"
@@ -456,17 +488,22 @@ function addColumn() {
             <div
               v-for="(_, p) in itemList"
               :key="p"
-              class="flex items-center gap-2"
+              class="flex items-start gap-2"
               @click="markFocus(`item:${p}`)"
               @focusin="markFocus(`item:${p}`)"
             >
-              <span class="w-5 shrink-0 text-right text-xs text-muted">{{ itemPrefix(p) }}</span>
-              <UInput
-                v-model="block.items[p]"
-                :disabled="!editable"
-                class="flex-1"
-                placeholder="Isi poin&#8230;"
-              />
+              <span class="mt-2 w-5 shrink-0 text-right text-xs text-muted">{{ itemPrefix(p) }}</span>
+              <div class="min-w-0 flex-1">
+                <UInput
+                  v-model="block.items[p]"
+                  :disabled="!editable"
+                  class="w-full"
+                  placeholder="Isi poin&#8230;"
+                />
+                <p v-if="editable && isBlank(block.items[p])" class="mt-1 text-xs text-warning" aria-live="polite">
+                  Poin ini masih kosong.
+                </p>
+              </div>
               <UButton
                 icon="i-lucide-x"
                 size="xs"
@@ -602,15 +639,22 @@ function addColumn() {
         :description="`Tipe '${block.type}' belum didukung editor. Isinya dipertahankan apa adanya.`"
       />
 
-      <details v-if="editable" class="pt-1">
-        <summary class="cursor-pointer text-xs text-muted select-none">
-          Detail teknis
-        </summary>
-        <div class="mt-2 space-y-1 text-xs text-muted">
-          <p>ID blok: <code class="rounded bg-elevated px-1">{{ block.id }}</code></p>
-          <p>Tipe: <code class="rounded bg-elevated px-1">{{ block.type }}</code></p>
-        </div>
-      </details>
+      <UCollapsible v-if="editable" class="pt-1">
+        <UButton
+          label="Detail teknis"
+          color="neutral"
+          variant="link"
+          size="xs"
+          trailing-icon="i-lucide-chevron-down"
+          class="px-0"
+        />
+        <template #content>
+          <div class="mt-2 space-y-1 text-xs text-muted">
+            <p>ID blok: <code class="rounded bg-elevated px-1">{{ block.id }}</code></p>
+            <p>Tipe: <code class="rounded bg-elevated px-1">{{ block.type }}</code></p>
+          </div>
+        </template>
+      </UCollapsible>
     </div>
 
     <!-- Garis sisip bawah -->

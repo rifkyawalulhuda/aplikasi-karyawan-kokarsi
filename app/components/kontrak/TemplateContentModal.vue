@@ -6,6 +6,7 @@ import {
   scanFieldUsage,
   uniqueBlockLabels
 } from '~/utils/field-usage'
+import { stripInlineMarks } from '~/utils/inline-marks'
 
 type InlineMarkWarning = { blockId: string; fieldPath: string; message: string }
 type TemplateValidationPreview = {
@@ -36,6 +37,42 @@ const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>
  */
 const usageSearch = ref('')
 const usageOpen = ref(false)
+
+// ── Tata letak editor: panel samping + mode fokus ───────────────────────────
+// Pada layar ≥ xl, panel versi & field tampil sebagai kolom tetap dan dapat
+// disembunyikan lewat "Mode fokus". Pada layar < xl, panel tampil sebagai
+// overlay yang dibuka lewat tombol agar area edit tidak terasa sempit.
+const versionsHidden = ref(false)
+const fieldsHidden = ref(false)
+const showVersions = ref(false)
+const showFields = ref(false)
+const LAYOUT_PREFS_KEY = 'kokarsi.templateEditor.layout'
+function persistLayoutPrefs() {
+  if (import.meta.server) return
+  try {
+    localStorage.setItem(LAYOUT_PREFS_KEY, JSON.stringify({
+      versionsHidden: versionsHidden.value,
+      fieldsHidden: fieldsHidden.value
+    }))
+  } catch { /* localStorage bisa tidak tersedia (mode privat) — abaikan */ }
+}
+onMounted(() => {
+  try {
+    const raw = localStorage.getItem(LAYOUT_PREFS_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { versionsHidden?: boolean, fieldsHidden?: boolean }
+    versionsHidden.value = parsed.versionsHidden === true
+    fieldsHidden.value = parsed.fieldsHidden === true
+  } catch { /* prefs rusak — pakai default */ }
+})
+watch([versionsHidden, fieldsHidden], persistLayoutPrefs)
+
+/** Mode fokus: sembunyikan kedua panel samping agar editor memakai lebar penuh. */
+function toggleFocusMode() {
+  const next = !(versionsHidden.value && fieldsHidden.value)
+  versionsHidden.value = next
+  fieldsHidden.value = next
+}
 
 const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null>(null); const pendingVersion = ref<Version | null>(null)
 /** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
@@ -126,7 +163,7 @@ async function refreshAfterDelete() {
     draft.value = null
   }
 }
-async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }) } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
+async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }); warnEmptyBlocks() } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
 async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview') { await openPreview(v); return } const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 
 /**
@@ -699,6 +736,104 @@ function goToUsage(occurrence: { blockIndex: number, blockId: string, path: stri
   })
 }
 
+/** Label + ikon ramah tipe blok untuk daftar isi (cermin `BLOCK_META` di kartu). */
+const BLOCK_LABELS: Record<string, string> = {
+  title: 'Judul',
+  subtitle: 'Subjudul',
+  paragraph: 'Paragraf',
+  article: 'Pasal',
+  list: 'Daftar',
+  table: 'Tabel',
+  pageBreak: 'Ganti Halaman',
+  signature: 'Tanda Tangan'
+}
+const BLOCK_ICONS: Record<string, string> = {
+  title: 'i-lucide-heading-1',
+  subtitle: 'i-lucide-heading-2',
+  paragraph: 'i-lucide-align-left',
+  article: 'i-lucide-scale',
+  list: 'i-lucide-list',
+  table: 'i-lucide-table',
+  pageBreak: 'i-lucide-scissors',
+  signature: 'i-lucide-pen-line'
+}
+
+/** Judul ringkas sebuah blok untuk daftar isi. */
+function outlineTitle(block: any): string {
+  const clean = (v: any) => String(v ?? '').replace(/\s+/g, ' ').trim()
+  switch (block?.type) {
+    case 'article': return clean(block.heading) || 'Pasal tanpa judul'
+    case 'list': return `${(block.items ?? []).length} poin`
+    case 'table': return `${(block.rows ?? []).length} baris × ${(block.columns ?? []).length} kolom`
+    case 'signature': return 'Tanda tangan'
+    case 'pageBreak': return 'Ganti halaman'
+    default: return clean(stripInlineMarks(block?.text)) || 'Belum ada teks'
+  }
+}
+
+/** Daftar isi blok pada bahasa aktif, untuk lompat cepat pada template panjang. */
+const blockOutline = computed(() =>
+  (blocks.value ?? []).map((b: any, index: number) => ({
+    index,
+    id: String(b?.id ?? `index-${index}`),
+    label: BLOCK_LABELS[b?.type] ?? (b?.type ?? 'Blok'),
+    icon: BLOCK_ICONS[b?.type] ?? 'i-lucide-square',
+    title: outlineTitle(b)
+  }))
+)
+
+/** Buka + gulir ke blok dari daftar isi (pola sama dengan `goToUsage`). */
+function goToBlock(index: number) {
+  const list = blocks.value ?? []
+  const block = list[index]
+  if (!block) return
+  collapsedBlocks.value[String(block.id ?? `index-${index}`)] = false
+  setFocus(String(block.id ?? `index-${index}`))
+  showVersions.value = false
+  nextTick(() => {
+    document.getElementById(blockDomId(block, index))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+/** Apakah isi sebuah blok masih kosong (diukur pada teks tanpa mark). */
+function blockIsEmpty(b: any): boolean {
+  const blank = (v: any) => !stripInlineMarks(String(v ?? '')).trim()
+  switch (b?.type) {
+    case 'title':
+    case 'subtitle':
+    case 'paragraph':
+      return blank(b.text)
+    case 'article':
+      return blank(b.heading) || (b.paragraphs ?? []).some((p: any) => blank(p))
+    case 'list':
+      return (b.items ?? []).some((i: any) => blank(i))
+    case 'table':
+      return (b.rows ?? []).some((r: any) => (b.columns ?? []).some((c: any) => blank(r?.[c.key])))
+    default:
+      return false
+  }
+}
+
+/** Indeks blok yang isinya masih kosong (untuk peringatan sebelum Publish). */
+const emptyBlockIndices = computed(() =>
+  (blocks.value ?? [])
+    .map((b: any, index: number) => ({ b, index }))
+    .filter(({ b }) => blockIsEmpty(b))
+    .map(({ index }) => index)
+)
+
+/** Peringatan (tidak memblokir) bila masih ada blok kosong saat menyimpan. */
+function warnEmptyBlocks() {
+  const empties = emptyBlockIndices.value
+  if (!empties.length) return
+  toast.add({
+    title: `${empties.length} isi masih kosong`,
+    description: 'Periksa blok bertanda sebelum menerbitkan versi.',
+    color: 'warning',
+    actions: [{ label: 'Lihat blok', color: 'warning', variant: 'soft', onClick: () => goToBlock(empties[0] ?? 0) }]
+  })
+}
+
 /** Duplikat blok, termasuk seluruh isinya. */
 function duplicateBlock(i: number) {
   const list = blocks.value ?? []
@@ -730,6 +865,7 @@ const confirmCloseOpen = ref(false)
 async function requestSelect(v: Version) {
   if (draftDirty.value && v.id !== selected.value?.id) { pendingVersion.value = v; return }
   await select(v)
+  showVersions.value = false
 }
 
 /** Tutup modal — kalau draft berubah, minta konfirmasi dulu. */
@@ -737,6 +873,30 @@ function requestClose() {
   if (draftDirty.value) { pendingVersion.value = null; confirmCloseOpen.value = true; return }
   open.value = false
 }
+
+/**
+ * Intersepsi permintaan tutup dari `UModal` (tombol X, Esc, klik luar).
+ *
+ * Tanpa ini, X/Esc menutup modal LANGSUNG dan melewati penjagaan draft —
+ * perubahan yang belum disimpan hilang tanpa peringatan. Semua jalur tutup
+ * kini lewat `requestClose()`.
+ */
+function onModalOpenChange(v: boolean) {
+  if (v) { open.value = true; return }
+  requestClose()
+}
+
+/**
+ * Penjaga refresh/tutup-tab: draft yang belum disimpan tidak boleh hilang
+ * diam-diam karena pengguna menekan F5 atau menutup tab.
+ */
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (!draftDirty.value) return
+  e.preventDefault()
+  e.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
 
 /** Ringkasan singkat isi blok untuk tampilan daftar. */
 const blocksCount = computed(() => (blocks.value ?? []).length)
@@ -780,11 +940,115 @@ function removeInvalidBlock(index: number) {
 
 <template>
   <UModal
-    v-model:open="open"
+    :open="open"
+    fullscreen
     :title="`Editor Template — ${template?.name ?? ''}`"
-    :description="draft ? 'Anda berada di mode edit draft.' : 'Mode baca: pilih atau buat draft untuk mengubah isi.'"
-    :ui="{ content: 'max-w-7xl w-full' }"
+    :description="draft ? 'Mode edit draft' : 'Mode baca: buat draft untuk mengubah isi'"
+    :ui="{ content: 'overflow-hidden', body: 'relative flex-1 min-h-0 p-0 sm:p-0', header: 'flex-wrap gap-y-2 pe-14' }"
+    @update:open="onModalOpenChange"
   >
+    <!-- Command bar: aksi utama selalu terlihat di header yang tidak menggulir. -->
+    <template #actions>
+      <div class="ms-auto flex flex-wrap items-center justify-end gap-1.5">
+        <!-- Toggle panel (overlay) pada layar < xl -->
+        <UButton
+          class="xl:hidden"
+          icon="i-lucide-history"
+          size="sm"
+          variant="ghost"
+          color="neutral"
+          aria-label="Riwayat versi"
+          @click="showVersions = !showVersions"
+        />
+        <UButton
+          class="xl:hidden"
+          icon="i-lucide-list-plus"
+          size="sm"
+          variant="ghost"
+          color="neutral"
+          aria-label="Panel field dinamis"
+          @click="showFields = !showFields"
+        />
+        <!-- Mode fokus (≥ xl): sembunyikan panel samping -->
+        <UTooltip text="Mode fokus — sembunyikan panel samping">
+          <UButton
+            class="hidden xl:inline-flex"
+            :icon="versionsHidden && fieldsHidden ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            :aria-pressed="versionsHidden && fieldsHidden"
+            aria-label="Mode fokus"
+            @click="toggleFocusMode"
+          />
+        </UTooltip>
+
+        <!-- Status versi -->
+        <UTooltip
+          v-if="draft ?? selected"
+          :text="draft ? 'Perubahan berlaku setelah Publish.' : 'Versi terbit (mode baca) — buat draft untuk mengubah isi.'"
+        >
+          <UBadge
+            color="neutral"
+            variant="subtle"
+            size="sm"
+            :label="`${draft ? 'Draft' : 'Versi'} v${(draft ?? selected)?.versionNumber}`"
+          />
+        </UTooltip>
+        <UBadge
+          v-if="draft && draftDirty"
+          color="warning"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-circle-dot"
+          label="Belum disimpan"
+        />
+        <UBadge
+          v-else-if="draft"
+          color="success"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-check"
+          label="Tersimpan"
+        />
+
+        <!-- Aksi utama -->
+        <UButton
+          label="Pratinjau PDF"
+          icon="i-lucide-eye"
+          size="sm"
+          variant="soft"
+          :loading="busy"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Pratinjau PDF"
+          @click="action('preview')"
+        />
+        <UButton
+          v-if="draft"
+          label="Simpan"
+          icon="i-lucide-save"
+          size="sm"
+          variant="soft"
+          :disabled="!draftDirty"
+          :loading="saving"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Simpan draft"
+          @click="save"
+        />
+        <UButton
+          v-if="draft"
+          label="Publish"
+          icon="i-lucide-rocket"
+          size="sm"
+          color="primary"
+          :loading="busy"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Publish versi"
+          @click="confirmPublish"
+        />
+      </div>
+    </template>
+
     <template #body>
       <div v-if="error" class="space-y-3 p-4">
         <UAlert
@@ -804,9 +1068,41 @@ function removeInvalidBlock(index: number) {
         </p>
       </div>
 
-      <div v-else class="grid gap-5 lg:grid-cols-[250px_minmax(0,1fr)_320px]">
-        <!-- ── Riwayat versi ── -->
-        <aside class="space-y-3">
+      <div v-else class="flex h-full min-h-0">
+        <!-- ── Riwayat versi + daftar isi ── -->
+        <aside
+          :class="[
+            versionsHidden
+              ? 'hidden'
+              : (showVersions
+                ? 'absolute inset-y-0 left-0 z-30 w-[300px] bg-default shadow-xl xl:static xl:w-[250px] xl:shadow-none'
+                : 'hidden xl:static xl:block xl:w-[250px]'),
+            'shrink-0 space-y-3 overflow-y-auto border-default p-3 xl:border-r'
+          ]"
+        >
+          <!-- Daftar isi blok: lompat cepat pada template panjang -->
+          <div v-if="blockOutline.length" class="rounded-lg border border-default">
+            <p class="flex items-center gap-1.5 border-b border-default px-3 py-2 text-xs font-semibold text-muted">
+              <UIcon name="i-lucide-list-tree" class="size-3.5" />
+              Daftar isi · {{ blockOutline.length }} blok
+            </p>
+            <ol class="p-1">
+              <li v-for="item in blockOutline" :key="item.id">
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition hover:bg-elevated"
+                  :class="focusedBlockId === item.id ? 'bg-primary/5 text-highlighted' : 'text-muted'"
+                  @click="goToBlock(item.index)"
+                >
+                  <span class="w-5 shrink-0 text-right tabular-nums">{{ item.index + 1 }}</span>
+                  <UIcon :name="item.icon" class="size-3.5 shrink-0 text-primary" />
+                  <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                  <span class="max-w-[45%] truncate text-[11px]">{{ item.title }}</span>
+                </button>
+              </li>
+            </ol>
+          </div>
+
           <div class="flex items-center justify-between gap-2">
             <div>
               <p class="font-semibold">
@@ -816,15 +1112,26 @@ function removeInvalidBlock(index: number) {
                 {{ versions.length }} versi
               </p>
             </div>
-            <UTooltip v-if="!draft" text="Buat draft baru untuk diedit">
+            <div class="flex items-center gap-1">
+              <UTooltip v-if="!draft" text="Buat draft baru untuk diedit">
+                <UButton
+                  size="xs"
+                  label="Draft baru"
+                  icon="i-lucide-plus"
+                  :loading="busy"
+                  @click="createDraft"
+                />
+              </UTooltip>
               <UButton
+                class="xl:hidden"
+                icon="i-lucide-x"
                 size="xs"
-                label="Draft baru"
-                icon="i-lucide-plus"
-                :loading="busy"
-                @click="createDraft"
+                variant="ghost"
+                color="neutral"
+                aria-label="Tutup panel versi"
+                @click="showVersions = false"
               />
-            </UTooltip>
+            </div>
           </div>
 
           <div v-if="!versions.length" class="rounded-lg border border-dashed border-default p-4 text-center">
@@ -834,7 +1141,7 @@ function removeInvalidBlock(index: number) {
             </p>
           </div>
 
-          <div class="max-h-[62vh] space-y-2 overflow-auto pr-1">
+          <div class="space-y-2">
             <div
               v-for="v in versions"
               :key="v.id"
@@ -891,64 +1198,8 @@ function removeInvalidBlock(index: number) {
         </aside>
 
         <!-- ── Editor blok ── -->
-        <main class="min-w-0 space-y-4">
+        <main class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4">
           <div class="space-y-3">
-            <!-- Status + aksi utama -->
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="min-w-0">
-                <div class="flex items-center gap-2">
-                  <p class="font-semibold">
-                    {{ draft ? 'Draft' : 'Versi' }} v{{ (draft ?? selected)?.versionNumber }}
-                  </p>
-                  <UBadge
-                    v-if="draftDirty"
-                    color="warning"
-                    variant="subtle"
-                    size="sm"
-                    icon="i-lucide-circle-dot"
-                    label="Belum disimpan"
-                  />
-                  <UBadge
-                    v-else-if="draft"
-                    color="success"
-                    variant="subtle"
-                    size="sm"
-                    icon="i-lucide-check"
-                    label="Tersimpan"
-                  />
-                </div>
-                <p class="text-xs text-muted">
-                  {{ draft ? 'Perubahan berlaku setelah Publish.' : 'Mode baca — buat draft baru untuk mengubah isi.' }}
-                </p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <UButton
-                  label="Pratinjau"
-                  icon="i-lucide-eye"
-                  variant="soft"
-                  :loading="busy"
-                  @click="action('preview')"
-                />
-                <UButton
-                  v-if="draft"
-                  label="Simpan"
-                  icon="i-lucide-save"
-                  variant="soft"
-                  :disabled="!draftDirty"
-                  :loading="saving"
-                  @click="save"
-                />
-                <UButton
-                  v-if="draft"
-                  label="Publish"
-                  icon="i-lucide-rocket"
-                  color="primary"
-                  :loading="busy"
-                  @click="confirmPublish"
-                />
-              </div>
-            </div>
-
             <UFormField
               v-if="draft"
               label="Ringkasan perubahan"
@@ -982,11 +1233,37 @@ function removeInvalidBlock(index: number) {
                 {{ blocksCount }} blok pada versi {{ lang === 'id' ? 'Indonesia' : 'English' }}
               </p>
             </div>
-            <p class="border-b border-default px-1 pb-1.5 pt-1.5 text-xs text-muted">
-              Pemformatan teks:
-              <b>**tebal**</b>, <i>*miring*</i>, <u>__garis bawah__</u>
-              — atau gunakan tombol di atas setiap field teks.
-            </p>
+            <div class="flex items-center justify-between gap-2 border-b border-default px-1 py-1.5">
+              <p class="text-xs text-muted">
+                Pemformatan teks didukung pada paragraf & uraian pasal.
+              </p>
+              <UPopover>
+                <UButton
+                  label="Bantuan pemformatan"
+                  icon="i-lucide-help-circle"
+                  size="xs"
+                  variant="link"
+                  color="neutral"
+                  class="px-0"
+                />
+                <template #content>
+                  <div class="w-72 space-y-2 p-3 text-xs">
+                    <p class="font-medium text-highlighted">
+                      Pemformatan teks
+                    </p>
+                    <ul class="space-y-1 text-muted">
+                      <li><b>**tebal**</b> — Tebal (Ctrl+B)</li>
+                      <li><i>*miring*</i> — Miring (Ctrl+I)</li>
+                      <li><u>__garis bawah__</u> — Garis bawah (Ctrl+U)</li>
+                    </ul>
+                    <p class="text-muted">
+                      Gunakan tombol di atas setiap field, atau ketik penandanya langsung.
+                      Acuan akhir tetap tombol <b>Pratinjau PDF</b>.
+                    </p>
+                  </div>
+                </template>
+              </UPopover>
+            </div>
           </div>
 
           <!-- Daftar blok -->
@@ -1085,18 +1362,18 @@ function removeInvalidBlock(index: number) {
           </div>
         </main>
 
-        <!-- ── Field dinamis (sticky) + Pratinjau + Validasi ── -->
-        <aside class="space-y-3">
-          <!-- Panel field: sticky agar daftar field selalu terlihat saat menggulir blok.
-               `max-h` dihitung dari TINGGI BODY MODAL, bukan sekadar viewport: modal
-               non-scrollable (`UModal`) punya header (--ui-header-height = 4rem) dan
-               footer (≈4,25rem) + padding body (1,5rem atas/bawah) + offset sticky
-               (0,75rem) + margin tengah modal (≈2rem) ≈ 15rem. Sebelumnya nilai 8rem
-               membuat panel ~7rem lebih tinggi dari area yang terlihat, sehingga
-               bagian bawah (daftar field & kartu "Validasi template") tertutup footer
-               sampai pengguna menggulir. `min-h-0` dipasang agar `flex-1` pada daftar
-               field benar-benar membatasi tinggi dan scroll-nya internal. -->
-          <div class="flex min-h-0 flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm lg:sticky lg:top-3 lg:z-10 lg:max-h-[calc(100dvh-15rem)]">
+        <!-- ── Field dinamis + Pratinjau + Validasi ── -->
+        <aside
+          :class="[
+            fieldsHidden
+              ? 'hidden'
+              : (showFields
+                ? 'absolute inset-y-0 right-0 z-30 w-[320px] bg-default shadow-xl xl:static xl:w-[320px] xl:shadow-none'
+                : 'hidden xl:static xl:block xl:w-[320px]'),
+            'shrink-0 space-y-3 overflow-y-auto border-default p-3 xl:border-l'
+          ]"
+        >
+          <div class="flex min-h-0 flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm">
             <div class="flex items-center justify-between">
               <div>
                 <p class="font-semibold">
@@ -1107,6 +1384,15 @@ function removeInvalidBlock(index: number) {
                 </p>
               </div>
               <div class="flex items-center gap-1">
+                <UButton
+                  class="xl:hidden"
+                  icon="i-lucide-x"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  aria-label="Tutup panel field"
+                  @click="showFields = false"
+                />
                 <UTooltip text="Cari di blok mana field dipakai">
                   <UButton
                     size="xs"
@@ -1152,7 +1438,7 @@ function removeInvalidBlock(index: number) {
               class="w-full shrink-0"
             />
 
-            <div class="min-h-0 flex-1 space-y-1.5 overflow-auto pr-1">
+            <div class="space-y-1.5">
               <UButton
                 v-for="f in filteredFieldItems"
                 :key="f.key"
@@ -1208,26 +1494,15 @@ function removeInvalidBlock(index: number) {
     <template #footer>
       <div class="flex w-full items-center justify-between gap-2">
         <p v-if="draftDirty" class="text-xs text-warning">
-          Ada perubahan yang belum disimpan.
+          Ada perubahan yang belum disimpan — tekan Simpan di atas sebelum menutup.
         </p>
         <span v-else />
-        <div class="flex gap-2">
-          <UButton
-            label="Tutup"
-            color="neutral"
-            variant="subtle"
-            @click="requestClose"
-          />
-          <UButton
-            v-if="draft"
-            label="Simpan draft"
-            icon="i-lucide-save"
-            color="primary"
-            :disabled="!draftDirty"
-            :loading="saving"
-            @click="save"
-          />
-        </div>
+        <UButton
+          label="Tutup"
+          color="neutral"
+          variant="subtle"
+          @click="requestClose"
+        />
       </div>
     </template>
   </UModal>
