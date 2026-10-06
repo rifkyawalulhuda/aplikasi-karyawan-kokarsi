@@ -18,22 +18,22 @@ function isProd() {
   return process.env.NODE_ENV === 'production'
 }
 
-export function setAccessCookie(event: H3Event, token: string) {
+export function setAccessCookie(event: H3Event, token: string, remember = true) {
   setCookie(event, ACCESS_COOKIE, token, {
     httpOnly: true,
     secure: isProd(),
     sameSite: 'strict',
-    maxAge: ACCESS_TTL_SECONDS,
+    ...(remember ? { maxAge: ACCESS_TTL_SECONDS } : {}),
     path: '/'
   })
 }
 
-export function setRefreshCookie(event: H3Event, token: string) {
+export function setRefreshCookie(event: H3Event, token: string, remember = true) {
   setCookie(event, REFRESH_COOKIE, token, {
     httpOnly: true,
     secure: isProd(),
     sameSite: 'strict',
-    maxAge: REFRESH_TTL_SECONDS,
+    ...(remember ? { maxAge: REFRESH_TTL_SECONDS } : {}),
     path: '/'
   })
 }

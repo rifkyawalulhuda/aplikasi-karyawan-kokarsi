@@ -53,6 +53,42 @@ class UpdateGeneralSettingsDto {
   @IsOptional()
   @IsString()
   agendaNotificationMorningHour?: string
+
+  @IsOptional()
+  @IsString()
+  loginTagline?: string
+
+  @IsOptional()
+  @IsString()
+  loginSubtitle?: string
+
+  @IsOptional()
+  @IsString()
+  loginFeatures?: string
+
+  @IsOptional()
+  @IsString()
+  loginGreetingEnabled?: string
+
+  @IsOptional()
+  @IsString()
+  loginRememberMeEnabled?: string
+
+  @IsOptional()
+  @IsString()
+  loginOrnamentsEnabled?: string
+
+  @IsOptional()
+  @IsString()
+  loginFooterShowVersion?: string
+
+  @IsOptional()
+  @IsString()
+  loginSupportTitle?: string
+
+  @IsOptional()
+  @IsString()
+  loginSupportContact?: string
 }
 
 @Controller('settings')

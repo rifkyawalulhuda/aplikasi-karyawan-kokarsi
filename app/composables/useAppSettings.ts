@@ -1,7 +1,26 @@
-import type { GeneralSettings } from '~/types'
+import type { GeneralSettings, LoginFeatureItem } from '~/types'
 
 const settings = ref<GeneralSettings | null>(null)
 let fetched = false
+
+function toBool(value: string | undefined, fallback = true): boolean {
+  if (value === undefined || value === '') return fallback
+  return value === '1' || value.toLowerCase() === 'true'
+}
+
+function parseFeatures(raw: string | undefined): LoginFeatureItem[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((item): item is { icon?: string, text?: string } => !!item && typeof item === 'object')
+      .map(item => ({ icon: item.icon ?? '', text: item.text ?? '' }))
+      .filter(item => item.text.trim() !== '')
+  } catch {
+    return []
+  }
+}
 
 export function useAppSettings() {
   async function fetchSettings() {
@@ -50,6 +69,16 @@ export function useAppSettings() {
   const loginLeftTextColor = computed(() => settings.value?.loginLeftTextColor || '')
   const loginRightTextColor = computed(() => settings.value?.loginRightTextColor || '')
 
+  const loginTagline = computed(() => settings.value?.loginTagline || 'Sistem Manajemen Karyawan')
+  const loginSubtitle = computed(() => settings.value?.loginSubtitle || '')
+  const loginFeatures = computed(() => parseFeatures(settings.value?.loginFeatures))
+  const loginGreetingEnabled = computed(() => toBool(settings.value?.loginGreetingEnabled))
+  const loginRememberMeEnabled = computed(() => toBool(settings.value?.loginRememberMeEnabled))
+  const loginOrnamentsEnabled = computed(() => toBool(settings.value?.loginOrnamentsEnabled))
+  const loginFooterShowVersion = computed(() => toBool(settings.value?.loginFooterShowVersion))
+  const loginSupportTitle = computed(() => settings.value?.loginSupportTitle || '')
+  const loginSupportContact = computed(() => settings.value?.loginSupportContact || '')
+
   if (!fetched) {
     fetchSettings()
   }
@@ -67,6 +96,15 @@ export function useAppSettings() {
     loginRightOverlayOpacity,
     loginLeftTextColor,
     loginRightTextColor,
-    refresh,
+    loginTagline,
+    loginSubtitle,
+    loginFeatures,
+    loginGreetingEnabled,
+    loginRememberMeEnabled,
+    loginOrnamentsEnabled,
+    loginFooterShowVersion,
+    loginSupportTitle,
+    loginSupportContact,
+    refresh
   }
 }

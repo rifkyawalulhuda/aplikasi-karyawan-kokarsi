@@ -12,7 +12,7 @@ const { data: allUsers } = useFetch<EmailNotificationUser[]>('/api/settings/emai
 const form = reactive({
   isEnabled: true,
   triggerWindows: [] as number[],
-  recipientUserIds: [] as number[],
+  recipientUserIds: [] as number[]
 })
 
 // Sync from API to form
@@ -72,8 +72,8 @@ async function confirmSave() {
       body: {
         isEnabled: form.isEnabled,
         triggerWindows: form.triggerWindows,
-        recipientUserIds: form.recipientUserIds,
-      },
+        recipientUserIds: form.recipientUserIds
+      }
     })
     await refresh()
     toast.add({ title: 'Konfigurasi email berhasil disimpan', color: 'success' })
@@ -81,7 +81,7 @@ async function confirmSave() {
     toast.add({
       title: 'Gagal menyimpan konfigurasi',
       description: e?.data?.message ?? 'Terjadi kesalahan',
-      color: 'error',
+      color: 'error'
     })
   } finally {
     saving.value = false
@@ -162,12 +162,11 @@ const selectedCount = computed(() => form.recipientUserIds.length)
         <!-- Add new window -->
         <div class="flex flex-col gap-1">
           <div class="flex items-center gap-2">
-            <input
-              v-model.number="newWindowInput"
-              type="number"
-              min="0"
+            <UInputNumber
+              v-model="newWindowInput"
+              :min="0"
               placeholder="Hari sebelum (contoh: 30)"
-              class="border border-default rounded-md px-3 py-1.5 text-sm w-48 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              class="w-48"
               @keydown.enter.prevent="addWindow"
             />
             <UButton
@@ -205,23 +204,16 @@ const selectedCount = computed(() => form.recipientUserIds.length)
         </p>
 
         <!-- User list -->
-        <div v-else class="flex flex-col gap-2">
-          <label
+        <div v-else class="flex flex-col gap-1">
+          <UCheckbox
             v-for="user in allUsers"
             :key="user.id"
-            class="flex items-center gap-3 cursor-pointer rounded-md p-2 hover:bg-elevated"
-          >
-            <input
-              type="checkbox"
-              :checked="form.recipientUserIds.includes(user.id)"
-              class="w-4 h-4 accent-primary cursor-pointer"
-              @change="toggleRecipient(user.id)"
-            />
-            <div class="flex flex-col">
-              <span class="text-sm font-medium">{{ user.name }}</span>
-              <span class="text-xs text-muted">{{ user.email }}</span>
-            </div>
-          </label>
+            :model-value="form.recipientUserIds.includes(user.id)"
+            :label="user.name"
+            :description="user.email"
+            class="rounded-md p-2 hover:bg-elevated"
+            @update:model-value="() => toggleRecipient(user.id)"
+          />
         </div>
 
         <!-- Selected count -->

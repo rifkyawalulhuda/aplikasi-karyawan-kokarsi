@@ -336,6 +336,20 @@ export interface GeneralSettings {
   loginLeftTextColor?: string
   loginRightTextColor?: string
   agendaNotificationMorningHour?: string
+  loginTagline?: string
+  loginSubtitle?: string
+  loginFeatures?: string
+  loginGreetingEnabled?: string
+  loginRememberMeEnabled?: string
+  loginOrnamentsEnabled?: string
+  loginFooterShowVersion?: string
+  loginSupportTitle?: string
+  loginSupportContact?: string
+}
+
+export interface LoginFeatureItem {
+  icon: string
+  text: string
 }
 
 // --- Email Notification ---

@@ -14,6 +14,15 @@ export interface GeneralSettingsPayload {
   loginLeftTextColor?: string
   loginRightTextColor?: string
   agendaNotificationMorningHour?: string
+  loginTagline?: string
+  loginSubtitle?: string
+  loginFeatures?: string
+  loginGreetingEnabled?: string
+  loginRememberMeEnabled?: string
+  loginOrnamentsEnabled?: string
+  loginFooterShowVersion?: string
+  loginSupportTitle?: string
+  loginSupportContact?: string
 }
 
 @Injectable()
@@ -31,6 +40,15 @@ export class SettingsService {
     'loginLeftTextColor',
     'loginRightTextColor',
     'agendaNotificationMorningHour',
+    'loginTagline',
+    'loginSubtitle',
+    'loginFeatures',
+    'loginGreetingEnabled',
+    'loginRememberMeEnabled',
+    'loginOrnamentsEnabled',
+    'loginFooterShowVersion',
+    'loginSupportTitle',
+    'loginSupportContact',
   ]
 
   private readonly defaults: GeneralSettingsPayload = {
@@ -46,6 +64,19 @@ export class SettingsService {
     loginLeftTextColor: '',
     loginRightTextColor: '',
     agendaNotificationMorningHour: '7',
+    loginTagline: 'Sistem Manajemen Karyawan',
+    loginSubtitle: 'Platform internal untuk pengelolaan data karyawan, kontrak kerja, dan laporan operasional.',
+    loginFeatures: JSON.stringify([
+      { icon: 'i-lucide-users', text: 'Manajemen Data Karyawan' },
+      { icon: 'i-lucide-file-text', text: 'Administrasi Kontrak Kerja' },
+      { icon: 'i-lucide-bar-chart-3', text: 'Laporan & Ekspor Data' },
+    ]),
+    loginGreetingEnabled: '1',
+    loginRememberMeEnabled: '1',
+    loginOrnamentsEnabled: '1',
+    loginFooterShowVersion: '1',
+    loginSupportTitle: 'Butuh bantuan?',
+    loginSupportContact: 'Hubungi Administrator IT Koperasi',
   }
 
   constructor(private prisma: PrismaService) {}
@@ -76,6 +107,15 @@ export class SettingsService {
       loginLeftTextColor: map.get('loginLeftTextColor') ?? this.defaults.loginLeftTextColor,
       loginRightTextColor: map.get('loginRightTextColor') ?? this.defaults.loginRightTextColor,
       agendaNotificationMorningHour: map.get('agendaNotificationMorningHour') ?? this.defaults.agendaNotificationMorningHour,
+      loginTagline: map.get('loginTagline') ?? this.defaults.loginTagline,
+      loginSubtitle: map.get('loginSubtitle') ?? this.defaults.loginSubtitle,
+      loginFeatures: map.get('loginFeatures') ?? this.defaults.loginFeatures,
+      loginGreetingEnabled: map.get('loginGreetingEnabled') ?? this.defaults.loginGreetingEnabled,
+      loginRememberMeEnabled: map.get('loginRememberMeEnabled') ?? this.defaults.loginRememberMeEnabled,
+      loginOrnamentsEnabled: map.get('loginOrnamentsEnabled') ?? this.defaults.loginOrnamentsEnabled,
+      loginFooterShowVersion: map.get('loginFooterShowVersion') ?? this.defaults.loginFooterShowVersion,
+      loginSupportTitle: map.get('loginSupportTitle') ?? this.defaults.loginSupportTitle,
+      loginSupportContact: map.get('loginSupportContact') ?? this.defaults.loginSupportContact,
     }
   }
 
@@ -114,6 +154,47 @@ export class SettingsService {
     if (payload.loginRightTextColor !== undefined) {
       updates.push({ key: 'loginRightTextColor', value: payload.loginRightTextColor })
     }
+
+    // ── Konten & opsi halaman login ─────────────────────────────────────────
+    const loginStringKeys: Array<keyof GeneralSettingsPayload> = [
+      'loginTagline',
+      'loginSubtitle',
+      'loginGreetingEnabled',
+      'loginRememberMeEnabled',
+      'loginOrnamentsEnabled',
+      'loginFooterShowVersion',
+      'loginSupportTitle',
+      'loginSupportContact',
+    ]
+    for (const key of loginStringKeys) {
+      const value = payload[key]
+      if (value !== undefined) {
+        updates.push({ key, value })
+      }
+    }
+
+    if (payload.loginFeatures !== undefined) {
+      let sanitized = payload.loginFeatures
+      if (sanitized.trim() !== '') {
+        try {
+          const parsed = JSON.parse(sanitized)
+          if (!Array.isArray(parsed)) throw new Error('bukan array')
+          sanitized = JSON.stringify(
+            parsed
+              .filter((item: unknown): item is { icon?: string, text?: string } => !!item && typeof item === 'object')
+              .map((item: { icon?: string, text?: string }) => ({
+                icon: typeof item.icon === 'string' ? item.icon : '',
+                text: typeof item.text === 'string' ? item.text : '',
+              }))
+              .filter((item: { icon: string, text: string }) => item.text.trim() !== ''),
+          )
+        } catch {
+          throw new Error('Format daftar fitur login tidak valid')
+        }
+      }
+      updates.push({ key: 'loginFeatures', value: sanitized })
+    }
+
     if (payload.agendaNotificationMorningHour !== undefined) {
       const hour = parseInt(payload.agendaNotificationMorningHour, 10)
       if (isNaN(hour) || hour < 0 || hour > 23) {

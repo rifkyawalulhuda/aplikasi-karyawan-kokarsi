@@ -1,4 +1,10 @@
-﻿// https://nuxt.com/docs/api/configuration/nuxt-config
+﻿import { readFileSync } from 'node:fs'
+
+// https://nuxt.com/docs/api/configuration/nuxt-config
+const appPackage = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
+) as { version?: string }
+
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
@@ -6,6 +12,12 @@ export default defineNuxtConfig({
     '@vueuse/nuxt',
     '@pinia/nuxt'
   ],
+
+  runtimeConfig: {
+    public: {
+      appVersion: appPackage.version ?? '1.0.0'
+    }
+  },
 
   devtools: {
     enabled: process.env.NODE_ENV !== 'production'
