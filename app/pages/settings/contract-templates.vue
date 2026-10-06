@@ -8,6 +8,7 @@ interface LookupItem { id: number, name: string }
 const toast = useToast()
 const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { confirmActionToast } = useConfirmActionToast()
 
 const { data: templatesRes, refresh } = await useFetch<ContractTemplate[]>('/api/contract-templates')
 const { data: contractTypesRes } = await useFetch<LookupItem[]>('/api/lookups/contract-types')
@@ -131,7 +132,7 @@ function openDuplicate(template: ContractTemplate) {
   formOpen.value = true
 }
 
-async function toggleActive(template: ContractTemplate) {
+async function setTemplateActive(template: ContractTemplate, nextActive: boolean) {
   try {
     await $fetch(`/api/contract-templates/${template.id}`, {
       method: 'PUT',
@@ -144,20 +145,46 @@ async function toggleActive(template: ContractTemplate) {
         jobRoleId: template.jobRoleId ?? undefined,
         description: template.description ?? undefined,
         notes: template.notes ?? undefined,
-        isActive: !template.isActive
+        isActive: nextActive
       }
     })
     toast.add({
-      title: template.isActive ? 'Template dinonaktifkan' : 'Template diaktifkan',
-      description: template.isActive
-        ? 'Template tidak lagi muncul sebagai pilihan saat membuat kontrak baru. Kontrak lama tidak terpengaruh.'
-        : undefined,
+      title: nextActive ? 'Template diaktifkan' : 'Template dinonaktifkan',
+      description: nextActive
+        ? 'Template kembali muncul sebagai pilihan saat membuat kontrak baru.'
+        : 'Template tidak lagi muncul sebagai pilihan saat membuat kontrak baru. Kontrak lama tidak terpengaruh.',
       color: 'success'
     })
     await refresh()
   } catch (e) {
     toast.add({ title: 'Gagal mengubah status template', description: apiErrorMessage(e), color: 'error' })
   }
+}
+
+/**
+ * Mengaktifkan langsung; menonaktifkan lewat konfirmasi yang menyebut berapa
+ * kontrak memakai template ini. Kontrak lama tetap aman (dokumennya beku lewat
+ * snapshot), tetapi template hilang dari pilihan saat membuat kontrak baru —
+ * jadi admin diberi tahu dampaknya sebelum lanjut.
+ */
+function toggleActive(template: ContractTemplate) {
+  if (!template.isActive) {
+    void setTemplateActive(template, true)
+    return
+  }
+
+  const used = usageCount(template)
+  confirmActionToast({
+    title: 'Nonaktifkan template ini?',
+    description: used > 0
+      ? `Template "${template.name}" sedang dipakai oleh ${used} kontrak. Kontrak yang sudah ada tidak terpengaruh, tetapi template ini tidak akan muncul saat membuat atau memperpanjang kontrak baru.`
+      : `Template "${template.name}" tidak akan muncul sebagai pilihan saat membuat kontrak baru.`,
+    icon: 'i-lucide-power',
+    color: 'warning',
+    confirmLabel: 'Nonaktifkan',
+    confirmColor: 'warning',
+    onConfirm: () => setTemplateActive(template, false)
+  })
 }
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {

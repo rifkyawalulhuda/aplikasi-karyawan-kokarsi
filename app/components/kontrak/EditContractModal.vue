@@ -70,12 +70,25 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
-const contractTemplateOptions = computed<LookupOption[]>(() =>
-  (contractTemplatesRes.value ?? []).map(template => ({
+const contractTemplateOptions = computed<LookupOption[]>(() => {
+  const options = (contractTemplatesRes.value ?? []).map(template => ({
     label: `${template.name} (${template.family})`,
     value: template.id,
-  })),
-)
+  }))
+
+  // Template yang sedang dipakai kontrak ini bisa saja dinonaktifkan setelah
+  // kontrak dibuat. Daftar hanya memuat template aktif, jadi tanpa disisipkan
+  // di sini pilihan tampak kosong walau `templateId` kontrak tetap tersimpan.
+  const current = props.contract?.template
+  if (current && !options.some(option => option.value === current.id)) {
+    options.push({
+      label: `${current.name} (${current.family}) — Nonaktif`,
+      value: current.id,
+    })
+  }
+
+  return options
+})
 
 // ── Field dinamis template (CONTRACT_INPUT) ──────────────────────────────
 // Sama seperti modal tambah kontrak: field dibaca dari `fieldDefinitions` versi

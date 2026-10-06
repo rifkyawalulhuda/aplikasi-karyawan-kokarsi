@@ -149,6 +149,36 @@ export class ContractsService {
     })
   }
 
+  /**
+   * Template nonaktif tidak boleh dipakai untuk kontrak BARU.
+   *
+   * Pengecualian penting: kontrak yang memang SUDAH memakai template itu
+   * (`allowedTemplateId`) tetap boleh melanjutkannya — memperpanjang atau
+   * mengedit kontrak lama yang template-nya dinonaktifkan setelah kontrak
+   * dibuat. Tanpa pengecualian ini, perpanjangan kontrak lama bisa mustahil.
+   *
+   * Template yang tidak ditemukan tidak digagalkan di sini: jalur legacy
+   * (template tanpa versi terbit) tetap berjalan seperti sebelumnya.
+   */
+  private async assertTemplateUsable(
+    templateId: number | null | undefined,
+    options: { allowedTemplateId?: number | null; context: string },
+  ) {
+    if (!templateId) return
+    if (options.allowedTemplateId && templateId === options.allowedTemplateId) return
+
+    const template = await this.prisma.contractTemplate.findUnique({
+      where: { id: templateId },
+      select: { id: true, name: true, isActive: true },
+    })
+    if (template && !template.isActive) {
+      throw new BadRequestException(
+        `Template kontrak "${template.name}" sedang nonaktif dan tidak dapat dipakai untuk ${options.context}. `
+        + 'Aktifkan kembali template tersebut atau pilih template lain.',
+      )
+    }
+  }
+
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
     const employeeStatus = (contract as any).employee?.employmentStatus
     return {
@@ -362,6 +392,7 @@ export class ContractsService {
   }
 
   async create(dto: CreateContractDto, actor: { name: string; role: string }) {
+    await this.assertTemplateUsable(dto.templateId, { context: 'kontrak baru' })
     await this.checkTerminationLockout(dto.employeeId)
     await this.checkSp3Lockout(dto.employeeId)
 
@@ -443,6 +474,13 @@ export class ContractsService {
     // hasilnya kontrak perpanjangan lahir tanpa snapshot dan field dinamisnya hilang.
     // Warisi template induk supaya hasilnya sama seperti perpanjangan dari UI.
     const effectiveTemplateId = dto.templateId ?? parent.templateId ?? null
+
+    // Template induk boleh nonaktif (kontrak ini memang sudah memakainya);
+    // hanya template BERBEDA yang dipilih saat perpanjangan yang wajib aktif.
+    await this.assertTemplateUsable(effectiveTemplateId, {
+      allowedTemplateId: parent.templateId ?? null,
+      context: 'perpanjangan kontrak',
+    })
 
     const computedParent = this.withComputedStatus(parent)
     if (computedParent.status !== 'AKAN_HABIS' && computedParent.status !== 'EXPIRED') {
@@ -533,6 +571,13 @@ export class ContractsService {
 
   async update(id: number, dto: UpdateContractDto, actor: { name: string; role: string }) {
     const existing = await this.findOne(id)
+
+    // Template yang sudah dipakai kontrak ini tetap boleh dipertahankan walau
+    // nonaktif; mengganti ke template nonaktif lain ditolak.
+    await this.assertTemplateUsable(dto.templateId ?? (existing as any).templateId ?? null, {
+      allowedTemplateId: (existing as any).templateId ?? null,
+      context: 'kontrak ini',
+    })
 
     if (existing.documentUrl) {
       const lockedFields = ['baseCompensation', 'startDate', 'endDate', 'employeeId'] as const

@@ -89,19 +89,19 @@ export class ContractTemplatesService {
     for (const seed of this.defaultTemplateSeeds) {
       const definition = CONTRACT_DOCUMENT_DEFINITIONS[seed.templateKey]
 
+      // Seed ini HANYA membuat template yang belum ada (`update: {}`).
+      //
+      // Sebelumnya blok `update` mengembalikan `isActive: true` dan `version: 1`
+      // pada setiap pemuatan halaman (`findAll()` → `ensureDefaultTemplates()`),
+      // sehingga admin TIDAK PERNAH bisa menonaktifkan template bawaan: PUT
+      // berhasil, tetapi GET berikutnya langsung mengaktifkannya kembali.
+      // Efek samping yang sama juga mengembalikan nama/deskripsi/jabatan/tipe
+      // kontrak yang sudah disunting admin ke nilai seed. Karena itu perubahan
+      // admin tidak boleh ditimpa; template key default yang benar-benar baru
+      // tetap dibuat lewat blok `create` di bawah.
       await this.prisma.contractTemplate.upsert({
         where: { code: seed.code },
-        update: {
-          name: seed.name,
-          family: seed.family,
-          templateKey: seed.templateKey,
-          description: definition?.fidelityNote ?? null,
-          requiredFields: definition?.requiredFields ?? null,
-          contractTypeId: contractTypeMap.get(seed.contractTypeName) ?? null,
-          jobRoleId: jobRoleMap.get(seed.jobRoleName) ?? null,
-          isActive: true,
-          version: 1,
-        },
+        update: {},
         create: {
           code: seed.code,
           name: seed.name,
@@ -224,7 +224,11 @@ export class ContractTemplatesService {
           description: payload.description ?? null,
           notes: payload.notes ?? null,
           requiredFields: (payload.requiredFields as any) ?? null,
-          isActive: payload.isActive ?? true,
+          // `undefined` = jangan sentuh kolom `isActive`. Sebelumnya `?? true`
+          // membuat setiap PUT yang tidak menyertakan `isActive` (mis. hanya
+          // mengubah deskripsi) mengaktifkan kembali template yang sengaja
+          // dinonaktifkan admin.
+          isActive: payload.isActive ?? undefined,
           // `undefined` = jangan sentuh kolom `version`. Sebelumnya `?? 1`
           // membuat setiap PUT yang tidak menyertakan `version` (mis. form
           // edit template di halaman Master Template Kontrak) menurunkan

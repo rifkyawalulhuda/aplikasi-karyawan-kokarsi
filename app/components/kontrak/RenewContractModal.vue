@@ -44,12 +44,25 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
-const contractTemplateOptions = computed<LookupOption[]>(() =>
-  (contractTemplatesRes.value ?? []).map(template => ({
+const contractTemplateOptions = computed<LookupOption[]>(() => {
+  const options = (contractTemplatesRes.value ?? []).map(template => ({
     label: `${template.name} (${template.family})`,
     value: template.id,
-  })),
-)
+  }))
+
+  // Template kontrak induk bisa sudah dinonaktifkan. Daftar hanya memuat
+  // template aktif, jadi tanpa disisipkan di sini admin tidak bisa memilih
+  // template yang sama (bertanda "Nonaktif") saat memperpanjang.
+  const parentTemplate = props.parentContract?.template
+  if (parentTemplate && !options.some(option => option.value === parentTemplate.id)) {
+    options.push({
+      label: `${parentTemplate.name} (${parentTemplate.family}) — Nonaktif`,
+      value: parentTemplate.id,
+    })
+  }
+
+  return options
+})
 
 const minStartDate = computed(() => {
   if (!props.parentContract?.endDate) return ''

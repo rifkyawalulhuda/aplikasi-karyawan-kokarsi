@@ -18,7 +18,8 @@ function makeService(existing: Record<string, any>, snapshot: any) {
       findUnique: jest.fn().mockResolvedValue(existing),
       update
     },
-    employee: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() }
+    employee: { findUnique: jest.fn().mockResolvedValue(null), update: jest.fn() },
+    contractTemplate: { findUnique: jest.fn().mockResolvedValue({ id: 5, name: 'Template', isActive: true }) }
   }
   const templateSnapshot = {
     buildSnapshot: jest.fn().mockResolvedValue(snapshot)
@@ -148,7 +149,8 @@ function makeRenewService(parent: Record<string, any>, snapshot: any) {
       }),
       update: jest.fn()
     },
-    warningLetter: { findFirst: jest.fn().mockResolvedValue(null) }
+    warningLetter: { findFirst: jest.fn().mockResolvedValue(null) },
+    contractTemplate: { findUnique: jest.fn().mockResolvedValue({ id: 5, name: 'Template', isActive: true }) }
   }
   const templateSnapshot = {
     buildSnapshot: jest.fn().mockResolvedValue(snapshot)
@@ -241,5 +243,89 @@ describe('ContractsService.renew — templateId & snapshot', () => {
     expect(data.templateId).toBe(5)
     expect(data.templateVersionId).toBeUndefined()
     expect(data.templateData).toEqual(expiringParent.templateData)
+  })
+})
+
+describe('ContractsService — guard template nonaktif', () => {
+  const INACTIVE = { id: 9, name: 'PKWT Driver', isActive: false }
+  const ACTIVE = { id: 9, name: 'PKWT Driver', isActive: true }
+
+  function build(opts: { templateFor?: (id: number) => any, parent?: any, existing?: any }) {
+    const findUniqueTemplate = jest.fn().mockImplementation(({ where }: any) =>
+      Promise.resolve(opts.templateFor ? opts.templateFor(where.id) : null),
+    )
+    const prisma = {
+      contractTemplate: { findUnique: findUniqueTemplate },
+      contract: {
+        findUnique: jest.fn().mockResolvedValue(opts.existing ?? opts.parent ?? null),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockImplementation(({ data }: any) => ({ id: 99, ...data })),
+        update: jest.fn().mockImplementation(({ data }: any) => ({ ...(opts.existing ?? {}), ...data })),
+      },
+      employee: { findUnique: jest.fn().mockResolvedValue({ employmentStatus: 'AKTIF', offboarding: null, contracts: [] }), update: jest.fn() },
+      warningLetter: { findFirst: jest.fn().mockResolvedValue(null) },
+    }
+    const service = new ContractsService(
+      prisma as any,
+      { invalidate: jest.fn() } as any,
+      { generateNotifications: jest.fn().mockResolvedValue(undefined) } as any,
+      { log: jest.fn().mockResolvedValue(undefined) } as any,
+      { buildSnapshot: jest.fn().mockResolvedValue(null) } as any,
+    )
+    return { service, findUniqueTemplate }
+  }
+
+  it('menolak membuat kontrak baru dengan template nonaktif', async () => {
+    const { service } = build({ templateFor: () => INACTIVE })
+
+    await expect(service.create(
+      { employeeId: 1, templateId: 9, startDate: '2026-01-01', endDate: '2026-12-31' } as any,
+      { name: 'Admin', role: 'ADMIN' },
+    )).rejects.toThrow(/nonaktif/i)
+  })
+
+  it('mengizinkan kontrak baru dengan template aktif', async () => {
+    const { service } = build({ templateFor: () => ACTIVE })
+
+    await expect(service.create(
+      { employeeId: 1, templateId: 9, startDate: '2026-01-01', endDate: '2026-12-31' } as any,
+      { name: 'Admin', role: 'ADMIN' },
+    )).resolves.toBeDefined()
+  })
+
+  it('menolak perpanjangan yang BERGANTI ke template nonaktif', async () => {
+    const parent = { ...expiringParent, templateId: 5 }
+    const { service } = build({ templateFor: () => INACTIVE, parent })
+
+    await expect(service.renew(42, { ...renewDto, templateId: 9 } as any))
+      .rejects.toThrow(/nonaktif/i)
+  })
+
+  it('mengizinkan perpanjangan yang mewarisi template induk walau template nonaktif', async () => {
+    // Template = template induk → dikecualikan, guard tidak pernah query template.
+    const parent = { ...expiringParent, templateId: 9 }
+    const { service, findUniqueTemplate } = build({ templateFor: () => INACTIVE, parent })
+
+    await service.renew(42, { ...renewDto } as any)
+
+    expect(findUniqueTemplate).not.toHaveBeenCalled()
+  })
+
+  it('mengizinkan edit kontrak yang tetap memakai template nonaktif yang sama', async () => {
+    const existing = { ...existingContract, templateId: 9 }
+    const { service, findUniqueTemplate } = build({ templateFor: () => INACTIVE, existing })
+
+    await service.update(7, { ...updateDto, templateId: 9 } as any, { name: 'Admin', role: 'ADMIN' })
+
+    expect(findUniqueTemplate).not.toHaveBeenCalled()
+  })
+
+  it('menolak edit yang BERGANTI ke template nonaktif', async () => {
+    const existing = { ...existingContract, templateId: 5 }
+    const { service } = build({ templateFor: () => INACTIVE, existing })
+
+    await expect(service.update(7, { ...updateDto, templateId: 9 } as any, { name: 'Admin', role: 'ADMIN' }))
+      .rejects.toThrow(/nonaktif/i)
   })
 })
