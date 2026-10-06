@@ -78,6 +78,7 @@ export default defineConfig({
             { text: 'Database Schema', link: '/teknis/database-schema' },
             { text: 'Database Schema: Kalender & Space', link: '/teknis/database-schema-kalender-space' },
             { text: 'Autentikasi', link: '/teknis/autentikasi' },
+            { text: 'Template Kontrak (Rendering)', link: '/teknis/template-kontrak-rendering' },
             { text: 'Environment Variables', link: '/teknis/environment-variables' },
             { text: 'Notifikasi Email', link: '/teknis/email-notification' },
           ],

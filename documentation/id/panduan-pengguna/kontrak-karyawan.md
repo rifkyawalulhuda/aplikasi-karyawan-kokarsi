@@ -25,9 +25,20 @@ Tabel menampilkan ringkasan kontrak aktif per karyawan:
    - Template dokumen
    - Posisi & lokasi (untuk PDF)
    - Kompensasi dasar
-4. Klik **Simpan**
+4. Isi **field tambahan** bila template yang dipilih memilikinya (lihat di bawah)
+5. Klik **Simpan**
 
 Nomor kontrak di-generate otomatis dengan format: `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`
+
+## Field Tambahan (Dinamis)
+
+Beberapa template memiliki **field dinamis** yang harus diisi saat membuat kontrak — mis. "Tanggal Terbit KTP Mitra". Field ini muncul di form kontrak dan nilainya disisipkan ke dokumen PDF lewat placeholder `&#123;&#123;custom.kunci&#125;&#125;`.
+
+::: warning Field wajib
+Field yang ditandai **Wajib diisi** pada template harus diisi sebelum kontrak dapat dibuat. Sistem akan menolak penyimpanan sampai field tersebut diisi.
+:::
+
+Daftar field yang tersedia diatur oleh admin pada [Template Kontrak](/panduan-pengguna/template-kontrak#field-dinamis).
 
 ## Edit Kontrak
 
@@ -58,6 +69,12 @@ Kontrak lama akan berubah status menjadi **Sudah Diperpanjang**.
 ::: tip Template Kontrak
 Konten dokumen PDF (judul, pasal, narasi) ditentukan oleh template yang dipilih saat membuat kontrak.
 Untuk mengkustomisasi teks pasal dan narasi template, lihat [Template Kontrak](/panduan-pengguna/template-kontrak).
+:::
+
+::: info Snapshot versi template
+Dokumen memakai **snapshot versi template** pada saat kontrak dibuat. Bila template dipublish ulang
+setelahnya, kontrak lama **tidak berubah**. Pratinjau pada editor template memakai mesin render yang sama
+dengan Generate PDF, sehingga hasil pratinjau 1:1 dengan dokumen final.
 :::
 
 ## Riwayat Kontrak
