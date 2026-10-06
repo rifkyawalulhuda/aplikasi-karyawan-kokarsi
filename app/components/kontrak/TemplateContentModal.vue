@@ -944,12 +944,14 @@ function removeInvalidBlock(index: number) {
     fullscreen
     :title="`Editor Template — ${template?.name ?? ''}`"
     :description="draft ? 'Mode edit draft' : 'Mode baca: buat draft untuk mengubah isi'"
-    :ui="{ content: 'overflow-hidden', body: 'relative flex-1 min-h-0 p-0 sm:p-0', header: 'flex-wrap gap-y-2 pe-14' }"
+    :ui="{ content: 'overflow-hidden', body: 'relative flex-1 min-h-0 p-0 sm:p-0', header: 'flex-wrap gap-y-2' }"
     @update:open="onModalOpenChange"
   >
-    <!-- Command bar: aksi utama selalu terlihat di header yang tidak menggulir. -->
+    <!-- Command bar: aksi utama selalu terlihat di header yang tidak menggulir.
+         `me-12 sm:me-14` menyisakan ruang untuk tombol Close (X) yang absolute
+         di kanan-atas, supaya tidak menempel dengan Publish. -->
     <template #actions>
-      <div class="ms-auto flex flex-wrap items-center justify-end gap-1.5">
+      <div class="ms-auto me-12 flex flex-wrap items-center justify-end gap-1.5 sm:me-14">
         <!-- Toggle panel (overlay) pada layar < xl -->
         <UButton
           class="xl:hidden"
