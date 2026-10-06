@@ -22,7 +22,7 @@ Pratinjau pada editor dan tombol Generate Kontrak memanggil **fungsi render yang
 
 ## Model Konten (`contentDefinition`)
 
-Teks disimpan sebagai **`string`** biasa, ditambah properti blok opsional (`align`, `headingAlign`). Tidak ada model data baru dan tidak ada migrasi untuk versi lama.
+Teks disimpan sebagai **`string`** biasa, ditambah properti blok opsional (`align`, `headingAlign`, `spaceAfter`). Tidak ada model data baru dan tidak ada migrasi untuk versi lama.
 
 ```ts
 contentDefinition = {
@@ -37,16 +37,18 @@ contentDefinition = {
 
 | `type` | Field utama | Keterangan |
 |---|---|---|
-| `title` | `text` | Judul utama (rata tengah, chrome kop) |
-| `subtitle` | `text` | Subjudul di bawah judul |
-| `paragraph` | `text`, `align?` | Satu blok teks |
-| `article` | `heading`, `paragraphs[]`, `align?`, `headingAlign?` | Judul pasal + uraian |
-| `list` | `style`, `items[]` | `style`: `bullet` \| `numbered` \| `alphabetic` |
-| `table` | `columns[]`, `rows[]` | Kolom: `{ key, label, format? }`, `format`: `text` \| `number` \| `currency` \| `date` |
+| `title` | `text`, `spaceAfter?` | Judul utama (rata tengah, chrome kop) |
+| `subtitle` | `text`, `spaceAfter?` | Subjudul di bawah judul |
+| `paragraph` | `text`, `align?`, `spaceAfter?` | Satu blok teks |
+| `article` | `heading`, `paragraphs[]`, `align?`, `headingAlign?`, `spaceAfter?` | Judul pasal + uraian |
+| `list` | `style`, `items[]`, `spaceAfter?` | `style`: `bullet` \| `numbered` \| `alphabetic` |
+| `table` | `columns[]`, `rows[]`, `spaceAfter?` | Kolom: `{ key, label, format? }`, `format`: `text` \| `number` \| `currency` \| `date` |
 | `pageBreak` | — | Memaksa halaman baru |
 | `signature` | `leftRole`, `rightRole`, … | Blok tanda tangan (tepat satu per bahasa) |
 
 Setiap blok memiliki `id` unik (tidak boleh duplikat dalam satu bahasa).
+
+> `spaceAfter` hanya berlaku pada keluarga **MITRA** (lihat [Spasi Antar Blok](#spasi-antar-blok-khusus-mitra)).
 
 ## Pemformatan Inline (Bold / Italic / Underline)
 
@@ -129,9 +131,29 @@ Kedua sumbu punya jalur masing-masing agar nol regresi pada template lama:
 
 Template tanpa mark **dan** tanpa `align` mengeksekusi kode yang sama seperti sebelum fitur → output byte/paginasi identik.
 
+## Spasi Antar Blok (`spaceAfter`, khusus MITRA)
+
+`spaceAfter` adalah **properti tingkat blok** berupa bilangan bulat **0–40 pt** — jarak vertikal **tambahan** di bawah blok, di atas jarak bawaan renderer (`paragraphGap`, `headingGapAfter`, `gapAfter` per tipe). Hanya berlaku pada keluarga **MITRA**; PKWT tidak mendukungnya (penguncian baris dua kolom).
+
+- **Aditif, bukan menimpa.** `spaceAfter: 12` berarti "tambah 12 pt", bukan "set jarak menjadi 12 pt". Nilai `undefined`/`0` → tidak ada jarak tambahan (perilaku lama persis).
+- **Hanya blok konten.** Berlaku untuk `title`, `subtitle`, `paragraph`, `article`, `list`, `table` (`SPACE_CAPABLE_BLOCKS`). `pageBreak` dan `signature` ditolak validator.
+- **Titik penerapan (engine).** `renderMitraPass` menambahkan jarak tepat **sebelum blok berikutnya**, dan hanya bila:
+  1. blok berikutnya benar-benar menggambar konten (bukan `signature`/`pageBreak`, bukan blok `title` pertama yang dikonsumsi sebagai judul kop);
+  2. blok berikutnya masih di **kolom/halaman yang sama** — bila blok sebelumnya sudah mengisi penuh kolom, jarak dilewati agar tidak menyisakan ruang kosong di puncak kolom baru.
+- **Ikut terukur.** `planMitraLayout` menjalankan engine asli pada dokumen scratch, sehingga jarak memengaruhi pemilihan split, jumlah halaman, dan reservasi tanda tangan — paginasi selalu konsisten dengan hasil akhir.
+- **Nol regresi template lama.** Bila tidak ada blok ber-`spaceAfter`, `renderSequence` tidak menambahkan apa pun → output identik.
+
+| Aspek | Nilai |
+|---|---|
+| Properti | `block.spaceAfter` (integer pt) |
+| Rentang sah | `0`–`40` |
+| Preset editor | Rapat `0`, Normal `undefined`, Renggang `12`, Ekstra `20`, Kustom `0–40` |
+| Normalisasi engine | `mitraBlockSpaceAfter()` (`mitra-layout.engine.ts`) |
+| Batas maksimum | `MAX_BLOCK_SPACE_AFTER` (`template-schema.validator.ts`) = `MITRA_MAX_BLOCK_SPACE_AFTER` (engine) |
+
 ## Validasi (`template-schema.validator.ts`)
 
-`validateContentDefinition(content, fieldKeys, family)` mengembalikan hitungan `placeholderCount`, `blockCount`, `markedBlockCount`, `alignedBlockCount`, dan `inlineMarkWarnings`. Validasi melempar `BadRequestException` dengan `issues` terstruktur bila ada masalah.
+`validateContentDefinition(content, fieldKeys, family)` mengembalikan hitungan `placeholderCount`, `blockCount`, `markedBlockCount`, `alignedBlockCount`, `spacedBlockCount`, dan `inlineMarkWarnings`. Validasi melempar `BadRequestException` dengan `issues` terstruktur bila ada masalah.
 
 Aturan utama:
 
@@ -139,6 +161,7 @@ Aturan utama:
 - Setiap bahasa: minimal satu blok konten **dan** tepat satu blok `signature`.
 - `id` blok tidak boleh duplikat; `type` harus salah satu dari `BLOCK_TYPES`.
 - `align`/`headingAlign` harus bernilai sah dan pada tipe blok yang mendukungnya.
+- `spaceAfter` harus bilangan bulat 0–40, hanya pada blok konten (`SPACE_CAPABLE_BLOCKS`), dan hanya untuk keluarga MITRA.
 - Mark hanya boleh pada `paragraph.text` dan `article.paragraphs[]`.
 - Placeholder harus terdaftar di katalog field; sintaks `&#123;&#123;...&#125;&#125;` yang rusak ditolak.
 - Judul pasal dinormalisasi maksimal 2 baris (`normalizeArticleHeadings`) — menutup celah paste dari Word.
@@ -191,6 +214,7 @@ Status versi: `DRAFT` → `PUBLISHED` → `ARCHIVED`.
 | Versioning / preview | `backend/src/contract-templates/contract-template-versions.service.ts` |
 | Helper mark (FE) | `app/utils/inline-marks.ts` |
 | Field berformat (FE) | `app/components/kontrak/RichTextField.vue`, `AlignButtonGroup.vue` |
+| Kontrol spasi antar blok (FE) | `app/components/kontrak/BlockSpaceControl.vue` |
 
 ## Lihat Juga
 

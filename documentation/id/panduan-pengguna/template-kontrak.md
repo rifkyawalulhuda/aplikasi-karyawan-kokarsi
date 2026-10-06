@@ -197,6 +197,27 @@ Blok **Paragraf** dan **Pasal** memiliki empat tombol perataan (radio, saling ek
 Bila tidak ada perataan yang dipilih, teks memakai perilaku bawaan sistem: **justified** untuk paragraf dan uraian pasal. Untuk judul pasal, default mengikuti keluarga template — **rata tengah** untuk MITRA dan **rata kiri** untuk PKWT.
 :::
 
+## Spasi Antar Blok (Khusus MITRA)
+
+Setiap blok konten pada template **Perjanjian Kemitraan (MITRA)** memiliki kontrol **Spasi antar blok** — jarak vertikal **tambahan** di bawah blok tersebut, di atas jarak bawaan dokumen. Berguna untuk merenggangkan antar-pasal atau memberi napas pada bagian tertentu.
+
+| Tombol | Efek |
+|---|---|
+| **Rapat** | Tanpa jarak tambahan (0 pt) |
+| **Normal** | Jarak bawaan dokumen (tidak menyetel apa pun) |
+| **Renggang** | Tambah 12 pt |
+| **Ekstra** | Tambah 20 pt |
+| **Kustom** | Atur sendiri, bilangan bulat **0–40 pt** |
+
+- Nilai bersifat **tambahan** — jarak bawaan blok tetap dipakai.
+- Bila blok berada tepat di puncak kolom/halaman baru (karena blok sebelumnya sudah penuh), jarak **tidak** diterapkan agar tidak menyisakan ruang kosong di atas.
+- Blok yang dapat diatur: **Paragraf**, **Pasal**, **Daftar**, **Tabel**, **Judul Dokumen**, dan **Subjudul**. **Tanda Tangan** dan **Ganti Halaman** tidak memiliki kontrol ini.
+- Saat sebuah blok memiliki jarak tambahan, kepala kartunya menampilkan penanda, mis. **+12 pt**.
+
+::: info Khusus MITRA & tidak mengubah kontrak lama
+Kontrol ini hanya muncul pada template keluarga **MITRA** (PKWT memakai penguncian baris dua kolom, sehingga tidak mendukung jarak per blok). Menambah spasi dapat menggeser paginasi PDF — sistem menghitung ulang jumlah halaman dan posisi tanda tangan secara otomatis. Kontrak yang **sudah dibuat** tidak terpengaruh karena memakai snapshot versi saat dibuat; perubahan berlaku untuk **kontrak baru** atau setelah versi template di-publish ulang.
+:::
+
 ## Field Dinamis
 
 Panel **Field dinamis** (kanan) berisi daftar placeholder yang dapat disisipkan ke blok. Klik field untuk menyisipkannya ke **blok yang sedang dipilih**.

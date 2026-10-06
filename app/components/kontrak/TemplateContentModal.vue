@@ -1335,6 +1335,7 @@ function removeInvalidBlock(index: number) {
                 :total="blocksCount"
                 :editable="!!draft"
                 :heading-align-default="isPkwt ? 'left' : 'center'"
+                :supports-spacing="!isPkwt"
                 :collapsed="collapsedBlocks[entry.block.id] ?? true"
                 :selected="focusedBlockId === entry.block.id"
                 :dragging="dragIndex === entry.index"

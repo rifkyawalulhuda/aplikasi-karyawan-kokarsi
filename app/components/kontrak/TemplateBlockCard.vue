@@ -25,11 +25,17 @@ interface Props {
   dragging?: boolean
   /** Garis sisip: di atas kartu (`before`) atau di bawahnya (`after`). */
   dropIndicator?: 'none' | 'before' | 'after'
+  /**
+   * Keluarga template mendukung "Spasi antar blok" (`spaceAfter`). Hanya MITRA
+   * yang punya dukungan ini; PKWT memakai penguncian baris dua kolom.
+   */
+  supportsSpacing?: boolean
 }
 const props = withDefaults(defineProps<Props>(), {
   headingAlignDefault: 'center',
   dragging: false,
-  dropIndicator: 'none'
+  dropIndicator: 'none',
+  supportsSpacing: false
 })
 const emit = defineEmits<{
   'move': [direction: number]
@@ -59,6 +65,20 @@ const paragraphList = computed<string[]>(() => props.block?.paragraphs ?? [])
 const itemList = computed<string[]>(() => props.block?.items ?? [])
 const columnList = computed<TableColumn[]>(() => props.block?.columns ?? [])
 const rowList = computed<Record<string, string>[]>(() => props.block?.rows ?? [])
+
+/**
+ * Tipe blok yang mendukung `spaceAfter`. Disamakan dengan
+ * `SPACE_CAPABLE_BLOCKS` di `backend/.../template-schema.validator.ts`.
+ */
+const SPACE_CAPABLE = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table']
+const showSpacing = computed(() => props.supportsSpacing && SPACE_CAPABLE.includes(props.block?.type))
+
+/** Label ringkas jarak aktif untuk badge kepala kartu. */
+const spaceBadge = computed<string | null>(() => {
+  const v = props.block?.spaceAfter
+  if (typeof v !== 'number' || v <= 0) return null
+  return `+${v} pt`
+})
 
 const toast = useToast()
 
@@ -317,6 +337,14 @@ function addColumn() {
             size="sm"
             icon="i-lucide-alert-triangle"
             :label="emptyWarnings[0]"
+          />
+          <UBadge
+            v-if="spaceBadge"
+            color="neutral"
+            variant="subtle"
+            size="sm"
+            icon="i-lucide-move-vertical"
+            :label="spaceBadge"
           />
         </div>
         <p v-if="collapsed" class="truncate text-xs text-muted">
@@ -638,6 +666,18 @@ function addColumn() {
         title="Tipe blok tidak dikenali"
         :description="`Tipe '${block.type}' belum didukung editor. Isinya dipertahankan apa adanya.`"
       />
+
+      <UFormField
+        v-if="showSpacing"
+        label="Spasi antar blok"
+        hint="Jarak tambahan di bawah blok ini (khusus MITRA)"
+      >
+        <KontrakBlockSpaceControl
+          :space-after="block.spaceAfter"
+          :disabled="!editable"
+          @update:space-after="block.spaceAfter = $event"
+        />
+      </UFormField>
 
       <UCollapsible v-if="editable" class="pt-1">
         <UButton

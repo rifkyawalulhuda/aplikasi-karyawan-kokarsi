@@ -170,6 +170,58 @@ describe('validateContentDefinition', () => {
     }
   })
 
+  it('menerima spaceAfter valid pada blok konten MITRA dan menghitungnya', () => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Body', spaceAfter: 12 },
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], spaceAfter: 0 },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.spacedBlockCount).toBe(2)
+  })
+
+  it.each([-1, 41, 12.5, '12', null])('menolak spaceAfter tidak valid %p', value => {
+    const content = baseContent(blocks => [
+      { id: 'p', type: 'paragraph', text: 'Body', spaceAfter: value },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).toThrow(/spaceAfter/)
+  })
+
+  it('menolak spaceAfter pada blok yang tidak mendukung (pageBreak)', () => {
+    const content = baseContent(blocks => [
+      { id: 'pb', type: 'pageBreak', spaceAfter: 10 },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+      throw new Error('Expected validator to reject spaceAfter on pageBreak')
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'languages.id[0].spaceAfter',
+          message: expect.stringMatching(/tidak didukung pada blok pageBreak/),
+        }),
+      ]))
+    }
+  })
+
+  it('menolak spaceAfter pada template PKWT', () => {
+    const content = {
+      languages: {
+        id: [
+          { id: 'p', type: 'paragraph', text: 'Body', spaceAfter: 10 },
+          { id: 'sig', type: 'signature' },
+        ],
+        en: [
+          { id: 'p-en', type: 'paragraph', text: 'Body' },
+          { id: 'sig-en', type: 'signature' },
+        ],
+      },
+    }
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'PKWT')).toThrow(/spaceAfter/)
+  })
+
   it('melaporkan delimiter tak berpasangan sebagai warning tanpa menggagalkan validasi', () => {
     const content = baseContent(blocks => [
       { id: 'p', type: 'paragraph', text: 'Asterisk *literal' },

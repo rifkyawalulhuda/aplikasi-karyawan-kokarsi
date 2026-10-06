@@ -46,6 +46,32 @@ export function blockAlign(value: unknown): BlockAlign | undefined {
     : undefined
 }
 
+/**
+ * Blok konten yang boleh membawa `spaceAfter` (jarak vertikal tambahan di bawah
+ * blok, satuan pt).
+ *
+ * `pageBreak` dikecualikan karena ia sendiri sudah memaksa halaman baru, dan
+ * `signature` dikecualikan karena dirender di luar kotak kolom (footer). Jarak
+ * pada keduanya tidak bermakna bagi tata letak.
+ */
+export const SPACE_CAPABLE_BLOCKS = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table'] as const
+
+/** Batas atas `spaceAfter` (pt). Cukup lega untuk jarak antar-pasal, tetap aman. */
+export const MAX_BLOCK_SPACE_AFTER = 40
+
+/**
+ * Normalisasi `block.spaceAfter`.
+ *
+ * Hanya bilangan bulat `0..MAX_BLOCK_SPACE_AFTER` yang sah; selain itu →
+ * `undefined` (perilaku lama: tanpa jarak tambahan). Nilai `0` sah dan berarti
+ * "rapat" (eksplisit tanpa jarak tambahan).
+ */
+export function blockSpaceAfter(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return undefined
+  if (value < 0 || value > MAX_BLOCK_SPACE_AFTER) return undefined
+  return value
+}
+
 export interface BlockValidationIssue {
   blockId: string
   message: string
@@ -162,6 +188,7 @@ export function validateContentDefinition(
   blockCount: number
   markedBlockCount: number
   alignedBlockCount: number
+  spacedBlockCount: number
   inlineMarkWarnings: InlineMarkWarning[]
 } {
   const issues: BlockValidationIssue[] = []
@@ -171,6 +198,7 @@ export function validateContentDefinition(
   let blockCount = 0
   let markedBlockCount = 0
   let alignedBlockCount = 0
+  let spacedBlockCount = 0
 
   const validateText = (blockId: string, text: string, fieldPath: string, allowMarks: boolean): boolean => {
     const result = validateInlineMarks(text, { allowMarks, location: fieldPath })
@@ -213,6 +241,33 @@ export function validateContentDefinition(
     }
   }
 
+  /**
+   * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok, di atas
+   * jarak bawaan renderer. Hanya blok konten (`SPACE_CAPABLE_BLOCKS`) dan hanya
+   * keluarga MITRA — PKWT punya penguncian baris dua kolom yang tidak menerima
+   * jarak per blok.
+   */
+  const validateSpaceAfter = (block: any, id: string, fieldPath: string) => {
+    if (block.spaceAfter === undefined) return
+    if (blockSpaceAfter(block.spaceAfter) === undefined) {
+      issues.push({
+        blockId: id,
+        fieldPath,
+        message: `Nilai spaceAfter "${String(block.spaceAfter)}" tidak valid. Gunakan bilangan bulat 0–${MAX_BLOCK_SPACE_AFTER} (pt).`,
+      })
+      return
+    }
+    if (!(SPACE_CAPABLE_BLOCKS as readonly string[]).includes(block.type)) {
+      issues.push({ blockId: id, fieldPath, message: `Properti spaceAfter tidak didukung pada blok ${block.type}.` })
+      return
+    }
+    if (family !== 'MITRA') {
+      issues.push({ blockId: id, fieldPath, message: 'Properti spaceAfter hanya didukung pada template Perjanjian Kemitraan (MITRA).' })
+      return
+    }
+    spacedBlockCount += 1
+  }
+
   if (!content || typeof content !== 'object' || !content.languages) {
     throw new BadRequestException('contentDefinition harus memiliki struktur { languages: { id: [], en: [] } }')
   }
@@ -245,6 +300,7 @@ export function validateContentDefinition(
       const blockPath = `languages.${lang}[${idx}]`
       validateAlign(block, id, `${blockPath}.align`)
       validateHeadingAlign(block, id, `${blockPath}.headingAlign`)
+      validateSpaceAfter(block, id, `${blockPath}.spaceAfter`)
       let blockHasInlineMarks = false
 
       if (block.type === 'signature' || block.type === 'pageBreak') {
@@ -437,7 +493,7 @@ export function validateContentDefinition(
     throw error
   }
 
-  return { placeholderCount, blockCount, markedBlockCount, alignedBlockCount, inlineMarkWarnings }
+  return { placeholderCount, blockCount, markedBlockCount, alignedBlockCount, spacedBlockCount, inlineMarkWarnings }
 }
 
 /** Ambil semua placeholder dari contentDefinition (untuk matching dengan fieldDefinitions). */

@@ -297,6 +297,30 @@ export function mitraBlockAlign(value: unknown): MitraAlign | undefined {
     : undefined
 }
 
+/**
+ * Batas atas `spaceAfter` (pt) — SAMA dengan `MAX_BLOCK_SPACE_AFTER` di
+ * `template-schema.validator.ts`. Digandakan (bukan diimpor) karena modul ini
+ * berada di `contracts/`, sedangkan validator di `contract-templates/` yang
+ * bergantung pada `contracts/` — mengimpor ke arah sebaliknya akan membuat
+ * siklus modul.
+ */
+export const MITRA_MAX_BLOCK_SPACE_AFTER = 40
+
+/**
+ * Jarak vertikal TAMBAHAN di bawah satu blok (`block.spaceAfter`), satuan pt.
+ *
+ * Bersifat ADITIF di atas jarak bawaan renderer: nilai tak sah / `undefined` /
+ * `<= 0` → `0` (tanpa jarak tambahan), sehingga template lama menghasilkan PDF
+ * yang sama persis. Diterapkan hanya bila blok berikutnya masih berada di
+ * kolom/halaman yang sama — lihat `renderMitraPass`.
+ */
+export function mitraBlockSpaceAfter(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0
+  const n = Math.round(value)
+  if (n <= 0 || n > MITRA_MAX_BLOCK_SPACE_AFTER) return 0
+  return n
+}
+
 const PLACEHOLDER = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)\s*\}\}/g
 
 /**
@@ -1032,13 +1056,45 @@ function renderMitraPass(
   const blocksFirst = blocks.slice(0, splitIndex)
   const blocksSecond = blocks.slice(splitIndex)
 
+  /**
+   * Render satu stream (kiri/kanan) sambil menerapkan `spaceAfter` antar blok.
+   *
+   * Jarak bersifat ADITIF di atas jarak bawaan blok dan hanya diterapkan bila
+   * blok berikutnya benar-benar menggambar KONTEN di kolom/halaman yang SAMA.
+   * Bila blok sebelumnya sudah mengisi penuh kolom (y pindah ke puncak kolom
+   * baru), jarak dilewati — menambah jarak di puncak kolom baru hanya
+   * menyisipkan ruang kosong di atas tanpa isi. Jarak juga dilewati bila blok
+   * berikutnya bukan blok konten (`signature`/`pageBreak`) atau blok `title`
+   * pertama yang dikonsumsi sebagai judul kop.
+   */
+  const willRenderContent = (b: any) => {
+    if (!b || b === headerTitleBlock) return false
+    return b.type !== 'signature' && b.type !== 'pageBreak'
+  }
+  const renderSequence = (list: MitraBlock[]) => {
+    let prevSpace = 0
+    for (let i = 0; i < list.length; i++) {
+      if (i > 0 && prevSpace > 0 && willRenderContent(list[i])) {
+        const s = currentStream
+        const pageTop = boxTop(streamPage[s]) + 2
+        if (y > pageTop + 0.01) {
+          const pageBefore = streamPage[s]
+          ensureSpace(prevSpace)
+          if (streamPage[s] === pageBefore) y += prevSpace
+        }
+      }
+      renderBlock(list[i])
+      prevSpace = mitraBlockSpaceAfter((list[i] as any)?.spaceAfter)
+    }
+  }
+
   // === Stream 0 → kolom KIRI semua halaman ===
   gotoStreamPage(0, 0)
-  for (const b of blocksFirst) renderBlock(b)
+  renderSequence(blocksFirst)
 
   // === Stream 1 → kolom KANAN semua halaman ===
   gotoStreamPage(1, 0)
-  for (const b of blocksSecond) renderBlock(b)
+  renderSequence(blocksSecond)
 
   // === Pass akhir: gambar kotak kolom DINAMIS untuk SEMUA halaman ===
   // Kotak berhenti di teks terakhir + bantalan (bukan setinggi halaman).

@@ -68,6 +68,8 @@ interface BlockLike {
   items?: unknown[]
   columns?: Array<{ key?: string, label?: string }>
   rows?: Array<Record<string, unknown>>
+  /** Jarak vertikal tambahan di bawah blok (pt) — khusus MITRA. */
+  spaceAfter?: number
   [key: string]: unknown
 }
 

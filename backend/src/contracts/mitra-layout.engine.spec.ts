@@ -6,6 +6,7 @@ import {
   MITRA_RUN_FONTS,
   mitraInterpolate,
   mitraBlockAlign,
+  mitraBlockSpaceAfter,
   scrubRawTokens,
   listPrefix,
   formatMitraCell,
@@ -641,6 +642,28 @@ describe('MITRA — mitraBlockAlign & font logical run', () => {
   })
 })
 
+describe('MITRA — mitraBlockSpaceAfter', () => {
+  it('mengembalikan nilai bulat sah apa adanya', () => {
+    expect(mitraBlockSpaceAfter(0)).toBe(0)
+    expect(mitraBlockSpaceAfter(12)).toBe(12)
+    expect(mitraBlockSpaceAfter(40)).toBe(40)
+  })
+
+  it('membulatkan nilai pecahan', () => {
+    expect(mitraBlockSpaceAfter(12.4)).toBe(12)
+    expect(mitraBlockSpaceAfter(12.6)).toBe(13)
+  })
+
+  it('nilai tak sah / di luar rentang → 0 (perilaku lama)', () => {
+    expect(mitraBlockSpaceAfter(undefined)).toBe(0)
+    expect(mitraBlockSpaceAfter(null)).toBe(0)
+    expect(mitraBlockSpaceAfter(-4)).toBe(0)
+    expect(mitraBlockSpaceAfter(41)).toBe(0)
+    expect(mitraBlockSpaceAfter('12')).toBe(0)
+    expect(mitraBlockSpaceAfter(Number.NaN)).toBe(0)
+  })
+})
+
 /**
  * Gerbang Fase 2c: mark & perataan TIDAK BOLEH mengubah paginasi.
  *
@@ -818,6 +841,61 @@ describe('MITRA — mark di PDF NYATA', () => {
     expect(bodyBase).toBeDefined()
     expect(bodyLeft).toBeDefined()
     expect(bodyLeft!.align).toBe(bodyBase!.align)
+  })
+
+  /**
+   * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok. Diukur
+   * lewat POSISI Y blok berikutnya — selisihnya harus PERSIS sebesar nilai yang
+   * diset, karena jarak diterapkan tepat sebelum blok berikutnya.
+   */
+  it('spaceAfter menggeser blok berikutnya tepat sebesar nilainya', async () => {
+    const build = (spaceAfter?: number) => [
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      { type: 'paragraph', text: 'PARAGRAF_A', spaceAfter },
+      { type: 'paragraph', text: 'PARAGRAF_B' },
+      { type: 'signature' },
+    ]
+    const yOf = (r: Awaited<ReturnType<typeof draw>>, needle: string) =>
+      r.texts.find(t => t.text.includes(needle))?.y ?? -1
+
+    const base = await draw(build() as any)
+    const spaced = await draw(build(24) as any)
+
+    const baseY = yOf(base, 'PARAGRAF_B')
+    const spacedY = yOf(spaced, 'PARAGRAF_B')
+    expect(baseY).toBeGreaterThan(0)
+    expect(spacedY - baseY).toBeCloseTo(24, 1)
+    // Blok sebelumnya sendiri tidak bergeser.
+    expect(yOf(spaced, 'PARAGRAF_A')).toBeCloseTo(yOf(base, 'PARAGRAF_A'), 1)
+  })
+
+  it('tanpa spaceAfter, output identik dengan perilaku lama (tidak ada jarak)', async () => {
+    const build = () => [
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      { type: 'paragraph', text: 'PARAGRAF_A' },
+      { type: 'paragraph', text: 'PARAGRAF_B' },
+      { type: 'signature' },
+    ]
+    const a = await draw(build() as any)
+    const b = await draw(build() as any)
+    const yOf = (r: Awaited<ReturnType<typeof draw>>, needle: string) =>
+      r.texts.find(t => t.text.includes(needle))?.y ?? -1
+    expect(yOf(a, 'PARAGRAF_B')).toBeCloseTo(yOf(b, 'PARAGRAF_B'), 6)
+  })
+
+  it('spaceAfter pada blok terakhir tidak menambah halaman kosong', async () => {
+    const countPages = (buf: Buffer) =>
+      (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) ?? []).length
+    const build = (spaceAfter?: number) => {
+      const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+      for (let i = 1; i <= 12; i++) blocks.push({ type: 'paragraph', text: `PARA-${i} ` + 'kata '.repeat(60) })
+      blocks[blocks.length - 1].spaceAfter = spaceAfter
+      blocks.push({ type: 'signature' })
+      return blocks
+    }
+    const base = await draw(build() as any)
+    const spaced = await draw(build(40) as any)
+    expect(countPages(spaced.buf)).toBe(countPages(base.buf))
   })
 
   it('TIDAK meminta font mark saat teksnya polos (jalur lama)', async () => {
