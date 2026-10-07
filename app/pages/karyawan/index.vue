@@ -24,6 +24,19 @@ const locationFilter = ref<string[]>([])
 const departmentFilter = ref<string[]>([])
 const genderFilter = ref<string[]>([])
 
+// Drill-down dari dashboard: /karyawan?status=AKTIF&site=...&department=...&gender=...
+const route = useRoute()
+function applyQueryFilters() {
+  const { status: qStatus, site, department, gender, q } = route.query
+  statusFilter.value = qStatus ? [String(qStatus)] : []
+  locationFilter.value = site ? [String(site)] : []
+  departmentFilter.value = department ? [String(department)] : []
+  genderFilter.value = gender ? [String(gender)] : []
+  if (q) searchQuery.value = String(q)
+}
+applyQueryFilters()
+watch(() => route.query, applyQueryFilters)
+
 const locationOptions = computed(() =>
   [...new Set(data.value.map(e => e.workLocation?.name).filter(Boolean) as string[])]
     .sort()

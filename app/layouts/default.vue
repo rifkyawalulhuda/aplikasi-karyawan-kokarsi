@@ -192,6 +192,77 @@ const searchGroups = ref<any[]>([])
 const searchLoading = ref(false)
 let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
+// --- Grup statis command palette (navigasi + aksi dashboard) ---
+const { editing: dashboardEditing, reset: resetDashboard, applyPreset: applyDashboardPreset } = useDashboardLayout()
+const dashboardRefreshBus = useEventBus('dashboard:refresh')
+const onDashboard = computed(() => route.path === '/')
+
+const staticCommandGroups = computed<any[]>(() => {
+  const groups: any[] = [
+    {
+      id: 'navigation',
+      label: 'Navigasi',
+      items: [
+        { id: 'nav-dashboard', label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
+        { id: 'nav-karyawan', label: 'Data Karyawan', icon: 'i-lucide-users', to: '/karyawan' },
+        { id: 'nav-kontrak', label: 'Kontrak', icon: 'i-lucide-file-text', to: '/kontrak' },
+        { id: 'nav-kalender', label: 'Kalender', icon: 'i-lucide-calendar-days', to: '/kalender' },
+        { id: 'nav-kendaraan', label: 'Pemakaian Kendaraan', icon: 'i-lucide-car-front', to: '/operasional/pemakaian-kendaraan' },
+        { id: 'nav-space', label: 'Space', icon: 'i-lucide-kanban', to: '/spaces' },
+      ],
+    },
+  ]
+
+  if (onDashboard.value) {
+    groups.unshift({
+      id: 'dashboard-actions',
+      label: 'Aksi Dashboard',
+      items: [
+        {
+          id: 'dash-refresh',
+          label: 'Muat ulang data dashboard',
+          icon: 'i-lucide-refresh-cw',
+          onSelect: () => dashboardRefreshBus.emit(),
+        },
+        {
+          id: 'dash-edit',
+          label: dashboardEditing.value ? 'Selesai atur widget' : 'Atur widget dashboard',
+          icon: 'i-lucide-sliders-horizontal',
+          onSelect: () => { dashboardEditing.value = !dashboardEditing.value },
+        },
+        {
+          id: 'dash-preset-ringkas',
+          label: 'Preset: Ringkas',
+          icon: 'i-lucide-minimize-2',
+          onSelect: () => applyDashboardPreset('ringkas'),
+        },
+        {
+          id: 'dash-preset-standar',
+          label: 'Preset: Standar',
+          icon: 'i-lucide-layout-dashboard',
+          onSelect: () => applyDashboardPreset('standar'),
+        },
+        {
+          id: 'dash-preset-lengkap',
+          label: 'Preset: Lengkap',
+          icon: 'i-lucide-maximize-2',
+          onSelect: () => applyDashboardPreset('lengkap'),
+        },
+        {
+          id: 'dash-reset',
+          label: 'Reset susunan widget',
+          icon: 'i-lucide-rotate-ccw',
+          onSelect: () => resetDashboard(),
+        },
+      ],
+    })
+  }
+
+  return groups
+})
+
+const allCommandGroups = computed(() => [...staticCommandGroups.value, ...searchGroups.value])
+
 watch(searchTerm, (q) => {
   if (searchDebounce) clearTimeout(searchDebounce)
   if (!q || q.trim().length < 2) {
@@ -380,7 +451,7 @@ const links = computed<NavigationMenuItem[]>(() => [
 
     <UDashboardSearch
       v-model:search-term="searchTerm"
-      :groups="searchGroups"
+      :groups="allCommandGroups"
       :loading="searchLoading"
     />
 

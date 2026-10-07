@@ -517,11 +517,18 @@ async function handleOpenId(openId: string | null | (string | null)[] | undefine
   catch { /* silent */ }
 }
 
-onMounted(() => {
+function applyQueryFilters() {
+  if (route.query.status) statusFilter.value = [String(route.query.status)]
+  if (route.query.contractType) contractTypeFilter.value = [String(route.query.contractType)]
   if (route.query.search) searchQuery.value = String(route.query.search)
+}
+
+onMounted(() => {
+  applyQueryFilters()
   handleOpenId(route.query.openId)
 })
 watch(() => route.query.openId, (newId) => handleOpenId(newId))
+watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
 </script>
 
 <template>
