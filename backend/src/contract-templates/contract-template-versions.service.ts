@@ -5,7 +5,7 @@ import { resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
 import { validateContentDefinition, collectAllPlaceholders, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
-import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
+import { definitionToContentDefinition, definitionToFieldDefinitions, normalizePkwtTitleBlocks } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
 import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions, ensureFieldDefinitionsForContent } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
@@ -47,13 +47,34 @@ export class ContractTemplateVersionsService {
     })
   }
 
-  async findOne(versionId: number) {
+  /**
+   * Baca baris versi APA ADANYA dari DB (tanpa penyeragaman judul).
+   *
+   * Dipakai jalur yang perlu melihat bentuk tersimpan untuk memutuskan apakah
+   * perbaikan perlu ditulis (mis. `publish()`). Untuk konsumsi UI/aksi biasa
+   * gunakan `findOne()` yang sudah menyeragamkan judul PKWT.
+   */
+  private async findVersionRow(versionId: number) {
     const version = await this.prisma.client.contractTemplateVersion.findUnique({
       where: { id: versionId },
       include: { template: { select: { id: true, code: true, name: true, family: true } } },
     })
     if (!version) throw new NotFoundException('Versi template tidak ditemukan')
     return version
+  }
+
+  /**
+   * Versi template untuk konsumsi UI/aksi.
+   *
+   * `contentDefinition` versi lama PKWT masih memuat blok `subtitle` kolom ID
+   * yang menimpa Judul EN saat render. Penyeragaman diterapkan di sini agar
+   * editor dan pratinjau langsung benar; baris DB baru benar-benar dibersihkan
+   * saat draft disimpan / versi dipublish. Lihat `normalizePkwtTitleBlocks`.
+   */
+  async findOne(versionId: number) {
+    const version = await this.findVersionRow(versionId)
+    const normalized = normalizePkwtTitleBlocks(version.contentDefinition, version.template?.family)
+    return normalized === version.contentDefinition ? version : { ...version, contentDefinition: normalized }
   }
 
   /**
@@ -85,7 +106,7 @@ export class ContractTemplateVersionsService {
     dto: CreateDraftDto,
     actor: { name: string },
   ) {
-    await this.ensureTemplate(templateId)
+    const template = await this.ensureTemplate(templateId)
     await this.ensureNoOpenDraft(templateId)
 
     const lastVersion = await this.prisma.client.contractTemplateVersion.findFirst({
@@ -107,7 +128,6 @@ export class ContractTemplateVersionsService {
     // permanen (lihat Risk "Perubahan legacy override hilang"). Ini satu-satunya
     // konsumen `contentOverrides` yang masih tersisa setelah DoD #10.
     if ((!contentDefinition && !lastVersion) || (dto.overrides && !dto.contentDefinition)) {
-      const template = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
       const base = template ? CONTRACT_DOCUMENT_DEFINITIONS[template.templateKey] : undefined
       if (!base) {
         throw new BadRequestException(
@@ -125,6 +145,12 @@ export class ContractTemplateVersionsService {
     if (!contentDefinition || !fieldDefinitions) {
       throw new BadRequestException('Definisi template tidak lengkap untuk membuat draft')
     }
+
+    // Seragamkan judul PKWT sejak draft dibuat: kolom ID tidak lagi menyimpan
+    // blok `subtitle` (yang isinya sebenarnya judul Inggris); judul itu pindah ke
+    // blok `title` kolom EN. Draft yang disalin dari versi lama ikut dibersihkan
+    // di sini. Lihat `normalizePkwtTitleBlocks`.
+    contentDefinition = normalizePkwtTitleBlocks(contentDefinition, template.family)
 
     // Binding katalog (checkbox "wajib diisi" per template) di-overlay terakhir
     // supaya snapshot draft = kontrak kerja sesungguhnya antara template dan
@@ -199,7 +225,10 @@ export class ContractTemplateVersionsService {
    * Semua dalam satu transaction.
    */
   async publish(versionId: number, actor: { name: string }) {
-    const version = await this.findOne(versionId)
+    // Baris APA ADANYA: `publish()` memutuskan sendiri perbaikan apa yang perlu
+    // ditulis, jadi ia harus melihat bentuk tersimpan (bukan versi yang sudah
+    // diseragamkan `findOne()`).
+    const version = await this.findVersionRow(versionId)
     if (version.status !== 'DRAFT') {
       throw new BadRequestException('Hanya versi DRAFT yang dapat dipublish')
     }
@@ -234,12 +263,18 @@ export class ContractTemplateVersionsService {
     // dapat memuat sintaks ini dari editor sebelum perbaikan; tanpa normalisasi,
     // publish gagal dengan "sintaks {{...}} rusak".
     const customKeys = await this.fieldsService.findContractInputCatalogKeys()
-    const contentDefinition = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
+    let contentDefinition = JSON.parse(JSON.stringify(version.contentDefinition ?? {}))
     const fixedCount = normalizeCustomPlaceholders(contentDefinition, customKeys)
     // Judul pasal >2 baris (mis. dari tempel-teks) juga dirapikan sebelum
     // snapshot dibekukan, supaya dokumen yang dirender selalu sesuai asumsi
     // tata letak.
     const fixedHeadings = normalizeArticleHeadings(contentDefinition)
+    // Rapikan judul PKWT (buang blok `subtitle` kolom ID; pindahkan judulnya ke
+    // blok `title` kolom EN) sebelum snapshot dibekukan. Setelah ini versi
+    // terbit tidak lagi menyimpan bentuk lama.
+    const normalizedTitles = normalizePkwtTitleBlocks(contentDefinition, template.family)
+    const fixedTitles = normalizedTitles !== contentDefinition
+    contentDefinition = normalizedTitles
 
     // Pastikan fieldDefinitions mencakup SETIAP placeholder SYSTEM di konten.
     // Placeholder SYSTEM yang tidak terdaftar tidak di-resolve saat kontrak
@@ -266,7 +301,7 @@ export class ContractTemplateVersionsService {
           publishedByName: actor.name,
           fieldDefinitions: fieldDefinitions as any,
           // Simpan konten yang sudah dinormalisasi agar snapshot konsisten.
-          ...(fixedCount > 0 || fixedHeadings > 0 ? { contentDefinition: contentDefinition as any } : {}),
+          ...(fixedCount > 0 || fixedHeadings > 0 || fixedTitles ? { contentDefinition: contentDefinition as any } : {}),
         },
       })
     })
@@ -549,6 +584,7 @@ export class ContractTemplateVersionsService {
   private async ensureTemplate(templateId: number) {
     const t = await this.prisma.client.contractTemplate.findUnique({ where: { id: templateId } })
     if (!t) throw new NotFoundException('Template tidak ditemukan')
+    return t
   }
 
   private async ensureNoOpenDraft(templateId: number) {

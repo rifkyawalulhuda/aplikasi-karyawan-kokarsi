@@ -131,13 +131,17 @@ Isi dokumen disusun dari blok. Klik **Tambah blok** untuk memilih tipe blok:
 | **Tabel** | Baris dan kolom, mis. rincian upah |
 | **Tanda Tangan** | Blok tanda tangan dua pihak |
 | **Judul Dokumen** | Judul utama di tengah halaman |
-| **Subjudul** | Baris kecil di bawah judul |
+| **Subjudul** | Baris kecil di bawah judul (hanya MITRA) |
 | **Ganti Halaman** | Memaksa halaman baru di PDF |
 
 Setiap blok dapat **digeser (drag)** untuk mengubah urutan, **diduplikat**, **dihapus**, atau **diciutkan** (collapse). Klik blok untuk memilihnya — blok terpilih menjadi target penyisipan field dinamis.
 
 ::: warning Blok wajib
 Setiap bahasa harus memiliki minimal satu blok konten **dan** tepat satu blok **Tanda Tangan**. Publish akan ditolak bila salah satu tidak ada.
+:::
+
+::: info Judul dokumen pada PKWT
+Template **PKWT** (dua kolom ID/EN) tidak memakai blok **Subjudul**. Kop dokumen memiliki dua baris judul: baris pertama = blok **Judul Dokumen** pada tab **Indonesia**, baris kedua = blok **Judul Dokumen** pada tab **English**. Jadi cukup satu blok Judul di tiap bahasa — tidak ada blok Subjudul yang perlu diisi.
 :::
 
 ::: info Judul pasal maks. 2 baris

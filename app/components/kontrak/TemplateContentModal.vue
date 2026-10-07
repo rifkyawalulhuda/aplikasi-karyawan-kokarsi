@@ -510,6 +510,19 @@ const BLOCK_PICKER = [
 ] as const
 
 /**
+ * Pilihan "Tambah blok", disaring per keluarga template.
+ *
+ * PKWT tidak punya subjudul dokumen: kop dua baris = Judul ID (blok `title`
+ * kolom ID) + Judul EN (blok `title` kolom EN). Menawarkan blok `subtitle` di
+ * sini hanya membingungkan — blok itu tidak pernah dirender sebagai subjudul di
+ * PKWT (lihat `normalizePkwtTitleBlocks` di backend). Blok `subtitle` lama yang
+ * telanjur tersimpan tetap dapat dilihat dan dihapus.
+ */
+const blockPickerOptions = computed(() =>
+  isPkwt.value ? BLOCK_PICKER.filter(opt => opt.type !== 'subtitle') : BLOCK_PICKER
+)
+
+/**
  * Tipe blok yang menampilkan kontrol "Spasi antar blok" (`spaceAfter`) per
  * keluarga. Disamakan dengan `spaceCapableBlocks()` di
  * `backend/src/contract-templates/template-schema.validator.ts`.
@@ -1597,7 +1610,7 @@ function removeInvalidBlock(index: number) {
     <template #body>
       <div class="grid gap-2 sm:grid-cols-2">
         <button
-          v-for="opt in BLOCK_PICKER"
+          v-for="opt in blockPickerOptions"
           :key="opt.type"
           type="button"
           :disabled="opt.type === 'signature' && hasSignatureBlock"

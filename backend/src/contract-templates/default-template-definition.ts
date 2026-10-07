@@ -120,7 +120,12 @@ function toLanguageBlocks(definition: ContractDocumentDefinition, english = fals
   const blocks: any[] = [
     { id: 'title', type: 'title', text: replaceLegacyTokens(english ? (definition.subtitle ?? definition.title) : definition.title) },
   ]
-  if (!english && definition.subtitle) {
+  // Blok `subtitle` HANYA untuk MITRA (satu bahasa). Pada PKWT, `definition.subtitle`
+  // adalah JUDUL INGGRIS, bukan subjudul: kop dua baris = Judul ID (blok `title`
+  // kolom ID) + Judul EN (blok `title` kolom EN). Menambahkan blok `subtitle` di
+  // kolom ID membuat kolom kanan punya judul yang sama sekaligus menimpa Judul EN
+  // saat render (lihat `resolvePkwtHeaderTitles` di `pkwt-document.renderer.ts`).
+  if (!english && definition.family === 'MITRA' && definition.subtitle) {
     blocks.push({ id: 'subtitle', type: 'subtitle', text: definition.subtitle })
   }
 
@@ -212,6 +217,47 @@ export function definitionToContentDefinition(definition: ContractDocumentDefini
     }, true)
     : []
   return { languages: { id, en } }
+}
+
+/**
+ * Rapikan blok judul PKWT pada `contentDefinition` yang SUDAH tersimpan.
+ *
+ * Sebelum perbaikan, seed menaruh blok `subtitle` di kolom INDONESIA berisi JUDUL
+ * INGGRIS (`definition.subtitle`). Renderer lama memakai subtitle itu sebagai
+ * baris judul kedua, sehingga Judul EN yang diketik admin diabaikan. Bentuk baru:
+ * kop dua baris = Judul ID (blok `title` kolom ID) + Judul EN (blok `title`
+ * kolom EN); tidak ada blok `subtitle` di kolom ID.
+ *
+ * Fungsi ini mengembalikan salinan `content` yang sudah diselaraskan:
+ *  - kolom EN wajib punya blok `title`; bila belum ada, teks subtitle ID
+ *    dipindahkan ke sana agar judul tidak hilang;
+ *  - blok `subtitle` kolom ID dibuang.
+ *
+ * Idempoten: `content` tanpa blok `subtitle` di kolom ID dikembalikan apa adanya
+ * (referensi sama). HANYA berlaku untuk keluarga PKWT — MITRA memakai `subtitle`
+ * secara sah sebagai subjudul dokumen.
+ */
+export function normalizePkwtTitleBlocks<T>(content: T, family?: string): T {
+  if (family !== 'PKWT') return content
+  const c = content as any
+  const idBlocks: any[] = Array.isArray(c?.languages?.id) ? c.languages.id : []
+  if (!idBlocks.some(b => b?.type === 'subtitle')) return content
+
+  const clone = JSON.parse(JSON.stringify(content)) as any
+  const cloneId: any[] = clone.languages.id
+  const subtitleText = String(cloneId.find((b: any) => b?.type === 'subtitle')?.text ?? '').trim()
+  const enBlocks: any[] = Array.isArray(clone.languages.en) ? clone.languages.en : []
+
+  const enHasTitle = enBlocks.some((b: any) => b?.type === 'title' && String(b?.text ?? '').trim().length > 0)
+  if (subtitleText && !enHasTitle) {
+    const titleIndex = enBlocks.findIndex((b: any) => b?.type === 'title')
+    if (titleIndex >= 0) enBlocks[titleIndex] = { ...enBlocks[titleIndex], id: 'title', type: 'title', text: subtitleText }
+    else enBlocks.unshift({ id: 'title', type: 'title', text: subtitleText })
+  }
+
+  clone.languages.en = enBlocks
+  clone.languages.id = cloneId.filter((b: any) => b?.type !== 'subtitle')
+  return clone
 }
 
 const FIELD_LABELS: Record<string, string> = {

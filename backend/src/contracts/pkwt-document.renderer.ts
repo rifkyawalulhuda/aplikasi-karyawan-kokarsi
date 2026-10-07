@@ -243,6 +243,33 @@ function extractTitle(blocks: any[]): { title?: string, subtitle?: string } {
 }
 
 /**
+ * Tentukan dua baris judul kop PKWT dari blok + opsi eksplisit.
+ *
+ * Baris 1 = Judul ID, baris 2 = Judul EN. Judul EN diambil dari blok `title`
+ * kolom EN LEBIH DULU daripada `subtitle` kolom ID. Setelah perbaikan seed,
+ * kolom ID tidak lagi punya blok `subtitle`; `idSub` hanya tersisa pada versi
+ * lama yang belum dinormalkan, dan di situ isinya justru judul Inggris — jadi
+ * fallback ini tidak pernah menaruh redaksi Indonesia di baris EN.
+ *
+ * Diekspor murni (tanpa `doc`) supaya prioritas ini dapat diuji langsung.
+ */
+export function resolvePkwtHeaderTitles(input: {
+  titleId?: string
+  titleEn?: string
+  fallbackTitle?: string
+  fallbackTitleEn?: string
+  blocks?: any[]
+  blocksEn?: any[]
+}): { titleId: string, titleEn: string } {
+  const { title: idTitle, subtitle: idSub } = extractTitle(input.blocks ?? [])
+  const { title: enTitle } = extractTitle(input.blocksEn ?? [])
+  return {
+    titleId: input.titleId ?? idTitle ?? input.fallbackTitle ?? '',
+    titleEn: input.titleEn ?? enTitle ?? idSub ?? input.fallbackTitleEn ?? ''
+  }
+}
+
+/**
  * Alirkan dokumen PKWT ke `doc` yang sudah dibuat.
  *
  * Kolom kiri = stream ID, kolom kanan = stream EN, dikunci per baris oleh
@@ -259,8 +286,14 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
   // menganggapnya path file dan gagal dengan ENOENT.
   registerPkwtFonts(doc, fonts)
 
-  const { title: idTitle, subtitle: idSub } = extractTitle(opts.blocks)
-  const { title: enTitle } = extractTitle(opts.blocksEn ?? [])
+  const { titleId, titleEn } = resolvePkwtHeaderTitles({
+    titleId: opts.titleId,
+    titleEn: opts.titleEn,
+    fallbackTitle: opts.fallbackTitle,
+    fallbackTitleEn: opts.fallbackTitleEn,
+    blocks: opts.blocks,
+    blocksEn: opts.blocksEn,
+  })
 
   const idParas = blocksToPkwtParagraphs(opts.blocks, values)
   const enParas = blocksToPkwtParagraphs(opts.blocksEn ?? [], opts.valuesEn ?? values)
@@ -287,8 +320,8 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
       orgLines: opts.orgLines ?? [],
       addressLines: opts.addressLines ?? [],
       contactLine: opts.contactLine,
-      titleId: opts.titleId ?? idTitle ?? opts.fallbackTitle ?? '',
-      titleEn: opts.titleEn ?? idSub ?? enTitle ?? opts.fallbackTitleEn ?? '',
+      titleId,
+      titleEn,
       contractNumber: opts.numberLabel,
       logoPath: opts.logoPath
     },

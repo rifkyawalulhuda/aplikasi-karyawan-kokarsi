@@ -15,7 +15,8 @@ import {
   resolvePkwtFonts,
   resolvePkwtLogoPath,
   createPkwtPdfBuffer,
-  blocksToPkwtParagraphs
+  blocksToPkwtParagraphs,
+  resolvePkwtHeaderTitles
 } from './pkwt-document.renderer'
 import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
 import { PKWT_PREVIEW_VALUES, PKWT_PREVIEW_VALUES_EN } from './pkwt-preview-sample'
@@ -336,6 +337,39 @@ describe('PKWT document renderer — mark & perataan di PDF NYATA', () => {
     })
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
     expect(buffer.length).toBeGreaterThan(1000)
+  })
+})
+
+describe('resolvePkwtHeaderTitles', () => {
+  it('baris 2 memakai blok `title` kolom EN, bukan `subtitle` kolom ID', () => {
+    const { titleId, titleEn } = resolvePkwtHeaderTitles({
+      blocks: [
+        { id: 'title', type: 'title', text: 'KESEPAKATAN KERJA WAKTU TERTENTU' },
+        { id: 'subtitle', type: 'subtitle', text: 'STATED PERIODS LABOUR AGREEMENT' },
+      ],
+      blocksEn: [{ id: 'title', type: 'title', text: 'FIXED-TERM EMPLOYMENT AGREEMENT' }],
+    })
+    expect(titleId).toBe('KESEPAKATAN KERJA WAKTU TERTENTU')
+    expect(titleEn).toBe('FIXED-TERM EMPLOYMENT AGREEMENT')
+  })
+
+  it('jatuh ke `subtitle` kolom ID hanya bila kolom EN tidak punya judul (versi lama)', () => {
+    const { titleEn } = resolvePkwtHeaderTitles({
+      blocks: [
+        { id: 'title', type: 'title', text: 'KESEPAKATAN KERJA WAKTU TERTENTU' },
+        { id: 'subtitle', type: 'subtitle', text: 'STATED PERIODS LABOUR AGREEMENT' },
+      ],
+      blocksEn: [],
+    })
+    expect(titleEn).toBe('STATED PERIODS LABOUR AGREEMENT')
+  })
+
+  it('opsi `titleEn` eksplisit menang atas blok', () => {
+    const { titleEn } = resolvePkwtHeaderTitles({
+      titleEn: 'EXPLICIT EN',
+      blocksEn: [{ id: 'title', type: 'title', text: 'FROM BLOCK' }],
+    })
+    expect(titleEn).toBe('EXPLICIT EN')
   })
 })
 

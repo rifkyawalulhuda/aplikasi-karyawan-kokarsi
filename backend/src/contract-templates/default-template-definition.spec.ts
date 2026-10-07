@@ -1,6 +1,6 @@
 import { CONTRACT_DOCUMENT_DEFINITIONS } from '../contracts/contract-document-definitions'
 import { mitraInterpolate } from '../contracts/mitra-layout.engine'
-import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
+import { definitionToContentDefinition, definitionToFieldDefinitions, normalizePkwtTitleBlocks } from './default-template-definition'
 import { SYSTEM_FIELD_SEEDS } from './template-field-seeds'
 import { collectAllPlaceholders, validateContentDefinition } from './template-schema.validator'
 
@@ -304,4 +304,114 @@ describe('PKWT — kolom kanan (EN) berbahasa Inggris', () => {
       expect(en.text).not.toContain('Tgl. Lahir')
     },
   )
+})
+
+/**
+ * Regresi judul PKWT.
+ *
+ * Dulu seed menaruh blok `subtitle` di kolom INDONESIA berisi JUDUL INGGRIS
+ * (`definition.subtitle`). Renderer memakai subtitle itu sebagai baris judul
+ * kedua, sehingga Judul EN yang diketik admin diabaikan. Bentuk benar: kop dua
+ * baris = Judul ID (blok `title` kolom ID) + Judul EN (blok `title` kolom EN).
+ */
+describe('PKWT — blok judul (tidak ada Subjudul, judul EN dari Judul EN)', () => {
+  const pkwtDefinitions = Object.values(CONTRACT_DOCUMENT_DEFINITIONS).filter(
+    definition => definition.family === 'PKWT',
+  )
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: kolom ID tidak punya blok `subtitle`',
+    (_key, definition) => {
+      const id = definitionToContentDefinition(definition).languages.id as any[]
+      expect(id.some(block => block?.type === 'subtitle')).toBe(false)
+    },
+  )
+
+  it.each(pkwtDefinitions.map(definition => [definition.key, definition] as const))(
+    '%s: kolom EN punya blok `title` berisi judul Inggris (definition.subtitle)',
+    (_key, definition) => {
+      const en = definitionToContentDefinition(definition).languages.en as any[]
+      const title = en.find(block => block?.type === 'title')
+      expect(title).toBeDefined()
+      expect(title!.text).toBe(definition.subtitle)
+    },
+  )
+
+  it('MITRA tetap memakai blok `subtitle` (subjudul dokumen)', () => {
+    // Definisi MITRA bawaan tidak memakai subtitle, jadi dipakai definisi
+    // sintetis: yang diuji adalah perilaku `toLanguageBlocks`, bukan data seed.
+    const definition = {
+      key: 'MITRA_TEST',
+      family: 'MITRA',
+      title: 'PERJANJIAN KEMITRAAN',
+      subtitle: 'SUBJUDUL DOKUMEN',
+      sections: [],
+    } as any
+    const id = definitionToContentDefinition(definition).languages.id as any[]
+    const subtitle = id.find(block => block?.type === 'subtitle')
+    expect(subtitle).toBeDefined()
+    expect(subtitle!.text).toBe('SUBJUDUL DOKUMEN')
+  })
+})
+
+/**
+ * `normalizePkwtTitleBlocks` menambal `contentDefinition` yang SUDAH tersimpan
+ * (dibuat sebelum perbaikan seed) agar kolom ID tidak lagi punya `subtitle` dan
+ * judul Inggris tetap ada di kolom EN.
+ */
+describe('normalizePkwtTitleBlocks', () => {
+  const legacyContent = () => ({
+    languages: {
+      id: [
+        { id: 'title', type: 'title', text: 'KESEPAKATAN KERJA WAKTU TERTENTU' },
+        { id: 'subtitle', type: 'subtitle', text: 'STATED PERIODS LABOUR AGREEMENT' },
+        { id: 'opening', type: 'paragraph', text: 'Pembuka.' },
+      ],
+      en: [
+        { id: 'title', type: 'title', text: 'STATED PERIODS LABOUR AGREEMENT' },
+        { id: 'opening', type: 'paragraph', text: 'Opening.' },
+      ],
+    },
+  })
+
+  it('membuang blok `subtitle` kolom ID pada PKWT', () => {
+    const result = normalizePkwtTitleBlocks(legacyContent(), 'PKWT')
+    expect((result.languages.id as any[]).some(block => block?.type === 'subtitle')).toBe(false)
+  })
+
+  it('memindahkan teks subtitle ke blok `title` kolom EN bila kolom EN belum punya judul', () => {
+    const content = {
+      languages: {
+        id: [
+          { id: 'subtitle', type: 'subtitle', text: 'JUDUL INGGRIS' },
+        ],
+        en: [{ id: 'opening', type: 'paragraph', text: 'Opening.' }],
+      },
+    }
+    const result = normalizePkwtTitleBlocks(content, 'PKWT')
+    const enTitle = (result.languages.en as any[]).find(block => block?.type === 'title')
+    expect(enTitle).toBeDefined()
+    expect(enTitle!.text).toBe('JUDUL INGGRIS')
+  })
+
+  it('tidak menimpa judul EN yang sudah ada', () => {
+    const result = normalizePkwtTitleBlocks(legacyContent(), 'PKWT')
+    const enTitle = (result.languages.en as any[]).find(block => block?.type === 'title')
+    expect(enTitle!.text).toBe('STATED PERIODS LABOUR AGREEMENT')
+  })
+
+  it('idempoten: konten tanpa subtitle dikembalikan apa adanya (referensi sama)', () => {
+    const content = normalizePkwtTitleBlocks(legacyContent(), 'PKWT')
+    expect(normalizePkwtTitleBlocks(content, 'PKWT')).toBe(content)
+  })
+
+  it('tidak menyentuh MITRA (subtitle sah sebagai subjudul dokumen)', () => {
+    const content = legacyContent()
+    expect(normalizePkwtTitleBlocks(content, 'MITRA')).toBe(content)
+  })
+
+  it('tidak menyentuh keluarga tanpa family', () => {
+    const content = legacyContent()
+    expect(normalizePkwtTitleBlocks(content, undefined)).toBe(content)
+  })
 })
