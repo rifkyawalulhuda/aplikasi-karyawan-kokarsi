@@ -621,17 +621,36 @@ model Notification {
   deeplink   String               @db.VarChar(255)
   userId     Int?
   userType   String?              @db.VarChar(20)
-  isRead     Boolean              @default(false)
-  readAt     DateTime?
-  resolvedAt DateTime?
-  expiryDate DateTime             @db.Date
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
+  isRead      Boolean              @default(false)
+  readAt      DateTime?
+  resolvedAt  DateTime?
+  dismissedAt DateTime?
+  pinnedAt    DateTime?
+  expiryDate  DateTime             @db.Date
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@unique([sourceType, sourceId, triggerDay])
   @@index([isRead, resolvedAt])
   @@index([userId, userType])
+  @@index([userId, userType, dismissedAt])
   @@map("notifications")
+}
+
+model NotificationPreference {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  userType              String   @db.VarChar(20)
+  mutedCategories       String[] @default([])
+  quietHoursStart       String?  @db.VarChar(5)
+  quietHoursEnd         String?  @db.VarChar(5)
+  soundEnabled          Boolean  @default(false)
+  osNotificationEnabled Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([userId, userType])
+  @@map("notification_preferences")
 }
 
 model EmailNotificationRecipient {

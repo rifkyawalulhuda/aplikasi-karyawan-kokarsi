@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { Subject, Observable } from 'rxjs'
 import { finalize } from 'rxjs/operators'
+import { Prisma, NotificationPreference } from '@prisma/client'
 import { PrismaService } from '../prisma/prisma.service'
 import { startOfDay } from '../shared/date-utils'
 
@@ -9,6 +10,40 @@ interface SseClient {
   userId: number
   userType: string
 }
+
+interface Recipient {
+  userId?: number
+  userType?: string
+}
+
+export interface NotificationQuery {
+  limit?: number
+  cursor?: number
+  category?: string
+  severity?: string
+  unread?: boolean
+  q?: string
+  userId?: number
+  userType?: string
+}
+
+export interface NotificationPreferenceInput {
+  mutedCategories?: string[]
+  quietHoursStart?: string | null
+  quietHoursEnd?: string | null
+  soundEnabled?: boolean
+  osNotificationEnabled?: boolean
+}
+
+const NOTIFICATION_CATEGORIES = [
+  'KONTRAK_KARYAWAN',
+  'SERTIFIKASI_IJIN',
+  'KONTRAK_VENDOR',
+  'LEGAL_KOPERASI',
+  'AGENDA',
+  'SPACE',
+  'ARSIP_UMUM',
+] as const
 
 @Injectable()
 export class NotificationsService {
@@ -72,8 +107,12 @@ export class NotificationsService {
       },
     })
 
+    const prefMap = await this.getPreferenceMap(
+      agendas.flatMap(a => a.assignedUserIds.map(userId => ({ userId, userType: 'user_account' }))),
+    )
+
     for (const agenda of agendas) {
-      for (const userId of agenda.assignedUserIds) {
+      for (const userId of this.filterAgendaRecipients(agenda.assignedUserIds, prefMap)) {
         const sourceType = `agenda_morning_${userId}`
         try {
           await this.prisma.notification.create({
@@ -129,8 +168,12 @@ export class NotificationsService {
       },
     })
 
+    const prefMap = await this.getPreferenceMap(
+      agendas.flatMap(a => a.assignedUserIds.map(userId => ({ userId, userType: 'user_account' }))),
+    )
+
     for (const agenda of agendas) {
-      for (const userId of agenda.assignedUserIds) {
+      for (const userId of this.filterAgendaRecipients(agenda.assignedUserIds, prefMap)) {
         const sourceType = `agenda_before_${userId}`
         try {
           await this.prisma.notification.create({
@@ -176,7 +219,10 @@ export class NotificationsService {
     createdByName: string,
   ): Promise<{ created: number }> {
     let created = 0
-    for (const userId of assignedUserIds) {
+    const prefMap = await this.getPreferenceMap(
+      assignedUserIds.map(userId => ({ userId, userType: 'user_account' })),
+    )
+    for (const userId of this.filterAgendaRecipients(assignedUserIds, prefMap)) {
       const sourceType = `agenda_created_${agendaId}_${userId}`
       try {
         await this.prisma.notification.create({
@@ -205,37 +251,122 @@ export class NotificationsService {
 
   // ── Per-user queries ─────────────────────────────────────────────────────────
 
-  async findAll(limit = 10, userId?: number, userType?: string) {
-    const where: any = { resolvedAt: null }
+  /** Scope filter: active (belum resolved & belum dismissed) + kepemilikan user. */
+  private scopeWhere(userId?: number, userType?: string): Prisma.NotificationWhereInput {
+    const where: Prisma.NotificationWhereInput = { resolvedAt: null, dismissedAt: null }
     if (userId !== undefined && userType) {
       where.userId = userId
       where.userType = userType
     }
-    return this.prisma.notification.findMany({
+    return where
+  }
+
+  /**
+   * Daftar notifikasi aktif dengan filter, pencarian, dan pagination cursor.
+   * Urutan: disematkan (pinned) dulu, lalu terbaru. Cursor memakai id unik
+   * sebagai tiebreaker sehingga posisi stabil saat item ditandai dibaca.
+   */
+  async findAll(query: NotificationQuery = {}) {
+    const limit = Math.min(Math.max(query.limit ?? 10, 1), 50)
+    const where = this.scopeWhere(query.userId, query.userType)
+
+    if (query.category) where.category = query.category as Prisma.NotificationWhereInput['category']
+    if (query.severity) where.severity = query.severity as Prisma.NotificationWhereInput['severity']
+    if (query.unread) where.isRead = false
+    if (query.q?.trim()) {
+      const q = query.q.trim()
+      where.OR = [
+        { title: { contains: q, mode: 'insensitive' } },
+        { message: { contains: q, mode: 'insensitive' } },
+      ]
+    }
+
+    const rows = await this.prisma.notification.findMany({
       where,
       orderBy: [
-        { isRead: 'asc' }, // unread (false) first
+        { pinnedAt: { sort: 'desc', nulls: 'last' } },
         { createdAt: 'desc' },
+        { id: 'desc' },
       ],
-      take: limit,
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
     })
+
+    const hasMore = rows.length > limit
+    const items = hasMore ? rows.slice(0, limit) : rows
+
+    return {
+      items,
+      hasMore,
+      nextCursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    }
+  }
+
+  /** Ringkasan agregat untuk badge & chip kategori (bukan dari halaman pertama). */
+  async getSummary(userId?: number, userType?: string) {
+    const base = this.scopeWhere(userId, userType)
+
+    const [total, unread, bySeverity, unreadBySeverity, byCategory, unreadByCategory] =
+      await Promise.all([
+        this.prisma.notification.count({ where: base }),
+        this.prisma.notification.count({ where: { ...base, isRead: false } }),
+        this.prisma.notification.groupBy({ by: ['severity'], where: base, _count: { _all: true } }),
+        this.prisma.notification.groupBy({
+          by: ['severity'],
+          where: { ...base, isRead: false },
+          _count: { _all: true },
+        }),
+        this.prisma.notification.groupBy({ by: ['category'], where: base, _count: { _all: true } }),
+        this.prisma.notification.groupBy({
+          by: ['category'],
+          where: { ...base, isRead: false },
+          _count: { _all: true },
+        }),
+      ])
+
+    const severity = { WARNING: 0, CRITICAL: 0 } as Record<string, number>
+    for (const row of bySeverity) severity[row.severity] = row._count._all
+
+    const unreadSeverity = { WARNING: 0, CRITICAL: 0 } as Record<string, number>
+    for (const row of unreadBySeverity) unreadSeverity[row.severity] = row._count._all
+
+    const categories: Record<string, number> = {}
+    for (const cat of NOTIFICATION_CATEGORIES) categories[cat] = 0
+    for (const row of byCategory) categories[row.category] = row._count._all
+
+    const unreadCategories: Record<string, number> = {}
+    for (const cat of NOTIFICATION_CATEGORIES) unreadCategories[cat] = 0
+    for (const row of unreadByCategory) unreadCategories[row.category] = row._count._all
+
+    return {
+      total,
+      unread,
+      bySeverity: severity,
+      unreadBySeverity: unreadSeverity,
+      byCategory: categories,
+      unreadByCategory: unreadCategories,
+    }
   }
 
   async getUnreadCount(userId?: number, userType?: string): Promise<number> {
-    const where: any = { isRead: false, resolvedAt: null }
+    const where = this.scopeWhere(userId, userType)
+    return this.prisma.notification.count({ where: { ...where, isRead: false } })
+  }
+
+  /** Pastikan baris ada dan milik user; lempar 404 bila bukan. */
+  private async findOwned(id: number, userId?: number, userType?: string) {
+    const where: Prisma.NotificationWhereInput = { id }
     if (userId !== undefined && userType) {
       where.userId = userId
       where.userType = userType
     }
-    return this.prisma.notification.count({ where })
+    const existing = await this.prisma.notification.findFirst({ where })
+    if (!existing) throw new NotFoundException('Notification not found')
+    return existing
   }
 
   async markAllRead(userId?: number, userType?: string) {
-    const where: any = { isRead: false, resolvedAt: null }
-    if (userId !== undefined && userType) {
-      where.userId = userId
-      where.userType = userType
-    }
+    const where = { ...this.scopeWhere(userId, userType), isRead: false }
     const result = await this.prisma.notification.updateMany({
       where,
       data: { isRead: true, readAt: new Date() },
@@ -245,12 +376,7 @@ export class NotificationsService {
   }
 
   async markOneRead(id: number, userId?: number, userType?: string) {
-    if (userId !== undefined && userType) {
-      const existing = await this.prisma.notification.findFirst({
-        where: { id, userId, userType },
-      })
-      if (!existing) throw new NotFoundException('Notification not found')
-    }
+    await this.findOwned(id, userId, userType)
     const result = await this.prisma.notification.update({
       where: { id },
       data: { isRead: true, readAt: new Date() },
@@ -259,18 +385,199 @@ export class NotificationsService {
     return result
   }
 
-  async deleteAll(userId?: number, userType?: string) {
-    const where: any = { resolvedAt: null }
-    if (userId !== undefined && userType) {
-      where.userId = userId
-      where.userType = userType
-    }
+  async markUnread(id: number, userId?: number, userType?: string) {
+    await this.findOwned(id, userId, userType)
+    const result = await this.prisma.notification.update({
+      where: { id },
+      data: { isRead: false, readAt: null },
+    })
+    await this.broadcastUnreadCount()
+    return result
+  }
+
+  /** Singkirkan satu notifikasi dari daftar (soft, bisa di-undo). */
+  async dismiss(id: number, userId?: number, userType?: string) {
+    await this.findOwned(id, userId, userType)
+    const result = await this.prisma.notification.update({
+      where: { id },
+      data: { dismissedAt: new Date() },
+    })
+    await this.broadcastUnreadCount()
+    return result
+  }
+
+  async undoDismiss(id: number, userId?: number, userType?: string) {
+    await this.findOwned(id, userId, userType)
+    const result = await this.prisma.notification.update({
+      where: { id },
+      data: { dismissedAt: null },
+    })
+    await this.broadcastUnreadCount()
+    return result
+  }
+
+  /** Bulk: tandai banyak notifikasi dibaca / belum dibaca. */
+  async markMany(ids: number[], isRead: boolean, userId?: number, userType?: string) {
+    if (ids.length === 0) return { count: 0 }
+    const where = { ...this.scopeWhere(userId, userType), id: { in: ids } }
     const result = await this.prisma.notification.updateMany({
       where,
-      data: { resolvedAt: new Date() },
+      data: { isRead, readAt: isRead ? new Date() : null },
+    })
+    await this.broadcastUnreadCount()
+    return result
+  }
+
+  /** Bulk: singkirkan banyak notifikasi sekaligus. */
+  async dismissMany(ids: number[], userId?: number, userType?: string) {
+    if (ids.length === 0) return { count: 0 }
+    const where = { ...this.scopeWhere(userId, userType), id: { in: ids } }
+    const result = await this.prisma.notification.updateMany({
+      where,
+      data: { dismissedAt: new Date() },
+    })
+    await this.broadcastUnreadCount()
+    return result
+  }
+
+  async setPinned(id: number, pinned: boolean, userId?: number, userType?: string) {
+    await this.findOwned(id, userId, userType)
+    const result = await this.prisma.notification.update({
+      where: { id },
+      data: { pinnedAt: pinned ? new Date() : null },
+    })
+    return result
+  }
+
+  async deleteAll(userId?: number, userType?: string) {
+    const where = this.scopeWhere(userId, userType)
+    const result = await this.prisma.notification.updateMany({
+      where,
+      data: { dismissedAt: new Date() },
     })
     await this.broadcastUnreadCount()
     return { deleted: result.count }
+  }
+
+  // ── Preferences (per-user) ───────────────────────────────────────────────────
+
+  async getPreference(userId: number, userType: string) {
+    const pref = await this.prisma.notificationPreference.findUnique({
+      where: { userId_userType: { userId, userType } },
+    })
+    if (pref) return pref
+    return {
+      id: 0,
+      userId,
+      userType,
+      mutedCategories: [] as string[],
+      quietHoursStart: null as string | null,
+      quietHoursEnd: null as string | null,
+      soundEnabled: false,
+      osNotificationEnabled: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+  }
+
+  async updatePreference(
+    userId: number,
+    userType: string,
+    input: NotificationPreferenceInput,
+  ) {
+    const data: Prisma.NotificationPreferenceUncheckedCreateInput = {
+      userId,
+      userType,
+    }
+    if (input.mutedCategories !== undefined) {
+      data.mutedCategories = input.mutedCategories.filter(c =>
+        (NOTIFICATION_CATEGORIES as readonly string[]).includes(c),
+      )
+    }
+    if (input.quietHoursStart !== undefined) data.quietHoursStart = input.quietHoursStart
+    if (input.quietHoursEnd !== undefined) data.quietHoursEnd = input.quietHoursEnd
+    if (input.soundEnabled !== undefined) data.soundEnabled = input.soundEnabled
+    if (input.osNotificationEnabled !== undefined) {
+      data.osNotificationEnabled = input.osNotificationEnabled
+    }
+
+    const { userId: _u, userType: _t, ...update } = data
+    return this.prisma.notificationPreference.upsert({
+      where: { userId_userType: { userId, userType } },
+      create: data,
+      update,
+    })
+  }
+
+  // ── Preference enforcement (dipakai generator) ───────────────────────────────
+
+  private async getPreferenceMap(
+    recipients: Recipient[],
+  ): Promise<Map<string, NotificationPreference>> {
+    const ids = recipients.map(r => r.userId).filter((v): v is number => typeof v === 'number')
+    const types = recipients.map(r => r.userType).filter((v): v is string => typeof v === 'string')
+    const map = new Map<string, NotificationPreference>()
+    if (ids.length === 0 || types.length === 0) return map
+
+    const prefs = await this.prisma.notificationPreference.findMany({
+      where: { userId: { in: ids }, userType: { in: types } },
+    })
+    for (const p of prefs) map.set(`${p.userId}:${p.userType}`, p)
+    return map
+  }
+
+  private isQuietHours(
+    pref: Pick<NotificationPreference, 'quietHoursStart' | 'quietHoursEnd'>,
+    now = new Date(),
+  ): boolean {
+    const { quietHoursStart: start, quietHoursEnd: end } = pref
+    if (!start || !end) return false
+    const [sh, sm] = start.split(':').map(Number)
+    const [eh, em] = end.split(':').map(Number)
+    if ([sh, sm, eh, em].some(n => Number.isNaN(n))) return false
+    const cur = now.getHours() * 60 + now.getMinutes()
+    const s = sh * 60 + sm
+    const e = eh * 60 + em
+    if (s === e) return false
+    return s < e ? cur >= s && cur < e : cur >= s || cur < e
+  }
+
+  /**
+   * Saring penerima: buang yang mem-mute kategori tsb, dan (opsional) yang
+   * sedang dalam quiet hours untuk notifikasi non-CRITICAL.
+   */
+  private filterRecipients(
+    recipients: Recipient[],
+    prefMap: Map<string, NotificationPreference>,
+    category: string,
+    severity: 'WARNING' | 'CRITICAL',
+    enforceQuietHours = true,
+  ): Recipient[] {
+    return recipients.filter((r) => {
+      const pref = prefMap.get(`${r.userId}:${r.userType}`)
+      if (!pref) return true
+      if (pref.mutedCategories?.includes(category)) return false
+      if (enforceQuietHours && severity !== 'CRITICAL' && this.isQuietHours(pref)) return false
+      return true
+    })
+  }
+
+  /**
+   * Agenda bersifat time-critical (pengingat 5 menit sebelum / pagi hari),
+   * jadi hanya mute kategori yang ditegakkan di generator; quiet hours
+   * ditangani di klien (menahan notifikasi OS & suara).
+   */
+  private filterAgendaRecipients(
+    userIds: number[],
+    prefMap: Map<string, NotificationPreference>,
+  ): number[] {
+    return this.filterRecipients(
+      userIds.map(userId => ({ userId, userType: 'user_account' })),
+      prefMap,
+      'AGENDA',
+      'WARNING',
+      false,
+    ).map(r => r.userId as number)
   }
 
   // ── Expiry reminder generation (per-user copies) ────────────────────────────
@@ -283,6 +590,7 @@ export class NotificationsService {
     let resolved = 0
 
     const recipients = activeUsers.length > 0 ? activeUsers : [{ userId: undefined as number | undefined, userType: undefined as string | undefined }]
+    const prefMap = await this.getPreferenceMap(recipients)
 
     for (const triggerDay of TRIGGER_DAYS) {
       const targetDate = new Date(today.getTime() + triggerDay * 24 * 60 * 60 * 1000)
@@ -299,7 +607,7 @@ export class NotificationsService {
       })
       for (const c of contracts) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
-        for (const r of recipients) {
+        for (const r of this.filterRecipients(recipients, prefMap, 'KONTRAK_KARYAWAN', severity)) {
           const sourceType = `contract_${r.userId ?? 'all'}`
           try {
             await this.prisma.notification.create({
@@ -337,7 +645,7 @@ export class NotificationsService {
       })
       for (const d of docs) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
-        for (const r of recipients) {
+        for (const r of this.filterRecipients(recipients, prefMap, 'SERTIFIKASI_IJIN', severity)) {
           const sourceType = `employee_document_${r.userId ?? 'all'}`
           try {
             await this.prisma.notification.create({
@@ -374,7 +682,7 @@ export class NotificationsService {
       for (const v of vendors) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
         const companyName = v.company?.name ?? 'Vendor'
-        for (const r of recipients) {
+        for (const r of this.filterRecipients(recipients, prefMap, 'KONTRAK_VENDOR', severity)) {
           const sourceType = `vendor_contract_${r.userId ?? 'all'}`
           try {
             await this.prisma.notification.create({
@@ -410,7 +718,7 @@ export class NotificationsService {
       })
       for (const lk of legals) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
-        for (const r of recipients) {
+        for (const r of this.filterRecipients(recipients, prefMap, 'LEGAL_KOPERASI', severity)) {
           const sourceType = `legal_koperasi_${r.userId ?? 'all'}`
           try {
             await this.prisma.notification.create({
@@ -441,7 +749,7 @@ export class NotificationsService {
       })
       for (const archive of archives) {
         const daysText = triggerDay === 0 ? 'hari ini' : `${triggerDay} hari lagi`
-        for (const r of recipients) {
+        for (const r of this.filterRecipients(recipients, prefMap, 'ARSIP_UMUM', severity)) {
           const sourceType = `general_archive_${r.userId ?? 'all'}`
           try {
             await this.prisma.notification.create({
@@ -484,7 +792,7 @@ export class NotificationsService {
     for (const d of akanExpiredDocs) {
       const daysLeft = Math.ceil((startOfDay(d.expiryDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
       const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
-      for (const r of recipients) {
+      for (const r of this.filterRecipients(recipients, prefMap, 'SERTIFIKASI_IJIN', catchallSeverity)) {
         const sourceType = `employee_document_${r.userId ?? 'all'}`
         try {
           await this.prisma.notification.create({
@@ -522,7 +830,7 @@ export class NotificationsService {
     for (const c of akanHabisContracts) {
       const daysLeft = Math.ceil((startOfDay(c.endDate).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
       const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
-      for (const r of recipients) {
+      for (const r of this.filterRecipients(recipients, prefMap, 'KONTRAK_KARYAWAN', catchallSeverity)) {
         const sourceType = `contract_${r.userId ?? 'all'}`
         const notifData = {
           category: 'KONTRAK_KARYAWAN' as const,
@@ -565,7 +873,7 @@ export class NotificationsService {
       const daysLeft = Math.ceil((startOfDay(v.endDate!).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
       const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
       const companyName = v.company?.name ?? 'Vendor'
-      for (const r of recipients) {
+      for (const r of this.filterRecipients(recipients, prefMap, 'KONTRAK_VENDOR', catchallSeverity)) {
         const sourceType = `vendor_contract_${r.userId ?? 'all'}`
         try {
           await this.prisma.notification.create({
@@ -602,7 +910,7 @@ export class NotificationsService {
     for (const lk of akanBerakhirLegals) {
       const daysLeft = Math.ceil((startOfDay(lk.endDate!).getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
       const catchallSeverity = daysLeft <= 7 ? 'CRITICAL' : 'WARNING'
-      for (const r of recipients) {
+      for (const r of this.filterRecipients(recipients, prefMap, 'LEGAL_KOPERASI', catchallSeverity)) {
         const sourceType = `legal_koperasi_${r.userId ?? 'all'}`
         try {
           await this.prisma.notification.create({

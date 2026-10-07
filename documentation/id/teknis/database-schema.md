@@ -135,10 +135,29 @@ Tabel yang dipakai bersama oleh modul Dok. Karyawan (PERSONAL) dan Sertifikasi &
 | `triggerDay` | INT | Berapa hari sebelum expired (-1 = catch-all) |
 | `deeplink` | VARCHAR | URL navigasi saat klik |
 | `isRead` | BOOL | Status baca |
-| `resolvedAt` | DATETIME | Waktu di-resolve (null = aktif) |
+| `resolvedAt` | DATETIME | Waktu di-resolve oleh sistem (null = aktif) |
+| `dismissedAt` | DATETIME | Waktu disingkirkan oleh pengguna (null = tampil) |
+| `pinnedAt` | DATETIME | Waktu disematkan pengguna (null = tidak disematkan) |
 | `expiryDate` | DATE | Tanggal expired sumber |
 
 **Unique constraint:** `(sourceType, sourceId, triggerDay)`
+
+### `notification_preferences`
+
+Preferensi notifikasi per pengguna (mute kategori, jam tenang, suara, notifikasi sistem).
+
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| `id` | INT | Primary key |
+| `userId` | INT | ID pengguna |
+| `userType` | VARCHAR | master_admin / user_account |
+| `mutedCategories` | TEXT[] | Kategori yang tidak ingin diterima |
+| `quietHoursStart` | VARCHAR | Jam mulai tenang (mis. 21:00) |
+| `quietHoursEnd` | VARCHAR | Jam selesai tenang (mis. 07:00) |
+| `soundEnabled` | BOOL | Bunyikan nada saat notifikasi baru |
+| `osNotificationEnabled` | BOOL | Tampilkan notifikasi sistem operasi |
+
+**Unique constraint:** `(userId, userType)`
 
 ## Tabel Master Data
 

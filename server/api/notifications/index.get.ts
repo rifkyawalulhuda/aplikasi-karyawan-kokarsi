@@ -8,7 +8,12 @@ export default defineEventHandler(async (event) => {
 
   const query = getQuery(event)
   const params = new URLSearchParams()
-  if (query.limit) params.set('limit', String(query.limit))
+  for (const key of ['limit', 'cursor', 'category', 'severity', 'unread', 'q'] as const) {
+    const value = query[key]
+    if (value !== undefined && value !== null && value !== '') {
+      params.set(key, String(value))
+    }
+  }
   const qs = params.toString() ? `?${params.toString()}` : ''
 
   const res = await $fetch.raw(`${BACKEND}/notifications${qs}`, {

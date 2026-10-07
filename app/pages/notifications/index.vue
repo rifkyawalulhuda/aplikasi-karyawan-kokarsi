@@ -1,228 +1,185 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-import { getPaginationRowModel } from '@tanstack/table-core'
-import type { Row } from '@tanstack/table-core'
-import { h } from 'vue'
+import {
+  NOTIFICATION_CATEGORY_META,
+  NOTIFICATION_CATEGORY_ORDER,
+  NOTIFICATION_TIME_GROUPS,
+  notificationTimeGroup
+} from '~/utils/notification-meta'
+import type { AppNotification } from '~/composables/useNotifications'
 
 definePageMeta({ layout: 'default' })
 
-const UBadge = resolveComponent('UBadge')
-const UButton = resolveComponent('UButton')
-const UIcon = resolveComponent('UIcon')
-
-const router = useRouter()
-
 const {
-  notifications,
   unreadCount,
-  isLoading,
-  fetchNotifications,
+  summary,
   markAllRead,
-  markOneRead,
+  markMany,
+  dismissMany,
+  deleteAll
 } = useNotifications()
 
-onMounted(() => {
-  fetchNotifications(100)
-})
+const feed = useNotificationFeed({ limit: 20 })
+const {
+  items,
+  isLoading,
+  isLoadingMore,
+  hasMore,
+  error,
+  isEmpty,
+  hasActiveFilters,
+  filters,
+  loadMore,
+  markRead,
+  markUnread,
+  togglePin,
+  dismiss,
+  open: openNotification,
+  resetFilters
+} = feed
 
-// --- Maps ---
-const categoryIconMap: Record<string, string> = {
-  KONTRAK_KARYAWAN: 'i-lucide-file-text',
-  SERTIFIKASI_IJIN: 'i-lucide-file-badge',
-  KONTRAK_VENDOR: 'i-lucide-building-2',
-  LEGAL_KOPERASI: 'i-lucide-file-signature',
-  AGENDA: 'i-lucide-calendar-days',
-  SPACE: 'i-lucide-kanban',
+const toast = useToast()
+const { confirmActionToast } = useConfirmActionToast()
+
+const prefsOpen = ref(false)
+const selectMode = ref(false)
+const selectedIds = ref<Set<number>>(new Set())
+
+const categoryOptions = computed(() => [
+  { label: 'Semua Kategori', value: null as string | null },
+  ...NOTIFICATION_CATEGORY_ORDER.map(key => ({
+    label: NOTIFICATION_CATEGORY_META[key].label,
+    value: key as string | null
+  }))
+])
+
+const severityOptions = [
+  { label: 'Semua Tingkat', value: null as string | null },
+  { label: 'Peringatan', value: 'WARNING' as string | null },
+  { label: 'Kritis', value: 'CRITICAL' as string | null }
+]
+
+// ── Grup waktu + sematan ──────────────────────────────────────────────────────
+interface Group {
+  key: string
+  label: string
+  items: AppNotification[]
 }
 
-const categoryLabel: Record<string, string> = {
-  KONTRAK_KARYAWAN: 'Kontrak Karyawan',
-  SERTIFIKASI_IJIN: 'Sertifikasi & Ijin',
-  KONTRAK_VENDOR: 'Kontrak Vendor',
-  LEGAL_KOPERASI: 'Legal Koperasi',
-  AGENDA: 'Agenda',
-  SPACE: 'Space',
-  ARSIP_UMUM: 'Arsip Umum',
-}
+const groups = computed<Group[]>(() => {
+  const pinned = items.value.filter(n => n.pinnedAt)
+  const rest = items.value.filter(n => !n.pinnedAt)
 
-const severityLabel: Record<string, string> = {
-  WARNING: 'Peringatan',
-  CRITICAL: 'Kritis',
-}
-
-const severityColor: Record<string, string> = {
-  WARNING: 'warning',
-  CRITICAL: 'error',
-}
-
-// --- Filters ---
-const categoryFilter = ref('all')
-const severityFilter = ref('all')
-const readFilter = ref('all')
-const pagination = ref({ pageIndex: 0, pageSize: 20 })
-const table = useTemplateRef('table')
-
-// Active notifications only (resolvedAt is null)
-const activeNotifications = computed(() =>
-  notifications.value.filter(n => n.resolvedAt === null),
-)
-
-const counts = computed(() => ({
-  total: activeNotifications.value.length,
-  unread: activeNotifications.value.filter(n => !n.isRead).length,
-  critical: activeNotifications.value.filter(n => n.severity === 'CRITICAL').length,
-  warning: activeNotifications.value.filter(n => n.severity === 'WARNING').length,
-}))
-
-const filteredData = computed(() => {
-  let result = activeNotifications.value
-
-  if (categoryFilter.value !== 'all') {
-    result = result.filter(n => n.category === categoryFilter.value)
+  const result: Group[] = []
+  if (pinned.length > 0) result.push({ key: 'pinned', label: 'Disematkan', items: pinned })
+  for (const label of NOTIFICATION_TIME_GROUPS) {
+    const bucket = rest.filter(n => notificationTimeGroup(n.createdAt) === label)
+    if (bucket.length > 0) result.push({ key: label, label, items: bucket })
   }
-
-  if (severityFilter.value !== 'all') {
-    result = result.filter(n => n.severity === severityFilter.value)
-  }
-
-  if (readFilter.value === 'unread') {
-    result = result.filter(n => !n.isRead)
-  }
-  else if (readFilter.value === 'read') {
-    result = result.filter(n => n.isRead)
-  }
-
   return result
 })
 
-watch([categoryFilter, severityFilter, readFilter], () => {
-  table.value?.tableApi?.setPageIndex(0)
-})
-
-// --- Helpers ---
-function formatDate(date: string) {
-  if (!date) return '-'
-  return new Date(date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+// ── Aksi ──────────────────────────────────────────────────────────────────────
+async function handleOpen(item: AppNotification) {
+  await openNotification(item)
 }
 
-function relativeTime(dateStr: string) {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Baru saja'
-  if (mins < 60) return `${mins} menit lalu`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} jam lalu`
-  const days = Math.floor(hours / 24)
-  return `${days} hari lalu`
+function handleDismiss(item: AppNotification) {
+  dismiss(item).then((undo) => {
+    if (!undo) return
+    toast.add({
+      title: 'Notifikasi disingkirkan',
+      description: item.title,
+      icon: 'i-lucide-bell-off',
+      duration: 5000,
+      actions: [{ label: 'Urungkan', onClick: () => undo() }]
+    })
+  })
 }
 
-// --- Row click: mark read + navigate ---
-async function handleRowClick(notif: any) {
-  await markOneRead(notif.id)
-  await router.push(notif.deeplink)
-}
-
-// --- Tandai Semua Dibaca ---
 const isMarkingAll = ref(false)
 async function handleMarkAllRead() {
   isMarkingAll.value = true
-  await markAllRead()
-  isMarkingAll.value = false
+  try {
+    await markAllRead()
+    toast.add({ title: 'Semua notifikasi ditandai dibaca', icon: 'i-lucide-check-check', duration: 3000 })
+  } finally {
+    isMarkingAll.value = false
+  }
 }
 
-// --- Columns ---
-type AppNotificationRow = (typeof notifications.value)[number]
+function handleDeleteAll() {
+  confirmActionToast({
+    title: 'Hapus Semua Notifikasi',
+    description: 'Semua notifikasi aktif akan disingkirkan. Anda dapat mengurungkannya.',
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    confirmLabel: 'Hapus Semua',
+    confirmColor: 'error',
+    onConfirm: async () => {
+      await deleteAll()
+      resetFilters()
+      toast.add({ title: 'Semua notifikasi dihapus', icon: 'i-lucide-trash-2', duration: 3000 })
+    }
+  })
+}
 
-const columns: TableColumn<AppNotificationRow>[] = [
-  {
-    id: 'status',
-    header: '',
-    size: 32,
-    cell: ({ row }: { row: Row<AppNotificationRow> }) =>
-      h('div', { class: 'flex items-center justify-center' }, [
-        h('span', {
-          class: [
-            'inline-block size-2 rounded-full flex-shrink-0',
-            row.original.isRead ? 'bg-muted' : 'bg-primary',
-          ],
-          title: row.original.isRead ? 'Sudah dibaca' : 'Belum dibaca',
-        }),
-      ]),
-  },
-  {
-    id: 'category',
-    header: 'Kategori',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) => {
-      const cat = row.original.category
-      return h('div', { class: 'flex items-center gap-1.5' }, [
-        h(UIcon, {
-          name: categoryIconMap[cat] ?? 'i-lucide-bell',
-          class: 'size-4 text-muted flex-shrink-0',
-        }),
-        h(UBadge, {
-          label: categoryLabel[cat] ?? cat,
-          color: 'neutral',
-          variant: 'subtle',
-          size: 'sm',
-        }),
-      ])
-    },
-  },
-  {
-    id: 'pesan',
-    header: 'Pesan',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) =>
-      h('div', { class: 'min-w-0' }, [
-        h('p', {
-          class: ['text-sm font-medium truncate', row.original.isRead ? 'text-muted' : 'text-default'],
-        }, row.original.title),
-        h('p', { class: 'text-xs text-muted mt-0.5 line-clamp-1' }, row.original.message),
-      ]),
-  },
-  {
-    id: 'severity',
-    header: 'Tingkat',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) => {
-      const s = row.original.severity
-      return h(UBadge, {
-        label: severityLabel[s] ?? s,
-        color: severityColor[s] ?? 'neutral',
-        variant: 'subtle',
-        size: 'sm',
-      })
-    },
-  },
-  {
-    id: 'expiryDate',
-    header: 'Tgl. Expired',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) =>
-      h('span', { class: 'text-sm text-muted whitespace-nowrap' }, formatDate(row.original.expiryDate)),
-  },
-  {
-    id: 'createdAt',
-    header: 'Dibuat',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) =>
-      h('span', { class: 'text-xs text-muted whitespace-nowrap' }, relativeTime(row.original.createdAt)),
-  },
-  {
-    id: 'actions',
-    header: 'Aksi',
-    cell: ({ row }: { row: Row<AppNotificationRow> }) =>
-      h('div', { class: 'flex justify-end' }, [
-        h(UButton, {
-          label: 'Buka Dokumen',
-          size: 'xs',
-          color: 'primary',
-          variant: 'ghost',
-          trailingIcon: 'i-lucide-arrow-right',
-          onClick: (e: MouseEvent) => {
-            e.stopPropagation()
-            handleRowClick(row.original)
-          },
-        }),
-      ]),
-  },
-]
+// ── Mode pilih ────────────────────────────────────────────────────────────────
+function enterSelectMode() {
+  selectMode.value = true
+  selectedIds.value = new Set()
+}
+
+function exitSelectMode() {
+  selectMode.value = false
+  selectedIds.value = new Set()
+}
+
+function toggleSelected(id: number) {
+  const next = new Set(selectedIds.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selectedIds.value = next
+}
+
+function isGroupFullySelected(group: Group) {
+  return group.items.length > 0 && group.items.every(n => selectedIds.value.has(n.id))
+}
+
+function toggleGroup(group: Group) {
+  const next = new Set(selectedIds.value)
+  const all = isGroupFullySelected(group)
+  for (const item of group.items) {
+    if (all) next.delete(item.id)
+    else next.add(item.id)
+  }
+  selectedIds.value = next
+}
+
+const selectedCount = computed(() => selectedIds.value.size)
+
+async function bulkMarkRead() {
+  const ids = [...selectedIds.value]
+  if (ids.length === 0) return
+  await markMany(ids, true)
+  exitSelectMode()
+  toast.add({ title: `${ids.length} notifikasi ditandai dibaca`, icon: 'i-lucide-check', duration: 3000 })
+}
+
+async function bulkDismiss() {
+  const ids = [...selectedIds.value]
+  if (ids.length === 0) return
+  await dismissMany(ids)
+  exitSelectMode()
+  toast.add({ title: `${ids.length} notifikasi disingkirkan`, icon: 'i-lucide-bell-off', duration: 3000 })
+}
+
+// ── Ringkasan ─────────────────────────────────────────────────────────────────
+const stats = computed(() => [
+  { label: 'Total Aktif', value: summary.value.total, color: 'neutral' as const, icon: 'i-lucide-inbox' },
+  { label: 'Belum Dibaca', value: summary.value.unread, color: 'primary' as const, icon: 'i-lucide-mail' },
+  { label: 'Kritis', value: summary.value.bySeverity?.CRITICAL ?? 0, color: 'error' as const, icon: 'i-lucide-circle-alert' },
+  { label: 'Peringatan', value: summary.value.bySeverity?.WARNING ?? 0, color: 'warning' as const, icon: 'i-lucide-triangle-alert' }
+])
 </script>
 
 <template>
@@ -233,142 +190,263 @@ const columns: TableColumn<AppNotificationRow>[] = [
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            v-if="unreadCount > 0"
-            label="Tandai Semua Dibaca"
-            icon="i-lucide-check-check"
-            color="neutral"
-            variant="outline"
-            size="sm"
-            :loading="isMarkingAll"
-            @click="handleMarkAllRead"
-          />
+          <div class="flex items-center gap-1.5">
+            <UButton
+              v-if="!selectMode"
+              label="Pilih"
+              icon="i-lucide-list-checks"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :disabled="items.length === 0"
+              @click="enterSelectMode"
+            />
+            <UButton
+              v-else
+              label="Batal"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              @click="exitSelectMode"
+            />
+            <UButton
+              v-if="unreadCount > 0 && !selectMode"
+              label="Tandai Semua Dibaca"
+              icon="i-lucide-check-check"
+              color="neutral"
+              variant="outline"
+              size="sm"
+              :loading="isMarkingAll"
+              @click="handleMarkAllRead"
+            />
+            <UButton
+              icon="i-lucide-settings-2"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              aria-label="Preferensi notifikasi"
+              @click="prefsOpen = true"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="ghost"
+              size="sm"
+              aria-label="Hapus semua notifikasi"
+              :disabled="summary.total === 0"
+              @click="handleDeleteAll"
+            />
+          </div>
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <!-- Subtitle -->
-      <p class="text-sm text-muted mb-4">
-        Pengingat masa berlaku dokumen
-      </p>
-
-      <!-- Stats bar -->
-      <div class="flex flex-wrap gap-3 mb-4">
-        <UBadge variant="subtle" color="neutral" size="lg">
-          Total Aktif: {{ counts.total }}
-        </UBadge>
-        <UBadge variant="subtle" color="primary" size="lg">
-          Belum Dibaca: {{ counts.unread }}
-        </UBadge>
-        <UBadge variant="subtle" color="error" size="lg">
-          Kritis: {{ counts.critical }}
-        </UBadge>
-        <UBadge variant="subtle" color="warning" size="lg">
-          Peringatan: {{ counts.warning }}
-        </UBadge>
-      </div>
-
-      <!-- Filters -->
-      <div class="flex flex-wrap items-center gap-2 mb-4">
-        <USelect
-          v-model="categoryFilter"
-          :items="[
-            { label: 'Semua Kategori', value: 'all' },
-            { label: 'Kontrak Karyawan', value: 'KONTRAK_KARYAWAN' },
-            { label: 'Sertifikasi & Ijin', value: 'SERTIFIKASI_IJIN' },
-            { label: 'Kontrak Vendor', value: 'KONTRAK_VENDOR' },
-            { label: 'Legal Koperasi', value: 'LEGAL_KOPERASI' },
-            { label: 'Agenda', value: 'AGENDA' },
-            { label: 'Space', value: 'SPACE' },
-          ]"
-          placeholder="Kategori"
-          class="min-w-48"
-        />
-        <USelect
-          v-model="severityFilter"
-          :items="[
-            { label: 'Semua Tingkat', value: 'all' },
-            { label: 'Peringatan', value: 'WARNING' },
-            { label: 'Kritis', value: 'CRITICAL' },
-          ]"
-          placeholder="Tingkat"
-          class="min-w-36"
-        />
-        <USelect
-          v-model="readFilter"
-          :items="[
-            { label: 'Semua Status Baca', value: 'all' },
-            { label: 'Belum Dibaca', value: 'unread' },
-            { label: 'Sudah Dibaca', value: 'read' },
-          ]"
-          placeholder="Status baca"
-          class="min-w-44"
-        />
-      </div>
-
-      <!-- Table -->
-      <UTable
-        ref="table"
-        v-model:pagination="pagination"
-        :pagination-options="{ getPaginationRowModel: getPaginationRowModel() }"
-        class="shrink-0"
-        :data="filteredData"
-        :columns="columns"
-        :loading="isLoading"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0',
-          tr: 'cursor-pointer hover:bg-elevated/60 transition-colors',
-        }"
-        @select="(row: any) => handleRowClick(row)"
-      >
-        <!-- Unread row highlight via class on tr -->
-        <template #tr="{ row }">
-          <tr
-            :class="[
-              'cursor-pointer hover:bg-elevated/60 transition-colors min-h-[44px]',
-              !row.original.isRead ? 'bg-primary/5' : '',
-            ]"
-            @click="handleRowClick(row.original)"
+      <div class="flex flex-col gap-4">
+        <!-- Stats -->
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div
+            v-for="stat in stats"
+            :key="stat.label"
+            class="flex items-center gap-3 rounded-xl border border-default bg-elevated/30 px-4 py-3"
           >
-            <td
-              v-for="cell in row.getVisibleCells()"
-              :key="cell.id"
-              class="border-b border-default px-3 py-2.5"
+            <div
+              class="flex size-9 items-center justify-center rounded-lg"
+              :class="{
+                'bg-neutral-500/10 text-neutral-500': stat.color === 'neutral',
+                'bg-primary/10 text-primary': stat.color === 'primary',
+                'bg-red-500/10 text-red-500': stat.color === 'error',
+                'bg-amber-500/10 text-amber-500': stat.color === 'warning'
+              }"
             >
-              <component :is="cell.column.columnDef.cell as any" :row="(row as any)" :cell="(cell as any)" />
-            </td>
-          </tr>
-        </template>
-
-        <template #empty>
-          <div class="flex flex-col items-center gap-2 py-12 text-muted">
-            <UIcon name="i-lucide-bell-off" class="size-10 opacity-40" />
-            <p class="text-sm">
-              Tidak ada notifikasi aktif
-            </p>
+              <UIcon :name="stat.icon" class="size-4" />
+            </div>
+            <div class="min-w-0">
+              <p class="text-lg font-semibold leading-none text-highlighted">
+                {{ stat.value }}
+              </p>
+              <p class="mt-1 truncate text-xs text-muted">
+                {{ stat.label }}
+              </p>
+            </div>
           </div>
-        </template>
-      </UTable>
-
-      <!-- Pagination -->
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          Menampilkan {{ filteredData.length }} notifikasi
         </div>
-        <UPagination
-          :key="`pagination-${pagination.pageSize}`"
-          :page="pagination.pageIndex + 1"
-          :items-per-page="pagination.pageSize"
-          :total="filteredData.length"
-          @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
-        />
+
+        <!-- Filter -->
+        <div class="flex flex-wrap items-center gap-2">
+          <UInput
+            v-model="filters.q"
+            icon="i-lucide-search"
+            placeholder="Cari notifikasi…"
+            size="sm"
+            class="min-w-56 flex-1"
+          />
+          <USelect
+            v-model="filters.category"
+            :items="categoryOptions"
+            placeholder="Kategori"
+            size="sm"
+            class="min-w-44"
+          />
+          <USelect
+            v-model="filters.severity"
+            :items="severityOptions"
+            placeholder="Tingkat"
+            size="sm"
+            class="min-w-36"
+          />
+          <UButton
+            :color="filters.unread ? 'primary' : 'neutral'"
+            :variant="filters.unread ? 'solid' : 'outline'"
+            icon="i-lucide-mail"
+            size="sm"
+            label="Belum dibaca"
+            @click="filters.unread = !filters.unread"
+          />
+          <UButton
+            v-if="hasActiveFilters"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            label="Reset"
+            @click="resetFilters()"
+          />
+        </div>
+
+        <!-- Daftar -->
+        <div class="overflow-hidden rounded-xl border border-default">
+          <!-- Loading skeleton -->
+          <div v-if="isLoading" class="divide-y divide-default">
+            <div v-for="n in 6" :key="n" class="flex items-start gap-3 p-4">
+              <USkeleton class="size-8 shrink-0 rounded-full" />
+              <div class="flex-1 space-y-2">
+                <USkeleton class="h-3 w-1/4 rounded" />
+                <USkeleton class="h-3 w-3/5 rounded" />
+                <USkeleton class="h-2.5 w-1/5 rounded" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Error -->
+          <div v-else-if="error" class="flex flex-col items-center gap-3 px-6 py-16 text-center">
+            <UIcon name="i-lucide-cloud-off" class="size-10 text-muted opacity-60" />
+            <p class="text-sm text-muted">
+              {{ error }}
+            </p>
+            <UButton
+              label="Coba lagi"
+              icon="i-lucide-refresh-cw"
+              size="sm"
+              color="neutral"
+              variant="subtle"
+              @click="feed.fetchFirstPage()"
+            />
+          </div>
+
+          <!-- Kosong -->
+          <div v-else-if="isEmpty" class="flex flex-col items-center gap-2 px-6 py-16 text-center">
+            <UIcon name="i-lucide-bell-off" class="size-10 text-muted opacity-40" />
+            <p class="text-sm font-medium text-default">
+              {{ hasActiveFilters ? 'Tidak ada notifikasi yang cocok' : 'Tidak ada notifikasi aktif' }}
+            </p>
+            <p class="max-w-sm text-xs text-muted">
+              {{ hasActiveFilters ? 'Coba ubah filter atau kata kunci pencarian.' : 'Anda akan diberi tahu saat ada dokumen yang mendekati kedaluwarsa.' }}
+            </p>
+            <UButton
+              v-if="hasActiveFilters"
+              label="Reset filter"
+              size="sm"
+              color="neutral"
+              variant="subtle"
+              @click="resetFilters()"
+            />
+          </div>
+
+          <!-- Grup -->
+          <div v-else>
+            <div v-for="group in groups" :key="group.key">
+              <div class="flex items-center justify-between border-b border-default bg-elevated/50 px-4 py-2">
+                <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  {{ group.label }}
+                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-muted">{{ group.items.length }}</span>
+                  <UButton
+                    v-if="selectMode"
+                    size="xs"
+                    color="neutral"
+                    variant="link"
+                    :label="isGroupFullySelected(group) ? 'Batal pilih' : 'Pilih semua'"
+                    @click="toggleGroup(group)"
+                  />
+                </div>
+              </div>
+              <ul class="divide-y divide-default">
+                <li v-for="item in group.items" :key="item.id">
+                  <NotificationItem
+                    :item="item"
+                    :select-mode="selectMode"
+                    :selected="selectedIds.has(item.id)"
+                    @open="handleOpen"
+                    @toggle-select="toggleSelected(item.id)"
+                    @mark-read="markRead"
+                    @mark-unread="markUnread"
+                    @pin="togglePin"
+                    @dismiss="handleDismiss"
+                  />
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="hasMore" class="border-t border-default p-3">
+              <UButton
+                label="Muat lebih banyak"
+                color="neutral"
+                variant="subtle"
+                size="sm"
+                block
+                :loading="isLoadingMore"
+                @click="loadMore"
+              />
+            </div>
+          </div>
+        </div>
+
+        <p class="text-xs text-muted">
+          Menampilkan {{ items.length }} notifikasi aktif{{ hasMore ? ' (masih ada lagi)' : '' }}
+        </p>
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Bar aksi bulk -->
+  <div
+    v-if="selectMode"
+    class="fixed inset-x-0 bottom-4 z-50 mx-auto flex w-fit items-center gap-3 rounded-full border border-default bg-default px-4 py-2 shadow-lg"
+  >
+    <span class="text-xs text-muted">{{ selectedCount }} dipilih</span>
+    <div class="flex items-center gap-1.5">
+      <UButton
+        label="Tandai dibaca"
+        icon="i-lucide-check"
+        size="xs"
+        color="neutral"
+        variant="subtle"
+        :disabled="selectedCount === 0"
+        @click="bulkMarkRead"
+      />
+      <UButton
+        label="Singkirkan"
+        icon="i-lucide-bell-off"
+        size="xs"
+        color="error"
+        variant="subtle"
+        :disabled="selectedCount === 0"
+        @click="bulkDismiss"
+      />
+    </div>
+  </div>
+
+  <NotificationPreferencesDialog v-model:open="prefsOpen" />
 </template>
