@@ -426,14 +426,22 @@ const links = computed<NavigationMenuItem[]>(() => [
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <div :class="collapsed ? 'flex flex-col items-center gap-1 w-full' : 'flex items-center justify-between w-full gap-2'">
+        <!-- Rail (collapsed) hanya 64px: menumpuk logo (40px) + lonceng (32px)
+             = 76px sehingga tombol logo terpotong atasnya dan lonceng meluber
+             ke baris pencarian. Saat collapsed cukup logo saja; lonceng
+             dipindah ke area menu di bawah (lihat slot #default). -->
+        <div :class="collapsed ? 'flex items-center justify-center w-full' : 'flex items-center justify-between w-full gap-2'">
           <TeamsMenu :collapsed="collapsed" />
-          <NotificationBell :collapsed="collapsed" />
+          <NotificationBell v-if="!collapsed" :collapsed="collapsed" />
         </div>
       </template>
 
       <template #default="{ collapsed }">
         <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default" />
+
+        <!-- Rail: lonceng notifikasi sejajar dengan ikon menu lain. Tooltip
+             kanan tetap memberi label, jadi fungsinya tidak hilang saat tutup. -->
+        <NotificationBell v-if="collapsed" collapsed />
 
         <UNavigationMenu
           :collapsed="collapsed"
