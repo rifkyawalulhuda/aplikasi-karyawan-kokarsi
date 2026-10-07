@@ -17,13 +17,28 @@ const props = withDefaults(defineProps<{
 })
 
 const { editing, isVisible } = useDashboardLayout()
+const drag = useDashboardDragContext()
 
 const title = computed(() => props.titleOverride ?? props.widget.title)
 const hidden = computed(() => !isVisible(props.widget.id))
+
+/** Sedang diangkat (pointer drag atau mode grab keyboard). */
+const lifted = computed(() =>
+  drag?.activeId.value === props.widget.id || drag?.grabbedId.value === props.widget.id
+)
+
+function onHandleDown(e: PointerEvent) {
+  drag?.onHandlePointerDown(e, props.widget.id)
+}
+function onHandleKeydown(e: KeyboardEvent) {
+  drag?.onHandleKeyDown(e, props.widget.id)
+}
 </script>
 
 <template>
   <div
+    :data-widget-id="widget.id"
+    :data-flip-key="widget.id"
     :class="[
       widget.spanClass,
       'transition-opacity duration-200',
@@ -34,13 +49,28 @@ const hidden = computed(() => !isVisible(props.widget.id))
     <UCard
       v-if="variant === 'card'"
       :ui="{ ...DASHBOARD_CARD_UI, body: bodyUi ?? DASHBOARD_CARD_UI.body }"
-      :class="autoHeight ? '' : 'h-full'"
+      :class="[
+        autoHeight ? '' : 'h-full',
+        lifted ? 'ring-2 ring-primary ring-dashed' : ''
+      ]"
     >
       <template #header>
         <div class="flex items-center justify-between gap-2">
           <div class="flex min-w-0 items-center gap-2">
+            <button
+              v-if="editing"
+              type="button"
+              class="dashboard-drag-handle -ml-1 flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-accented/60 hover:text-highlighted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:cursor-grabbing"
+              :aria-label="`Tahan dan geser ${title} untuk mengubah urutan`"
+              :aria-pressed="lifted"
+              @pointerdown="onHandleDown"
+              @keydown="onHandleKeydown"
+            >
+              <UIcon name="i-lucide-grip-vertical" class="size-4" aria-hidden="true" />
+            </button>
             <UIcon
-              :name="editing ? 'i-lucide-grip-vertical' : widget.icon"
+              v-else
+              :name="widget.icon"
               class="size-4 shrink-0 text-muted"
               aria-hidden="true"
             />
@@ -62,11 +92,26 @@ const hidden = computed(() => !isVisible(props.widget.id))
     </UCard>
 
     <!-- Varian polos: header teks + slot (mis. grid beberapa kartu) -->
-    <section v-else>
+    <section
+      v-else
+      :class="lifted ? 'rounded-lg ring-2 ring-primary ring-dashed' : ''"
+    >
       <div class="mb-3 flex items-center justify-between gap-2">
         <div class="flex min-w-0 items-center gap-2">
+          <button
+            v-if="editing"
+            type="button"
+            class="dashboard-drag-handle -ml-1 flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted transition-colors hover:bg-accented/60 hover:text-highlighted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary active:cursor-grabbing"
+            :aria-label="`Tahan dan geser ${title} untuk mengubah urutan`"
+            :aria-pressed="lifted"
+            @pointerdown="onHandleDown"
+            @keydown="onHandleKeydown"
+          >
+            <UIcon name="i-lucide-grip-vertical" class="size-4" aria-hidden="true" />
+          </button>
           <UIcon
-            :name="editing ? 'i-lucide-grip-vertical' : widget.icon"
+            v-else
+            :name="widget.icon"
             class="size-4 shrink-0 text-muted"
             aria-hidden="true"
           />

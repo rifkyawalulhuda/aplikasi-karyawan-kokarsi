@@ -21,7 +21,7 @@ const props = defineProps<{
 }>()
 
 const auth = useAuthStore()
-const { order, visibleWidgets, editing } = useDashboardLayout()
+const { order, visibleWidgets, editing, setOrder } = useDashboardLayout()
 
 const COMPONENTS: Record<string, Component> = {
   kpi: KpiWidget,
@@ -48,8 +48,54 @@ function isAllowed(id: string) {
   return true
 }
 
+// ── Drag & drop ─────────────────────────────────────────────────────────────
+const gridRef = ref<HTMLElement | null>(null)
+
+// Urutan transien: dimutasi selama drag; layout asli hanya ditulis saat drop.
+const transientOrder = ref<string[]>([...order.value])
+watch(order, (value) => {
+  if (!drag.isDragging.value && !drag.grabbedId.value) transientOrder.value = [...value]
+})
+
+const flip = useFlip()
+
+function gridWidgetEls(): HTMLElement[] {
+  if (!gridRef.value) return []
+  return [...gridRef.value.querySelectorAll<HTMLElement>('[data-widget-id]')]
+}
+
+/** Terapkan urutan baru + animasi FLIP. */
+function applyOrder(ids: string[]) {
+  const before = flip.first(gridWidgetEls())
+  transientOrder.value = ids
+  nextTick(() => flip.play(before, gridWidgetEls()))
+}
+
+const announceMsg = ref('')
+
+const drag = useDashboardDrag({
+  container: gridRef,
+  order: transientOrder,
+  isEnabled: editing,
+  reorder: applyOrder,
+  onDrop(id) {
+    const next = transientOrder.value
+    const changed = next.length !== order.value.length || next.some((x, i) => x !== order.value[i])
+    if (!changed) return
+    setOrder(next)
+    const idx = next.indexOf(id)
+    const title = DASHBOARD_WIDGET_MAP[id]?.title ?? id
+    announceMsg.value = `${title} dipindah ke posisi ${idx + 1} dari ${next.length}.`
+  },
+  announce(message) {
+    announceMsg.value = message
+  }
+})
+
+provide(DASHBOARD_DRAG_KEY, drag)
+
 const renderedWidgets = computed(() =>
-  (editing.value ? order.value : visibleWidgets.value).filter(isAllowed)
+  (editing.value ? transientOrder.value : visibleWidgets.value).filter(isAllowed)
 )
 
 function widgetProps(id: string) {
@@ -58,12 +104,21 @@ function widgetProps(id: string) {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 xl:grid-cols-6">
-    <component
-      :is="COMPONENTS[id]"
-      v-for="id in renderedWidgets"
-      :key="id"
-      v-bind="widgetProps(id)"
-    />
+  <div>
+    <div
+      ref="gridRef"
+      class="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2 xl:grid-cols-6"
+    >
+      <component
+        :is="COMPONENTS[id]"
+        v-for="id in renderedWidgets"
+        :key="id"
+        v-bind="widgetProps(id)"
+      />
+    </div>
+
+    <p class="sr-only" role="status" aria-live="polite">
+      {{ announceMsg }}
+    </p>
   </div>
 </template>

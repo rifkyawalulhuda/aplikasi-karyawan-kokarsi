@@ -36,6 +36,7 @@ interface UseDashboardLayout {
   isVisible: (id: string) => boolean
   canMove: (id: string, dir: -1 | 1) => boolean
   move: (id: string, dir: -1 | 1) => void
+  setOrder: (ids: string[]) => void
   toggleHidden: (id: string) => void
   reset: () => void
   applyPreset: (preset: DashboardLayoutPreset) => void
@@ -90,6 +91,11 @@ export const useDashboardLayout = createSharedComposable((): UseDashboardLayout 
     persist({ order: next, hidden: hidden.value })
   }
 
+  /** Ganti urutan sekaligus (dipakai drag & drop saat drop). */
+  function setOrder(ids: string[]) {
+    persist({ order: ids, hidden: hidden.value })
+  }
+
   function toggleHidden(id: string) {
     const next = hidden.value.includes(id)
       ? hidden.value.filter(x => x !== id)
@@ -117,6 +123,7 @@ export const useDashboardLayout = createSharedComposable((): UseDashboardLayout 
     isVisible,
     canMove,
     move,
+    setOrder,
     toggleHidden,
     reset,
     applyPreset

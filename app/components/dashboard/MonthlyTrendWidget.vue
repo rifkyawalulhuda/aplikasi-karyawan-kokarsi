@@ -157,7 +157,7 @@ const cards = computed(() => [
             />
             <VisAxis type="y" :num-ticks="4" :grid-line="true" />
             <VisCrosshair :template="tooltip" :color="() => '#3b82f6'" />
-            <VisTooltip />
+            <VisTooltip class-name="dashboard-chart-tooltip" />
           </VisXYContainer>
 
           <template #fallback>

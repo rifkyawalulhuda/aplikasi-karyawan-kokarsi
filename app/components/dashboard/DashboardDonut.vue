@@ -23,16 +23,61 @@ function pct(value: number) {
   return total.value > 0 ? Math.round((value / total.value) * 100) : 0
 }
 
+function formatNumber(value: number) {
+  return value.toLocaleString('id-ID')
+}
+
+/** Cegah label (mis. nama departemen) merusak markup tooltip. */
+function escapeHtml(value: string) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
 const valueAccessor = (d: DashboardChartDatum) => d.value
 const colorAccessor = (d: DashboardChartDatum) => d.color
 
+/**
+ * Datum yang terikat pada tiap segmen donut adalah objek ARC dari Unovis —
+ * datum aslinya tersimpan di properti `data`. Mengakses `arc.label` langsung
+ * menghasilkan `undefined` (inilah bug tooltip "Undefined").
+ */
+interface DonutArcDatum {
+  data?: DashboardChartDatum
+  value?: number
+}
+
+/**
+ * Tooltip informatif: titik warna + label, nilai + satuan, dan porsi terhadap
+ * total. Mewarisi warna teks dari Unovis (`currentColor`) agar ikut tema;
+ * garis sekunder cukup diredupkan dengan `opacity`.
+ */
+function tooltipTemplate(arc: DonutArcDatum): string | null {
+  const d = arc?.data
+  if (!d) return null
+  const share = pct(d.value)
+  return `
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;line-height:1.2">
+      <span style="flex:0 0 auto;width:8px;height:8px;border-radius:9999px;background:${d.color}"></span>
+      <span>${escapeHtml(d.label)}</span>
+    </div>
+    <div style="margin-top:4px;display:flex;align-items:baseline;gap:5px;font-size:12px;line-height:1.2">
+      <span style="font-weight:700;font-variant-numeric:tabular-nums">${formatNumber(d.value)}</span>
+      <span style="opacity:.7">${escapeHtml(props.unit)}</span>
+      <span style="opacity:.7">·</span>
+      <span style="opacity:.7;font-variant-numeric:tabular-nums">${share}% dari ${formatNumber(total.value)}</span>
+    </div>
+  `
+}
+
 const triggers = computed(() => ({
-  [VisDonutSelectors.segment]: (d: DashboardChartDatum) =>
-    `<div style="font-weight:600">${d.label}</div><div>${d.value} ${props.unit} (${pct(d.value)}%)</div>`
+  [VisDonutSelectors.segment]: (arc: DonutArcDatum) => tooltipTemplate(arc)
 }))
 
 const ariaLabel = computed(() =>
-  `Diagram lingkaran: ${props.data.map(d => `${d.label} ${d.value}`).join(', ')}`
+  `Diagram lingkaran: ${props.data.map(d => `${d.label} ${d.value} ${props.unit} (${pct(d.value)}%)`).join(', ')}`
 )
 </script>
 
@@ -48,7 +93,7 @@ const ariaLabel = computed(() =>
             :central-label="String(total)"
             :central-sub-label="centerSubLabel"
           />
-          <VisTooltip :triggers="triggers" />
+          <VisTooltip class-name="dashboard-chart-tooltip" :triggers="triggers" />
         </VisSingleContainer>
       </div>
 

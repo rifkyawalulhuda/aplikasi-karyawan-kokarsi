@@ -75,7 +75,7 @@ const offboardingTicks = computed(() => offboarding.value.map(d => d.year))
             />
             <VisAxis type="y" :num-ticks="4" :grid-line="true" />
             <VisCrosshair :template="recruitmentTooltip" color="#3b82f6" />
-            <VisTooltip />
+            <VisTooltip class-name="dashboard-chart-tooltip" />
           </VisXYContainer>
 
           <template #fallback>
@@ -124,7 +124,7 @@ const offboardingTicks = computed(() => offboarding.value.map(d => d.year))
             />
             <VisAxis type="y" :num-ticks="4" :grid-line="true" />
             <VisCrosshair :template="offboardingTooltip" :color="() => '#f43f5e'" />
-            <VisTooltip />
+            <VisTooltip class-name="dashboard-chart-tooltip" />
           </VisXYContainer>
 
           <template #fallback>
