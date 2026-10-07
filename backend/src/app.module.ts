@@ -26,6 +26,7 @@ import { ActivityLogModule } from './activity-log/activity-log.module'
 import { OperationalVehicleUsageModule } from './operational-vehicle-usage/operational-vehicle-usage.module'
 import { GeneralArchivesModule } from './general-archives/general-archives.module'
 import { DashboardModule } from './dashboard/dashboard.module'
+import { SearchModule } from './search/search.module'
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { DashboardModule } from './dashboard/dashboard.module'
     OperationalVehicleUsageModule,
     GeneralArchivesModule,
     DashboardModule,
+    SearchModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,
