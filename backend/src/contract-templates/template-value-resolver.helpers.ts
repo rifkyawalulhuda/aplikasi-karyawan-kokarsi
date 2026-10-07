@@ -24,6 +24,9 @@ const MONTHS_EN = [
 
 const DAYS_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']
 
+/** Nama hari Inggris — pasangan `DAYS_ID` untuk kolom EN PKWT. */
+const DAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
 const NUMBER_WORDS_ID: Record<number, string> = {
   0: 'nol', 1: 'satu', 2: 'dua', 3: 'tiga', 4: 'empat', 5: 'lima',
   6: 'enam', 7: 'tujuh', 8: 'delapan', 9: 'sembilan', 10: 'sepuluh',
@@ -73,6 +76,11 @@ export function getIndonesianDayName(d: Date): string {
   return DAYS_ID[d.getDay()]
 }
 
+/** "Monday" — pasangan Inggris dari `getIndonesianDayName`. */
+export function getEnglishDayName(d: Date): string {
+  return DAYS_EN[d.getDay()]
+}
+
 function isLastDayOfMonth(d: Date): boolean {
   const next = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
   return next.getDate() === 1
@@ -120,6 +128,17 @@ export function deriveDuration(start: Date, end: Date): string {
 /** "hari Senin tanggal 31 bulan Agustus tahun 2026" — sesuai format sample MITRA. */
 export function deriveHariTanggal(d: Date): string {
   return `hari ${getIndonesianDayName(d)} tanggal ${d.getDate()} bulan ${MONTHS_ID[d.getMonth()]} tahun ${d.getFullYear()}`
+}
+
+/**
+ * "Monday, 31 August 2026" — pasangan Inggris dari `deriveHariTanggal`.
+ *
+ * Dipakai HANYA untuk kolom EN PKWT; lihat `MONTHS_EN` soal penyimpangan dari
+ * master. Tanpa varian ini, kolom kanan mencetak nama hari/bulan Indonesia di
+ * tengah naskah Inggris.
+ */
+export function deriveHariTanggalEn(d: Date): string {
+  return `${getEnglishDayName(d)}, ${formatEnglishDate(d)}`
 }
 
 /** Format rupiah sederhana "Rp 4.500.000" */
@@ -245,7 +264,11 @@ export function resolvePlaceholderValue(key: string, ctx: ResolveContext): Resol
     }
     case 'doc.hariTanggal': {
       const d = contract.signedDate ?? contract.startDate
-      return { value: deriveHariTanggal(d), displayValue: deriveHariTanggal(d) }
+      return {
+        value: deriveHariTanggal(d),
+        displayValue: deriveHariTanggal(d),
+        displayValueEn: deriveHariTanggalEn(d),
+      }
     }
     default:
       break

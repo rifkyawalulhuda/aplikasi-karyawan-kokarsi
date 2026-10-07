@@ -60,6 +60,7 @@ export const PKWT_PREVIEW_VALUES: Record<string, string> = {
  * tercetak:
  *   - `employee.gender`   → `genderLabel(raw, 'EN')`
  *   - tanggal & rentang   → `formatEnglishDate` / `deriveTermRangeEn`
+ *   - `doc.hariTanggal`   → `deriveHariTanggalEn` (`Monday, 31 August 2026`)
  */
 export const PKWT_PREVIEW_VALUES_EN: Record<string, string> = {
   ...PKWT_PREVIEW_VALUES,
@@ -70,4 +71,5 @@ export const PKWT_PREVIEW_VALUES_EN: Record<string, string> = {
   'contract.signedDate': '2 July 2026',
   'contract.termRange': '2 July 2026 - 1 July 2027',
   'doc.docDate': '2 July 2026',
+  'doc.hariTanggal': 'Thursday, 2 July 2026',
 }

@@ -4,6 +4,7 @@ import {
   deriveTermRangeEn,
   deriveDuration,
   deriveHariTanggal,
+  deriveHariTanggalEn,
   formatIndonesianDate,
   formatEnglishDate,
   genderLabel,
@@ -118,6 +119,18 @@ describe('deriveHariTanggal', () => {
   })
 })
 
+describe('deriveHariTanggalEn', () => {
+  it('nama hari & bulan Inggris, dipisah koma', () => {
+    // 31 Agustus 2026 adalah Senin → Monday
+    expect(deriveHariTanggalEn(d('2026-08-31'))).toBe('Monday, 31 August 2026')
+  })
+  it('tanpa kata Indonesia (hari/tanggal/bulan) dan tanpa bulan Indonesia', () => {
+    const out = deriveHariTanggalEn(d('2026-07-02'))
+    expect(out).toBe('Thursday, 2 July 2026')
+    expect(out).not.toMatch(/hari|tanggal|bulan|Juli/)
+  })
+})
+
 describe('resolvePlaceholderValue', () => {
   const baseCtx = {
     contract: {
@@ -152,6 +165,13 @@ describe('resolvePlaceholderValue', () => {
   it('doc.hariTanggal pakai signedDate', () => {
     const r = resolvePlaceholderValue('doc.hariTanggal', baseCtx as any)!
     expect(r.displayValue).toContain('Senin')
+  })
+  it('doc.hariTanggal punya varian Inggris untuk kolom EN PKWT', () => {
+    // signedDate = 31 Agustus 2026 (Senin). Tanpa displayValueEn, kolom Inggris
+    // ikut mencetak "hari Senin tanggal 31 bulan Agustus tahun 2026".
+    const r = resolvePlaceholderValue('doc.hariTanggal', baseCtx as any)!
+    expect(r.displayValueEn).toBe('Monday, 31 August 2026')
+    expect(r.displayValueEn).not.toMatch(/hari|tanggal|bulan|Agustus/)
   })
   it('doc.docDate fallback ke startDate bila signedDate kosong', () => {
     const ctx = { ...baseCtx, contract: { ...baseCtx.contract, signedDate: null } }

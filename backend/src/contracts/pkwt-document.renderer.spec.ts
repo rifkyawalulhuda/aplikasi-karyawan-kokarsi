@@ -384,4 +384,9 @@ describe('PKWT_PREVIEW_VALUES', () => {
     expect(PKWT_PREVIEW_VALUES['employee.gender']).toBe('Laki-laki')
     expect(PKWT_PREVIEW_VALUES_EN['employee.gender']).toBe('Male')
   })
+
+  it('doc.hariTanggal tampil Indonesia di kolom ID dan Inggris di kolom EN', () => {
+    expect(PKWT_PREVIEW_VALUES['doc.hariTanggal']).toBe('Kamis, 2 Juli 2026')
+    expect(PKWT_PREVIEW_VALUES_EN['doc.hariTanggal']).toBe('Thursday, 2 July 2026')
+  })
 })
