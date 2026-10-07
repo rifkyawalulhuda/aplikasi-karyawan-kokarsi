@@ -10,7 +10,7 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const selectedFile = ref<File | null>(null)
 const loading = ref(false)
 const templateLoading = ref(false)
-const result = ref<{ imported: number; errors: Array<{ row: number; message: string }> } | null>(null)
+const result = ref<{ imported: number, errors: Array<{ row: number, message: string }> } | null>(null)
 const isDragging = ref(false)
 
 const showResult = computed(() => result.value !== null)
@@ -29,7 +29,7 @@ async function handleDownloadTemplate() {
   try {
     const blob = await $fetch<Blob>('/api/lookups/companies/import-template', {
       method: 'GET',
-      responseType: 'blob',
+      responseType: 'blob'
     })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -46,7 +46,7 @@ async function handleDownloadTemplate() {
     toast.add({
       title: 'Gagal mengunduh template',
       description: msg,
-      color: 'error',
+      color: 'error'
     })
   } finally {
     templateLoading.value = false
@@ -119,13 +119,13 @@ async function onImport() {
   try {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
-    const res = await $fetch<{ imported: number; errors: Array<{ row: number; message: string }> }>(
+    const res = await $fetch<{ imported: number, errors: Array<{ row: number, message: string }> }>(
       '/api/lookups/companies/bulk-import',
       {
         method: 'POST',
         body: formData,
-        credentials: 'include',
-      },
+        credentials: 'include'
+      }
     )
     result.value = res
 
@@ -140,14 +140,14 @@ async function onImport() {
       toast.add({
         title: 'Import selesai dengan error',
         description: `${res.imported} berhasil, ${res.errors.length} gagal`,
-        color: 'warning',
+        color: 'warning'
       })
     }
   } catch (e: any) {
     toast.add({
       title: 'Gagal import data',
       description: e?.data?.message ?? 'Terjadi kesalahan saat import',
-      color: 'error',
+      color: 'error'
     })
   } finally {
     loading.value = false
@@ -169,8 +169,12 @@ async function onImport() {
           <div class="flex items-center gap-3">
             <UIcon name="i-lucide-file-spreadsheet" class="w-6 h-6 text-success" />
             <div>
-              <p class="text-sm font-medium text-highlighted">Template Excel</p>
-              <p class="text-xs text-muted">Unduh template untuk format import perusahaan</p>
+              <p class="text-sm font-medium text-highlighted">
+                Template Excel
+              </p>
+              <p class="text-xs text-muted">
+                Unduh template untuk format import perusahaan
+              </p>
             </div>
           </div>
           <UButton
@@ -201,7 +205,9 @@ async function onImport() {
             <p class="text-sm font-medium text-highlighted mb-1">
               Tarik & lepas file Excel di sini
             </p>
-            <p class="text-xs text-muted mb-4">atau klik untuk pilih file (format .xlsx, maks 5MB)</p>
+            <p class="text-xs text-muted mb-4">
+              atau klik untuk pilih file (format .xlsx, maks 5MB)
+            </p>
             <UButton
               label="Pilih File"
               icon="i-lucide-folder-open"
@@ -215,7 +221,7 @@ async function onImport() {
               accept=".xlsx,.xls"
               class="hidden"
               @change="onFileInputChange"
-            />
+            >
           </div>
         </div>
 
@@ -225,8 +231,12 @@ async function onImport() {
             <div class="flex items-center gap-3 min-w-0">
               <UIcon name="i-lucide-file-spreadsheet" class="w-8 h-8 text-success shrink-0" />
               <div class="min-w-0">
-                <p class="text-sm font-medium text-highlighted truncate">{{ selectedFile.name }}</p>
-                <p class="text-xs text-muted">{{ (selectedFile.size / 1024).toFixed(1) }} KB</p>
+                <p class="text-sm font-medium text-highlighted truncate">
+                  {{ selectedFile.name }}
+                </p>
+                <p class="text-xs text-muted">
+                  {{ (selectedFile.size / 1024).toFixed(1) }} KB
+                </p>
               </div>
             </div>
             <UButton
@@ -263,14 +273,20 @@ async function onImport() {
 
           <div v-if="result!.errors.length > 0" class="rounded-xl border border-error/30 overflow-hidden">
             <div class="bg-error/10 px-4 py-2 border-b border-error/30">
-              <p class="text-sm font-semibold text-error">Detail Error</p>
+              <p class="text-sm font-semibold text-error">
+                Detail Error
+              </p>
             </div>
             <div class="max-h-[200px] overflow-y-auto">
               <table class="w-full text-sm">
                 <thead class="bg-elevated/50 sticky top-0">
                   <tr>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Baris</th>
-                    <th class="px-3 py-2 text-left font-medium text-muted">Pesan Error</th>
+                    <th class="px-3 py-2 text-left font-medium text-muted">
+                      Baris
+                    </th>
+                    <th class="px-3 py-2 text-left font-medium text-muted">
+                      Pesan Error
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -279,8 +295,12 @@ async function onImport() {
                     :key="i"
                     class="border-t border-default"
                   >
-                    <td class="px-3 py-2 text-muted">{{ err.row }}</td>
-                    <td class="px-3 py-2 text-error text-xs">{{ err.message }}</td>
+                    <td class="px-3 py-2 text-muted">
+                      {{ err.row }}
+                    </td>
+                    <td class="px-3 py-2 text-error text-xs">
+                      {{ err.message }}
+                    </td>
                   </tr>
                 </tbody>
               </table>
