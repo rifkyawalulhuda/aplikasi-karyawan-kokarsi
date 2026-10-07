@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Space, SpaceAnnouncement } from '~/types/space'
+import { errorMessage } from './board-meta'
 
 const props = defineProps<{
   space: Space
@@ -8,7 +9,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ updated: [] }>()
 
-const requestFetch = useRequestFetch()
 const toast = useToast()
 
 // Load announcements
@@ -16,6 +16,16 @@ const { data: announcements, refresh } = useFetch<SpaceAnnouncement[]>(
   () => `/api/spaces/${props.spaceId}/announcements`,
   { credentials: 'include', lazy: true }
 )
+
+// Realtime: pembaruan pengumuman dari user lain → muat ulang daftar
+const sse = useSpaceSseContext()
+watch(() => sse?.events.value ?? [], (list) => {
+  const latest = list[list.length - 1]
+  if (!latest) return
+  if (latest.type === 'ANNOUNCEMENT_CREATED' || latest.type === 'ANNOUNCEMENT_UPDATED' || latest.type === 'ANNOUNCEMENT_DELETED') {
+    refresh()
+  }
+}, { deep: true })
 
 const collapsed = ref(false)
 const adding = ref(false)
@@ -29,14 +39,14 @@ async function addAnnouncement() {
     await $fetch(`/api/spaces/${props.spaceId}/announcements`, {
       method: 'POST',
       body: { content: newContent.value.trim(), isPinned: true },
-      credentials: 'include',
+      credentials: 'include'
     })
     newContent.value = ''
     adding.value = false
     refresh()
     emit('updated')
-  } catch (e: any) {
-    toast.add({ title: 'Gagal menambahkan pengumuman', description: e?.data?.message ?? 'Error', color: 'error' })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal menambahkan pengumuman', description: errorMessage(err), color: 'error' })
   } finally {
     saving.value = false
   }
@@ -47,7 +57,7 @@ function onUpdated() {
   emit('updated')
 }
 
-function onDeleted(annId: number) {
+function onDeleted() {
   refresh()
   emit('updated')
 }
@@ -99,13 +109,25 @@ const hasAnnouncements = computed(() => (announcements.value?.length ?? 0) > 0)
           @keydown.escape="adding = false; newContent = ''"
         />
         <div class="mt-2 flex gap-1.5">
-          <UButton label="Posting" size="xs" color="primary" :loading="saving" @click="addAnnouncement" />
-          <UButton label="Batal" size="xs" color="neutral" variant="ghost" @click="adding = false; newContent = ''" />
+          <UButton
+            label="Posting"
+            size="xs"
+            color="primary"
+            :loading="saving"
+            @click="addAnnouncement"
+          />
+          <UButton
+            label="Batal"
+            size="xs"
+            color="neutral"
+            variant="ghost"
+            @click="adding = false; newContent = ''"
+          />
         </div>
       </div>
 
       <!-- Announcements -->
-      <div class="group relative" v-for="ann in announcements ?? []" :key="ann.id">
+      <div v-for="ann in announcements ?? []" :key="ann.id" class="group relative">
         <SpacesSpaceAnnouncement
           :announcement="ann"
           :space-id="spaceId"

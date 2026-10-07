@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { errorMessage } from './board-meta'
 import { Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -12,7 +13,7 @@ const props = withDefaults(defineProps<{
   memberMap?: Record<number, string>
   spaceId?: number // Untuk upload gambar
 }>(), {
-  editable: true,
+  editable: true
 })
 
 const emit = defineEmits<{
@@ -79,15 +80,15 @@ async function uploadImage(file: File): Promise<string | null> {
     const res = await $fetch<{ url: string }>(`/api/spaces/${props.spaceId}/documents/upload-image`, {
       method: 'POST',
       body: formData,
-      credentials: 'include',
+      credentials: 'include'
     })
 
     return res.url
-  } catch (e: any) {
-    toast.add({ 
-      title: 'Upload Gagal', 
-      description: e?.data?.message ?? e?.message ?? 'Gagal mengupload gambar', 
-      color: 'error' 
+  } catch (err: unknown) {
+    toast.add({
+      title: 'Upload Gagal',
+      description: errorMessage(err),
+      color: 'error'
     })
     return null
   } finally {
@@ -111,7 +112,7 @@ async function handleFileSelect(event: Event) {
     insertImage(url, imageAlt.value)
     closeImageModal()
   }
-  
+
   // Reset input
   input.value = ''
 }
@@ -144,7 +145,7 @@ function closeImageModal() {
 // Handle drop event
 async function handleDrop(event: DragEvent) {
   if (!props.editable) return
-  
+
   const files = event.dataTransfer?.files
   if (!files?.length) return
 
@@ -165,7 +166,7 @@ async function handleDrop(event: DragEvent) {
 
 // Handle paste event (for clipboard images)
 // Returns boolean synchronously (tiptap requirement), uploads async fire-and-forget
-function handlePaste(_view: any, event: ClipboardEvent): boolean {
+function handlePaste(_view: unknown, event: ClipboardEvent): boolean {
   const items = event.clipboardData?.items
   if (!items) return false
 
@@ -174,7 +175,7 @@ function handlePaste(_view: any, event: ClipboardEvent): boolean {
       event.preventDefault()
       const file = item.getAsFile()
       if (file) {
-        uploadImage(file).then(url => {
+        uploadImage(file).then((url) => {
           if (url) insertImage(url)
         })
       }
@@ -191,16 +192,16 @@ onMounted(() => {
     extensions: [
       StarterKit,
       Placeholder.configure({
-        placeholder: props.placeholder ?? 'Mulai menulis...',
+        placeholder: props.placeholder ?? 'Mulai menulis...'
       }),
       Typography,
       Image.configure({
         inline: false,
         allowBase64: false,
         HTMLAttributes: {
-          class: 'tiptap-image',
-        },
-      }),
+          class: 'tiptap-image'
+        }
+      })
     ],
     content: parseContent(props.modelValue),
     editable: props.editable ?? true,
@@ -223,8 +224,8 @@ onMounted(() => {
           return true
         }
         return false
-      },
-    },
+      }
+    }
   })
 })
 
@@ -267,7 +268,7 @@ const tools = [
   { icon: 'i-lucide-image', action: openImageModal, isActive: () => false, title: 'Insert Image' },
   { separator: true },
   { icon: 'i-lucide-undo', action: () => editor.value?.chain().focus().undo().run(), isActive: () => false, title: 'Undo' },
-  { icon: 'i-lucide-redo', action: () => editor.value?.chain().focus().redo().run(), isActive: () => false, title: 'Redo' },
+  { icon: 'i-lucide-redo', action: () => editor.value?.chain().focus().redo().run(), isActive: () => false, title: 'Redo' }
 ]
 </script>
 
@@ -340,8 +341,12 @@ const tools = [
               <UIcon name="i-lucide-upload" class="size-6 text-muted" />
             </div>
             <div class="text-center">
-              <p class="font-medium text-highlighted">Klik atau drag gambar ke sini</p>
-              <p class="text-xs text-muted mt-1">Maksimal 5MB • JPG, PNG, WebP</p>
+              <p class="font-medium text-highlighted">
+                Klik atau drag gambar ke sini
+              </p>
+              <p class="text-xs text-muted mt-1">
+                Maksimal 5MB • JPG, PNG, WebP
+              </p>
             </div>
             <input
               ref="fileInputRef"
@@ -349,7 +354,7 @@ const tools = [
               accept="image/jpeg,image/png,image/webp"
               class="hidden"
               @change="handleFileSelect"
-            />
+            >
           </div>
 
           <!-- Alt text -->
@@ -379,20 +384,27 @@ const tools = [
 
           <!-- Preview -->
           <div v-if="imageUrl" class="rounded-lg border border-default p-2">
-            <p class="mb-2 text-xs text-muted">Preview:</p>
+            <p class="mb-2 text-xs text-muted">
+              Preview:
+            </p>
             <img
               :src="imageUrl"
               :alt="imageAlt || 'Preview'"
               class="max-h-40 w-full rounded object-contain"
               @error="(e) => (e.target as HTMLImageElement).style.display = 'none'"
-            />
+            >
           </div>
         </div>
       </template>
 
       <template #footer>
         <div class="flex justify-end gap-2">
-          <UButton label="Batal" color="neutral" variant="ghost" @click="closeImageModal" />
+          <UButton
+            label="Batal"
+            color="neutral"
+            variant="ghost"
+            @click="closeImageModal"
+          />
           <UButton
             v-if="imageTab === 'url'"
             label="Tambahkan"

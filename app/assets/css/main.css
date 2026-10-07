@@ -52,6 +52,39 @@ body.dashboard-dragging * {
   }
 }
 
+/* ── Board (Space) drag & drop ─────────────────────────────────────────────── */
+body.board-dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+body.board-dragging * {
+  cursor: grabbing !important;
+}
+
+/* Ghost kartu/kolom yang mengikuti kursor. */
+.board-drag-ghost {
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4), 0 8px 16px -8px rgb(0 0 0 / 0.3);
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+  opacity: 0.97;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* Daftar kartu dalam kolom: scroll halus + area drag. */
+.board-col-list {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-drag-ghost {
+    transition: none !important;
+  }
+}
+
 /* ── Tooltip chart dashboard (Unovis) ──────────────────────────────────────── */
 /* Unovis mengaktifkan tema gelapnya lewat `html.dark-theme`, sedangkan Nuxt UI
    memakai `html.dark` — jadi tema gelap tooltip di-override manual di sini. */

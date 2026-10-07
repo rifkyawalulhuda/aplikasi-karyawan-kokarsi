@@ -1,4 +1,16 @@
+import type { InjectionKey, Ref } from 'vue'
 import type { SpaceEvent } from '~/types/space'
+
+/** Key untuk membagikan satu koneksi SSE Space ke seluruh subtree halaman. */
+export const SPACE_SSE_KEY: InjectionKey<{
+  events: Ref<SpaceEvent[]>
+  connected: Ref<boolean>
+}> = Symbol('space-sse')
+
+/** Baca event SSE Space dari ancestor (halaman [id].vue). Null bila tidak tersedia. */
+export function useSpaceSseContext() {
+  return inject(SPACE_SSE_KEY, null)
+}
 
 export function useSpaceSSE(spaceId: Ref<number | null>) {
   const events = ref<SpaceEvent[]>([])
