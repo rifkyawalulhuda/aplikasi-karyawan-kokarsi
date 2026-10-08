@@ -8,6 +8,7 @@ import {
   formatContractDate,
   formatCurrency
 } from '~/utils/contract-timeline'
+import type { ContractSegment } from '~/utils/contract-timeline'
 
 const props = withDefaults(defineProps<{
   contracts: Contract[]
@@ -27,6 +28,19 @@ const STATUS_ORDER = ['AKTIF', 'AKAN_HABIS', 'EXPIRED', 'SELESAI', 'DIBATALKAN',
 const activeStatuses = ref<Set<string>>(new Set())
 const hoveredId = ref<number | null>(null)
 const detailScrollRef = ref<HTMLElement | null>(null)
+
+// Tooltip segmen: dirender di body (fixed) agar tidak terpotong ancestor dan
+// ter-klamp ke viewport sehingga tidak meluber di segmen paling kiri/kanan.
+interface SegmentTooltip {
+  x: number
+  top: number
+  placement: 'top' | 'bottom'
+  visible: boolean
+  contractNo: string
+  meta: string
+}
+const tooltip = ref<SegmentTooltip | null>(null)
+const tooltipEl = ref<HTMLElement | null>(null)
 
 // ── Filter status ────────────────────────────────────────────────────────────
 const statusCounts = computed(() => {
@@ -104,13 +118,68 @@ function scrollToContract(id: number) {
   })
 }
 
+function showTooltip(event: MouseEvent | FocusEvent, seg: ContractSegment) {
+  const el = event.currentTarget as HTMLElement
+  const rect = el.getBoundingClientRect()
+  const anchorTop = rect.top
+  const anchorBottom = rect.bottom
+
+  tooltip.value = {
+    x: rect.left + rect.width / 2,
+    top: anchorTop,
+    placement: 'top',
+    visible: false,
+    contractNo: seg.contract.contractNo,
+    meta: `${seg.durationLabel} · ${CONTRACT_STATUS_LABEL[seg.status] ?? seg.status}`
+  }
+
+  // Ukur dulu, lalu klamp posisi horizontal ke dalam track (bukan viewport,
+  // agar tidak meluber dari kartu/modal) & pilih atas/bawah.
+  nextTick(() => {
+    const node = tooltipEl.value
+    const state = tooltip.value
+    if (!node || !state) return
+
+    const pad = 10
+    const half = node.offsetWidth / 2
+    const height = node.offsetHeight
+
+    const track = el.parentElement?.getBoundingClientRect()
+    let x = state.x
+    if (track) {
+      const minX = track.left + half + pad
+      const maxX = track.right - half - pad
+      x = minX > maxX
+        ? (track.left + track.right) / 2
+        : Math.min(Math.max(state.x, minX), maxX)
+    }
+
+    let placement: 'top' | 'bottom' = 'top'
+    let top = anchorTop - pad
+    if (anchorTop - height - pad < pad) {
+      placement = 'bottom'
+      top = anchorBottom + pad
+    }
+
+    tooltip.value = { ...state, x, top, placement, visible: true }
+  })
+}
+
+function hideTooltip() {
+  tooltip.value = null
+}
+
 // Sorot & gulir ke kontrak yang barisnya tadi diklik di tabel.
 function focusSelected() {
   if (props.selectedContractId == null) return
   nextTick(() => scrollToContract(props.selectedContractId as number))
 }
 
-onMounted(focusSelected)
+onMounted(() => {
+  focusSelected()
+  window.addEventListener('scroll', hideTooltip, true)
+})
+onBeforeUnmount(() => window.removeEventListener('scroll', hideTooltip, true))
 watch(() => props.selectedContractId, focusSelected)
 </script>
 
@@ -173,26 +242,20 @@ watch(() => props.selectedContractId, focusSelected)
           v-for="(seg, si) in timeline.segments"
           :key="seg.contract.id"
           type="button"
-          class="contract-seg-in group absolute inset-y-2 rounded-md ring-1 ring-black/5 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          class="contract-seg-in absolute inset-y-2 rounded-md ring-1 ring-black/5 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           :class="[
             CONTRACT_STATUS_BAR[seg.status] ?? 'bg-accented',
             isDimmed(seg.status) ? 'opacity-25' : 'opacity-100',
             hoveredId === seg.contract.id || selectedContractId === seg.contract.id ? 'ring-2 ring-primary/60' : ''
           ]"
           :style="{ left: `${seg.leftPct}%`, width: `max(${seg.widthPct}%, 10px)`, animationDelay: `${si * 60}ms` }"
-          :aria-label="`Kontrak ${seg.contract.contractNo}, ${seg.durationLabel}`"
-          :title="`${seg.contract.contractNo} · ${seg.durationLabel}`"
-          @mouseenter="hoveredId = seg.contract.id"
-          @mouseleave="hoveredId = null"
+          :aria-label="`Kontrak ${seg.contract.contractNo}, ${seg.durationLabel}, ${CONTRACT_STATUS_LABEL[seg.status] ?? seg.status}`"
+          @mouseenter="hoveredId = seg.contract.id; showTooltip($event, seg)"
+          @mouseleave="hoveredId = null; hideTooltip()"
+          @focus="showTooltip($event, seg)"
+          @blur="hideTooltip()"
           @click="scrollToContract(seg.contract.id)"
-        >
-          <span
-            class="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border border-default bg-default px-2.5 py-1.5 text-left text-xs shadow-lg group-hover:block"
-          >
-            <span class="block font-mono font-medium text-highlighted">{{ seg.contract.contractNo }}</span>
-            <span class="block text-muted">{{ seg.durationLabel }} · {{ CONTRACT_STATUS_LABEL[seg.status] ?? seg.status }}</span>
-          </span>
-        </button>
+        />
 
         <!-- Penanda hari ini -->
         <div
@@ -365,5 +428,28 @@ watch(() => props.selectedContractId, focusSelected)
         </div>
       </article>
     </div>
+
+    <!-- Tooltip segmen: fixed di body agar tak terpotong & tak meluber -->
+    <Teleport to="body">
+      <div
+        v-if="tooltip"
+        ref="tooltipEl"
+        role="tooltip"
+        class="pointer-events-none fixed z-[100] max-w-[calc(100vw-1rem)] rounded-lg border border-default bg-default px-2.5 py-1.5 text-xs shadow-lg transition-opacity duration-100"
+        :style="{
+          left: `${tooltip.x}px`,
+          top: `${tooltip.top}px`,
+          transform: tooltip.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+          opacity: tooltip.visible ? 1 : 0
+        }"
+      >
+        <p class="font-mono font-medium text-highlighted">
+          {{ tooltip.contractNo }}
+        </p>
+        <p class="mt-0.5 text-muted">
+          {{ tooltip.meta }}
+        </p>
+      </div>
+    </Teleport>
   </div>
 </template>
