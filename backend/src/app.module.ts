@@ -27,6 +27,7 @@ import { OperationalVehicleUsageModule } from './operational-vehicle-usage/opera
 import { GeneralArchivesModule } from './general-archives/general-archives.module'
 import { DashboardModule } from './dashboard/dashboard.module'
 import { SearchModule } from './search/search.module'
+import { OrgStructureModule } from './org-structure/org-structure.module'
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SearchModule } from './search/search.module'
     GeneralArchivesModule,
     DashboardModule,
     SearchModule,
+    OrgStructureModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,

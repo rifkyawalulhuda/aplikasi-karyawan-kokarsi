@@ -25,6 +25,12 @@ const links = computed<NavigationMenuItem[]>(() => [
     onSelect: () => { open.value = false },
   },
   {
+    label: 'Struktur Organisasi',
+    icon: 'i-lucide-network',
+    to: '/struktur-organisasi',
+    onSelect: () => { open.value = false },
+  },
+  {
     label: 'Kontrak',
     icon: 'i-lucide-file-text',
     to: '/kontrak',

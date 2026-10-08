@@ -656,6 +656,41 @@ export function useExport() {
     return true
   }
 
+  function exportOrgStructureExcel(nodes: any[], periodName?: string, filename = 'struktur-organisasi') {
+    if (!nodes.length) return false
+    const statusLabel: Record<string, string> = {
+      AKTIF: 'Aktif',
+      AKAN_BERAKHIR: 'Akan Berakhir',
+      EXPIRED: 'Expired',
+      TIDAK_AKTIF: 'Tidak Aktif'
+    }
+    const nameById = new Map<number, any>(nodes.map(n => [n.id, n]))
+    const rows = nodes.map((n, i) => ({
+      'No': i + 1,
+      'Nama': n.name ?? '-',
+      'Jabatan': n.position ?? '-',
+      'Unit Usaha': n.unitUsaha ?? '-',
+      'Atasan': n.parentId && nameById.has(n.parentId) ? nameById.get(n.parentId).name : '-',
+      'No. SK': n.skNumber ?? '-',
+      'Tanggal SK': fmt(n.skDate),
+      'Masa Jabatan Mulai': fmt(n.startDate),
+      'Masa Jabatan Selesai': fmt(n.endDate),
+      'Status': statusLabel[n.status] ?? n.status ?? '-',
+      'Keterangan': n.notes ?? '-'
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 28 }, { wch: 24 }, { wch: 20 }, { wch: 28 },
+      { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 36 }
+    ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Struktur Organisasi')
+    const suffix = periodName ? `-${periodName.replace(/[^\w-]+/g, '_')}` : ''
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
+    return true
+  }
+
   return {
     exportExcel,
     exportPDF,
@@ -667,6 +702,7 @@ export function useExport() {
     exportActivityLogsExcel,
     exportOperationalVehicleUsagesExcel,
     exportGeneralArchivesExcel,
-    exportMasterDataExcel
+    exportMasterDataExcel,
+    exportOrgStructureExcel
   }
 }

@@ -1,0 +1,33 @@
+import { defineEventHandler, getCookie, getMethod, getQuery, readBody } from 'h3'
+
+export default defineEventHandler(async (event) => {
+  const method = getMethod(event)
+  const query = getQuery(event)
+  const token = getCookie(event, 'auth_token') ?? ''
+  const authHeader: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {}
+
+  const params = new URLSearchParams()
+  if (query.periodId !== undefined && query.periodId !== null) {
+    params.set('periodId', String(query.periodId))
+  }
+  const qs = params.toString() ? `?${params.toString()}` : ''
+
+  const body = method !== 'GET' ? await readBody(event) : undefined
+
+  try {
+    return await $fetch(`${BACKEND}/org-structure/nodes${qs}`, {
+      method: method as any,
+      headers: authHeader,
+      body,
+    })
+  } catch (error: any) {
+    const msg = error?.data?.message
+    throw createError({
+      statusCode: error?.statusCode ?? error?.response?.status ?? 500,
+      statusMessage: typeof msg === 'string' ? msg : 'Gagal memproses jabatan struktur organisasi',
+      data: { message: typeof msg === 'string' ? msg : 'Gagal memproses jabatan struktur organisasi' },
+    })
+  }
+})

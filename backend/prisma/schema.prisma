@@ -132,6 +132,7 @@ model Employee {
   masterAdmin       MasterAdmin?
   warningLetters    WarningLetter[]
   employeeDocuments EmployeeDocument[]
+  orgPositions      OrgPosition[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -870,4 +871,56 @@ model ActivityLog {
   @@index([timestamp])
   @@index([performedBy])
   @@map("activity_logs")
+}
+
+enum OrgPositionStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+model OrgPeriod {
+  id        Int           @id @default(autoincrement())
+  name      String        @db.VarChar(255)
+  startDate DateTime      @db.Date
+  endDate   DateTime?     @db.Date
+  isActive  Boolean       @default(true)
+  notes     String?       @db.Text
+  nodes     OrgPosition[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("org_periods")
+}
+
+model OrgPosition {
+  id         Int               @id @default(autoincrement())
+  periodId   Int
+  parentId   Int?
+  employeeId Int?
+  name       String            @db.VarChar(255)
+  position   String            @db.VarChar(255)
+  unitUsaha  String?           @db.VarChar(255)
+  photoUrl   String?           @db.VarChar(500)
+  skNumber   String?           @db.VarChar(255)
+  skDate     DateTime?         @db.Date
+  startDate  DateTime?         @db.Date
+  endDate    DateTime?         @db.Date
+  status     OrgPositionStatus @default(AKTIF)
+  sortOrder  Int               @default(0)
+  notes      String?           @db.Text
+
+  period   OrgPeriod     @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  parent   OrgPosition?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children OrgPosition[] @relation("OrgHierarchy")
+  employee Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([periodId])
+  @@index([parentId])
+  @@map("org_positions")
 }

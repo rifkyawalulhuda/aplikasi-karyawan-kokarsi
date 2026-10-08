@@ -1,0 +1,20 @@
+import type { InjectionKey, Ref } from 'vue'
+import type { OrgNode } from '~/types/org-structure'
+
+export interface OrgChartContext {
+  canManage: boolean
+  collapsed: Set<number>
+  dragId: Ref<number | null>
+  dropTargetId: Ref<number | null>
+  canDrop: (dragId: number, targetId: number) => boolean
+  onDragStart: (node: OrgNode) => void
+  onDragEnd: () => void
+  onDropOn: (target: OrgNode) => void
+  toggle: (id: number) => void
+  select: (node: OrgNode) => void
+  addChild: (node: OrgNode) => void
+  edit: (node: OrgNode) => void
+  remove: (node: OrgNode) => void
+}
+
+export const orgChartKey: InjectionKey<OrgChartContext> = Symbol('orgChart')
