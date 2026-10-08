@@ -2,10 +2,21 @@ import type { OrgNode, OrgChartDisplay } from '~/types/org-structure'
 
 const MM_TO_PX = 96 / 25.4
 const PAGE_MARGIN_MM = 10
+// Ruang aman (mm) agar pembulatan sub-pixel tidak memicu halaman kedua yang kosong.
+const SAFETY_MM = 1
+
+export type OrgChartPaperSize = 'A4' | 'A3'
+
+/** Dimensi kertas potret (mm). */
+const PAPER: Record<OrgChartPaperSize, { w: number; h: number }> = {
+  A4: { w: 210, h: 297 },
+  A3: { w: 297, h: 420 },
+}
 
 interface PrintOptions {
   title: string
   display: OrgChartDisplay
+  paper?: OrgChartPaperSize
 }
 
 const STATUS_STYLE: Record<string, { label: string, bg: string, fg: string, bd: string }> = {
@@ -68,14 +79,16 @@ function buildTree(nodes: OrgNode[], display: OrgChartDisplay): string {
 const PRINT_STYLE = `
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   html, body { margin: 0; padding: 0; background: #fff; color: #0f172a; }
-  /* width: max-content penting agar konten diukur pada ukuran intrinsiknya,
-     tidak terpengaruh lebar viewport iframe (yang disembunyikan). */
-  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; width: max-content; min-width: 100%; }
+  /* Lebar body dikunci via JS ke lebar area cetak; #chart pakai max-content agar
+     diukur pada ukuran intrinsiknya, lepas dari lebar viewport iframe. */
+  body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
   .hdr { text-align: center; margin-bottom: 14px; }
   .hdr h1 { font-size: 18px; margin: 0 0 2px; letter-spacing: -0.01em; }
   .hdr .sub { font-size: 12px; color: #64748b; }
-  #stage { margin: 0 auto; width: max-content; }
-  #chart { transform-origin: top left; width: max-content; }
+  /* stage dikunci ke ukuran hasil skala & memotong luapan; #chart dikeluarkan dari
+     alur (absolute) supaya tinggi tak-ter-skala tidak ikut memanjangkan dokumen. */
+  #stage { position: relative; margin: 0 auto; overflow: hidden; }
+  #chart { position: absolute; top: 0; left: 0; transform-origin: top left; width: max-content; }
   .tree { display: flex; justify-content: center; align-items: flex-start; list-style: none; margin: 0; padding: 0; }
   .branch { position: relative; display: flex; flex-direction: column; align-items: center; padding: 26px 10px 0; }
   .branch::before, .branch::after { content: ''; position: absolute; top: 0; height: 26px; width: calc(50% + 1px); border-top: 2px solid #94a3b8; }
@@ -156,22 +169,27 @@ export function useOrgChartPrint() {
 
       const contentW = Math.ceil(chart.getBoundingClientRect().width)
       const contentH = Math.ceil(chart.getBoundingClientRect().height)
-      const headerH = hdr ? Math.ceil(hdr.getBoundingClientRect().height) + 14 : 0
 
-      // Area cetak A4 (mm) dikurangi margin.
-      const PORTRAIT = { w: 210 - PAGE_MARGIN_MM * 2, h: 297 - PAGE_MARGIN_MM * 2 }
-      const LANDSCAPE = { w: 297 - PAGE_MARGIN_MM * 2, h: 210 - PAGE_MARGIN_MM * 2 }
+      const paper = PAPER[opts.paper ?? 'A4']
+      // Area cetak (mm) dikurangi margin.
+      const portrait = { w: paper.w - PAGE_MARGIN_MM * 2, h: paper.h - PAGE_MARGIN_MM * 2 }
+      const landscape = { w: paper.h - PAGE_MARGIN_MM * 2, h: paper.w - PAGE_MARGIN_MM * 2 }
       const aspect = contentW / Math.max(1, contentH)
-      const orientation = aspect > PORTRAIT.w / PORTRAIT.h ? 'landscape' : 'portrait'
-      const area = orientation === 'landscape' ? LANDSCAPE : PORTRAIT
+      const orientation = aspect > portrait.w / portrait.h ? 'landscape' : 'portrait'
+      const area = orientation === 'landscape' ? landscape : portrait
       const availW = area.w * MM_TO_PX
-      const availH = area.h * MM_TO_PX - headerH
+
+      // Kunci lebar dokumen ke lebar area cetak agar header tidak membungkus saat konten
+      // di-skala kecil, lalu ukur tinggi header pada lebar final.
+      doc.body.style.width = `${Math.floor(availW)}px`
+      const headerH = hdr ? Math.ceil(hdr.getBoundingClientRect().height) + 14 : 0
+      const availH = area.h * MM_TO_PX - headerH - SAFETY_MM * MM_TO_PX
 
       const scale = Math.min(availW / contentW, availH / contentH, 1)
 
-      pageStyle.textContent = `@page { size: A4 ${orientation}; margin: ${PAGE_MARGIN_MM}mm; }`
-      stage.style.width = `${Math.ceil(contentW * scale)}px`
-      stage.style.height = `${Math.ceil(contentH * scale)}px`
+      pageStyle.textContent = `@page { size: ${opts.paper ?? 'A4'} ${orientation}; margin: ${PAGE_MARGIN_MM}mm; }`
+      stage.style.width = `${Math.floor(contentW * scale)}px`
+      stage.style.height = `${Math.floor(contentH * scale)}px`
       chart.style.transform = `scale(${scale})`
 
       const go = () => {

@@ -369,9 +369,9 @@ function handleExport() {
 // ── Print ────────────────────────────────────────────────────────────────────
 const { print: printOrgChart } = useOrgChartPrint()
 
-function printChart() {
+function printChart(paper: 'A4' | 'A3' = 'A4') {
   const title = selectedPeriod.value?.name ?? 'Struktur Organisasi'
-  printOrgChart(tree.value, { title, display: chartDisplay.value })
+  printOrgChart(tree.value, { title, display: chartDisplay.value, paper })
 }
 </script>
 
@@ -383,13 +383,21 @@ function printChart() {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            label="Cetak"
-            icon="i-lucide-printer"
-            color="neutral"
-            variant="subtle"
-            @click="printChart"
-          />
+          <UDropdownMenu
+            :items="[[
+              { label: 'Cetak A4 · 1 halaman', icon: 'i-lucide-file', onSelect: () => printChart('A4') },
+              { label: 'Cetak A3 · bagan besar', icon: 'i-lucide-file-stack', onSelect: () => printChart('A3') },
+            ]]"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              label="Cetak"
+              icon="i-lucide-printer"
+              color="neutral"
+              variant="subtle"
+              trailing-icon="i-lucide-chevron-down"
+            />
+          </UDropdownMenu>
           <UButton
             label="Export"
             icon="i-lucide-download"
