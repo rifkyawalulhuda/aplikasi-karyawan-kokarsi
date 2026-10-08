@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { OrgNode } from '~/types/org-structure'
+import type { OrgNode, OrgChartDisplay } from '~/types/org-structure'
 
 const props = defineProps<{
   nodes: OrgNode[]
   canManage?: boolean
   flatNodes?: OrgNode[]
+  display?: OrgChartDisplay
 }>()
 
 const emit = defineEmits<{
@@ -134,6 +135,7 @@ function onPointerUp(e: PointerEvent) {
         :nodes="nodes"
         :can-manage="canManage"
         :flat-nodes="flatNodes"
+        :display="display"
         @move="emit('move', $event)"
         @select="emit('select', $event)"
         @add-child="emit('addChild', $event)"

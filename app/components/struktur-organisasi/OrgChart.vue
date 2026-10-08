@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { OrgNode } from '~/types/org-structure'
+import type { OrgNode, OrgChartDisplay } from '~/types/org-structure'
 import { orgChartKey, type OrgChartContext } from '~/composables/useOrgChartContext'
 
 const props = defineProps<{
   nodes: OrgNode[]
   canManage?: boolean
   flatNodes?: OrgNode[]
+  display?: OrgChartDisplay
 }>()
 
 const emit = defineEmits<{
@@ -150,6 +151,7 @@ function onRootDrop(e: DragEvent) {
             :can-manage="ctx.canManage"
             :has-children="!!(node.children && node.children.length)"
             :collapsed="ctx.collapsed.has(node.id)"
+            :display="display"
             @toggle="ctx.toggle(node.id)"
             @select="ctx.select(node)"
             @add-child="ctx.addChild(node)"
@@ -162,7 +164,7 @@ function onRootDrop(e: DragEvent) {
           v-if="node.children && node.children.length && !ctx.collapsed.has(node.id)"
           class="org-children"
         >
-          <StrukturOrganisasiOrgChart :nodes="node.children" />
+          <StrukturOrganisasiOrgChart :nodes="node.children" :display="display" />
         </div>
       </li>
     </ul>

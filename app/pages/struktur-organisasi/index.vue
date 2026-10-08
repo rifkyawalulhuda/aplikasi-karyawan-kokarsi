@@ -2,7 +2,7 @@
 import type { TableColumn } from '@nuxt/ui'
 import type { Row } from '@tanstack/table-core'
 import { h } from 'vue'
-import type { OrgNode, OrgPeriod } from '~/types/org-structure'
+import type { OrgNode, OrgPeriod, OrgChartDisplayKey } from '~/types/org-structure'
 
 const UAvatar = resolveComponent('UAvatar')
 const UBadge = resolveComponent('UBadge')
@@ -13,6 +13,16 @@ const { confirmDeleteToast } = useConfirmDeleteToast()
 const { exportOrgStructureExcel } = useExport()
 
 const canManage = computed(() => auth.canManageMasterData)
+
+// ── Preferensi tampilan kartu bagan ──────────────────────────────────────────
+const { display: chartDisplay, set: setChartDisplay, reset: resetChartDisplay } = useOrgChartDisplay()
+
+const displayOptions: { key: OrgChartDisplayKey; label: string; icon: string }[] = [
+  { key: 'photo', label: 'Foto', icon: 'i-lucide-image' },
+  { key: 'position', label: 'Jabatan', icon: 'i-lucide-briefcase' },
+  { key: 'unitUsaha', label: 'Unit Usaha', icon: 'i-lucide-building-2' },
+  { key: 'status', label: 'Status', icon: 'i-lucide-activity' },
+]
 
 // ── State ────────────────────────────────────────────────────────────────────
 const view = ref<'chart' | 'table'>('chart')
@@ -428,6 +438,48 @@ function printChart() {
             placeholder="Cari nama, jabatan, unit..."
             class="max-w-xs"
           />
+          <UPopover v-if="view === 'chart'" :content="{ align: 'end' }">
+            <UButton
+              icon="i-lucide-sliders-horizontal"
+              label="Kartu"
+              color="neutral"
+              variant="subtle"
+              title="Atur elemen yang tampil di kartu bagan"
+            />
+            <template #content>
+              <div class="w-60 p-2">
+                <div class="mb-1.5 flex items-center justify-between px-1">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted">Tampilkan di kartu</p>
+                  <UButton
+                    icon="i-lucide-rotate-ccw"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Kembalikan ke tampilan awal"
+                    title="Kembalikan ke tampilan awal"
+                    @click="resetChartDisplay"
+                  />
+                </div>
+                <ul class="space-y-0.5">
+                  <li
+                    v-for="opt in displayOptions"
+                    :key="opt.key"
+                    class="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 transition hover:bg-elevated/60"
+                  >
+                    <span class="flex items-center gap-2 text-sm text-highlighted">
+                      <UIcon :name="opt.icon" class="size-4 text-muted" />
+                      {{ opt.label }}
+                    </span>
+                    <USwitch
+                      :model-value="chartDisplay[opt.key]"
+                      :aria-label="`Tampilkan ${opt.label}`"
+                      @update:model-value="(v: boolean) => setChartDisplay(opt.key, v)"
+                    />
+                  </li>
+                </ul>
+              </div>
+            </template>
+          </UPopover>
           <UTabs
             v-model="view"
             :items="[
@@ -465,6 +517,7 @@ function printChart() {
             :nodes="tree"
             :can-manage="canManage"
             :flat-nodes="flatNodes"
+            :display="chartDisplay"
             @move="onMove"
             @select="openDetail"
             @add-child="openAddChild"

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import type { OrgNode } from '~/types/org-structure'
+import type { OrgNode, OrgChartDisplay } from '~/types/org-structure'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   node: OrgNode
   canManage: boolean
   hasChildren: boolean
   collapsed: boolean
-}>()
+  display?: OrgChartDisplay
+}>(), {
+  display: () => ({ photo: true, position: true, unitUsaha: true, status: true }),
+})
 
 const emit = defineEmits<{
   toggle: []
@@ -73,6 +76,7 @@ const menuItems = computed(() => {
 
     <div class="flex items-start gap-3 p-3">
       <UAvatar
+        v-if="display.photo"
         :src="photo"
         :alt="node.name"
         size="lg"
@@ -80,16 +84,20 @@ const menuItems = computed(() => {
       />
       <div class="min-w-0 flex-1">
         <p class="truncate text-sm font-semibold text-highlighted" :title="node.name">{{ node.name }}</p>
-        <p class="truncate text-xs text-muted" :title="node.position">{{ node.position }}</p>
-        <div class="mt-1.5 flex flex-wrap items-center gap-1">
+        <p v-if="display.position" class="truncate text-xs text-muted" :title="node.position">{{ node.position }}</p>
+        <div
+          v-if="display.status || (display.unitUsaha && node.unitUsaha)"
+          class="mt-1.5 flex flex-wrap items-center gap-1"
+        >
           <UBadge
-            v-if="node.unitUsaha"
+            v-if="display.unitUsaha && node.unitUsaha"
             :label="node.unitUsaha"
             color="neutral"
             variant="subtle"
             size="sm"
           />
           <UBadge
+            v-if="display.status"
             :label="statusLabel[node.status] ?? node.status"
             :color="(statusColor[node.status] ?? 'neutral') as any"
             variant="subtle"

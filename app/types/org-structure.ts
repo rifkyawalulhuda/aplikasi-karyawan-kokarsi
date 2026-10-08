@@ -40,3 +40,13 @@ export interface OrgNode {
   createdAt: string
   updatedAt: string
 }
+
+/** Elemen yang dapat dinyalakan/dimatikan pada Kartu Bagan (Nama selalu tampil). */
+export interface OrgChartDisplay {
+  photo: boolean
+  position: boolean
+  unitUsaha: boolean
+  status: boolean
+}
+
+export type OrgChartDisplayKey = keyof OrgChartDisplay
