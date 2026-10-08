@@ -40,9 +40,12 @@ const {
 } = useOrgChartBackground()
 
 // ── State ────────────────────────────────────────────────────────────────────
+const route = useRoute()
 const view = ref<'chart' | 'table'>('chart')
 const searchQuery = ref('')
 const fetchStatus = ref<'pending' | 'success' | 'error'>('pending')
+/** Node yang menunggu dibuka (deep-link `?openId=`) setelah periode & node dimuat. */
+const pendingOpenId = ref<number | null>(null)
 
 const { data: periodsRes, refresh: refreshPeriods } = await useFetch<OrgPeriod[]>('/api/org-structure/periods', {
   credentials: 'include',
@@ -74,6 +77,14 @@ async function fetchNodes() {
       credentials: 'include',
     })
     fetchStatus.value = 'success'
+    if (pendingOpenId.value != null) {
+      const target = flatNodes.value.find(n => n.id === pendingOpenId.value)
+      pendingOpenId.value = null
+      if (target) {
+        view.value = 'chart'
+        openDetail(target)
+      }
+    }
   } catch {
     fetchStatus.value = 'error'
   }
@@ -81,6 +92,27 @@ async function fetchNodes() {
 
 watch(selectedPeriodId, () => { fetchNodes() })
 await fetchNodes()
+
+// ── Deep-link dari pencarian global (`?openId=`) ──────────────────────────────
+async function applyDeepLink() {
+  const raw = route.query.openId
+  const id = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (!Number.isFinite(id) || id <= 0) return
+  try {
+    const node = await $fetch<OrgNode & { periodId?: number }>(`/api/org-structure/nodes/${id}`, {
+      credentials: 'include',
+    })
+    pendingOpenId.value = id
+    if (node?.periodId != null && node.periodId !== selectedPeriodId.value) {
+      // Watch periode akan memanggil fetchNodes → membuka node.
+      selectedPeriodId.value = node.periodId
+    } else {
+      await fetchNodes()
+    }
+  } catch {
+    pendingOpenId.value = null
+  }
+}
 
 function refresh() {
   fetchNodes()
@@ -207,6 +239,10 @@ function openDetail(node: OrgNode) {
   detailTarget.value = flatNodes.value.find(n => n.id === node.id) ?? node
   detailOpen.value = true
 }
+
+// Deep-link `?openId=` — dijalankan setelah mount (refs siap) & saat query berubah.
+onMounted(applyDeepLink)
+watch(() => route.query.openId, (value) => { if (value != null) applyDeepLink() })
 
 function openAddPeriod() {
   periodModalMode.value = 'add'

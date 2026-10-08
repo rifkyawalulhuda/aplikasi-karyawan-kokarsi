@@ -364,7 +364,7 @@ onMounted(() => {
             v-model="search.query.value"
             type="text"
             class="min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted"
-            placeholder="Cari karyawan, kontrak, dokumen, atau perintah…"
+            placeholder="Cari karyawan, struktur organisasi, kontrak, dokumen…"
             autocomplete="off"
             spellcheck="false"
             aria-label="Cari"
@@ -547,7 +547,7 @@ onMounted(() => {
                 Tidak ada hasil untuk “{{ search.query.value }}”
               </p>
               <p class="max-w-xs text-xs text-muted">
-                Coba kata kunci lain, atau periksa ejaan. Pencarian mencakup nama, NIK, nomor kontrak, dan nomor dokumen.
+                Coba kata kunci lain, atau periksa ejaan. Pencarian mencakup nama, NIK, jabatan struktur, nomor kontrak, dan nomor dokumen.
               </p>
             </div>
 
@@ -558,7 +558,7 @@ onMounted(() => {
                 Mulai mengetik untuk mencari
               </p>
               <p class="max-w-xs text-xs text-muted">
-                Karyawan, kontrak, surat peringatan, sertifikasi, dan dokumen legal — atau lompat ke menu.
+                Karyawan, struktur organisasi, kontrak, surat peringatan, sertifikasi, dan dokumen legal — atau lompat ke menu.
               </p>
             </div>
           </div>

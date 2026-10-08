@@ -42,6 +42,7 @@ export interface SearchResponse {
 
 const CATEGORY_KEYS = [
   'employees',
+  'strukturOrganisasi',
   'contracts',
   'warningLetters',
   'certifications',
@@ -82,6 +83,13 @@ const CONTRACT_STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
 }
 
+const ORG_STATUS_LABEL: Record<string, string> = {
+  AKTIF: 'Aktif',
+  AKAN_BERAKHIR: 'Akan Berakhir',
+  EXPIRED: 'Expired',
+  TIDAK_AKTIF: 'Tidak Aktif',
+}
+
 @Injectable()
 export class SearchService {
   constructor(private readonly prisma: PrismaService) {}
@@ -99,6 +107,7 @@ export class SearchService {
 
     const [
       employees,
+      strukturOrganisasi,
       contracts,
       warningLetters,
       certifications,
@@ -109,6 +118,7 @@ export class SearchService {
       generalArchives,
     ] = await Promise.all([
       this.searchEmployees(q, candidateTake, safeLimit),
+      this.searchOrgPositions(q, candidateTake, safeLimit),
       this.searchContracts(q, candidateTake, safeLimit),
       this.searchWarningLetters(q, candidateTake, safeLimit),
       this.searchEmployeeDocuments(q, candidateTake, safeLimit, 'CERTIFICATION'),
@@ -124,6 +134,7 @@ export class SearchService {
       limit: safeLimit,
       categories: {
         employees,
+        strukturOrganisasi,
         contracts,
         warningLetters,
         certifications,
@@ -186,6 +197,44 @@ export class SearchService {
           code: row.employeeNo,
           email: row.email ?? undefined,
           phone: row.phoneNumber ?? undefined,
+        }),
+      ))
+  }
+
+  private searchOrgPositions(q: string, take: number, limit: number): Promise<SearchCategoryResult> {
+    return this.prisma.client.orgPosition
+      .findMany({
+        where: {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { position: { contains: q, mode: 'insensitive' } },
+            { unitUsaha: { contains: q, mode: 'insensitive' } },
+            { skNumber: { contains: q, mode: 'insensitive' } },
+            { employee: { fullName: { contains: q, mode: 'insensitive' } } },
+            { employee: { employeeNo: { contains: q, mode: 'insensitive' } } },
+          ],
+        },
+        include: {
+          period: { select: { name: true } },
+          employee: { select: { id: true, fullName: true, employeeNo: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take,
+      })
+      .then(rows => this.finalize(
+        rows,
+        q,
+        limit,
+        row => [row.name, row.position, row.unitUsaha, row.skNumber, row.employee?.fullName, row.employee?.employeeNo],
+        row => ({
+          id: row.id,
+          type: 'orgPosition',
+          title: row.name,
+          subtitle: [row.position, row.unitUsaha].filter(Boolean).join(' · ') || undefined,
+          meta: [row.period?.name, ORG_STATUS_LABEL[row.status] ?? row.status].filter(Boolean) as string[],
+          code: row.skNumber ?? undefined,
+          employeeId: row.employee?.id,
+          employeeName: row.employee?.fullName ?? undefined,
         }),
       ))
   }

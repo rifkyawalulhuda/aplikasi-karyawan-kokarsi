@@ -33,6 +33,7 @@ export interface SearchResponse {
 
 export type SearchCategoryKey
   = | 'employees'
+    | 'strukturOrganisasi'
     | 'contracts'
     | 'warningLetters'
     | 'certifications'
@@ -59,6 +60,7 @@ export interface SearchCategoryMeta {
  */
 export const SEARCH_CATEGORIES: SearchCategoryMeta[] = [
   { key: 'employees', label: 'Karyawan', icon: 'i-lucide-user', color: 'primary' },
+  { key: 'strukturOrganisasi', label: 'Struktur Organisasi', icon: 'i-lucide-network', color: 'neutral' },
   { key: 'contracts', label: 'Kontrak', icon: 'i-lucide-file-text', color: 'info' },
   { key: 'warningLetters', label: 'Surat Peringatan', icon: 'i-lucide-alert-triangle', color: 'warning' },
   { key: 'certifications', label: 'Sertifikasi & Ijin', icon: 'i-lucide-file-badge', color: 'success' },
@@ -80,6 +82,7 @@ export function categoryMeta(key: string): SearchCategoryMeta {
 export function searchHitRoute(hit: SearchHit): string | null {
   switch (hit.type) {
     case 'employee': return `/karyawan/${hit.id}`
+    case 'orgPosition': return `/struktur-organisasi?openId=${hit.id}`
     case 'contract': return `/kontrak?openId=${hit.id}`
     case 'warningLetter': return `/dokumen/surat-peringatan?openId=${hit.id}`
     case 'certification': return `/dokumen/sertifikasi-ijin?openId=${hit.id}`
@@ -96,6 +99,7 @@ export function searchHitRoute(hit: SearchHit): string | null {
 export function searchHitIcon(hit: SearchHit): string {
   switch (hit.type) {
     case 'employee': return 'i-lucide-user'
+    case 'orgPosition': return 'i-lucide-network'
     case 'contract': return 'i-lucide-file-text'
     case 'warningLetter': return 'i-lucide-alert-triangle'
     case 'certification': return 'i-lucide-file-badge'
