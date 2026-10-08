@@ -61,3 +61,11 @@ export interface OrgChartBackground {
   pattern: OrgChartBgPattern
   gridSize: number
 }
+
+/** State tampilan bagan yang dipersist per periode (pan/zoom + node yang diciutkan). */
+export interface OrgChartViewState {
+  scale: number
+  tx: number
+  ty: number
+  collapsed: number[]
+}

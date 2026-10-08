@@ -127,6 +127,41 @@ const filteredNodes = computed(() => {
   )
 })
 
+// ── Pencarian di bagan (highlight + auto-buka leluhur + auto-pan) ────────────
+const chartCanvasRef = useTemplateRef<{ fit: () => void, panTo: (id: number) => void, zoomTo100: () => void }>('chartCanvasRef')
+
+const chartMatchIds = computed<number[]>(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return []
+  return flatNodes.value
+    .filter(n =>
+      n.name.toLowerCase().includes(q)
+      || n.position.toLowerCase().includes(q)
+      || (n.unitUsaha ?? '').toLowerCase().includes(q),
+    )
+    .map(n => n.id)
+})
+
+// Semua leluhur dari node yang cocok → dipaksa terbuka agar hasil terlihat.
+const chartRevealIds = computed<number[]>(() => {
+  if (!chartMatchIds.value.length) return []
+  const byId = nodeNameById.value
+  const reveal = new Set<number>()
+  for (const id of chartMatchIds.value) {
+    let cur = byId.get(id)?.parentId ?? null
+    while (cur != null && !reveal.has(cur)) {
+      reveal.add(cur)
+      cur = byId.get(cur)?.parentId ?? null
+    }
+  }
+  return [...reveal]
+})
+
+watch(chartMatchIds, (ids) => {
+  if (view.value !== 'chart' || !ids.length) return
+  nextTick(() => chartCanvasRef.value?.panTo(ids[0]!))
+})
+
 // ── Modals ───────────────────────────────────────────────────────────────────
 const nodeModalOpen = ref(false)
 const nodeModalMode = ref<'add' | 'edit' | 'add-child'>('add')
@@ -332,53 +367,11 @@ function handleExport() {
 }
 
 // ── Print ────────────────────────────────────────────────────────────────────
-function buildPrintNodes(nodes: OrgNode[]): string {
-  if (!nodes.length) return ''
-  return `<ul>${nodes.map(n => `
-    <li>
-      <div class="node">
-        <div class="nm">${escapeHtml(n.name)}</div>
-        <div class="pos">${escapeHtml(n.position)}</div>
-        ${n.unitUsaha ? `<div class="unit">${escapeHtml(n.unitUsaha)}</div>` : ''}
-      </div>
-      ${buildPrintNodes(n.children ?? [])}
-    </li>`).join('')}</ul>`
-}
-
-function escapeHtml(s: string) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string))
-}
+const { print: printOrgChart } = useOrgChartPrint()
 
 function printChart() {
   const title = selectedPeriod.value?.name ?? 'Struktur Organisasi'
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;color:#111}
-    h1{font-size:20px;margin:0 0 4px}
-    .sub{color:#666;font-size:13px;margin-bottom:24px}
-    ul{list-style:none;padding-left:0;display:flex;justify-content:center;gap:16px;flex-wrap:nowrap;position:relative;margin:0}
-    li{position:relative;padding:20px 8px 0;display:flex;flex-direction:column;align-items:center}
-    ul ul{margin-top:0}
-    .node{border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:150px;text-align:center;background:#fff}
-    .nm{font-weight:600;font-size:13px}
-    .pos{font-size:12px;color:#444}
-    .unit{font-size:11px;color:#777;margin-top:2px}
-    li::before,li::after{content:'';position:absolute;top:0;right:50%;border-top:1px solid #ccc;width:50%;height:20px}
-    li::after{right:auto;left:50%;border-left:1px solid #ccc}
-    li:only-child::after,li:only-child::before{display:none}
-    li:first-child::before,li:last-child::after{border:0 none}
-    @media print{body{padding:0}}
-  </style></head><body>
-    <h1>Struktur Organisasi</h1>
-    <div class="sub">${escapeHtml(title)}</div>
-    ${buildPrintNodes(tree.value)}
-  </body></html>`
-  const w = window.open('', '_blank')
-  if (!w) return
-  w.document.write(html)
-  w.document.close()
-  w.focus()
-  setTimeout(() => w.print(), 300)
+  printOrgChart(tree.value, { title, display: chartDisplay.value })
 }
 </script>
 
@@ -447,7 +440,6 @@ function printChart() {
 
         <div class="ml-auto flex items-center gap-2">
           <UInput
-            v-if="view === 'table'"
             v-model="searchQuery"
             icon="i-lucide-search"
             placeholder="Cari nama, jabatan, unit..."
@@ -455,15 +447,15 @@ function printChart() {
           />
           <UPopover v-if="view === 'chart'" :content="{ align: 'end' }">
             <UButton
-              icon="i-lucide-paint-bucket"
-              label="Latar"
+              icon="i-lucide-sliders-horizontal"
+              label="Tampilan"
               color="neutral"
               variant="subtle"
-              title="Ubah latar belakang kanvas bagan"
+              title="Atur latar & elemen kartu bagan"
             />
             <template #content>
-              <div class="w-72 p-3">
-                <div class="mb-2 flex items-center justify-between">
+              <div class="max-h-[70vh] w-72 overflow-y-auto p-3">
+                <div class="flex items-center justify-between">
                   <p class="text-xs font-medium uppercase tracking-wide text-muted">Latar belakang</p>
                   <UButton
                     icon="i-lucide-rotate-ccw"
@@ -551,29 +543,19 @@ function printChart() {
                     @update:model-value="(v: number | undefined) => v != null && setBgGridSize(v)"
                   />
                 </div>
-              </div>
-            </template>
-          </UPopover>
 
-          <UPopover v-if="view === 'chart'" :content="{ align: 'end' }">
-            <UButton
-              icon="i-lucide-sliders-horizontal"
-              label="Kartu"
-              color="neutral"
-              variant="subtle"
-              title="Atur elemen yang tampil di kartu bagan"
-            />
-            <template #content>
-              <div class="w-60 p-2">
-                <div class="mb-1.5 flex items-center justify-between px-1">
+                <USeparator class="my-3" />
+
+                <!-- Tampilkan di kartu -->
+                <div class="flex items-center justify-between px-1">
                   <p class="text-xs font-medium uppercase tracking-wide text-muted">Tampilkan di kartu</p>
                   <UButton
                     icon="i-lucide-rotate-ccw"
                     color="neutral"
                     variant="ghost"
                     size="xs"
-                    aria-label="Kembalikan ke tampilan awal"
-                    title="Kembalikan ke tampilan awal"
+                    aria-label="Kembalikan elemen kartu ke awal"
+                    title="Kembalikan elemen kartu ke awal"
                     @click="resetChartDisplay"
                   />
                 </div>
@@ -631,12 +613,16 @@ function printChart() {
           </div>
           <StrukturOrganisasiOrgChartCanvas
             v-else
+            ref="chartCanvasRef"
             :nodes="tree"
             :can-manage="canManage"
             :flat-nodes="flatNodes"
             :display="chartDisplay"
             :background-style="chartCanvasStyle"
             :contrast="chartContrast"
+            :period-id="selectedPeriodId"
+            :highlight-ids="chartMatchIds"
+            :reveal-ids="chartRevealIds"
             @move="onMove"
             @select="openDetail"
             @add-child="openAddChild"

@@ -7,8 +7,10 @@ const props = withDefaults(defineProps<{
   hasChildren: boolean
   collapsed: boolean
   display?: OrgChartDisplay
+  highlighted?: boolean
 }>(), {
   display: () => ({ photo: true, position: true, unitUsaha: true, status: true }),
+  highlighted: false,
 })
 
 const emit = defineEmits<{
@@ -55,6 +57,7 @@ const menuItems = computed(() => {
 <template>
   <div
     class="group relative w-56 cursor-pointer rounded-xl border border-default bg-default shadow-sm transition hover:shadow-md hover:border-primary/40"
+    :class="highlighted ? 'bg-primary/5 ring-2 ring-primary/40' : ''"
     role="button"
     tabindex="0"
     :aria-label="`Lihat detail ${node.name}`"
@@ -62,26 +65,26 @@ const menuItems = computed(() => {
     @keydown.enter.prevent="emit('select')"
     @keydown.space.prevent="emit('select')"
   >
-    <!-- Collapse toggle -->
+    <!-- Collapse toggle (hit-area diperbesar untuk sentuh) -->
     <button
       v-if="hasChildren"
       type="button"
-      class="absolute -bottom-3 left-1/2 z-10 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border border-default bg-default text-muted shadow-sm transition hover:text-primary hover:border-primary"
+      class="absolute -bottom-3.5 left-1/2 z-10 flex size-7 -translate-x-1/2 items-center justify-center rounded-full border border-default bg-default text-muted shadow-sm transition before:absolute before:-inset-2 before:content-[''] hover:text-primary hover:border-primary"
       :aria-label="collapsed ? 'Tampilkan bawahan' : 'Sembunyikan bawahan'"
       :aria-expanded="!collapsed"
       @click.stop="emit('toggle')"
     >
-      <UIcon :name="collapsed ? 'i-lucide-plus' : 'i-lucide-minus'" class="size-3.5" />
+      <UIcon :name="collapsed ? 'i-lucide-plus' : 'i-lucide-minus'" class="size-4" />
     </button>
 
-    <!-- Actions (absolut, agar konten tetap terpusat) -->
-    <div class="absolute right-1.5 top-1.5 z-10 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" @click.stop>
+    <!-- Actions (selalu tampil agar bisa diakses via sentuh/keyboard) -->
+    <div class="absolute right-1 top-1 z-10" @click.stop>
       <UDropdownMenu :items="menuItems" :content="{ align: 'end' }">
         <UButton
           icon="i-lucide-ellipsis-vertical"
           color="neutral"
           variant="ghost"
-          size="xs"
+          size="sm"
           aria-label="Aksi jabatan"
         />
       </UDropdownMenu>
