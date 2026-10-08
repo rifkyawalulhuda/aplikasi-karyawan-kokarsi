@@ -24,6 +24,21 @@ const displayOptions: { key: OrgChartDisplayKey; label: string; icon: string }[]
   { key: 'status', label: 'Status', icon: 'i-lucide-activity' },
 ]
 
+// ── Preferensi latar belakang kanvas bagan ───────────────────────────────────
+const {
+  background: chartBackground,
+  bgColor: chartBgColor,
+  contrast: chartContrast,
+  canvasStyle: chartCanvasStyle,
+  presets: bgPresets,
+  patterns: bgPatterns,
+  setPreset: setBgPreset,
+  setCustomColor: setBgCustomColor,
+  setPattern: setBgPattern,
+  setGridSize: setBgGridSize,
+  reset: resetChartBackground,
+} = useOrgChartBackground()
+
 // ── State ────────────────────────────────────────────────────────────────────
 const view = ref<'chart' | 'table'>('chart')
 const searchQuery = ref('')
@@ -440,6 +455,108 @@ function printChart() {
           />
           <UPopover v-if="view === 'chart'" :content="{ align: 'end' }">
             <UButton
+              icon="i-lucide-paint-bucket"
+              label="Latar"
+              color="neutral"
+              variant="subtle"
+              title="Ubah latar belakang kanvas bagan"
+            />
+            <template #content>
+              <div class="w-72 p-3">
+                <div class="mb-2 flex items-center justify-between">
+                  <p class="text-xs font-medium uppercase tracking-wide text-muted">Latar belakang</p>
+                  <UButton
+                    icon="i-lucide-rotate-ccw"
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    aria-label="Kembalikan latar ke awal"
+                    title="Kembalikan ke tampilan awal"
+                    @click="resetChartBackground"
+                  />
+                </div>
+
+                <!-- Tema -->
+                <p class="mb-1.5 text-xs font-medium text-muted">Tema</p>
+                <div class="mb-3 flex flex-wrap gap-2">
+                  <button
+                    v-for="p in bgPresets"
+                    :key="p.key"
+                    type="button"
+                    class="flex h-12 w-12 items-center justify-center rounded-lg border text-[10px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :class="chartBackground.preset === p.key ? 'border-primary ring-2 ring-primary/40' : 'border-default hover:border-primary/50'"
+                    :style="p.key === 'custom'
+                      ? { background: 'conic-gradient(from 180deg, #f87171, #fbbf24, #34d399, #60a5fa, #a78bfa, #f87171)' }
+                      : { backgroundColor: p.color }"
+                    :title="p.label"
+                    :aria-label="`Tema ${p.label}`"
+                    :aria-pressed="chartBackground.preset === p.key"
+                    @click="setBgPreset(p.key)"
+                  >
+                    <span
+                      v-if="p.key !== 'custom'"
+                      class="rounded px-1"
+                      :class="p.contrast === 'dark' ? 'text-white' : 'text-neutral-700'"
+                    >{{ p.label }}</span>
+                    <UIcon v-else name="i-lucide-pipette" class="size-4 text-white drop-shadow" />
+                  </button>
+                </div>
+
+                <!-- Warna kustom -->
+                <div v-if="chartBackground.preset === 'custom'" class="mb-3 flex items-center gap-2">
+                  <input
+                    :value="chartBackground.customColor"
+                    type="color"
+                    class="h-9 w-12 cursor-pointer rounded border border-default bg-default"
+                    aria-label="Pilih warna latar kustom"
+                    @input="setBgCustomColor(($event.target as HTMLInputElement).value)"
+                  >
+                  <UInput
+                    :model-value="chartBackground.customColor"
+                    size="sm"
+                    class="w-28 font-mono"
+                    @update:model-value="(v: string) => setBgCustomColor(v)"
+                  />
+                </div>
+
+                <!-- Pola -->
+                <p class="mb-1.5 text-xs font-medium text-muted">Pola</p>
+                <div class="mb-3 grid grid-cols-4 gap-1.5">
+                  <button
+                    v-for="pat in bgPatterns"
+                    :key="pat.key"
+                    type="button"
+                    class="flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    :class="chartBackground.pattern === pat.key ? 'border-primary bg-primary/5 text-primary' : 'border-default text-muted hover:border-primary/50'"
+                    :aria-label="pat.label"
+                    :aria-pressed="chartBackground.pattern === pat.key"
+                    @click="setBgPattern(pat.key)"
+                  >
+                    <UIcon :name="pat.icon" class="size-4" />
+                    {{ pat.label }}
+                  </button>
+                </div>
+
+                <!-- Ukuran pola -->
+                <div v-if="chartBackground.pattern !== 'none'">
+                  <div class="mb-1 flex items-center justify-between">
+                    <p class="text-xs font-medium text-muted">Ukuran pola</p>
+                    <span class="text-xs tabular-nums text-muted">{{ chartBackground.gridSize }}px</span>
+                  </div>
+                  <USlider
+                    :model-value="chartBackground.gridSize"
+                    :min="12"
+                    :max="48"
+                    :step="4"
+                    @update:model-value="(v: number | undefined) => v != null && setBgGridSize(v)"
+                  />
+                </div>
+              </div>
+            </template>
+          </UPopover>
+
+          <UPopover v-if="view === 'chart'" :content="{ align: 'end' }">
+            <UButton
               icon="i-lucide-sliders-horizontal"
               label="Kartu"
               color="neutral"
@@ -518,6 +635,8 @@ function printChart() {
             :can-manage="canManage"
             :flat-nodes="flatNodes"
             :display="chartDisplay"
+            :background-style="chartCanvasStyle"
+            :contrast="chartContrast"
             @move="onMove"
             @select="openDetail"
             @add-child="openAddChild"

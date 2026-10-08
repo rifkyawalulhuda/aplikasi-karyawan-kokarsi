@@ -6,6 +6,8 @@ const props = defineProps<{
   canManage?: boolean
   flatNodes?: OrgNode[]
   display?: OrgChartDisplay
+  backgroundStyle?: Record<string, string>
+  contrast?: 'light' | 'dark'
 }>()
 
 const emit = defineEmits<{
@@ -113,6 +115,8 @@ function onPointerUp(e: PointerEvent) {
     ref="viewport"
     class="org-canvas relative h-[70vh] min-h-120 w-full overflow-hidden rounded-xl border border-default bg-elevated/20"
     :class="panning ? 'cursor-grabbing' : 'cursor-grab'"
+    :data-contrast="contrast ?? 'light'"
+    :style="backgroundStyle"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -120,9 +124,6 @@ function onPointerUp(e: PointerEvent) {
     @wheel="onWheel"
     @mousedown.middle.prevent
   >
-    <!-- Latar grid (tidak ikut transform agar tetap terlihat sebagai kanvas) -->
-    <div class="org-canvas__grid pointer-events-none absolute inset-0" aria-hidden="true" />
-
     <!-- Panggung yang di-pan & di-zoom -->
     <div
       class="org-canvas__stage absolute top-0 left-0 p-8"
@@ -206,12 +207,21 @@ function onPointerUp(e: PointerEvent) {
   touch-action: pan-y;
 }
 
-.org-canvas__grid {
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--ui-border) 100%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--ui-border) 100%, transparent) 1px, transparent 1px);
-  background-size: 24px 24px;
-  opacity: 0.5;
+/* Auto-kontras: saat latar gelap, override token agar kartu & kontrol ikut gelap.
+   Kartu memakai token --ui-bg / --ui-text-* / --ui-border, sehingga cukup
+   mengganti variabelnya di scope kanvas — tanpa mengubah komponen kartu. */
+.org-canvas[data-contrast='dark'] {
+  --ui-bg: #1e293b;
+  --ui-bg-muted: #1e293b;
+  --ui-bg-elevated: #334155;
+  --ui-bg-accented: #475569;
+  --ui-border: #334155;
+  --ui-border-muted: #334155;
+  --ui-border-accented: #475569;
+  --ui-text-highlighted: #f8fafc;
+  --ui-text: #e2e8f0;
+  --ui-text-muted: #94a3b8;
+  --ui-text-dimmed: #64748b;
 }
 
 .org-canvas__stage {

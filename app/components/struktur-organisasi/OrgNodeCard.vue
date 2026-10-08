@@ -74,7 +74,21 @@ const menuItems = computed(() => {
       <UIcon :name="collapsed ? 'i-lucide-plus' : 'i-lucide-minus'" class="size-3.5" />
     </button>
 
-    <div class="flex items-start gap-3 p-3">
+    <!-- Actions (absolut, agar konten tetap terpusat) -->
+    <div class="absolute right-1.5 top-1.5 z-10 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" @click.stop>
+      <UDropdownMenu :items="menuItems" :content="{ align: 'end' }">
+        <UButton
+          icon="i-lucide-ellipsis-vertical"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          aria-label="Aksi jabatan"
+        />
+      </UDropdownMenu>
+    </div>
+
+    <!-- Konten terpusat -->
+    <div class="flex flex-col items-center gap-2 p-3 text-center">
       <UAvatar
         v-if="display.photo"
         :src="photo"
@@ -82,41 +96,30 @@ const menuItems = computed(() => {
         size="lg"
         class="shrink-0"
       />
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 w-full">
         <p class="truncate text-sm font-semibold text-highlighted" :title="node.name">{{ node.name }}</p>
         <p v-if="display.position" class="truncate text-xs text-muted" :title="node.position">{{ node.position }}</p>
-        <div
-          v-if="display.status || (display.unitUsaha && node.unitUsaha)"
-          class="mt-1.5 flex flex-wrap items-center gap-1"
-        >
-          <UBadge
-            v-if="display.unitUsaha && node.unitUsaha"
-            :label="node.unitUsaha"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-          />
-          <UBadge
-            v-if="display.status"
-            :label="statusLabel[node.status] ?? node.status"
-            :color="(statusColor[node.status] ?? 'neutral') as any"
-            variant="subtle"
-            size="sm"
-          />
-        </div>
       </div>
 
-      <!-- Actions -->
-      <div class="shrink-0 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100" @click.stop>
-        <UDropdownMenu :items="menuItems" :content="{ align: 'end' }">
-          <UButton
-            icon="i-lucide-ellipsis-vertical"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            aria-label="Aksi jabatan"
-          />
-        </UDropdownMenu>
+      <!-- Metadata (unit usaha & status) -->
+      <div
+        v-if="display.status || (display.unitUsaha && node.unitUsaha)"
+        class="flex flex-wrap items-center justify-center gap-1"
+      >
+        <UBadge
+          v-if="display.unitUsaha && node.unitUsaha"
+          :label="node.unitUsaha"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+        />
+        <UBadge
+          v-if="display.status"
+          :label="statusLabel[node.status] ?? node.status"
+          :color="(statusColor[node.status] ?? 'neutral') as any"
+          variant="subtle"
+          size="sm"
+        />
       </div>
     </div>
   </div>

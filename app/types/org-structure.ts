@@ -50,3 +50,14 @@ export interface OrgChartDisplay {
 }
 
 export type OrgChartDisplayKey = keyof OrgChartDisplay
+
+export type OrgChartBgPreset = 'light' | 'dark' | 'paper' | 'blueprint' | 'custom'
+export type OrgChartBgPattern = 'none' | 'lines' | 'dots' | 'diagonal'
+
+/** Preferensi latar belakang kanvas bagan. */
+export interface OrgChartBackground {
+  preset: OrgChartBgPreset
+  customColor: string
+  pattern: OrgChartBgPattern
+  gridSize: number
+}
