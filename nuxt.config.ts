@@ -41,6 +41,12 @@ export default defineNuxtConfig({
 
   icon: {
     mode: 'svg',
+    // Scan source files agar semua ikon yang dipakai app ikut di-bundle ke client.
+    // Tanpa ini ikon di luar bundle hanya di-fetch async → sempat kosong saat refresh
+    // (hydration mismatch) sehingga ikon menghilang.
+    clientBundle: {
+      scan: true,
+    },
     serverBundle: {
       collections: ['lucide', 'simple-icons']
     },
