@@ -272,6 +272,8 @@ function onNodePointerUp(e: PointerEvent, _node: OrgNode) {
   --org-line-w: 2.5px;
   --org-line: var(--ui-text-muted);
   --org-elbow-r: 12px;
+  /* Tinggi tiap segmen konektor (stub induk & drop ke anak). */
+  --org-elbow-h: 24px;
 }
 
 .org-tree {
@@ -288,35 +290,31 @@ function onNodePointerUp(e: PointerEvent, _node: OrgNode) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 12px 0;
+  padding: var(--org-elbow-h) 12px 0;
   list-style: none;
 }
 
-/* Horizontal + elbow connectors */
+/* Horizontal + elbow connectors.
+   Tiap setengah bar dibuat selebar (50% + w/2) dan digeser (50% − w/2) agar
+   garis turun (drop) ke setiap anak TEPAT di tengah kartu — pixel-perfect,
+   tidak "patah" walau bagan di-zoom. */
 .org-branch::before,
 .org-branch::after {
   content: '';
   position: absolute;
   top: 0;
-  right: 50%;
-  width: 50%;
-  height: 24px;
+  height: var(--org-elbow-h);
+  width: calc(50% + var(--org-line-w) / 2);
   border-top: var(--org-line-w) solid var(--org-line);
 }
 
+.org-branch::before {
+  right: calc(50% - var(--org-line-w) / 2);
+}
+
 .org-branch::after {
-  right: auto;
-  left: 50%;
+  left: calc(50% - var(--org-line-w) / 2);
   border-left: var(--org-line-w) solid var(--org-line);
-}
-
-.org-branch:only-child::after,
-.org-branch:only-child::before {
-  display: none;
-}
-
-.org-branch:only-child {
-  padding-top: 24px;
 }
 
 .org-branch:first-child::before,
@@ -333,6 +331,18 @@ function onNodePointerUp(e: PointerEvent, _node: OrgNode) {
   border-radius: var(--org-elbow-r) 0 0 0;
 }
 
+/* Anak tunggal: tanpa garis horizontal — cukup garis vertikal lurus
+   (stub dari .org-children + segmen ini menjadi satu garis menerus). */
+.org-branch:only-child::before {
+  display: none;
+}
+
+.org-branch:only-child::after {
+  border: 0 none;
+  border-left: var(--org-line-w) solid var(--org-line);
+  border-radius: 0;
+}
+
 /* Root level: no connectors above top-level nodes */
 .org-tree--root > .org-branch {
   padding-top: 0;
@@ -343,9 +353,10 @@ function onNodePointerUp(e: PointerEvent, _node: OrgNode) {
   display: none;
 }
 
-/* Vertical line from parent card down to children row. */
+/* Stub dari kartu induk turun ke garis horizontal baris anak. */
 .org-children {
   position: relative;
+  padding-top: var(--org-elbow-h);
 }
 
 .org-children::before {
@@ -354,9 +365,8 @@ function onNodePointerUp(e: PointerEvent, _node: OrgNode) {
   top: 0;
   left: 50%;
   width: var(--org-line-w);
-  height: 24px;
+  height: var(--org-elbow-h);
   background: var(--org-line);
-  border-radius: 0 0 var(--org-elbow-r) var(--org-elbow-r);
   transform: translateX(calc(var(--org-line-w) / -2));
 }
 

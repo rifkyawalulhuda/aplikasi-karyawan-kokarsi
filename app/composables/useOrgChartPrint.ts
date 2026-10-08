@@ -78,16 +78,17 @@ const PRINT_STYLE = `
   #chart { transform-origin: top left; width: max-content; }
   .tree { display: flex; justify-content: center; align-items: flex-start; list-style: none; margin: 0; padding: 0; }
   .branch { position: relative; display: flex; flex-direction: column; align-items: center; padding: 26px 10px 0; }
-  .branch::before, .branch::after { content: ''; position: absolute; top: 0; right: 50%; width: 50%; height: 26px; border-top: 2px solid #94a3b8; }
-  .branch::after { right: auto; left: 50%; border-left: 2px solid #94a3b8; }
-  .branch:only-child::before, .branch:only-child::after { display: none; }
-  .branch:only-child { padding-top: 26px; }
+  .branch::before, .branch::after { content: ''; position: absolute; top: 0; height: 26px; width: calc(50% + 1px); border-top: 2px solid #94a3b8; }
+  .branch::before { right: calc(50% - 1px); }
+  .branch::after { left: calc(50% - 1px); border-left: 2px solid #94a3b8; }
   .branch:first-child::before, .branch:last-child::after { border: 0 none; }
   .branch:last-child::before { border-right: 2px solid #94a3b8; border-radius: 0 10px 0 0; }
   .branch:first-child::after { border-radius: 10px 0 0 0; }
+  .branch:only-child::before { display: none; }
+  .branch:only-child::after { border: 0 none; border-left: 2px solid #94a3b8; border-radius: 0; }
   .tree.root > .branch { padding-top: 0; }
   .tree.root > .branch::before, .tree.root > .branch::after { display: none; }
-  .children { position: relative; }
+  .children { position: relative; padding-top: 26px; }
   .children::before { content: ''; position: absolute; top: 0; left: 50%; width: 2px; height: 26px; background: #94a3b8; transform: translateX(-1px); }
   .node { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 140px; max-width: 200px; padding: 10px 12px; border: 1.5px solid #cbd5e1; border-radius: 12px; background: #fff; text-align: center; }
   .avatar-wrap { position: relative; width: 40px; height: 40px; }
