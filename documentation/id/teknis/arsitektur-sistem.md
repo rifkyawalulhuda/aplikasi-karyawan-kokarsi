@@ -17,6 +17,7 @@ aplikasi-karyawan-kokarsi/
 │   │   ├── employees/      # Modul karyawan
 │   │   ├── contracts/      # Modul kontrak
 │   │   ├── notifications/  # Sistem notifikasi SSE
+│   │   ├── org-structure/  # Struktur organisasi (periode + jabatan)
 │   │   ├── akte-dokumen/   # Akte dokumen
 │   │   ├── legal-koperasi/ # Legal koperasi
 │   │   ├── general-archives/          # Arsip umum
@@ -79,6 +80,7 @@ Nuxt Frontend (port 3000)
 | AkteDokumen | `GET/POST/PUT/DELETE /akte-dokumen`, upload file |
 | GeneralArchives | `GET/POST/PUT/DELETE /general-archives`, upload file |
 | OperationalVehicleUsage | `GET/POST /operational-vehicle-usages`, `POST /operational-vehicle-usages/:id/cancel` |
+| OrgStructure | `GET/POST/PUT/DELETE /org-structure/periods`, `GET /org-structure/tree`, `GET/POST/PUT/DELETE /org-structure/nodes`, `POST /org-structure/nodes/:id/move`, `POST /org-structure/nodes/:id/photo` |
 | Notifications | `GET /notifications`, `GET /notifications/stream` (SSE) |
 | ContractCron | Scheduled jobs (00:01 WIB daily, setiap 5 menit) |
 

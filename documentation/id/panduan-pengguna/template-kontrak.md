@@ -136,6 +136,10 @@ Isi dokumen disusun dari blok. Klik **Tambah blok** untuk memilih tipe blok:
 
 Setiap blok dapat **digeser (drag)** untuk mengubah urutan, **diduplikat**, **dihapus**, atau **diciutkan** (collapse). Klik blok untuk memilihnya — blok terpilih menjadi target penyisipan field dinamis.
 
+::: info Tabel pada PKWT (dua kolom)
+Blok **Tabel** dirender pada **kedua kolom** PKWT (Indonesia di kiri, English di kanan) secara **terkunci per baris**. Baris tabel yang sangat tinggi otomatis **dipecah lintas halaman** sehingga tidak terpotong. Kolom tabel dapat diberi format **teks**, **angka**, atau **mata uang** (mis. `Rp 5.500.000`).
+:::
+
 ::: warning Blok wajib
 Setiap bahasa harus memiliki minimal satu blok konten **dan** tepat satu blok **Tanda Tangan**. Publish akan ditolak bila salah satu tidak ada.
 :::

@@ -154,6 +154,31 @@ Template tanpa mark **dan** tanpa `align` mengeksekusi kode yang sama seperti se
 | Normalisasi bersama | `contracts/block-spacing.ts` (`normalizeBlockSpaceAfter`, `blockSpaceAfterPts`) |
 | Batas maksimum | `MAX_BLOCK_SPACE_AFTER` (`block-spacing.ts`) |
 
+## Blok Tabel (PKWT & MITRA)
+
+Blok `table` dirender oleh kedua keluarga, dengan model yang berbeda:
+
+| Keluarga | Cara render |
+|---|---|
+| **MITRA** | Satu kolom — `renderBlocks` → `contract-block-renderer.ts` (`drawRow`) |
+| **PKWT** | Dua kolom **terkunci per baris** (ID kiri, EN kanan) |
+
+### Alur PKWT
+
+1. `blocksToPkwtParagraphs` mengubah blok `table` menjadi **satu** paragraf ber-`table`; label kolom & sel sudah diinterpolasi + diformat di sini (engine bebas nilai).
+2. `buildPkwtRowsFromStructuredParagraphs` memancarkan baris `kind: 'table'` (membawa `idTable` dan/atau `enTable`).
+3. `renderPkwtLayout` → `drawPkwtTableRow` menggambar grid ber-border pada kedua kolom, baris demi baris (baris 0 = header, bold), tinggi baris = `max` kedua sisi.
+
+### Sel Ekstra-Tinggi
+
+Baris tabel yang lebih tinggi dari satu kotak halaman **dipecah per-lini lintas halaman** (jalur sama dengan renderer generik), sehingga teks sel tidak terpotong dan tidak meluber keluar halaman.
+
+### Format Sel & Lebar Kolom
+
+- **Format** kolom: `text` · `number` · `currency` · `date`. `formatCell()` (di `table-layout.helpers.ts`, dipakai bersama PKWT & MITRA) memformat angka dengan locale `id-ID`; teks non-angka dikembalikan apa adanya.
+- **Lebar** kolom (`width`) adalah **bobot relatif** yang dinormalisasi `computeColumnWidths()` agar total selalu selebar kolom — bukan persen mentah.
+- **Sel tidak mendukung mark inline** (`**`/`*`/`__`) — validator menolak publish bila ada penanda di sel tabel.
+
 ## Validasi (`template-schema.validator.ts`)
 
 `validateContentDefinition(content, fieldKeys, family)` mengembalikan hitungan `placeholderCount`, `blockCount`, `markedBlockCount`, `alignedBlockCount`, `spacedBlockCount`, dan `inlineMarkWarnings`. Validasi melempar `BadRequestException` dengan `issues` terstruktur bila ada masalah.
