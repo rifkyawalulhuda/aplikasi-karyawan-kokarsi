@@ -217,7 +217,7 @@ Setiap blok konten memiliki kontrol **Spasi antar blok** — jarak vertikal **ta
 - Bila blok berada tepat di puncak kolom/halaman baru (karena blok sebelumnya sudah penuh), jarak **tidak** diterapkan agar tidak menyisakan ruang kosong di atas.
 - Blok yang dapat diatur:
   - **MITRA** (Perjanjian Kemitraan): **Paragraf**, **Pasal**, **Daftar**, **Tabel**, **Judul Dokumen**, dan **Subjudul**.
-  - **PKWT** (Kesepakatan Kerja Waktu Tertentu): **Paragraf**, **Pasal**, dan **Daftar** (blok yang benar-benar mengalir ke kolom; judul/subjudul jadi kop dan tabel tidak dirender di kolom).
+  - **PKWT** (Kesepakatan Kerja Waktu Tertentu): **Paragraf**, **Pasal**, **Daftar**, dan **Tabel** (blok yang benar-benar mengalir ke kolom; judul/subjudul jadi kop).
 - Pada **PKWT** (dua kolom ID/EN yang terkunci per baris), bila jarak disetel hanya di salah satu bahasa atau berbeda antar bahasa, nilai **terbesar** yang dipakai — jarak tetap terasa.
 - **Tanda Tangan** dan **Ganti Halaman** tidak memiliki kontrol ini.
 - Saat sebuah blok memiliki jarak tambahan, kepala kartunya menampilkan penanda, mis. **+12 pt**.

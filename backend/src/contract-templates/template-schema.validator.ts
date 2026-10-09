@@ -61,12 +61,12 @@ export const SPACE_CAPABLE_BLOCKS = ['title', 'subtitle', 'paragraph', 'article'
  * Blok konten PKWT yang boleh membawa `spaceAfter`.
  *
  * Hanya blok yang BENAR-BENAR mengalir ke kolom: `blocksToPkwtParagraphs`
- * mengubah `paragraph`/`article`/`list` menjadi paragraf ber-kolom, sedangkan
- * `title`/`subtitle` menjadi kop (chrome) dan `table` dilewati. Memberi jarak
- * pada yang tidak dirender hanya akan membuat admin mengira perubahannya
- * berpengaruh.
+ * mengubah `paragraph`/`article`/`list` menjadi paragraf ber-kolom, dan `table`
+ * menjadi blok tabel ber-border; sedangkan `title`/`subtitle` menjadi kop
+ * (chrome). Memberi jarak pada yang tidak dirender hanya akan membuat admin
+ * mengira perubahannya berpengaruh.
  */
-export const PKWT_SPACE_CAPABLE_BLOCKS = ['paragraph', 'article', 'list'] as const
+export const PKWT_SPACE_CAPABLE_BLOCKS = ['paragraph', 'article', 'list', 'table'] as const
 
 /**
  * Blok yang mendukung `spaceAfter` untuk keluarga tertentu.

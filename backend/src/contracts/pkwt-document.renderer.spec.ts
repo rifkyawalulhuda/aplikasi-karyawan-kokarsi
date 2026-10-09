@@ -281,6 +281,44 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
     )
     expect(paras.map(p => p.spaceAfter)).toEqual([0, 0])
   })
+
+  it('blok table menghasilkan paragraf ber-`table` dengan sel terinterpolasi & terformat', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{
+        id: 't1',
+        type: 'table',
+        columns: [
+          { key: 'label', label: 'Komponen' },
+          { key: 'amount', label: 'Nominal', format: 'currency' },
+        ],
+        rows: [{ label: '{{employee.fullName}}', amount: '5500000' }],
+      }],
+      { 'employee.fullName': 'Budi' }
+    )
+    expect(paras).toHaveLength(1)
+    const table = paras[0].table
+    expect(table).toBeDefined()
+    expect(table!.header).toBe(true)
+    // Baris 0 = header, baris 1 = data (label terinterpolasi, amount terformat).
+    expect(table!.cells[0]).toEqual(['Komponen', 'Nominal'])
+    expect(table!.cells[1][0]).toBe('Budi')
+    expect(table!.cells[1][1]).toContain('5.500.000')
+  })
+
+  it('blok table tanpa header tidak menambah baris header', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{
+        id: 't1',
+        type: 'table',
+        header: false,
+        columns: [{ key: 'v', label: 'Nilai' }],
+        rows: [{ v: 'satu' }],
+      }],
+      {}
+    )
+    expect(paras[0].table!.header).toBe(false)
+    expect(paras[0].table!.cells).toEqual([['satu']])
+  })
 })
 
 describe('PKWT document renderer — mark & perataan di PDF NYATA', () => {

@@ -13,6 +13,7 @@
  */
 import PDFDocument from 'pdfkit'
 import { interpolate } from './contract-block-renderer'
+import { formatCell } from './table-layout.helpers'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
 import { blockSpaceAfterPts } from './block-spacing'
 import {
@@ -24,7 +25,8 @@ import {
   renderPkwtLayout,
   type PkwtAlign,
   type PkwtParagraph,
-  type PkwtSignatureOptions
+  type PkwtSignatureOptions,
+  type PkwtTable
 } from './pkwt-layout.engine'
 
 /** Direktori font (Times New Roman + Lucida Sans Typewriter). */
@@ -162,7 +164,7 @@ export function blocksToPkwtParagraphs(
   for (const block of blocks ?? []) {
     // Identitas blok untuk penelusuran; blok tanpa id tetap diberi label unik.
     const blockId = String(block?.id ?? `__anon-${anon++}`)
-    const local: { text: string, bold: boolean, runs?: InlineRun[], align?: PkwtAlign }[] = []
+    const local: { text: string, bold: boolean, runs?: InlineRun[], align?: PkwtAlign, table?: PkwtTable }[] = []
     // Perataan hanya diambil untuk blok yang MEMANG mendukungnya (`paragraph`
     // dan `article`). `list`/`table` punya perataan sendiri; validator menolak
     // `align` di sana, dan di sini dijaga agar tidak ikut terbawa.
@@ -201,8 +203,29 @@ export function blocksToPkwtParagraphs(
         }
         break
 
+      case 'table': {
+        // Tabel dirender sebagai SATU paragraf ber-`table`: engine menggambar
+        // grid ber-border di kolomnya (lihat `drawPkwtTableRow`). Label kolom &
+        // sel diinterpolasi + diformat di sini supaya engine bebas nilai.
+        const columns = (block.columns ?? []).map((c: any) => ({
+          label: interpolate(String(c?.label ?? ''), values),
+          width: c?.width,
+          align: c?.align,
+        }))
+        if (columns.length === 0) break
+        const header = block.header !== false
+        const cells: string[][] = []
+        if (header) cells.push(columns.map(c => c.label))
+        for (const row of block.rows ?? []) {
+          cells.push((block.columns ?? []).map((c: any) =>
+            formatCell(interpolate(String(row?.[c?.key] ?? ''), values), c?.format)))
+        }
+        local.push({ text: '', bold: false, table: { columns, cells, header } })
+        break
+      }
+
       default:
-        // title/subtitle/signature/pageBreak/table → bukan isi kolom.
+        // title/subtitle/signature/pageBreak → bukan isi kolom.
         break
     }
 
@@ -222,6 +245,7 @@ export function blocksToPkwtParagraphs(
         // `align` per-paragraf (untuk judul pasal = headingAlign); jatuh ke
         // `localAlign` blok bila paragrafnya tidak membawa align sendiri.
         align: p.align ?? localAlign,
+        table: p.table,
         blockId,
         blockIndex: ordinal,
         spaceAfter: blockSpaceAfter,

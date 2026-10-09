@@ -13,7 +13,10 @@
  *    lewat jalur `doc.text` lama, sehingga template yang sudah ada menghasilkan PDF
  *    yang sama persis (pola dua-sumbu yang sama dengan engine PKWT/MITRA).
  */
-import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
+import { computeColumnWidths, computeRowHeight, formatCell, wrapCellLines } from './table-layout.helpers'
+// `formatCell` dulu didefinisikan di sini; kini tinggal di `table-layout.helpers`
+// (dipakai bersama engine PKWT). Re-export agar importer lama tetap bekerja.
+export { formatCell } from './table-layout.helpers'
 // Tipe saja (`import type`): helper resolver adalah modul daun tanpa dependency
 // NestJS/Prisma, jadi memakai tipe bahasanya di sini tidak menimbulkan siklus
 // modul walau `contract-templates` sendiri bergantung pada `contracts`.
@@ -95,20 +98,6 @@ export function buildValueMap(resolved: any, language: DocumentLanguage = 'ID'):
     }
   }
   return out
-}
-
-/** Format angka untuk kolom tabel sesuai format yang diminta. */
-export function formatCell(value: string, format: string | undefined): string {
-  if (format !== 'currency' && format !== 'number') return value
-  const cleaned = String(value).replace(/[^0-9.-]/g, '')
-  // Tidak ada digit sama sekali → bukan angka, kembalikan apa adanya
-  if (!/[0-9]/.test(cleaned)) return value
-  const n = Number(cleaned)
-  if (!Number.isFinite(n)) return value
-  if (format === 'currency') {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
-  }
-  return new Intl.NumberFormat('id-ID').format(n)
 }
 
 /** Prefix bernomor untuk list: 1. / a. / •  */

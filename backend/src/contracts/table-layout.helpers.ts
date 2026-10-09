@@ -45,6 +45,29 @@ export function computeColumnWidths(columns: TableColumnLike[], totalWidth: numb
 }
 
 /**
+ * Format satu nilai sel tabel sesuai `format` kolomnya.
+ *
+ * Dipakai BERSAMA oleh renderer generik (`contract-block-renderer.ts`) dan engine
+ * PKWT (`pkwt-layout.engine.ts`) supaya nilai yang tercetak identik — dulu fungsi
+ * ini hanya ada di renderer generik sehingga tabel PKWT tak pernah diformat.
+ *
+ * `currency`/`number` memakai locale `id-ID`; teks non-angka dikembalikan apa
+ * adanya supaya sel seperti "Belum ada" tidak berubah jadi `NaN`.
+ */
+export function formatCell(value: string, format: string | undefined): string {
+  if (format !== 'currency' && format !== 'number') return value
+  const cleaned = String(value).replace(/[^0-9.-]/g, '')
+  // Tidak ada digit sama sekali → bukan angka, kembalikan apa adanya
+  if (!/[0-9]/.test(cleaned)) return value
+  const n = Number(cleaned)
+  if (!Number.isFinite(n)) return value
+  if (format === 'currency') {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
+  }
+  return new Intl.NumberFormat('id-ID').format(n)
+}
+
+/**
  * Tinggi baris tabel untuk satu set sel.
  * Dipakai agar kedua renderer memakai rumus tinggi yang identik.
  */

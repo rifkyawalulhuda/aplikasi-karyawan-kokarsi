@@ -308,12 +308,35 @@ export const PKWT_RUN_FONTS: RunFonts = {
  * Bilingual row model
  * ------------------------------------------------------------------ */
 
+/**
+ * Satu kolom tabel PKWT. `label` sudah terinterpolasi (nilai contoh / kontrak).
+ * `width` adalah BOBOT RELATIF yang dinormalisasi `computeColumnWidths`.
+ */
+export interface PkwtTableColumn {
+  label: string
+  width?: number
+  align?: string
+}
+
+/**
+ * Tabel PKWT yang siap digambar.
+ *
+ * Sel sudah terinterpolasi + terformat (lihat `blocksToPkwtParagraphs`), sehingga
+ * engine tidak perlu tahu nilai kontrak. `cells[0]` adalah baris HEADER bila
+ * `header === true`.
+ */
+export interface PkwtTable {
+  columns: PkwtTableColumn[]
+  cells: string[][]
+  header: boolean
+}
+
 /** Satu baris paralel: teks ID (kiri) dan EN (kanan) yang harus sealign. */
 export interface PkwtRow {
   id: string
   en: string
   /** Gaya baris; memengaruhi font & gap. */
-  kind?: 'heading' | 'body' | 'list'
+  kind?: 'heading' | 'body' | 'list' | 'table'
   /**
    * Bold PER-KOLOM.
    *
@@ -385,6 +408,13 @@ export interface PkwtRow {
    * gunanya dan hanya mendorong teks turun dari `boxTop`).
    */
   gapBefore?: number
+  /**
+   * Bila terisi, baris ini adalah BLOK TABEL (bukan baris teks). `id`/`en`
+   * dibiarkan kosong; engine menggambar tabel ber-border per kolom dan
+   * memaginasi per baris tabel. Boleh hanya salah satu kolom yang berisi tabel.
+   */
+  idTable?: PkwtTable
+  enTable?: PkwtTable
 }
 
 /**
@@ -620,6 +650,11 @@ export interface PkwtParagraph {
    * `buildPkwtRowsFromStructuredParagraphs`).
    */
   spaceAfter?: number
+  /**
+   * Bila terisi, paragraf ini sebenarnya membawa BLOK TABEL. Engine mengabaikan
+   * `text`/`runs` untuk paragraf seperti ini dan menggambar tabel ber-border.
+   */
+  table?: PkwtTable
 }
 
 /**
@@ -700,8 +735,19 @@ export function buildPkwtRowsFromStructuredParagraphs(
 
   const rows: PkwtRow[] = []
   const emitBlock = (blockIndex: number) => {
-    const a = toLines(idGroup.get(blockIndex) ?? [])
-    const b = toLines(enGroup.get(blockIndex) ?? [])
+    const idParas = idGroup.get(blockIndex) ?? []
+    const enParas = enGroup.get(blockIndex) ?? []
+    // Blok TABEL dikirim sebagai SATU baris khusus: engine menggambar tabel
+    // ber-border per kolom (lihat `drawPkwtTableRow`), bukan membungkus teks.
+    // Boleh hanya salah satu kolom yang berisi tabel.
+    const idTable = idParas.find(p => p.table)?.table
+    const enTable = enParas.find(p => p.table)?.table
+    if (idTable || enTable) {
+      rows.push({ id: '', en: '', kind: 'table', idTable, enTable })
+      return
+    }
+    const a = toLines(idParas)
+    const b = toLines(enParas)
     const m = Math.max(a.length, b.length)
     for (let j = 0; j < m; j++) {
       const left = a[j]
@@ -1278,7 +1324,89 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     doc.text(cell, x, y, { width: w, lineGap: G.lineGap, align })
   }
 
+  /**
+   * Gambar BLOK TABEL (baris `kind === 'table'`) pada kedua kolom sekaligus.
+   *
+   * Tabel ID dan EN digambar BERBARIS-baris secara terkunci (header baris ke-0,
+   * dst.) supaya kedua kolom tetap sejajar seperti baris teks biasa. Tinggi baris
+   * gabungan = `max` tinggi kedua sisi; baris yang tidak muat memindahkan SELURUH
+   * baris ke halaman baru. Tabel boleh hanya ada di satu kolom.
+   */
+  const drawPkwtTableRow = (row: PkwtRow) => {
+    const idTable = row.idTable
+    const enTable = row.enTable
+    if (!idTable && !enTable) return
+    const size = G.font.body - 1
+    const idX = G.left.x0 + G.textPaddingLeft
+    const enX = G.right.x0 + G.textPaddingLeft
+    const idWidths = idTable ? computeColumnWidths(idTable.columns, innerW0) : []
+    const enWidths = enTable ? computeColumnWidths(enTable.columns, innerW1) : []
+    const rowCount = Math.max(idTable?.cells.length ?? 0, enTable?.cells.length ?? 0)
+
+    // Jarak blok sebelum tabel — dibuang bila tabel jatuh di puncak halaman,
+    // sama seperti baris teks biasa.
+    const gap = row.gapBefore ?? 0
+    if (gap > 0 && y + gap <= boxBottomFor(pageIndex) - PAD_TOP) y += gap
+
+    const drawCells = (
+      cells: string[],
+      widths: number[],
+      x0: number,
+      top: number,
+      h: number,
+      bold: boolean,
+      columns: PkwtTableColumn[],
+    ) => {
+      const font = bold ? F.bold : F.regular
+      let x = x0
+      columns.forEach((c, ci) => {
+        doc.rect(x, top, widths[ci], h).stroke('#000000')
+        doc
+          .font(font)
+          .fontSize(size)
+          .fillColor('#000000')
+          .text(cells[ci] ?? '', x + 4, top + 3, {
+            width: Math.max(widths[ci] - 8, 1),
+            align: (c.align ?? 'left') as any,
+          })
+        x += widths[ci]
+      })
+    }
+
+    for (let i = 0; i < rowCount; i++) {
+      const idCells = idTable?.cells[i]
+      const enCells = enTable?.cells[i]
+      const idBold = idTable ? idTable.header && i === 0 : false
+      const enBold = enTable ? enTable.header && i === 0 : false
+      // Ukur tiap sisi dengan font yang benar-benar dipakai sisi itu.
+      doc.font(idBold ? F.bold : F.regular).fontSize(size)
+      const idH = idCells ? computeRowHeight(doc, idCells, idWidths, size, 8, 6) : 0
+      doc.font(enBold ? F.bold : F.regular).fontSize(size)
+      const enH = enCells ? computeRowHeight(doc, enCells, enWidths, size, 8, 6) : 0
+      const h = Math.max(idH, enH, size + 6)
+
+      if (y + h > boxBottomFor(pageIndex) - PAD_TOP) {
+        doc.addPage()
+        pageIndex += 1
+        y = boxTopFor(pageIndex) + PAD_TOP
+        contentBottoms[pageIndex] = y
+      }
+      if (idCells) drawCells(idCells, idWidths, idX, y, h, idBold, idTable!.columns)
+      if (enCells) drawCells(enCells, enWidths, enX, y, h, enBold, enTable!.columns)
+      y += h
+      contentBottoms[pageIndex] = y
+    }
+    // Jarak ringan di bawah tabel, meniru renderer blok generik (`state.y += 4`).
+    y += 4
+    contentBottoms[pageIndex] = y
+  }
+
   for (const row of opts.rows ?? []) {
+    // Blok tabel dikelola sendiri (paginasi per baris tabel).
+    if (row.kind === 'table' && (row.idTable || row.enTable)) {
+      drawPkwtTableRow(row)
+      continue
+    }
     const h = measureRow(row)
     // Jarak antar-blok diukur SEBELUM uji luber: kalau tidak, baris terakhir
     // sebuah blok bisa lolos uji (muat), lalu jaraknya "tumpah" ke luar kotak.

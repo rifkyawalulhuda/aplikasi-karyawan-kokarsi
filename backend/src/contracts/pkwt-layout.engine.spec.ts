@@ -20,8 +20,10 @@ import {
   buildPkwtRowsFromStructuredParagraphs,
   pkwtColumnInnerWidth,
   pkwtSignatureHeight,
+  renderPkwtLayout,
   resolveCellAlign
 } from './pkwt-layout.engine'
+import PDFDocument from 'pdfkit'
 import { parseInlineRuns } from './inline-marks'
 import { createPkwtPdfBuffer, resolvePkwtFonts } from './pkwt-document.renderer'
 import { PKWT_PREVIEW_VALUES } from './pkwt-preview-sample'
@@ -214,6 +216,84 @@ describe('buildPkwtRowsFromStructuredParagraphs — pasangan ID/EN per blok', ()
     )
     expect(rows.map(r => r.en)).toEqual(['en a', 'en b'])
     expect(rows[1].id).toBe('')
+  })
+
+  it('paragraf ber-`table` menjadi SATU baris kind=table (bukan dibungkus teks)', () => {
+    const table = {
+      columns: [{ label: 'Nama' }, { label: 'Nilai' }],
+      cells: [['Nama', 'Nilai'], ['Upah', 'Rp 5.500.000']],
+      header: true,
+    }
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [{ blockId: 't', blockIndex: 0, text: '', bold: false, table }],
+      [{ blockId: 't', blockIndex: 0, text: '', bold: false, table }],
+      opts
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].kind).toBe('table')
+    expect(rows[0].idTable).toBe(table)
+    expect(rows[0].enTable).toBe(table)
+    // Teks kosong tidak menghasilkan baris teks tambahan.
+    expect(rows[0].id).toBe('')
+    expect(rows[0].en).toBe('')
+  })
+
+  it('tabel hanya di satu kolom tetap menghasilkan baris tabel', () => {
+    const table = { columns: [{ label: 'A' }], cells: [['A'], ['1']], header: true }
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [{ blockId: 't', blockIndex: 0, text: '', bold: false, table }],
+      [],
+      opts
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].kind).toBe('table')
+    expect(rows[0].idTable).toBe(table)
+    expect(rows[0].enTable).toBeUndefined()
+  })
+})
+
+describe('PKWT layout engine — blok tabel benar-benar digambar', () => {
+  const fonts = resolvePkwtFonts()
+  // Tanpa font master, `renderPkwtLayout` melempar saat mendaftarkan font.
+  const maybe = fs.existsSync(fonts.regular) ? it : it.skip
+
+  const makeDoc = () =>
+    new PDFDocument({
+      size: [PKWT_GEOMETRY.pageWidth, PKWT_GEOMETRY.pageHeight],
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      bufferPages: true,
+    })
+
+  /** Tinggi konten halaman 1 setelah baris digambar. */
+  const renderBottom = (rows: any[]): number => {
+    const doc = makeDoc()
+    renderPkwtLayout(doc, {
+      rows,
+      header: { orgLines: [], addressLines: [], titleId: '', titleEn: '' },
+      fonts,
+      signature: { leftTitle: 'Karyawan', rightTitle: 'Pengusaha' },
+      reserveSignatureZone: false,
+    })
+    return (doc as any).__pkwtLayout.contentBottoms[0]
+  }
+
+  maybe('baris tabel menambah tinggi konten (dulu dilewati sepenuhnya)', () => {
+    const table = {
+      columns: [{ label: 'Komponen' }, { label: 'Nominal' }],
+      cells: [
+        ['Komponen', 'Nominal'],
+        ['Upah Pokok', 'Rp 5.500.000'],
+        ['Tunjangan', 'Rp 500.000'],
+      ],
+      header: true,
+    }
+    const empty = renderBottom([])
+    const withTable = renderBottom([
+      { id: '', en: '', kind: 'table', idTable: table, enTable: table },
+    ])
+    expect(withTable).toBeGreaterThan(empty)
   })
 })
 
@@ -779,6 +859,38 @@ print(json.dumps(out))
     // Baris kedua pada dokumen DUA-BLOK turun tepat sebesar `blockGap`.
     expect(a[1] - b[1]).toBeCloseTo(G.blockGap, 1)
     expect(a[1] - a[0]).toBeGreaterThan(b[1] - b[0])
+  })
+
+  it('blok tabel benar-benar tercetak di PDF (teks sel muncul, bukan dilewati)', async () => {
+    const file = path.join(tmpDir, 'pkwt-table.pdf')
+    fs.writeFileSync(file, await createPkwtPdfBuffer({
+      values: {},
+      titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+      titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+      numberLabel: 'No. : 1/KUKP-SII/I/2026',
+      orgLines: ['KOPERASI KARYAWAN'],
+      addressLines: ['Jl. Contoh No. 1'],
+      contactLine: 'TELP. 021 - 0',
+      signature: { leftTitle: 'PIHAK PERTAMA', rightTitle: 'PIHAK KEDUA' },
+      blocks: [
+        { type: 'paragraph', text: 'Rincian-upah sebagai berikut.' },
+        {
+          type: 'table',
+          columns: [
+            { key: 'komponen', label: 'KOMPONEN' },
+            { key: 'nominal', label: 'NOMINAL' },
+          ],
+          rows: [{ komponen: 'UPAH-POKOK', nominal: '5500000' }],
+        },
+      ],
+    }))
+
+    // Sebelum perbaikan, blok `table` dilewati `blocksToPkwtParagraphs` sehingga
+    // tak satu pun teks sel muncul di PDF.
+    const text = measure(file).text
+    expect(text).toContain('KOMPONEN')
+    expect(text).toContain('NOMINAL')
+    expect(text).toContain('UPAH-POKOK')
   })
 })
 

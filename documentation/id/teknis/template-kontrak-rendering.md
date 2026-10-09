@@ -141,7 +141,7 @@ Template tanpa mark **dan** tanpa `align` mengeksekusi kode yang sama seperti se
   - **PKWT** (`pkwt-layout.engine.ts`) mengunci baris ID/EN per blok. `buildPkwtRowsFromStructuredParagraphs` menambahkan `spaceAfter` blok ke-`i` pada `gapBefore` baris pembuka blok ke-`i+1`, di atas `PKWT_GEOMETRY.blockGap`. Blok terakhir tidak menyumbang apa pun. Karena baris ID/EN terkunci, jarak blok = **max** `spaceAfter` kedua kolom (bila hanya satu bahasa disetel, nilai itu tetap berlaku).
 - **Himpunan tipe yang didukung** (`spaceCapableBlocks(family)`):
   - MITRA (`SPACE_CAPABLE_BLOCKS`): `title`, `subtitle`, `paragraph`, `article`, `list`, `table`.
-  - PKWT (`PKWT_SPACE_CAPABLE_BLOCKS`): `paragraph`, `article`, `list` — `title`/`subtitle` jadi kop (chrome) dan `table` tidak dirender di kolom.
+  - PKWT (`PKWT_SPACE_CAPABLE_BLOCKS`): `paragraph`, `article`, `list`, `table` — `title`/`subtitle` jadi kop (chrome).
   - `pageBreak` & `signature` ditolak validator (struktural / footer).
 - **Ikut terukur.** MITRA mengukur lewat `planMitraLayout`; PKWT menghitung ulang paginasi per baris. Paginasi selalu konsisten dengan hasil akhir.
 - **Nol regresi template lama.** Tanpa blok ber-`spaceAfter`, tidak ada jarak yang ditambahkan → output identik.
