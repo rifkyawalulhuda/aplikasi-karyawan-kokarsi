@@ -221,10 +221,8 @@ const periodLabel = computed(() => vehiclePeriod.value === 'today' ? 'Hari Ini' 
                 <div v-for="item in group.items" :key="item.id" class="flex items-center gap-3 py-2.5">
                   <span class="w-12 shrink-0 text-sm font-semibold tabular-nums text-highlighted">{{ jamWib(item.usedAt) }}</span>
                   <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-medium text-highlighted">
-                      {{ item.vehicleNumber }}
-                    </p>
-                    <p class="truncate text-xs text-muted">
+                    <OperasionalVehiclePlate :vehicle-number="item.vehicleNumber" size="sm" />
+                    <p class="mt-1 truncate text-xs text-muted">
                       {{ item.driver }} · {{ item.destination }}
                     </p>
                   </div>

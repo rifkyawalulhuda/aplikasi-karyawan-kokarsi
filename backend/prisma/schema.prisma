@@ -655,12 +655,13 @@ model NotificationPreference {
 }
 
 model EmailNotificationRecipient {
-  id            Int         @id @default(autoincrement())
-  userAccountId Int
-  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
-  createdAt     DateTime    @default(now())
+  id            Int          @id @default(autoincrement())
+  userAccountId Int?         @unique
+  userAccount   UserAccount? @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+  email         String?      @unique @db.VarChar(255)
+  name          String?      @db.VarChar(255)
+  createdAt     DateTime     @default(now())
 
-  @@unique([userAccountId])
   @@map("email_notification_recipients")
 }
 

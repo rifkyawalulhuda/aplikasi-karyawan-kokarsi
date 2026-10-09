@@ -27,8 +27,7 @@ export class MailerooService {
     to: { email: string; name?: string }[]
     subject: string
     html: string
-  }): Promise<boolean> {
-    const apiKey = process.env.MAILEROO_API_KEY
+  }): Promise<boolean> {    const apiKey = process.env.MAILEROO_API_KEY
     const fromEmail = process.env.MAILEROO_FROM_EMAIL || 'noreply@localhost'
     const fromName = process.env.MAILEROO_FROM_NAME || 'System'
 
@@ -65,6 +64,71 @@ export class MailerooService {
       this.logger.error(`Failed to send email: ${err?.message}`)
       return false
     }
+  }
+
+  /**
+   * Kirim email uji ke penerima terpilih. HTML menyerupai notifikasi asli
+   * (kop + contoh tabel) agar admin melihat tampilan sebenarnya, dengan
+   * penanda jelas bahwa ini email percobaan.
+   */
+  async sendTestEmail(
+    recipients: { email: string; name?: string }[],
+  ): Promise<boolean> {
+    if (!recipients.length) return false
+
+    const today = new Date().toLocaleDateString('id-ID', {
+      day: '2-digit', month: 'long', year: 'numeric',
+    })
+    const time = new Date().toLocaleTimeString('id-ID', {
+      hour: '2-digit', minute: '2-digit',
+    })
+
+    const subject = `[Kokarsi] Email Uji Konfigurasi Notifikasi - ${today}`
+
+    const sampleRow = (name: string, doc: string, date: string) => `
+      <tr>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0;">${name}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0;">${doc}</td>
+        <td style="padding:8px 12px;border:1px solid #e2e8f0;">${date}</td>
+      </tr>`
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#2563eb;color:white;padding:20px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;">Notifikasi Status Kontrak</h2>
+          <p style="margin:4px 0 0;opacity:0.9;">Kokarsi PT. Sankyu — ${today}</p>
+        </div>
+        <div style="padding:20px;background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+          <div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:16px;">
+            <strong>Email uji konfigurasi.</strong> Ini contoh tampilan notifikasi. Data di bawah hanya ilustrasi.
+          </div>
+          <p>Berikut pembaruan status kontrak karyawan per hari ini:</p>
+          <h3 style="color:#f59e0b;margin:0 0 8px;">&#9888;&#65039; Kontrak Akan Habis (≤ 30 hari) — 2 kontrak</h3>
+          <table style="border-collapse:collapse;width:100%;margin-bottom:20px;font-size:14px;">
+            <thead>
+              <tr style="background:#fef3c7;">
+                <th style="padding:8px 12px;border:1px solid #e2e8f0;text-align:left;">Nama Karyawan</th>
+                <th style="padding:8px 12px;border:1px solid #e2e8f0;text-align:left;">No. Kontrak</th>
+                <th style="padding:8px 12px;border:1px solid #e2e8f0;text-align:left;">Berakhir</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sampleRow('Contoh Karyawan A', 'KTR/DEMO/001', today)}
+              ${sampleRow('Contoh Karyawan B', 'KTR/DEMO/002', today)}
+            </tbody>
+          </table>
+          <p style="margin-top:20px;color:#64748b;font-size:13px;">
+            Email ini dikirim pada ${time} WIB sebagai bagian dari pengujian konfigurasi.<br>
+            Bila Anda menerima email ini, berarti konfigurasi pengiriman sudah berfungsi.
+          </p>
+        </div>
+        <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:16px;">
+          Email ini dikirim otomatis oleh sistem. Jangan balas email ini.
+        </p>
+      </div>
+    `
+
+    return this.sendEmail({ to: recipients, subject, html })
   }
 
   async sendDocumentStatusNotification(

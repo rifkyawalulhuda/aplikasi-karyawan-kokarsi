@@ -132,7 +132,7 @@ export interface Contract {
   generatedPdfUrl?: string | null
   generatedAt?: string | null
   parentContractId?: number | null
-  parentContract?: { id: number; contractNo: string; status: ContractStatus } | null
+  parentContract?: { id: number, contractNo: string, status: ContractStatus } | null
   createdAt: string
   updatedAt?: string
 }
@@ -143,7 +143,7 @@ export interface ContractSummaryRow {
   fullName: string
   contractId: number
   contractNo: string
-  contractType: { id: number; name: string } | null
+  contractType: { id: number, name: string } | null
   startDate: string
   endDate: string
   status: ContractStatus
@@ -153,7 +153,7 @@ export interface ContractSummaryRow {
 }
 
 export interface ContractHistoryResponse {
-  employee: { id: number; employeeNo: string; fullName: string; fotoKaryawan?: string | null }
+  employee: { id: number, employeeNo: string, fullName: string, fotoKaryawan?: string | null }
   contracts: Contract[]
 }
 
@@ -187,7 +187,7 @@ export interface ContractTemplate {
   version: number
   notes?: string | null
   /** Jumlah kontrak yang memakai template ini (dari `_count.contracts`). */
-  _count?: { contracts: number; versions?: number }
+  _count?: { contracts: number, versions?: number }
   /** Versi PUBLISHED efektif; `undefined` bila belum pernah diterbitkan. */
   versions?: ContractTemplatePublishedVersion[]
   createdAt?: string
@@ -356,13 +356,33 @@ export interface LoginFeatureItem {
 export interface EmailNotificationConfig {
   isEnabled: boolean
   triggerWindows: number[]
-  recipients: EmailNotificationUser[]
+  recipientUserIds: number[]
+  externalRecipients: ExternalEmailRecipient[]
 }
 
 export interface EmailNotificationUser {
   id: number
   name: string
   email: string
+}
+
+export interface ExternalEmailRecipient {
+  id: number
+  email: string
+  name: string
+}
+
+export interface EmailNotificationStatus {
+  mailerConfigured: boolean
+  fromEmail: string
+  fromName: string
+}
+
+export interface EmailNotificationHistory {
+  id: number
+  changedBy: string
+  description: string
+  createdAt: string
 }
 
 export type CalendarItemType = 'agenda' | 'employee_contract' | 'employee_document' | 'vendor_contract' | 'legal_koperasi'
