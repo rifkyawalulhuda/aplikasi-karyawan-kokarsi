@@ -17,13 +17,17 @@ PG_DB="kokarsi_karyawan"
 PG_HOST="localhost"
 PG_PORT=5432
 RETAIN_DAYS=7
+# Log disimpan DI LUAR folder backup agar tidak memicu sync issue MEGA
+# (file log terus berubah saat backup berjalan). Salinannya ditaruh di
+# dalam folder backup setelah backup selesai.
+LOG_DIR="${HOME}/backups/logs"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 TIMESTAMP="$(date +%Y-%m-%d_%H-%M)"
 BACKUP_NAME="backup_${TIMESTAMP}"
 BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
-LOG_FILE="${BACKUP_DIR}/backup.log"
+LOG_FILE="${LOG_DIR}/kokarsi.log"
 
 # ── Parse arguments ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -33,7 +37,7 @@ while [[ $# -gt 0 ]]; do
       BACKUP_DIR="$2"
       BACKUP_NAME="backup_$(date +%Y-%m-%d_%H-%M)"
       BACKUP_PATH="${BACKUP_DIR}/${BACKUP_NAME}"
-      LOG_FILE="${BACKUP_DIR}/backup.log"
+      LOG_FILE="${LOG_DIR}/kokarsi.log"
       shift 2 ;;
     --pg-user) PG_USER="$2"; shift 2 ;;
     --pg-db) PG_DB="$2"; shift 2 ;;
@@ -58,6 +62,7 @@ write_log() {
 
 # ── Pastikan folder backup ada ───────────────────────────────────────────────
 mkdir -p "$BACKUP_DIR"
+mkdir -p "$LOG_DIR"
 
 write_log "===== Backup started: $BACKUP_NAME (Mode: $MODE) ====="
 mkdir -p "$BACKUP_PATH"
@@ -206,5 +211,8 @@ write_log "Deleted $DELETED old backup(s)"
 TOTAL_BACKUPS=$(find "$BACKUP_DIR" -maxdepth 1 -type d -name "backup_*" | wc -l)
 write_log "===== Backup completed: $BACKUP_PATH ====="
 write_log "Total backups retained: $TOTAL_BACKUPS"
+# ── 7. Salin log ke folder backup (referensi lokal, aman untuk sync) ────────
+cp "$LOG_FILE" "$BACKUP_PATH/backup.log" 2>/dev/null || true
+
 echo ""
 echo "Backup selesai: $BACKUP_PATH"

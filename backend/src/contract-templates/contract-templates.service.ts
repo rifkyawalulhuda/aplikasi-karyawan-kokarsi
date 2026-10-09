@@ -6,7 +6,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { validateContentDefinition } from './template-schema.validator'
 import { TemplateFieldsService } from './template-fields.service'
-import { applyTemplateBindings } from './template-field-bindings.helpers'
+import { addPlaceholderKeysFromDefinitions, applyTemplateBindings } from './template-field-bindings.helpers'
 
 export interface ContractTemplatePayload {
   code: string
@@ -135,7 +135,14 @@ export class ContractTemplatesService {
           definitionToFieldDefinitions(definition),
           await this.fieldsService.findTemplateBindings(template.id),
         )
-        validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), seed.family)
+        // `applyTemplateBindings()` membuang prefix `custom.` dari key
+        // CONTRACT_INPUT, sedangkan blok konten menulis `{{custom.xxx}}`.
+        // Tanpa jembatan ini validasi menolak `{{custom.ktp_issued_date}}` dan
+        // bootstrap versi gagal — akibatnya `GET /contract-templates` selalu 400
+        // dan halaman Template Kontrak tampil kosong.
+        const validKeys = new Set(fieldDefinitions.map(field => field.key))
+        addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+        validateContentDefinition(contentDefinition, [...validKeys], seed.family)
         await this.prisma.client.contractTemplateVersion.create({
           data: {
             templateId: template.id,

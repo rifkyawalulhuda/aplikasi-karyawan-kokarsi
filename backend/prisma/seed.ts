@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt'
 import { CONTRACT_DOCUMENT_DEFINITIONS } from '../src/contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from '../src/contract-templates/default-template-definition'
 import { validateContentDefinition } from '../src/contract-templates/template-schema.validator'
-import { applyTemplateBindings } from '../src/contract-templates/template-field-bindings.helpers'
+import { addPlaceholderKeysFromDefinitions, applyTemplateBindings } from '../src/contract-templates/template-field-bindings.helpers'
 
 const DB_URL = process.env.DATABASE_URL
 if (!DB_URL) throw new Error('DATABASE_URL tidak ditemukan di .env')
@@ -348,7 +348,10 @@ async function main() {
         orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
       })
       const fieldDefinitions = applyTemplateBindings(definitionToFieldDefinitions(definition), bindings)
-      validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), templateSeed.family)
+      // Jembatan prefix `custom.` — lihat `addPlaceholderKeysFromDefinitions()`.
+      const validKeys = new Set(fieldDefinitions.map(field => field.key))
+      addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+      validateContentDefinition(contentDefinition, [...validKeys], templateSeed.family)
       await prisma.contractTemplateVersion.create({
         data: {
           templateId: template.id,

@@ -303,3 +303,34 @@ export function extractContractInputFields(fieldDefinitions: unknown): ContractI
   }
   return fields
 }
+
+/**
+ * Tambahkan key valid untuk placeholder `{{custom.xxx}}` yang dirujuk konten.
+ *
+ * `applyTemplateBindings()` membuang prefix `custom.` (resolver mengharapkan key
+ * polos), sedangkan blok konten menulis `{{custom.xxx}}`. Tanpa jembatan ini
+ * `validateContentDefinition()` melaporkan placeholder sebagai "tidak terdaftar
+ * di katalog field" — mis. `{{custom.ktp_issued_date}}` pada paragraf identitas
+ * PIHAK KEDUA — sehingga publish maupun bootstrap versi gagal.
+ *
+ * WAJIB dipakai oleh SETIAP jalur yang memanggil `validateContentDefinition()`
+ * dengan `fieldDefinitions` hasil `applyTemplateBindings()`:
+ *  - `ContractTemplatesService.ensureDefaultTemplates()` (bootstrap lazy saat
+ *    daftar template dibuka — kalau terlewat, seluruh `GET /contract-templates`
+ *    gagal 400 dan halaman Template Kontrak tampil kosong);
+ *  - `prisma/seed.ts` (pembuatan versi v1 saat seeding);
+ *  - `ContractTemplateVersionsService` (publish, preview, getPublished).
+ */
+export function addPlaceholderKeysFromDefinitions(
+  contentDefinition: unknown,
+  fieldDefinitions: Array<{ key?: unknown }>,
+  validKeys: Set<string>,
+): void {
+  for (const placeholder of collectAllPlaceholders(contentDefinition)) {
+    const isReferenced = fieldDefinitions.some(
+      (definition: { key?: unknown }) =>
+        placeholder === definition.key || placeholder === `custom.${definition.key}`,
+    )
+    if (isReferenced) validKeys.add(placeholder)
+  }
+}

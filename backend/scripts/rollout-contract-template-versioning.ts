@@ -14,6 +14,7 @@ import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../src/contracts
 import { definitionToContentDefinition, definitionToFieldDefinitions } from '../src/contract-templates/default-template-definition'
 import { resolvePlaceholders } from '../src/contract-templates/template-value-resolver.helpers'
 import { validateContentDefinition } from '../src/contract-templates/template-schema.validator'
+import { addPlaceholderKeysFromDefinitions } from '../src/contract-templates/template-field-bindings.helpers'
 
 config({ path: resolve(__dirname, '../.env') })
 
@@ -52,7 +53,10 @@ async function bootstrapVersions() {
     const merged = mergeDefinition(definition, template.contentOverrides as Record<string, any> | null)
     const contentDefinition = definitionToContentDefinition(merged)
     const fieldDefinitions = definitionToFieldDefinitions(merged)
-    validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), template.family as any)
+    // Jembatan prefix `custom.` — lihat `addPlaceholderKeysFromDefinitions()`.
+    const validKeys = new Set(fieldDefinitions.map(field => field.key))
+    addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+    validateContentDefinition(contentDefinition, [...validKeys], template.family as any)
     if (!dryRun) {
       const latest = await prisma.contractTemplateVersion.findFirst({
         where: { templateId: template.id }, orderBy: { versionNumber: 'desc' },

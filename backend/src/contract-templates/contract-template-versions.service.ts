@@ -3,11 +3,11 @@ import { Prisma } from '@prisma/client'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { PrismaService } from '../prisma/prisma.service'
-import { validateContentDefinition, collectAllPlaceholders, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
+import { validateContentDefinition, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { definitionToContentDefinition, definitionToFieldDefinitions, normalizePkwtTitleBlocks } from './default-template-definition'
 import { TemplateFieldsService } from './template-fields.service'
-import { applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions, ensureFieldDefinitionsForContent } from './template-field-bindings.helpers'
+import { addPlaceholderKeysFromDefinitions, applyTemplateBindings, extractContractInputFields, normalizeVersionFieldDefinitions, ensureFieldDefinitionsForContent } from './template-field-bindings.helpers'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { isValidMasterField, isValidMasterSource } from './master-reference.registry'
 import { MITRA_HEADER_CHROME } from '../contracts/mitra-layout.engine'
@@ -620,12 +620,9 @@ export class ContractTemplateVersionsService {
     fieldDefinitions: Array<{ key?: unknown }>,
     validKeys: Set<string>,
   ): void {
-    for (const placeholder of collectAllPlaceholders(contentDefinition)) {
-      const isReferenced = fieldDefinitions.some(
-        (definition: any) => placeholder === definition.key || placeholder === `custom.${definition.key}`,
-      )
-      if (isReferenced) validKeys.add(placeholder)
-    }
+    // Delegasi ke helper bersama supaya semua jalur validasi memakai jembatan
+    // prefix `custom.` yang sama (lihat template-field-bindings.helpers.ts).
+    addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
   }
 
   private validateFieldDefinitions(value: any, catalog: Set<string>) {
