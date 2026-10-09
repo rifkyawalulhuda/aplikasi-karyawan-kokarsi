@@ -304,7 +304,9 @@ watch(() => props.selectedContractId, focusSelected)
         v-for="(contract, index) in filteredContracts"
         :key="contract.id"
         :data-contract-id="contract.id"
-        class="dossier-rise rounded-xl border bg-default p-4 transition-colors"
+        :tabindex="contextMenuEnabled ? 0 : undefined"
+        :aria-haspopup="contextMenuEnabled ? 'menu' : undefined"
+        class="dossier-rise rounded-xl border bg-default p-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         :class="[
           hoveredId === contract.id ? 'border-primary/60 ring-1 ring-primary/30' : 'border-default',
           selectedContractId === contract.id ? 'border-primary ring-1 ring-primary/40' : ''

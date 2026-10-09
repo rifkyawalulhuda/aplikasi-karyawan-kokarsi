@@ -315,7 +315,7 @@ export const PKWT_RUN_FONTS: RunFonts = {
 export interface PkwtTableColumn {
   label: string
   width?: number
-  align?: string
+  align?: PkwtAlign
 }
 
 /**
@@ -1356,6 +1356,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
       h: number,
       bold: boolean,
       columns: PkwtTableColumn[],
+      lineGap?: number,
     ) => {
       const font = bold ? F.bold : F.regular
       let x = x0
@@ -1367,10 +1368,21 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
           .fillColor('#000000')
           .text(cells[ci] ?? '', x + 4, top + 3, {
             width: Math.max(widths[ci] - 8, 1),
-            align: (c.align ?? 'left') as any,
+            align: c.align ?? 'left',
+            ...(lineGap === undefined ? {} : { lineGap }),
           })
         x += widths[ci]
       })
+    }
+
+    /** Pindah halaman bila segmen setinggi `need` tidak muat di kotak berjalan. */
+    const breakIfNeeded = (need: number) => {
+      if (y + need > boxBottomFor(pageIndex) - PAD_TOP) {
+        doc.addPage()
+        pageIndex += 1
+        y = boxTopFor(pageIndex) + PAD_TOP
+        contentBottoms[pageIndex] = y
+      }
     }
 
     for (let i = 0; i < rowCount; i++) {
@@ -1385,16 +1397,63 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
       const enH = enCells ? computeRowHeight(doc, enCells, enWidths, size, 8, 6) : 0
       const h = Math.max(idH, enH, size + 6)
 
-      if (y + h > boxBottomFor(pageIndex) - PAD_TOP) {
-        doc.addPage()
-        pageIndex += 1
-        y = boxTopFor(pageIndex) + PAD_TOP
+      // Baris NORMAL (muat dalam satu kotak halaman): gambar utuh.
+      if (h <= boxBottomFor(pageIndex) - boxTopFor(pageIndex) - PAD_TOP) {
+        breakIfNeeded(h)
+        if (idTable && idCells) drawCells(idCells, idWidths, idX, y, h, idBold, idTable.columns)
+        if (enTable && enCells) drawCells(enCells, enWidths, enX, y, h, enBold, enTable.columns)
+        y += h
+        contentBottoms[pageIndex] = y
+        continue
+      }
+
+      // Baris EKSTRA-TINGGI (lebih tinggi dari satu kotak): pecah per-lini
+      // lintas halaman agar tidak meluber keluar halaman — jalur yang sama
+      // dengan `contract-block-renderer.ts`.
+      doc.font(idBold ? F.bold : F.regular).fontSize(size)
+      const idLineH = doc.heightOfString('Xg', { lineGap: 0 })
+      doc.font(enBold ? F.bold : F.regular).fontSize(size)
+      const enLineH = doc.heightOfString('Xg', { lineGap: 0 })
+      const lineH = Math.max(idLineH, enLineH)
+      const idCellLines = idCells
+        ? idCells.map((cell, ci) => wrapCellLines(doc, cell ?? '', Math.max(idWidths[ci] - 8, 1), idBold ? F.bold : F.regular, size))
+        : []
+      const enCellLines = enCells
+        ? enCells.map((cell, ci) => wrapCellLines(doc, cell ?? '', Math.max(enWidths[ci] - 8, 1), enBold ? F.bold : F.regular, size))
+        : []
+      const maxLines = Math.max(
+        1,
+        ...idCellLines.map(l => l.length),
+        ...enCellLines.map(l => l.length),
+      )
+      let consumed = 0
+      while (consumed < maxLines) {
+        if (y + lineH * 2 > boxBottomFor(pageIndex) - PAD_TOP) {
+          doc.addPage()
+          pageIndex += 1
+          y = boxTopFor(pageIndex) + PAD_TOP
+          contentBottoms[pageIndex] = y
+        }
+        const avail = boxBottomFor(pageIndex) - y
+        const fit = Math.max(1, Math.floor((avail - 6) / lineH))
+        const take = Math.min(fit, maxLines - consumed)
+        const segHeight = take * lineH + 6
+        if (idTable && idCells) {
+          drawCells(
+            idCellLines.map(lines => lines.slice(consumed, consumed + take).join('\n')),
+            idWidths, idX, y, segHeight, idBold, idTable.columns, 0,
+          )
+        }
+        if (enTable && enCells) {
+          drawCells(
+            enCellLines.map(lines => lines.slice(consumed, consumed + take).join('\n')),
+            enWidths, enX, y, segHeight, enBold, enTable.columns, 0,
+          )
+        }
+        y += segHeight
+        consumed += take
         contentBottoms[pageIndex] = y
       }
-      if (idCells) drawCells(idCells, idWidths, idX, y, h, idBold, idTable!.columns)
-      if (enCells) drawCells(enCells, enWidths, enX, y, h, enBold, enTable!.columns)
-      y += h
-      contentBottoms[pageIndex] = y
     }
     // Jarak ringan di bawah tabel, meniru renderer blok generik (`state.y += 4`).
     y += 4

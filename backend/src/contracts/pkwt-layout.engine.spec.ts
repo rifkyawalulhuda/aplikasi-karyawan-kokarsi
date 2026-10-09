@@ -295,6 +295,36 @@ describe('PKWT layout engine — blok tabel benar-benar digambar', () => {
     ])
     expect(withTable).toBeGreaterThan(empty)
   })
+
+  maybe('baris tabel EKSTRA-TINGGI dipecah lintas halaman, tidak meluber', () => {
+    // Satu sel berisi 200 baris → jauh lebih tinggi dari satu kotak halaman.
+    // Sebelum perbaikan, baris ini digambar utuh di satu halaman sehingga
+    // kotaknya meluber keluar halaman.
+    const tallText = Array.from({ length: 200 }, (_, i) => `Baris ${i + 1}`).join('\n')
+    const table = {
+      columns: [{ label: 'Uraian' }],
+      cells: [['Uraian'], [tallText]],
+      header: true,
+    }
+    const doc = makeDoc()
+    renderPkwtLayout(doc, {
+      rows: [{ id: '', en: '', kind: 'table', idTable: table, enTable: table }],
+      header: { orgLines: [], addressLines: [], titleId: '', titleEn: '' },
+      fonts,
+      signature: { leftTitle: 'Karyawan', rightTitle: 'Pengusaha' },
+      reserveSignatureZone: false,
+    })
+    const meta = (doc as any).__pkwtLayout as { pageCount: number, contentBottoms: number[] }
+
+    // Terpecah ke lebih dari satu halaman.
+    expect(meta.pageCount).toBeGreaterThan(1)
+    // Tidak ada konten yang melewati batas bawah kotak halaman (anti-meluber).
+    // Toleransi 5pt menyerap jarak ringan `+4` di akhir blok tabel.
+    meta.contentBottoms.forEach((bottom, pi) => {
+      const boxBottom = pi === 0 ? PKWT_GEOMETRY.firstPageBoxBottom : PKWT_GEOMETRY.contPageBoxBottom
+      expect(bottom).toBeLessThanOrEqual(boxBottom + 5)
+    })
+  })
 })
 
 describe('PKWT layout engine — jarak antar-blok', () => {
@@ -891,6 +921,36 @@ print(json.dumps(out))
     expect(text).toContain('KOMPONEN')
     expect(text).toContain('NOMINAL')
     expect(text).toContain('UPAH-POKOK')
+  })
+
+  it('sel tabel ekstra-tinggi tetap utuh lintas halaman (baris terakhir tidak hilang)', async () => {
+    // Penanda di baris PALING AKHIR sel; kalau pemecahan halaman memotong teks,
+    // penanda ini tidak akan muncul di PDF.
+    const tallText = Array.from({ length: 120 }, (_, i) => `Sel-baris-${i + 1}`).join('\n')
+    const file = path.join(tmpDir, 'pkwt-table-tall.pdf')
+    fs.writeFileSync(file, await createPkwtPdfBuffer({
+      values: {},
+      titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+      titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+      numberLabel: 'No. : 1/KUKP-SII/I/2026',
+      orgLines: ['KOPERASI KARYAWAN'],
+      addressLines: ['Jl. Contoh No. 1'],
+      contactLine: 'TELP. 021 - 0',
+      signature: { leftTitle: 'PIHAK PERTAMA', rightTitle: 'PIHAK KEDUA' },
+      blocks: [
+        {
+          type: 'table',
+          columns: [{ key: 'uraian', label: 'URAIAN' }],
+          rows: [{ uraian: tallText }],
+        },
+      ],
+    }))
+
+    const measured = measure(file)
+    expect(measured.pages.length).toBeGreaterThan(1)
+    // Baris pertama DAN terakhir sel harus muncul (tidak terpotong).
+    expect(measured.text).toContain('Sel-baris-1')
+    expect(measured.text).toContain('Sel-baris-120')
   })
 })
 

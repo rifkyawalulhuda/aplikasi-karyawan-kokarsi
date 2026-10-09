@@ -115,6 +115,11 @@ const contractMenuX = ref(0)
 const contractMenuY = ref(0)
 const contractMenuTarget = ref<Contract | null>(null)
 
+/** Kartu pemicu (untuk memposisikan menu dari keyboard & memulihkan fokus). */
+function contractCardEl(contract: Contract): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`[data-contract-id="${contract.id}"]`)
+}
+
 async function openContractMenu(contract: Contract, event: MouseEvent) {
   contractMenuTarget.value = contract
   contractMenu.value = true
@@ -122,12 +127,54 @@ async function openContractMenu(contract: Contract, event: MouseEvent) {
   const menuEl = document.querySelector('[data-contract-menu]') as HTMLElement | null
   const menuWidth = menuEl?.offsetWidth ?? 208
   const menuHeight = menuEl?.offsetHeight ?? 260
-  contractMenuX.value = Math.min(event.clientX, window.innerWidth - menuWidth - 8)
-  contractMenuY.value = Math.min(event.clientY, window.innerHeight - menuHeight - 8)
+
+  // Posisi: dari titik klik (mouse), atau dari kartu pemicu bila dibuka lewat
+  // keyboard (Shift+F10 / tombol Menu) — event keyboard memberi clientX/Y = 0.
+  let x = event.clientX
+  let y = event.clientY
+  if (x === 0 && y === 0) {
+    const rect = contractCardEl(contract)?.getBoundingClientRect()
+    x = rect ? rect.left : 8
+    y = rect ? rect.top : 8
+  }
+  // Clamp ke viewport, dengan lantai 8px agar tidak pernah negatif.
+  contractMenuX.value = Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8))
+  contractMenuY.value = Math.max(8, Math.min(y, window.innerHeight - menuHeight - 8))
+
+  // Fokus ke item pertama supaya menu bisa dioperasikan lewat keyboard.
+  menuEl?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
 }
 
-function closeContractMenu() {
+/**
+ * Tutup menu. `restoreFocus` dimatikan saat memilih item (aksi bisa membuka
+ * modal lain) agar fokus tidak "melompat" ke kartu di belakang.
+ */
+function closeContractMenu(restoreFocus = true) {
+  const contract = contractMenuTarget.value
   contractMenu.value = false
+  if (restoreFocus && contract) {
+    nextTick(() => contractCardEl(contract)?.focus())
+  }
+}
+
+/** Navigasi keyboard di dalam menu (panah/Home/End). */
+function onContractMenuKeydown(event: KeyboardEvent) {
+  const items = Array.from(document.querySelectorAll<HTMLElement>('[data-contract-menu] [role="menuitem"]'))
+  if (items.length === 0) return
+  const idx = items.indexOf(document.activeElement as HTMLElement)
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    items[(idx + 1 + items.length) % items.length]?.focus()
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    items[(idx - 1 + items.length) % items.length]?.focus()
+  } else if (event.key === 'Home') {
+    event.preventDefault()
+    items[0]?.focus()
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    items[items.length - 1]?.focus()
+  }
 }
 
 function onContractContextMenu(payload: { contract: Contract, event: MouseEvent }) {
@@ -160,7 +207,7 @@ function contractMenuItems(contract: Contract) {
 
 function onContractMenuSelect(item: { onSelect: () => void }) {
   item.onSelect()
-  closeContractMenu()
+  closeContractMenu(false)
 }
 
 function primaryLabel(contract: Contract) {
@@ -352,21 +399,27 @@ function primaryIcon(contract: Contract) {
       v-if="contractMenu && contractMenuTarget"
       class="pointer-events-auto fixed inset-0 z-[100]"
       @pointerdown.stop
-      @click="closeContractMenu"
-      @contextmenu.prevent="closeContractMenu"
+      @click="closeContractMenu()"
+      @contextmenu.prevent="closeContractMenu()"
+      @keydown.esc.stop="closeContractMenu()"
     >
       <div
         data-contract-menu
+        role="menu"
+        :aria-label="`Aksi untuk ${contractMenuTarget.contractNo}`"
         class="pointer-events-auto absolute z-[100] min-w-48 overflow-hidden rounded-xl border border-default bg-default py-1 shadow-xl"
         :style="{ top: `${contractMenuY}px`, left: `${contractMenuX}px` }"
         @pointerdown.stop
         @click.stop
+        @keydown="onContractMenuKeydown"
       >
         <button
           v-for="item in contractMenuItems(contractMenuTarget)"
           :key="item.label"
           type="button"
-          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted transition-colors hover:bg-elevated/60"
+          role="menuitem"
+          tabindex="-1"
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted transition-colors hover:bg-elevated/60 focus-visible:bg-elevated/60 focus-visible:outline-none"
           @click="onContractMenuSelect(item)"
         >
           <UIcon :name="item.icon" class="size-4 shrink-0 text-muted" />
