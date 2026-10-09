@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SpaceDocument } from '~/types/space'
+import { errorMessage } from '~/components/spaces/board-meta'
 
 definePageMeta({ layout: 'default' })
 
@@ -19,7 +20,7 @@ const { data: doc, pending, error } = useFetch<SpaceDocument>(
     credentials: 'include',
     onResponseError({ response }) {
       console.error('[DocPage] fetch error:', response.status, response._data)
-    },
+    }
   }
 )
 
@@ -92,22 +93,25 @@ async function saveDoc() {
       body: {
         title: title.value.trim() || 'Untitled',
         content: content.value,
-        emoji: emoji.value,
+        emoji: emoji.value
       },
-      credentials: 'include',
+      credentials: 'include'
     })
     lastSavedAt.value = new Date()
     docStatus.value = 'saved'
-  } catch (e: any) {
+  } catch (err: unknown) {
     docStatus.value = 'dirty'
-    toast.add({ title: 'Gagal menyimpan', description: e?.data?.message ?? 'Error', color: 'error' })
+    toast.add({ title: 'Gagal menyimpan', description: errorMessage(err), color: 'error' })
   }
 }
 
 // Simpan langsung (untuk tombol & Ctrl+S)
 function saveNow() {
   if (!hasUnsavedChanges.value) return
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
   saveDoc()
 }
 
@@ -117,7 +121,10 @@ async function downloadPdf() {
   isDownloadingPdf.value = true
   try {
     if (hasUnsavedChanges.value) {
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+      if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+      }
       await saveDoc()
     }
     await exportDocPdf(title.value || 'Untitled', emoji.value, content.value)
@@ -157,7 +164,7 @@ onBeforeRouteLeave((_to, _from, next) => {
       confirmColor: 'error',
       onConfirm: () => {
         next()
-      },
+      }
     })
     // Cegah navigasi sampai user konfirmasi
     next(false)
@@ -253,8 +260,15 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
       <!-- Error state -->
       <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-3 text-center">
         <UIcon name="i-lucide-alert-circle" class="size-10 text-error" />
-        <p class="font-medium text-highlighted">Dokumen tidak ditemukan</p>
-        <UButton label="Kembali" color="neutral" variant="outline" @click="router.push(`/spaces/${spaceId}`)" />
+        <p class="font-medium text-highlighted">
+          Dokumen tidak ditemukan
+        </p>
+        <UButton
+          label="Kembali"
+          color="neutral"
+          variant="outline"
+          @click="router.push(`/spaces/${spaceId}`)"
+        />
       </div>
 
       <!-- Editor (full-width for desktop) -->
@@ -274,7 +288,9 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
                   class="flex size-9 items-center justify-center rounded text-xl hover:bg-elevated"
                   :class="emoji === e ? 'bg-elevated ring-1 ring-primary' : ''"
                   @click="emoji = e"
-                >{{ e }}</button>
+                >
+                  {{ e }}
+                </button>
               </div>
             </template>
           </UPopover>
@@ -285,7 +301,7 @@ const EMOJIS = ['📄', '📝', '📋', '📊', '📌', '💡', '🎯', '📚', 
               class="w-full bg-transparent text-2xl font-bold text-highlighted outline-none placeholder:text-muted"
               placeholder="Untitled"
               @keydown.enter.prevent
-            />
+            >
           </div>
         </div>
 

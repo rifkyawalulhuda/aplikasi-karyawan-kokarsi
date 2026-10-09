@@ -1,14 +1,16 @@
 <script setup lang="ts">
-const props = defineProps<{ open: boolean }>()
-const emit = defineEmits<{ 'update:open': [boolean]; created: [] }>()
+import { errorMessage } from './board-meta'
+
+defineProps<{ open: boolean }>()
+const emit = defineEmits<{ 'update:open': [boolean], 'created': [] }>()
 
 const toast = useToast()
 const loading = ref(false)
 
 // Fetch daftar user pengurus untuk multi-select member
-const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
+const { data: usersRes } = useFetch<{ id: number, name: string }[]>('/api/users/pengurus', {
   credentials: 'include',
-  lazy: true,
+  lazy: true
 })
 const userOptions = computed(() =>
   (usersRes.value ?? []).map(u => ({ label: u.name, value: u.id }))
@@ -19,15 +21,15 @@ const COLORS = [
   { value: 'teal', bg: 'bg-teal-500' }, { value: 'green', bg: 'bg-green-500' },
   { value: 'yellow', bg: 'bg-amber-400' }, { value: 'orange', bg: 'bg-orange-500' },
   { value: 'red', bg: 'bg-red-500' }, { value: 'pink', bg: 'bg-pink-500' },
-  { value: 'purple', bg: 'bg-purple-500' }, { value: 'indigo', bg: 'bg-indigo-500' },
+  { value: 'purple', bg: 'bg-purple-500' }, { value: 'indigo', bg: 'bg-indigo-500' }
 ]
 
 const TEMPLATES = [
-  { key: 'simple', label: 'Simple', desc: 'Todo → In Progress → Done', icon: '✅' },
-  { key: 'dev', label: 'Dev Flow', desc: 'Backlog → Todo → In Progress → Review → Done', icon: '💻' },
-  { key: 'bug', label: 'Bug Track', desc: 'Reported → Confirmed → In Fix → Testing → Closed', icon: '🐛' },
-  { key: 'hr', label: 'HR Flow', desc: 'Diajukan → Ditinjau → Disetujui → Selesai', icon: '👥' },
-  { key: 'custom', label: 'Kosong', desc: 'Mulai dari awal, buat kolom sendiri', icon: '⬜' },
+  { key: 'simple', label: 'Simple', desc: 'Todo → In Progress → Done', icon: 'i-lucide-list-checks' },
+  { key: 'dev', label: 'Dev Flow', desc: 'Backlog → Todo → In Progress → Review → Done', icon: 'i-lucide-code-2' },
+  { key: 'bug', label: 'Bug Track', desc: 'Reported → Confirmed → In Fix → Testing → Closed', icon: 'i-lucide-bug' },
+  { key: 'hr', label: 'HR Flow', desc: 'Diajukan → Ditinjau → Disetujui → Selesai', icon: 'i-lucide-users' },
+  { key: 'custom', label: 'Kosong', desc: 'Mulai dari awal, buat kolom sendiri', icon: 'i-lucide-square-dashed' }
 ]
 
 const EMOJIS = ['📋', '🚀', '💡', '🎯', '⚡', '🔥', '✨', '🎨', '📊', '🛠️', '🌟', '📌']
@@ -38,7 +40,7 @@ const form = reactive({
   icon: '📋',
   color: 'blue',
   template: 'simple',
-  memberIds: [] as number[],
+  memberIds: [] as number[]
 })
 
 function reset() {
@@ -60,13 +62,13 @@ async function onSubmit() {
     await $fetch('/api/spaces', {
       method: 'POST',
       body: form,
-      credentials: 'include',
+      credentials: 'include'
     })
     reset()
     emit('created')
     emit('update:open', false)
-  } catch (e: any) {
-    toast.add({ title: 'Gagal membuat Space', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal membuat Space', description: errorMessage(err), color: 'error' })
   } finally {
     loading.value = false
   }
@@ -74,7 +76,12 @@ async function onSubmit() {
 </script>
 
 <template>
-  <UModal :open="open" title="Buat Space Baru" :ui="{ content: 'max-w-lg' }" @update:open="emit('update:open', $event)">
+  <UModal
+    :open="open"
+    title="Buat Space Baru"
+    :ui="{ content: 'max-w-lg' }"
+    @update:open="emit('update:open', $event)"
+  >
     <template #body>
       <div class="space-y-5">
         <!-- Icon + Name -->
@@ -92,18 +99,30 @@ async function onSubmit() {
                   class="flex size-9 items-center justify-center rounded text-xl hover:bg-elevated"
                   :class="form.icon === emoji ? 'bg-elevated ring-1 ring-primary' : ''"
                   @click="form.icon = emoji"
-                >{{ emoji }}</button>
+                >
+                  {{ emoji }}
+                </button>
               </div>
             </template>
           </UPopover>
           <UFormField label="Nama Space" class="flex-1" required>
-            <UInput v-model="form.name" class="w-full" placeholder="contoh: Sprint Q3, Bug Tracking..." autofocus />
+            <UInput
+              v-model="form.name"
+              class="w-full"
+              placeholder="contoh: Sprint Q3, Bug Tracking..."
+              autofocus
+            />
           </UFormField>
         </div>
 
         <!-- Description -->
         <UFormField label="Deskripsi">
-          <UTextarea v-model="form.description" :rows="2" class="w-full" placeholder="Opsional — jelaskan tujuan Space ini" />
+          <UTextarea
+            v-model="form.description"
+            :rows="2"
+            class="w-full"
+            placeholder="Opsional — jelaskan tujuan Space ini"
+          />
         </UFormField>
 
         <!-- Members (opsional) -->
@@ -117,7 +136,9 @@ async function onSubmit() {
             :search-input="{ placeholder: 'Cari nama user...' }"
             class="w-full"
           />
-          <p class="mt-1 text-xs text-muted">Opsional — anggota dapat diedit setelah Space dibuat.</p>
+          <p class="mt-1 text-xs text-muted">
+            Opsional — anggota dapat diedit setelah Space dibuat.
+          </p>
         </UFormField>
 
         <!-- Color -->
@@ -148,10 +169,12 @@ async function onSubmit() {
               @click="form.template = t.key"
             >
               <div class="flex items-center gap-2">
-                <span class="text-base">{{ t.icon }}</span>
-                <span class="font-medium text-sm text-highlighted">{{ t.label }}</span>
+                <UIcon :name="t.icon" class="size-4 text-primary" aria-hidden="true" />
+                <span class="text-sm font-medium text-highlighted">{{ t.label }}</span>
               </div>
-              <p class="mt-0.5 text-xs text-muted">{{ t.desc }}</p>
+              <p class="mt-0.5 text-xs text-muted">
+                {{ t.desc }}
+              </p>
             </button>
           </div>
         </UFormField>
@@ -160,8 +183,18 @@ async function onSubmit() {
 
     <template #footer>
       <div class="flex w-full justify-end gap-2">
-        <UButton label="Batal" color="neutral" variant="outline" @click="emit('update:open', false)" />
-        <UButton label="Buat Space" color="primary" :loading="loading" @click="onSubmit" />
+        <UButton
+          label="Batal"
+          color="neutral"
+          variant="outline"
+          @click="emit('update:open', false)"
+        />
+        <UButton
+          label="Buat Space"
+          color="primary"
+          :loading="loading"
+          @click="onSubmit"
+        />
       </div>
     </template>
   </UModal>

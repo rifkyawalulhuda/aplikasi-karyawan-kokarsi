@@ -19,6 +19,11 @@ export class CreateCompanyDto {
   @IsString() @IsOptional() phone?: string
 }
 
+export class CreateBankDto {
+  @IsString() @IsNotEmpty() name: string
+  @IsString() @IsOptional() branch?: string
+}
+
 @Injectable()
 export class LookupsService {
   constructor(
@@ -52,6 +57,14 @@ export class LookupsService {
     return new BadRequestException('Tabel companies belum tersedia. Jalankan migrasi database terlebih dahulu.')
   }
 
+  private isMissingBanksTable(error: any) {
+    return error?.code === 'P2021' || error?.meta?.modelName === 'Bank'
+  }
+
+  private banksMigrationError() {
+    return new BadRequestException('Tabel banks belum tersedia. Jalankan migrasi database terlebih dahulu.')
+  }
+
   private isForeignKeyViolation(error: any) {
     return error?.code === 'P2003' || error?.meta?.cause?.originalCode === '23503'
   }
@@ -83,7 +96,7 @@ export class LookupsService {
       throw error
     })
 
-    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies] = await Promise.all([
+    const [workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies, banks] = await Promise.all([
       this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobRole.findMany({ orderBy: { name: 'asc' } }),
       this.prisma.jobLevel.findMany({ orderBy: { name: 'asc' } }),
@@ -101,8 +114,12 @@ export class LookupsService {
         if (this.isMissingCompaniesTable(error)) return []
         throw error
       }),
+      this.prisma.bank.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+        if (this.isMissingBanksTable(error)) return []
+        throw error
+      }),
     ])
-    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies }
+    return { workLocations, jobRoles, jobLevels, taxStatus, contractTypes, departments, documentTypes, companies, banks }
   }
 
   getWorkLocations() { return this.prisma.workLocation.findMany({ orderBy: { name: 'asc' } }) }
@@ -340,6 +357,44 @@ export class LookupsService {
     }).catch((error) => {
       if (this.isMissingCompaniesTable(error)) throw this.companiesMigrationError()
       if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('perusahaan')
+      throw error
+    })
+  }
+
+  getBanks() {
+    return this.prisma.bank.findMany({ orderBy: { name: 'asc' } }).catch((error) => {
+      if (this.isMissingBanksTable(error)) throw this.banksMigrationError()
+      throw error
+    })
+  }
+
+  createBank(dto: CreateBankDto, actor: { name: string; role: string }) {
+    return this.prisma.bank.create({ data: { name: dto.name, branch: dto.branch ?? null } }).then((item) => {
+      void this.activityLog.log({ action: 'CREATE', module: 'Master Data', targetLabel: `banks: ${item.name}`, performedBy: actor.name, performedByRole: actor.role, detail: `Bank: ${item.name}${item.branch ? ` | Cabang: ${item.branch}` : ''}` })
+      return item
+    }).catch((error) => {
+      if (this.isMissingBanksTable(error)) throw this.banksMigrationError()
+      throw error
+    })
+  }
+
+  updateBank(id: number, dto: CreateBankDto, actor: { name: string; role: string }) {
+    return this.prisma.bank.update({ where: { id }, data: { name: dto.name, branch: dto.branch ?? null } }).then((item) => {
+      void this.activityLog.log({ action: 'UPDATE', module: 'Master Data', targetLabel: `banks: ${item.name}`, performedBy: actor.name, performedByRole: actor.role, detail: `Nilai baru: ${item.name}${item.branch ? ` | Cabang: ${item.branch}` : ''}` })
+      return item
+    }).catch((error) => {
+      if (this.isMissingBanksTable(error)) throw this.banksMigrationError()
+      throw error
+    })
+  }
+
+  deleteBank(id: number, actor: { name: string; role: string }) {
+    return this.prisma.bank.delete({ where: { id } }).then((item) => {
+      void this.activityLog.log({ action: 'DELETE', module: 'Master Data', targetLabel: `banks: ${item.name}`, performedBy: actor.name, performedByRole: actor.role, detail: `Nilai dihapus: ${item.name}` })
+      return item
+    }).catch((error) => {
+      if (this.isMissingBanksTable(error)) throw this.banksMigrationError()
+      if (this.isForeignKeyViolation(error)) throw this.foreignKeyError('bank')
       throw error
     })
   }

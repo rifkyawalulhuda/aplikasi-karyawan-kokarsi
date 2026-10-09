@@ -25,6 +25,9 @@ import { HolidaysModule } from './holidays/holidays.module'
 import { ActivityLogModule } from './activity-log/activity-log.module'
 import { OperationalVehicleUsageModule } from './operational-vehicle-usage/operational-vehicle-usage.module'
 import { GeneralArchivesModule } from './general-archives/general-archives.module'
+import { DashboardModule } from './dashboard/dashboard.module'
+import { SearchModule } from './search/search.module'
+import { OrgStructureModule } from './org-structure/org-structure.module'
 
 @Module({
   imports: [
@@ -36,6 +39,9 @@ import { GeneralArchivesModule } from './general-archives/general-archives.modul
     ActivityLogModule,
     OperationalVehicleUsageModule,
     GeneralArchivesModule,
+    DashboardModule,
+    SearchModule,
+    OrgStructureModule,
     EmployeesModule,
     ContractsModule,
     LookupsModule,

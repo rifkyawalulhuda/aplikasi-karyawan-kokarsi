@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { Contract, ContractTemplate } from '~/types'
+import type { Contract, ContractTemplate, ContractInputField, ContractInputFieldsResponse } from '~/types'
 import { CalendarDate } from '@internationalized/date'
 
 interface LookupOption { label: string; value: number }
@@ -70,12 +70,106 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
-const contractTemplateOptions = computed<LookupOption[]>(() =>
-  (contractTemplatesRes.value ?? []).map(template => ({
+const contractTemplateOptions = computed<LookupOption[]>(() => {
+  const options = (contractTemplatesRes.value ?? []).map(template => ({
     label: `${template.name} (${template.family})`,
     value: template.id,
-  })),
-)
+  }))
+
+  // Template yang sedang dipakai kontrak ini bisa saja dinonaktifkan setelah
+  // kontrak dibuat. Daftar hanya memuat template aktif, jadi tanpa disisipkan
+  // di sini pilihan tampak kosong walau `templateId` kontrak tetap tersimpan.
+  const current = props.contract?.template
+  if (current && !options.some(option => option.value === current.id)) {
+    options.push({
+      label: `${current.name} (${current.family}) — Nonaktif`,
+      value: current.id,
+    })
+  }
+
+  return options
+})
+
+// ── Field dinamis template (CONTRACT_INPUT) ──────────────────────────────
+// Sama seperti modal tambah kontrak: field dibaca dari `fieldDefinitions` versi
+// PUBLISHED template agar yang ditampilkan = yang divalidasi server. Nilainya
+// di-prefill dari `contract.templateData` (hasil normalisasi backend).
+const templateFields = ref<ContractInputField[]>([])
+const templateData = ref<Record<string, any>>({})
+const dynamicFieldErrors = ref<Record<string, string>>({})
+// Template tanpa versi terbit = kontrak ini kontrak legacy (tanpa snapshot).
+// Editnya tetap diizinkan, tapi nilainya tidak akan pernah masuk ke PDF, jadi
+// pengguna diberi tahu lewat banner — bukan diblokir, karena tanggal/kompensasi
+// kontrak legacy tetap sah untuk diperbaiki.
+const templateNotPublished = ref(false)
+
+async function fetchTemplateFields(templateId?: number) {
+  templateFields.value = []
+  templateNotPublished.value = false
+  if (!templateId) return
+  try {
+    const res = await $fetch<ContractInputFieldsResponse>(
+      `/api/contract-templates/${templateId}/fields`,
+      { credentials: 'include' },
+    )
+    templateFields.value = res.fields ?? []
+    templateNotPublished.value = res.published === false
+  } catch {
+    // Kontrak lama bisa memakai template tanpa versi terbit; jangan blokir edit
+    // hanya karena field tambahan tidak bisa dimuat.
+    templateFields.value = []
+  }
+}
+
+/** Nilai yang dikirim: hanya field yang dikenal template ini. */
+function dynamicFieldValues(): Record<string, any> {
+  const values: Record<string, any> = {}
+  for (const field of templateFields.value) {
+    const value = templateData.value[field.key]
+    if (value === undefined || value === null || String(value).trim() === '') continue
+    values[field.key] = value
+  }
+  return values
+}
+
+/** Nilai templateData dari server → bentuk yang diterima input form. */
+function prefillTemplateData(c: Contract | null) {
+  const source = (c as any)?.templateData
+  const result: Record<string, any> = {}
+  if (source && typeof source === 'object') {
+    for (const [key, value] of Object.entries(source as Record<string, any>)) {
+      // Date dari JSON sudah jadi ISO string; potong ke YYYY-MM-DD agar cocok
+      // dengan `<input type="date">` dan CalendarPicker.
+      result[key] = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value)
+        ? value.slice(0, 10)
+        : value
+    }
+  }
+  templateData.value = result
+  dynamicFieldErrors.value = {}
+}
+
+function collectDynamicFieldErrors(): Record<string, string> {
+  const errors: Record<string, string> = {}
+  for (const field of templateFields.value) {
+    if (!field.required) continue
+    const value = templateData.value[field.key]
+    if (value === undefined || value === null || String(value).trim() === '') {
+      errors[field.key] = `${field.label} wajib diisi`
+    }
+  }
+  return errors
+}
+
+// Error sebuah field hilang begitu field itu diisi.
+watch(templateData, (values) => {
+  const remaining: Record<string, string> = {}
+  for (const [key, message] of Object.entries(dynamicFieldErrors.value)) {
+    const value = values?.[key]
+    if (value === undefined || value === null || String(value).trim() === '') remaining[key] = message
+  }
+  dynamicFieldErrors.value = remaining
+}, { deep: true })
 
 const schema = z.object({
   startDate: z.string().min(1, 'Tanggal mulai wajib diisi'),
@@ -113,6 +207,7 @@ function fillState(c: Contract | null) {
   startDateCal.value  = toCalDate(state.startDate)
   endDateCal.value    = toCalDate(state.endDate)
   signedDateCal.value = toCalDate(state.signedDate)
+  prefillTemplateData(c)
 }
 
 const fetchLoading = ref(false)
@@ -136,11 +231,29 @@ watch(() => props.contract, async (c) => {
       fetchLoading.value = false
     }
   }
+  // Field tambahan bergantung pada template kontrak ini (bukan pilihan di form
+  // saat pertama dibuka), jadi ambil setelah templateId terisi.
+  await fetchTemplateFields(state.templateId)
 }, { immediate: true })
+
+// Pengguna mengganti template → field dan nilai template lama tidak relevan lagi.
+watch(() => state.templateId, async (templateId, previous) => {
+  if (!previous || templateId === previous) return
+  await fetchTemplateFields(templateId)
+  prefillTemplateData(null)
+})
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   const contract = props.contract
   if (!contract) return
+
+  // Validasi field dinamis dulu agar errornya tampil di dalam form.
+  dynamicFieldErrors.value = collectDynamicFieldErrors()
+  if (Object.keys(dynamicFieldErrors.value).length > 0) {
+    toast.add({ title: 'Lengkapi data tambahan template', color: 'warning' })
+    return
+  }
+
   loading.value = true
   try {
     const employeeId = fullContract.value?.employeeId ?? contract.employeeId
@@ -155,6 +268,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         templateId,
         signedDate,
         baseCompensation,
+        templateData: dynamicFieldValues(),
       },
     })
     toast.add({ title: 'Kontrak berhasil diperbarui', color: 'success' })
@@ -221,6 +335,31 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
             class="w-full"
           />
         </UFormField>
+
+        <KontrakContractDynamicFields
+          v-model="templateData"
+          :fields="templateFields"
+          :errors="dynamicFieldErrors"
+        />
+
+        <div
+          v-if="templateNotPublished"
+          class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+        >
+          <UIcon
+            name="i-lucide-triangle-alert"
+            class="mt-0.5 w-4 h-4 shrink-0 text-warning"
+          />
+          <div>
+            <p class="font-medium">
+              Template ini belum memiliki versi terbit.
+            </p>
+            <p class="text-muted">
+              Kontrak ini tidak punya snapshot dokumen, sehingga nilai field tambahan di atas
+              tidak akan ikut tercetak ke PDF. Perubahan tanggal dan kompensasi tetap tersimpan.
+            </p>
+          </div>
+        </div>
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>

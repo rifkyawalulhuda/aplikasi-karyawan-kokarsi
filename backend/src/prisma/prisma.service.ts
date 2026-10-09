@@ -50,9 +50,11 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get documentType() { return this.client.documentType }
   get employeeDocument() { return this.client.employeeDocument }
   get company() { return this.client.company }
+  get bank() { return (this.client as any).bank }
   get vendorContract() { return this.client.vendorContract }
   get legalKoperasi() { return this.client.legalKoperasi }
   get notification() { return this.client.notification }
+  get notificationPreference() { return (this.client as any).notificationPreference }
   get akteDokumen() { return this.client.akteDokumen }
   get emailNotificationRecipient() { return this.client.emailNotificationRecipient }
   get emailNotificationSentLog() { return this.client.emailNotificationSentLog }
@@ -69,6 +71,8 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
   get activityLog() { return (this.client as any).activityLog }
   get operationalVehicleUsage() { return (this.client as any).operationalVehicleUsage }
   get generalArchive() { return (this.client as any).generalArchive }
+  get orgPeriod() { return (this.client as any).orgPeriod }
+  get orgPosition() { return (this.client as any).orgPosition }
 
   $connect() { return this.client.$connect() }
   $disconnect() { return this.client.$disconnect() }

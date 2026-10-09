@@ -1,16 +1,32 @@
 import { defineStore } from 'pinia'
 
+const ADMIN_COOKIE = 'auth_admin'
+const ADMIN_TTL_SECONDS = 60 * 60 * 24 * 7
+
+interface AuthAdmin {
+  id: number
+  employeeNo: string
+  fullName: string
+  email?: string
+  role?: 'ADMIN' | 'PENGELOLA_KOPERASI'
+  accountType?: 'master_admin' | 'user_account'
+  photoUrl?: string | null
+}
+
 export const useAuthStore = defineStore('auth', () => {
-  const admin = useCookie<{ id: number; employeeNo: string; fullName: string; email?: string; role?: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } | null>('auth_admin', { maxAge: 60 * 30 })
+  // Cookie ini hanya menyimpan info tampilan (bukan kredensial); otorisasi tetap
+  // via JWT httpOnly. "Remember me" mengatur apakah cookie ini persisten 7 hari
+  // atau sesi (hilang saat browser ditutup) — diselaraskan dengan cookie httpOnly.
+  const admin = useCookie<AuthAdmin | null>(ADMIN_COOKIE, { maxAge: ADMIN_TTL_SECONDS })
 
   const isLoggedIn = computed(() => !!admin.value)
   const canManageMasterData = computed(() => admin.value?.role === 'ADMIN')
   const canDelete = computed(() => admin.value?.role === 'ADMIN')
 
-  async function login(employeeNo: string, password: string) {
-    const res = await $fetch<{ admin: { id: number; employeeNo: string; fullName: string; role: 'ADMIN' | 'PENGELOLA_KOPERASI'; accountType?: 'master_admin' | 'user_account'; photoUrl?: string | null } }>('/api/auth/login', {
+  async function login(employeeNo: string, password: string, remember = true) {
+    const res = await $fetch<{ admin: AuthAdmin }>('/api/auth/login', {
       method: 'POST',
-      body: { employeeNo, password },
+      body: { employeeNo, password, remember }
     })
 
     if (!res?.admin) {
@@ -18,6 +34,13 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     admin.value = res.admin
+
+    // remember=false → tulis ulang cookie tanpa maxAge agar menjadi cookie sesi.
+    if (!remember) {
+      const sessionCookie = useCookie<AuthAdmin | null>(ADMIN_COOKIE)
+      sessionCookie.value = res.admin
+    }
+
     return res
   }
 

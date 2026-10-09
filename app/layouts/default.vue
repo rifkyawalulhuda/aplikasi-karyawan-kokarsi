@@ -1,209 +1,15 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
 
-const route = useRoute()
 const open = ref(false)
+/** Buka/tutup command palette Global Search (dipicu tombol sidebar & Ctrl K). */
+const searchOpen = ref(false)
 const auth = useAuthStore()
 const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
 function toggleColorMode() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
 }
-
-function employmentStatusLabel(status: string) {
-  const map: Record<string, string> = {
-    AKTIF: 'Aktif', KONTRAK_EXPIRED: 'Kontrak Expired', RESIGN: 'Resign', PHK: 'PHK',
-  }
-  return map[status] ?? status
-}
-
-function contractStatusLabel(status: string) {
-  const map: Record<string, string> = {
-    AKTIF: 'Aktif', AKAN_HABIS: 'Akan Habis', EXPIRED: 'Expired',
-    SELESAI: 'Selesai', DIBATALKAN: 'Dibatalkan', DRAFT: 'Draft',
-  }
-  return map[status] ?? status
-}
-
-async function fetchGroups(query: string) {
-  if (!query || query.trim().length < 2) return []
-
-  try {
-    const results = await $fetch<{
-      employees: any[]
-      contracts: any[]
-      warningLetters: any[]
-      employeeDocuments: any[]
-      dokKaryawan: any[]
-      vendorContracts: any[]
-      legalKoperasi: any[]
-      akteDokumen: any[]
-      generalArchives: any[]
-    }>(`/api/search?q=${encodeURIComponent(query.trim())}&limit=5`, {
-      credentials: 'include',
-    })
-
-    const groups: any[] = []
-
-    if (results.employees?.length) {
-      groups.push({
-        id: 'employees',
-        label: 'Karyawan',
-        ignoreFilter: true,
-        items: results.employees.map((e: any) => ({
-          id: `emp-${e.id}`,
-          label: e.fullName,
-          suffix: `${e.employeeNo} · ${employmentStatusLabel(e.employmentStatus)}`,
-          icon: 'i-lucide-user',
-          to: `/karyawan/${e.id}`,
-        })),
-      })
-    }
-
-    if (results.contracts?.length) {
-      groups.push({
-        id: 'contracts',
-        label: 'Kontrak',
-        ignoreFilter: true,
-        items: results.contracts.map((c: any) => ({
-          id: `contract-${c.id}`,
-          label: c.contractNo,
-          suffix: `${c.employee?.fullName ?? '-'} · ${contractStatusLabel(c.status)}`,
-          icon: 'i-lucide-file-text',
-          to: `/kontrak?openId=${c.id}`,
-        })),
-      })
-    }
-
-    if (results.warningLetters?.length) {
-      groups.push({
-        id: 'warning-letters',
-        label: 'Surat Peringatan',
-        ignoreFilter: true,
-        items: results.warningLetters.map((l: any) => ({
-          id: `sp-${l.id}`,
-          label: l.letterNumber,
-          suffix: `${l.employee?.fullName ?? '-'} · SP ${l.warningLevel}`,
-          icon: 'i-lucide-alert-triangle',
-          to: `/dokumen/surat-peringatan?openId=${l.id}`,
-        })),
-      })
-    }
-
-    if (results.employeeDocuments?.length) {
-      groups.push({
-        id: 'employeeDocuments',
-        label: 'Sertifikasi & Ijin',
-        ignoreFilter: true,
-        items: results.employeeDocuments.map((doc: any) => ({
-          id: `edoc-${doc.id}`,
-          label: `${doc.documentType?.name ?? 'Dokumen'}`,
-          suffix: `${doc.employee?.fullName ?? ''}`,
-          icon: 'i-lucide-file-badge',
-          to: `/dokumen/sertifikasi-ijin?openId=${doc.id}`,
-        })),
-      })
-    }
-
-    if ((results as any).dokKaryawan?.length) {
-      groups.push({
-        id: 'dokKaryawan',
-        label: 'Dok. Karyawan',
-        ignoreFilter: true,
-        items: (results as any).dokKaryawan.map((doc: any) => ({
-          id: `dok-${doc.id}`,
-          label: `${doc.documentType?.name ?? 'Dokumen'}`,
-          suffix: `${doc.employee?.fullName ?? ''} · ${doc.documentNumber ?? ''}`.replace(/\s·\s$/, ''),
-          icon: 'i-lucide-id-card',
-          to: `/dokumen/dok-karyawan?openId=${doc.id}`,
-        })),
-      })
-    }
-
-    if (results.vendorContracts?.length) {
-      groups.push({
-        id: 'vendorContracts',
-        label: 'Kontrak Vendor',
-        ignoreFilter: true,
-        items: results.vendorContracts.map((vc: any) => ({
-          id: `vc-${vc.id}`,
-          label: `${vc.documentName}`,
-          suffix: `${vc.company?.name ?? ''}`,
-          icon: 'i-lucide-building-2',
-          to: `/dokumen-legal/kontrak-vendor?openId=${vc.id}`,
-        })),
-      })
-    }
-
-    if (results.legalKoperasi?.length) {
-      groups.push({
-        id: 'legalKoperasi',
-        label: 'Legal Koperasi',
-        ignoreFilter: true,
-        items: results.legalKoperasi.map((lk: any) => ({
-          id: `lk-${lk.id}`,
-          label: `${lk.documentName}`,
-          suffix: `${lk.publisher}`,
-          icon: 'i-lucide-file-signature',
-          to: `/dokumen-legal/legal-koperasi?openId=${lk.id}`,
-        })),
-      })
-    }
-
-    if (results.akteDokumen?.length) {
-      groups.push({
-        id: 'akteDokumen',
-        label: 'Akte Dokumen',
-        ignoreFilter: true,
-        items: results.akteDokumen.map((a: any) => ({
-          id: `akte-${a.id}`,
-          label: a.judulAkte,
-          suffix: a.nomorAkte,
-          icon: 'i-lucide-scroll-text',
-          to: `/dokumen-legal/akte-dokumen?openId=${a.id}`,
-        })),
-      })
-    }
-
-    if (results.generalArchives?.length) {
-      groups.push({
-        id: 'generalArchives',
-        label: 'Arsip Umum',
-        ignoreFilter: true,
-        items: results.generalArchives.map((ga: any) => ({
-          id: `archive-${ga.id}`,
-          label: ga.documentName,
-          suffix: ga.documentNumber ?? 'Nomor tidak tersedia',
-          icon: 'i-lucide-archive',
-          to: `/dokumen-legal/arsip-umum?openId=${ga.id}`,
-        })),
-      })
-    }
-
-    return groups
-  } catch {
-    return []
-  }
-}
-
-// Reactive search: watch search term, debounce, fetch results
-const searchTerm = ref('')
-const searchGroups = ref<any[]>([])
-const searchLoading = ref(false)
-let searchDebounce: ReturnType<typeof setTimeout> | null = null
-
-watch(searchTerm, (q) => {
-  if (searchDebounce) clearTimeout(searchDebounce)
-  if (!q || q.trim().length < 2) {
-    searchGroups.value = []
-    return
-  }
-  searchLoading.value = true
-  searchDebounce = setTimeout(async () => {
-    searchGroups.value = await fetchGroups(q)
-    searchLoading.value = false
-  }, 200)
-})
 
 const links = computed<NavigationMenuItem[]>(() => [
   {
@@ -216,6 +22,12 @@ const links = computed<NavigationMenuItem[]>(() => [
     label: 'Data Karyawan',
     icon: 'i-lucide-users',
     to: '/karyawan',
+    onSelect: () => { open.value = false },
+  },
+  {
+    label: 'Struktur Organisasi',
+    icon: 'i-lucide-network',
+    to: '/struktur-organisasi',
     onSelect: () => { open.value = false },
   },
   {
@@ -355,14 +167,22 @@ const links = computed<NavigationMenuItem[]>(() => [
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <div :class="collapsed ? 'flex flex-col items-center gap-1 w-full' : 'flex items-center justify-between w-full gap-2'">
+        <!-- Rail (collapsed) hanya 64px: menumpuk logo (40px) + lonceng (32px)
+             = 76px sehingga tombol logo terpotong atasnya dan lonceng meluber
+             ke baris pencarian. Saat collapsed cukup logo saja; lonceng
+             dipindah ke area menu di bawah (lihat slot #default). -->
+        <div :class="collapsed ? 'flex items-center justify-center w-full' : 'flex items-center justify-between w-full gap-2'">
           <TeamsMenu :collapsed="collapsed" />
-          <NotificationBell :collapsed="collapsed" />
+          <NotificationBell v-if="!collapsed" :collapsed="collapsed" />
         </div>
       </template>
 
       <template #default="{ collapsed }">
-        <UDashboardSearchButton :collapsed="collapsed" class="bg-transparent ring-default" />
+        <GlobalSearchTrigger :collapsed="collapsed" @open="searchOpen = true" />
+
+        <!-- Rail: lonceng notifikasi sejajar dengan ikon menu lain. Tooltip
+             kanan tetap memberi label, jadi fungsinya tidak hilang saat tutup. -->
+        <NotificationBell v-if="collapsed" collapsed />
 
         <UNavigationMenu
           :collapsed="collapsed"
@@ -378,11 +198,8 @@ const links = computed<NavigationMenuItem[]>(() => [
       </template>
     </UDashboardSidebar>
 
-    <UDashboardSearch
-      v-model:search-term="searchTerm"
-      :groups="searchGroups"
-      :loading="searchLoading"
-    />
+    <!-- Command palette Global Search (satu modal, responsif). -->
+    <GlobalSearch v-model:open="searchOpen" />
 
     <slot />
   </UDashboardGroup>

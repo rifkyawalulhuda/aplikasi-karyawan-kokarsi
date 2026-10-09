@@ -3,7 +3,7 @@ import { AuthGuard } from '@nestjs/passport'
 import { FileInterceptor } from '@nestjs/platform-express'
 import { diskStorage } from 'multer'
 import { extname, join } from 'path'
-import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto, OffboardingDto } from './employees.service'
+import { EmployeesService, CreateEmployeeDto, UpdateEmployeeDto, OffboardingDto, BulkUpdateBankRowDto } from './employees.service'
 import { validateImageBuffer } from '../shared/file-validation.util'
 
 @UseGuards(AuthGuard('jwt'))
@@ -41,6 +41,15 @@ export class EmployeesController {
     res.send(buffer)
   }
 
+  /** Template Excel ringkas untuk update massal Data Bank karyawan yang sudah ada. */
+  @Get('bank-update-template')
+  async getBankUpdateTemplate(@Res() res: any) {
+    const buffer = await this.service.generateBankUpdateTemplate()
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="template-update-bank-karyawan.xlsx"')
+    res.send(buffer)
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id)
@@ -63,6 +72,27 @@ export class EmployeesController {
       throw new BadRequestException('Maksimal 500 karyawan per import')
     }
     return this.service.bulkCreate(body.employees)
+  }
+
+  /**
+   * Update massal Data Bank (bank + no. rekening) karyawan yang sudah ada,
+   * dicocokkan per No. Induk Karyawan. Hanya menyentuh kolom bank/rekening.
+   */
+  @Post('bulk-update-bank')
+  bulkUpdateBank(@Body() body: { employees: BulkUpdateBankRowDto[] }, @Request() req: any) {
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Hanya ADMIN yang dapat melakukan update massal data bank')
+    }
+    if (!Array.isArray(body?.employees)) {
+      throw new BadRequestException('Field "employees" harus berupa array')
+    }
+    if (body.employees.length === 0) {
+      throw new BadRequestException('Array employees tidak boleh kosong')
+    }
+    if (body.employees.length > 500) {
+      throw new BadRequestException('Maksimal 500 karyawan per update')
+    }
+    return this.service.bulkUpdateBank(body.employees)
   }
 
   @Put(':id')

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Space } from '~/types/space'
+import { errorMessage } from './board-meta'
 
 const props = defineProps<{
   open: boolean
@@ -8,12 +9,12 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [boolean]
-  updated: []
+  'updated': []
 }>()
 
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
-const { data: usersRes } = await useFetch<{ id: number; name: string; role: string }[]>('/api/users/pengurus', {
+const { data: usersRes } = await useFetch<{ id: number, name: string, role: string }[]>('/api/users/pengurus', {
   credentials: 'include'
 })
 
@@ -43,13 +44,13 @@ async function addMember() {
     await $fetch(`/api/spaces/${props.space.id}/members`, {
       method: 'POST',
       body: { memberId: addingMemberId.value },
-      credentials: 'include',
+      credentials: 'include'
     })
     addingMemberId.value = undefined
     emit('updated')
     toast.add({ title: 'Member berhasil ditambahkan', color: 'success' })
-  } catch (e: any) {
-    toast.add({ title: 'Gagal menambahkan member', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal menambahkan member', description: errorMessage(err), color: 'error' })
   } finally {
     loadingAdd.value = false
   }
@@ -65,16 +66,16 @@ function removeMember(userId: number, userName: string) {
       try {
         await $fetch(`/api/spaces/${props.space.id}/members/${userId}`, {
           method: 'DELETE',
-          credentials: 'include',
+          credentials: 'include'
         })
         emit('updated')
         toast.add({ title: 'Member dihapus', color: 'success' })
-      } catch (e: any) {
-        toast.add({ title: 'Gagal menghapus member', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+      } catch (err: unknown) {
+        toast.add({ title: 'Gagal menghapus member', description: errorMessage(err), color: 'error' })
       } finally {
         loadingRemove.value = null
       }
-    },
+    }
   })
 }
 
@@ -95,15 +96,24 @@ const creatorName = computed(() =>
       <div class="space-y-5">
         <!-- Creator -->
         <div>
-          <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Pembuat Space</p>
+          <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Pembuat Space
+          </p>
           <div class="flex items-center gap-3 rounded-lg bg-elevated/40 px-3 py-2.5">
             <div class="flex size-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
               {{ creatorName.charAt(0).toUpperCase() }}
             </div>
             <div class="flex-1 min-w-0">
-              <p class="truncate text-sm font-medium text-highlighted">{{ creatorName }}</p>
+              <p class="truncate text-sm font-medium text-highlighted">
+                {{ creatorName }}
+              </p>
             </div>
-            <UBadge label="Pembuat" color="primary" variant="subtle" size="sm" />
+            <UBadge
+              label="Pembuat"
+              color="primary"
+              variant="subtle"
+              size="sm"
+            />
           </div>
         </div>
 
@@ -122,8 +132,12 @@ const creatorName = computed(() =>
                 {{ member.name.charAt(0).toUpperCase() }}
               </div>
               <div class="flex-1 min-w-0">
-                <p class="truncate text-sm font-medium text-highlighted">{{ member.name }}</p>
-                <p class="text-xs text-muted">{{ member.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi' }}</p>
+                <p class="truncate text-sm font-medium text-highlighted">
+                  {{ member.name }}
+                </p>
+                <p class="text-xs text-muted">
+                  {{ member.role === 'ADMIN' ? 'Administrator' : 'Pengelola Koperasi' }}
+                </p>
               </div>
               <UButton
                 icon="i-lucide-x"
@@ -143,7 +157,9 @@ const creatorName = computed(() =>
 
         <!-- Add member -->
         <div>
-          <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Tambah Member</p>
+          <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+            Tambah Member
+          </p>
           <div v-if="nonMembers.length" class="flex gap-2">
             <USelect
               v-model="addingMemberId"
@@ -168,7 +184,12 @@ const creatorName = computed(() =>
 
     <template #footer>
       <div class="flex w-full justify-end">
-        <UButton label="Tutup" color="neutral" variant="outline" @click="emit('update:open', false)" />
+        <UButton
+          label="Tutup"
+          color="neutral"
+          variant="outline"
+          @click="emit('update:open', false)"
+        />
       </div>
     </template>
   </UModal>

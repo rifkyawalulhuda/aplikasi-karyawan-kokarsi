@@ -22,7 +22,55 @@ export interface ContractDocumentDefinition {
     paragraphs: string[]
   }>
   requiredFields: string[]
-  englishSections?: Record<string, string[]>
+  /**
+   * Pasal versi Inggris.
+   *
+   * Kunci = `heading` pasal Indonesia pada `sections` — dipakai HANYA sebagai
+   * kunci pasangan, BUKAN sebagai judul. Nilai memuat judul Inggris + isi
+   * Inggris.
+   *
+   * Sebelumnya tipe ini `Record<string, string[]>` sehingga KUNCI-nya ikut
+   * terpakai sebagai judul. Itulah sebabnya kolom kanan PKWT mencetak
+   * `Pasal 1\nMaksud Kesepakatan` alih-alih `Article 1\nAgreement Purpose`,
+   * walau isi paragrafnya sudah Inggris.
+   */
+  englishSections?: Record<string, { heading: string; paragraphs: string[] }>
+  /**
+   * Redaksi Inggris untuk blok non-Pasal PKWT: pembuka, para pihak, ruang
+   * lingkup/posisi, jangka waktu, pengupahan, dan penutup.
+   *
+   * Bila kosong, kolom kanan memakai redaksi Indonesia milik
+   * `openingLine`/`recitals`/`roleLabel`/`locationLine`/`termLine`/
+   * `compensationLabel`/`closingParagraphs`. Itulah bug yang membuat pratinjau
+   * PKWT menampilkan bahasa Indonesia di sisi kanan.
+   */
+  englishBody?: PkwtEnglishBody
+}
+
+/**
+ * Redaksi Inggris blok non-Pasal PKWT (kolom kanan).
+ *
+ * Ditranskripsi dari kolom kanan master PDF tiap varian PKWT
+ * (`docs/sample-legal-doc/pdf/PKWT *.pdf`), bukan dikarang.
+ */
+export interface PkwtEnglishBody {
+  /** Paragraf pembuka kolom kanan master. */
+  openingLine: string
+  /** Judul blok para pihak (ID: `Para Pihak`). */
+  recitalsHeading: string
+  recitals: string[]
+  /** Judul blok ruang lingkup/posisi (ID: `Ruang Lingkup dan Posisi`). */
+  roleHeading: string
+  roleLabel: string
+  locationLine: string
+  /** Judul blok jangka waktu (ID: `Jangka Waktu`). */
+  termHeading: string
+  termLine: string
+  /** Judul blok pengupahan (ID: `compensationLabel` = `Upah Karyawan`). */
+  compensationLabel: string
+  /** Judul blok penutup (ID: `Penutup`). */
+  closingHeading: string
+  closingParagraphs: string[]
 }
 
 const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sections'] => [
@@ -125,6 +173,7 @@ const pkwtCommonSections = (roleLabel: string): ContractDocumentDefinition['sect
 // Daftar tugas (Pasal 1 ayat 2) spesifik per jenis mitra, mengikuti sample PDF asli
 const MITRA_SCOPE_WORK: Record<string, string> = {
   MITRA_DRIVER: 'Driver antar jemput karyawan, pengantaran/pengiriman barang, dan antar dokumen',
+  MITRA_DRIVER_TRUCK_B3: 'Driver truck B3 untuk pengangkutan barang, distribusi, dan operasional logistik',
   MITRA_KOMART: 'Cashier Kopmart Koperasi PT. Sankyu Indonesia International',
   MITRA_STAFF: 'Staff Administrasi Koperasi PT. Sankyu Indonesia International',
   MITRA_WAREHOUSE: 'Handling Warehouse Koperasi PT. Sankyu Indonesia International',
@@ -141,6 +190,17 @@ const MITRA_DUTIES: Record<string, string[]> = {
     'g. Menjaga keselamatan penumpang atau barang yang diangkut.',
     'h. Melaporkan kejadian atau masalah yang terjadi selama perjalanan.',
     'i. Mengetahui dan mematuhi peraturan lalu lintas.',
+  ],
+  MITRA_DRIVER_TRUCK_B3: [
+    'a. Memiliki SIM yang sesuai dan masih aktif untuk kendaraan truck yang dioperasikan.',
+    'b. Melakukan pemeriksaan kelayakan truck sebelum, selama, dan setelah digunakan.',
+    'c. Memastikan muatan, dokumen pengiriman, dan perlengkapan keselamatan tersedia sebelum keberangkatan.',
+    'd. Mengemudikan truck secara aman, tertib, dan sesuai peraturan lalu lintas.',
+    'e. Menjaga keamanan barang dan bertanggung jawab atas proses pengiriman sampai tujuan.',
+    'f. Mematuhi batas muatan, rute, jadwal, serta instruksi operasional yang ditetapkan.',
+    'g. Melaporkan kerusakan kendaraan, kecelakaan, keterlambatan, atau kejadian lain kepada koordinator.',
+    'h. Menjaga kebersihan dan melakukan perawatan harian truck sesuai checklist.',
+    'i. Mengisi laporan perjalanan dan menyerahkan bukti pengiriman secara lengkap.',
   ],
   MITRA_KOMART: [
     'a. Pelayanan dan Pemrosesan Transaksi: melayani transaksi pembayaran pelanggan atau anggota koperasi baik secara tunai (cash) maupun non-tunai (kartu debit/kredit, QRIS, dll) menggunakan mesin kasir atau sistem Point of Sale (POS).',
@@ -172,11 +232,32 @@ const MITRA_DUTIES: Record<string, string[]> = {
   ],
 }
 
-// Struktur lengkap 15 Pasal Perjanjian Kemitraan (mengikuti sample PDF 1:1)
+// Struktur lengkap Perjanjian Kemitraan (mengikuti sample PDF 1:1).
+//
+// Semua teks di sini adalah KONTEN TEMPLATE yang disalin ke `contentDefinition`
+// saat versi template dibuat, sehingga isi dokumen 100% berasal dari Template
+// Kontrak (dapat diedit admin lewat Contract Template Editor), bukan dari kode.
+// Nilai dinamis memakai placeholder {{...}} — TIDAK ada teks kontrak yang
+// di-hardcode di layanan PDF.
 const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sections'] => {
   const scopeWork = MITRA_SCOPE_WORK[templateKey] ?? 'penyediaan jasa sesuai kebutuhan PIHAK PERTAMA'
   const duties = MITRA_DUTIES[templateKey] ?? []
   return [
+    // --- Pembukaan & Para Pihak (sebelum PASAL 1, sesuai master) ---
+    {
+      heading: '',
+      paragraphs: [
+        'Perjanjian Kemitraan selanjutnya disebut sebagai "Perjanjian" ini dibuat dan ditandatangani pada {{doc.hariTanggal}} oleh dan antara:',
+        '1. Koperasi Karyawan PT. Sankyu Indonesia International Unit Kantor Pusat, suatu badan hukum berbentuk Koperasi yang didirikan berdasarkan hukum Negara Indonesia, berdasarkan Akta Pendirian Nomor (36/BH/XIII.2/KUMKM/X/2015) tertanggal 16 Oktober 2015, dibuat dihadapan (VIKA FITRIAINI, SH., M.Kn.), Notaris di Kabupaten Bekasi, yang telah disahkan oleh Keputusan Kementerian Hukum dan Hak Asasi Manusia Republik Indonesia Direktorat Jenderal Administrasi Hukum Umum dengan Surat Keputusan Nomor 14 tanggal 16 Oktober 2015 berkedudukan di Jalan Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav. 20, Kota Delta Mas, Kecamatan Cikarang Pusat Kabupaten Bekasi, Provinsi Jawa Barat, dalam hal ini diwakili oleh Bpk. {{settings.cooperativeChairmanName}} dalam kapasitasnya sebagai Ketua Koperasi, dan oleh karenanya berhak serta berwenang untuk bertindak dan mewakili Koperasi PT. Sankyu Indonesia International Unit Kantor Pusat (untuk selanjutnya disebut sebagai "PIHAK PERTAMA"); dan',
+        '2. Bpk./Ibu {{employee.fullName}}, Warga Negara Indonesia, lahir di {{employee.birthPlace}} pada tanggal {{employee.birthDate}}, pemegang Kartu Tanda Penduduk (KTP) Nomor {{employee.nik}} tertanggal {{custom.ktp_issued_date}}, beralamat di {{employee.address}}, dalam hal ini bertindak untuk dan atas nama pribadi (untuk selanjutnya disebut sebagai "PIHAK KEDUA").',
+        'Kemudian PIHAK PERTAMA dan PIHAK KEDUA untuk selanjutnya secara bersama-sama disebut sebagai ("Para Pihak") dan secara sendiri-sendiri disebut sebagai ("Pihak").',
+        'Dengan ini masing-masing bertindak dalam kedudukannya tersebut di atas terlebih dahulu menerangkan hal-hal sebagai berikut:',
+        '1. Bahwa PIHAK PERTAMA adalah suatu koperasi yang salah satu ruang lingkup kegiatannya bergerak di bidang Penyediaan Tenaga Kerja.',
+        '2. Bahwa PIHAK KEDUA merupakan pihak yang bersedia untuk bermitra dengan PIHAK PERTAMA dalam penyediaan jasa kepada perusahaan-perusahaan yang membutuhkan jasa dari PIHAK PERTAMA.',
+        '3. Bahwa Para Pihak sepakat untuk mengikatkan diri dalam suatu Perjanjian dan dalam rangka melaksanakan maksud dan tujuan tersebut, Para Pihak sepakat untuk melakukan kerjasama kemitraan sebagaimana diatur menurut Perjanjian ini.',
+        'Sehubungan dengan hal-hal tersebut diatas, Para Pihak sepakat untuk membuat dan menandatangani Perjanjian ini dengan syarat-syarat dan ketentuan sebagai berikut:',
+      ],
+    },
     {
       heading: 'PASAL 1\nRUANG LINGKUP',
       paragraphs: [
@@ -192,7 +273,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
     {
       heading: 'PASAL 2\nJANGKA WAKTU PERJANJIAN',
       paragraphs: [
-        '__MITRA_TERM__',
+        '1. Para Pihak sepakat bahwa Pekerjaan yang dilaksanakan oleh PIHAK KEDUA adalah untuk jangka waktu {{contract.duration}} terhitung sejak penandatanganan Perjanjian ini dari {{contract.termRange}} dan apabila Para Pihak telah menyelesaikan seluruh kewajibannya berdasarkan Perjanjian ini.',
         '2. Jangka Waktu Perjanjian ini dapat diperpanjang berdasarkan persetujuan tertulis Para Pihak, kecuali salah satu Pihak bermaksud untuk mengakhiri Perjanjian ini dengan memberikan surat pemberitahuan kepada Pihak lainnya dalam waktu paling lambat 30 (tiga puluh) hari kerja sebelum berakhirnya Jangka Waktu Perjanjian.',
       ],
     },
@@ -223,7 +304,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
       heading: 'PASAL 4\nIMBALAN JASA',
       paragraphs: [
         '1. Para Pihak sepakat bahwa imbalan jasa atas Pekerjaan yang dilaksanakan oleh PIHAK KEDUA berdasarkan Perjanjian ini adalah sebesar:',
-        '__MITRA_IMBALAN__',
+        'a. Imbalan Jasa Bulanan sebesar {{contract.baseCompensation}} yang dibayarkan setiap bulan sesuai ketentuan perjanjian ini.',
         'b. Uang Ketupat sebesar satu kali Upah Minimum Kota/Kabupaten (UMK) yang berlaku pada area administratif terkait, dibayarkan satu kali dalam satu tahun pada periode Hari Raya Idul Fitri.',
         'c. Imbalan Tahunan sebesar 0,5 (nol koma lima) kali UMK yang berlaku pada area administratif terkait, yang dibayarkan satu kali dalam satu tahun.',
         'd. Simpanan Mitra sebesar satu kali UMK yang berlaku pada area administratif terkait, yang akan ditambahkan dan disimpan selama masa kemitraan dan akan didistribusikan pada saat adanya pemutusan hubungan kemitraan.',
@@ -312,7 +393,7 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
       paragraphs: [
         '1. Setiap pemberitahuan, permintaan, dan lain-lain berkaitan dengan Perjanjian ini harus dibuat secara tertulis dan harus dikirim dengan surat tercatat, jasa kurir, dikirim secara langsung dengan mendapat tanda terima, atau melalui e-mail, yang ditujukan ke alamat:',
         'Jika dikirim kepada PIHAK PERTAMA dialamatkan kepada: Alamat: Jl. Kawasan Industri Terpadu Indonesia Cina (KITIC) Kav.20 GIIC - KOTA DELTAMAS - CIKARANG PUSAT - BEKASI 17330; Telepon: 021 - 50555340; E-mail: Kokarsi_unitjkt@sankyu.co.id',
-        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: __MITRA_ADDRESS__; Telepon: __MITRA_PHONE__; E-mail: __MITRA_EMAIL__',
+        'Jika dikirim kepada PIHAK KEDUA dialamatkan kepada: Alamat: {{employee.address}}; Telepon: {{employee.phoneNumber}}; E-mail: {{employee.email}}',
         '2. Pemberitahuan dianggap telah diterima oleh Pihak yang dituju: pada saat ditandatanganinya tanda terima oleh Pihak yang dituju (dalam hal dikirim langsung atau menggunakan jasa kurir); dalam 3 (tiga) hari kerja setelah tanggal pengiriman jika pemberitahuan disampaikan melalui surat tercatat; dan pada saat konfirmasi laporan pengiriman telah diterima oleh pengirim, pada tanggal diterimanya e-mail, jika pemberitahuan disampaikan melalui e-mail.',
       ],
     },
@@ -340,10 +421,183 @@ const mitraFullSections = (templateKey: string): ContractDocumentDefinition['sec
         '3. Kegagalan, keterlambatan, atau penundaan salah satu Pihak untuk menjalankan haknya berdasarkan Perjanjian ini atau kegagalan, keterlambatan, atau penundaan untuk meminta Pihak lainnya agar memenuhi ketentuan-ketentuan dalam Perjanjian ini, tidak akan dianggap sebagai pengesampingan atau pelepasan hak, wewenang, atau tuntutan oleh Pihak lainnya untuk di kemudian hari menuntut dipenuhinya ketentuan-ketentuan dalam Perjanjian ini.',
       ],
     },
+    // --- Penutup (tanpa heading, sesuai master) ---
+    {
+      heading: '',
+      paragraphs: [
+        'Demikian Perjanjian ini dibuat dalam 2 (dua) rangkap serta bermeterai cukup dan masing-masing mempunyai kekuatan hukum yang sama. Perjanjian ini ditandatangani oleh Para Pihak untuk dipedomani sebagaimana mestinya.',
+      ],
+    },
   ]
 }
 
 const DOCX_REMOVED_NOTE = 'Dokumen kontrak dirender langsung ke PDF native dari kode dengan layout legal internal yang mengacu ke sample PDF referensi.'
+
+/* ------------------------------------------------------------------ *
+ * Pasal versi Inggris (PKWT) — ditranskripsi dari kolom kanan master
+ * ------------------------------------------------------------------ */
+
+/**
+ * Paragraf Pasal 1..11 versi Inggris.
+ *
+ * Kunci = `heading` pasal Indonesia pada `sections` hasil
+ * `pkwtCommonSections()`; nilainya `{ heading, paragraphs }` dengan judul
+ * Inggris. Keempat varian PKWT memakai isi pasal yang sama (hanya jabatan pada
+ * Pasal 1 ayat 2 yang berbeda), jadi tabel ini dibagi bersama.
+ *
+ * Penulisan mengikuti master apa adanya — termasuk tata bahasa aslinya yang
+ * tidak baku (`doesn't required`, `finish to law`, `blackened`). Ini disengaja:
+ * naskah kontrak harus identik dengan dokumen yang ditandatangani, bukan
+ * diperbaiki.
+ */
+const PKWT_EN_ARTICLE_BODIES: Record<string, { heading: string; paragraphs: string[] }> = {
+  'Pasal 1\nMaksud Kesepakatan': {
+    heading: 'Article 1\nAgreement Purpose',
+    paragraphs: [
+      '1. Company employ the Employee for stated periods according to company need.',
+      '2. Work location at the PT Sankyu Indonesia International Cooperative, in the role of __EN_ROLE__.',
+      "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
+    ],
+  },
+  'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': {
+    heading: 'Article 2\nPeriod Time of Agreement',
+    paragraphs: [
+      '__EN_TERM_DATE__',
+      "2. In this Agreement for Certain Time doesn't required probation period.",
+    ],
+  },
+  'Pasal 3\nPengupahan': {
+    heading: 'Article 3\nRemuneration',
+    paragraphs: [
+      '__EN_WAGE_AMOUNT__',
+      "2. Company shall deduct employee's wage for individual income tax.",
+      "3. Employee's wage shall be paid on date of 7 every month.",
+    ],
+  },
+  'Pasal 4\nWaktu Kerja': {
+    heading: 'Article 4\nWorking Time',
+    paragraphs: [
+      'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
+    ],
+  },
+  'Pasal 5\nPembebasan dari Kewajiban Bekerja': {
+    heading: 'Article 5\nAcquitted from Work Obligation',
+    paragraphs: [
+      '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
+      '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
+    ],
+  },
+  'Pasal 6\nTata Tertib Kerja': {
+    heading: 'Article 6\nWorking Rule',
+    paragraphs: [
+      '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
+      '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
+      '3. Employee is obliged to use work equipment in doing the task and should be polite.',
+      '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
+      '5. Employee is obliged to maintain the equipment of company property.',
+    ],
+  },
+  'Pasal 7\nDisiplin Kerja': {
+    heading: 'Article 7\nWork Discipline',
+    paragraphs: [
+      '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
+      'a. Giving counterfeit or to be counterfeited information When the agreement made.',
+      'b. Drunk, opium, using drugs medicine or narcotic in working place.',
+      'c. Doing immoral action in working place.',
+      'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company environment.',
+      'e. Oppressing, humiliate coarsely or threaten owner, owner family or colleague.',
+      'f. Persuading owner or colleague to do something that opposite with law or moral.',
+      "g. Expressly or careless damaging, losing out or let company's property in danger condition.",
+      'h. Opening company secret or blackened the company leader and his family that should be closed by him, except for the state need.',
+      'i. Smoking at the forbid place in the sensitive location toward fire.',
+      "j. Undergoing legal proceedings resulting in an inability to work for more than six months, disrupting company productivity or the company's work results.",
+      "k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company's superior or management.",
+    ],
+  },
+  'Pasal 8\nMangkir': {
+    heading: 'Article 8\nA b s e n t',
+    paragraphs: [
+      "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
+      "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
+    ],
+  },
+  'Pasal 9\nBerakhirnya Kesepakatan': {
+    heading: 'Article 9\nEnd of Agreement',
+    paragraphs: [
+      "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
+      '2. The Agreement of Certain is finish automatically because the concerned employee died.',
+      '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
+      '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
+    ],
+  },
+  'Pasal 10\nTugas dan Tanggung Jawab': {
+    heading: 'Article 10\nDuty and Responsible',
+    paragraphs: [
+      '1. Employee should do work job well regarding to instruction of superior or company leader.',
+      '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
+    ],
+  },
+  'Pasal 11\nPenyelesaian Keluh Kesah': {
+    heading: 'Article 11\nCompletion of Complain',
+    paragraphs: [
+      '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
+      '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
+      '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
+    ],
+  },
+
+}
+/**
+ * Pasal versi Inggris untuk satu varian PKWT.
+ *
+ * `__EN_ROLE__` diisi jabatan versi Inggris dari master varian terkait
+ * (`Work location at the PT Sankyu Indonesia International Cooperative, in the
+ * role of <jabatan>`), sehingga tidak ada terjemahan yang dikarang di sini.
+ */
+function pkwtEnglishSections(englishRole: string): ContractDocumentDefinition['englishSections'] {
+  const out: Record<string, { heading: string; paragraphs: string[] }> = {}
+  for (const [key, body] of Object.entries(PKWT_EN_ARTICLE_BODIES)) {
+    out[key] = {
+      heading: body.heading,
+      paragraphs: body.paragraphs.map((p) => p.replace(/__EN_ROLE__/g, englishRole)),
+    }
+  }
+  return out
+}
+
+/**
+ * Redaksi Inggris blok non-Pasal PKWT.
+ *
+ * Tanpa ini, kolom kanan memakai redaksi Indonesia milik `openingLine`/
+ * `recitals`/`roleLabel`/`locationLine`/`termLine`/`compensationLabel`/
+ * `closingParagraphs` — bug yang membuat sisi kanan pratinjau PKWT berbahasa
+ * Indonesia.
+ *
+ * `englishRole` = jabatan versi Inggris persis seperti tertulis di master
+ * (mis. `Cashier at the cooperative mart`).
+ */
+function pkwtEnglishBody(englishRole: string): PkwtEnglishBody {
+  return {
+    openingLine: 'Both parties have been agreed to engage Stated Periods Labour Agreement by requirements as follows :',
+    recitalsHeading: 'The Parties',
+    recitals: [
+      'The FIRST PARTY is Koperasi Karyawan PT. Sankyu Indonesia Internasional, which carries out business activities and operational services according to the needs of the company and the related work unit.',
+      'The SECOND PARTY is the employee who is willing to carry out work according to the assigned position, subject to the applicable work provisions, work rules and operational policies.',
+    ],
+    roleHeading: 'Scope of Work and Position',
+    roleLabel: englishRole,
+    locationLine: `Work location at the PT Sankyu Indonesia International Cooperative, in the role of ${englishRole}.`,
+    termHeading: 'Term of Agreement',
+    termLine: 'This agreement is effective according to the agreed contract period.',
+    compensationLabel: 'Remuneration',
+    closingHeading: 'Closing',
+    closingParagraphs: [
+      'Thus the Agreement of Certain Time made without any pressure from both parties, made by double duplicate and enough stamp.',
+    ],
+  }
+}
+
+
 
 export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefinition> = {
   PKWT_DRIVER: {
@@ -370,69 +624,8 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Driver'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
-    englishSections: {
-      'Pasal 1\nMaksud Kesepakatan': [
-        '1. Company employ the Employee for stated periods according to company need.',
-        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
-        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
-      ],
-      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
-        '__TERM_DATE__',
-        "2. In this Agreement for Certain Time doesn't required probation period.",
-      ],
-      'Pasal 3\nPengupahan': [
-        '__WAGE_AMOUNT__',
-        "2. Company shall deduct employee's wage for individual income tax.",
-        "3. Employee's wage shall be paid on date of 7 every month.",
-      ],
-      'Pasal 4\nWaktu Kerja': [
-        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
-      ],
-      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
-        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
-        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
-      ],
-      'Pasal 6\nTata Tertib Kerja': [
-        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
-        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
-        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
-        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
-        '5. Employee is obliged to maintain the equipment of company property.',
-      ],
-      'Pasal 7\nDisiplin Kerja': [
-        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
-        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
-        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
-        'c. Doing immoral action in working place.',
-        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
-        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
-        'f. Persuade the employer or co-worker to do something violate the law or morality.',
-        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
-        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
-        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
-        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
-        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
-      ],
-      'Pasal 8\nMangkir': [
-        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
-        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
-      ],
-      'Pasal 9\nBerakhirnya Kesepakatan': [
-        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
-        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
-        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
-        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
-      ],
-      'Pasal 10\nTugas dan Tanggung Jawab': [
-        '1. Employee should do work job well regarding to instruction of superior or company leader.',
-        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
-      ],
-      'Pasal 11\nPenyelesaian Keluh Kesah': [
-        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
-        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
-        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
-      ],
-    },
+    englishSections: pkwtEnglishSections('Driver'),
+    englishBody: pkwtEnglishBody('Driver'),
   },
   PKWT_KASIR: {
     key: 'PKWT_KASIR',
@@ -458,69 +651,8 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Kasir Kopmart'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
-    englishSections: {
-      'Pasal 1\nMaksud Kesepakatan': [
-        '1. Company employ the Employee for stated periods according to company need.',
-        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
-        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
-      ],
-      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
-        '__TERM_DATE__',
-        "2. In this Agreement for Certain Time doesn't required probation period.",
-      ],
-      'Pasal 3\nPengupahan': [
-        '__WAGE_AMOUNT__',
-        "2. Company shall deduct employee's wage for individual income tax.",
-        "3. Employee's wage shall be paid on date of 7 every month.",
-      ],
-      'Pasal 4\nWaktu Kerja': [
-        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
-      ],
-      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
-        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
-        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
-      ],
-      'Pasal 6\nTata Tertib Kerja': [
-        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
-        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
-        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
-        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
-        '5. Employee is obliged to maintain the equipment of company property.',
-      ],
-      'Pasal 7\nDisiplin Kerja': [
-        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
-        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
-        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
-        'c. Doing immoral action in working place.',
-        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
-        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
-        'f. Persuade the employer or co-worker to do something violate the law or morality.',
-        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
-        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
-        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
-        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
-        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
-      ],
-      'Pasal 8\nMangkir': [
-        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
-        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
-      ],
-      'Pasal 9\nBerakhirnya Kesepakatan': [
-        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
-        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
-        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
-        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
-      ],
-      'Pasal 10\nTugas dan Tanggung Jawab': [
-        '1. Employee should do work job well regarding to instruction of superior or company leader.',
-        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
-      ],
-      'Pasal 11\nPenyelesaian Keluh Kesah': [
-        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
-        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
-        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
-      ],
-    },
+    englishSections: pkwtEnglishSections('Cashier at the cooperative mart'),
+    englishBody: pkwtEnglishBody('Cashier at the cooperative mart'),
   },
   PKWT_STAFF: {
     key: 'PKWT_STAFF',
@@ -546,69 +678,8 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Staff Admin'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
-    englishSections: {
-      'Pasal 1\nMaksud Kesepakatan': [
-        '1. Company employ the Employee for stated periods according to company need.',
-        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
-        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
-      ],
-      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
-        '__TERM_DATE__',
-        "2. In this Agreement for Certain Time doesn't required probation period.",
-      ],
-      'Pasal 3\nPengupahan': [
-        '__WAGE_AMOUNT__',
-        "2. Company shall deduct employee's wage for individual income tax.",
-        "3. Employee's wage shall be paid on date of 7 every month.",
-      ],
-      'Pasal 4\nWaktu Kerja': [
-        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
-      ],
-      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
-        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
-        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
-      ],
-      'Pasal 6\nTata Tertib Kerja': [
-        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
-        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
-        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
-        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
-        '5. Employee is obliged to maintain the equipment of company property.',
-      ],
-      'Pasal 7\nDisiplin Kerja': [
-        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
-        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
-        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
-        'c. Doing immoral action in working place.',
-        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
-        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
-        'f. Persuade the employer or co-worker to do something violate the law or morality.',
-        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
-        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
-        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
-        'j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company\'s work results.',
-        'k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company\'s superior or management.',
-      ],
-      'Pasal 8\nMangkir': [
-        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
-        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
-      ],
-      'Pasal 9\nBerakhirnya Kesepakatan': [
-        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
-        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
-        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
-        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
-      ],
-      'Pasal 10\nTugas dan Tanggung Jawab': [
-        '1. Employee should do work job well regarding to instruction of superior or company leader.',
-        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
-      ],
-      'Pasal 11\nPenyelesaian Keluh Kesah': [
-        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
-        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
-        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
-      ],
-    },
+    englishSections: pkwtEnglishSections('Administrative Staff'),
+    englishBody: pkwtEnglishBody('Administrative Staff'),
   },
   PKWT_WAREHOUSE: {
     key: 'PKWT_WAREHOUSE',
@@ -634,69 +705,8 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'Karyawan/employee',
     sections: pkwtCommonSections('Karyawan Gudang'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
-    englishSections: {
-      'Pasal 1\nMaksud Kesepakatan': [
-        '1. Company employ the Employee for stated periods according to company need.',
-        '2. With work in Koperasi PT Sankyu Indonesia Internasional for work as __ROLE_LABEL__.',
-        "3. The company has the right to move employee from one job to other or from one section to other with doesn't reduce the agreed wage in this agreement.",
-      ],
-      'Pasal 2\nMasa Berlakunya Kesepakatan Kerja': [
-        '__TERM_DATE__',
-        "2. In this Agreement for Certain Time doesn't required probation period.",
-      ],
-      'Pasal 3\nPengupahan': [
-        '__WAGE_AMOUNT__',
-        "2. Company shall deduct employee's wage for individual income tax.",
-        "3. Employee's wage shall be paid on date of 7 every month.",
-      ],
-      'Pasal 4\nWaktu Kerja': [
-        'In view of the provision of behave laws, company working hour is 40 (Forty) hours a week.',
-      ],
-      'Pasal 5\nPembebasan dari Kewajiban Bekerja': [
-        '1. Employee could be given permit to leave his/her job because of sick or get accident if it completed by certificate of doctor.',
-        '2. Employee could be given permit to leave his/her job in case of important matter after getting approval from company.',
-      ],
-      'Pasal 6\nTata Tertib Kerja': [
-        '1. Employee is obliged to pay attention and follow work safety rules ordered by the company.',
-        '2. Employee is forbidden bring working tools of company property to out of work place for private business without permit from company leader.',
-        '3. Employee is obliged to use work equipment in doing the task and should be polite.',
-        '4. Every lose or damage of work equipment should be reported by employee to company leader. Employee who deliberate or his negligence become suffer a financial lose for the company, he/she oblige to change the lose.',
-        '5. Employee is obliged to maintain the equipment of company property.',
-      ],
-      'Pasal 7\nDisiplin Kerja': [
-        '1. Employees will be given sanctions in the form of termination of employment without receiving any form of compensation, if employees commit serious violations as described below:',
-        'a. Giving counterfeit or to be counterfeited information When the agreement made.',
-        'b. Drunk, opium, using drugs medicine or narcotic in working place.',
-        'c. Doing immoral action in working place.',
-        'd. Doing the criminal action such as : steal, embezzle, cheat, trading forbid goods in or out of company.',
-        'e. Mistreatment, insulting or threatening the employer, employer family or co-worker.',
-        'f. Persuade the employer or co-worker to do something violate the law or morality.',
-        'g. Deliberate or careless damage or leave their selves or co-worker in danger.',
-        'h. Expose company secret or slander the company leader and his family, which should be kept confidential except for State business.',
-        'i. Smoking in prohibited places or in places vulnerable to fire danger.',
-        "j. Undergoing a legal process which resulted in inability to work for more than 6 months which disrupts company productivity or the company's work results.",
-        "k. Borrowing or using equipment or goods belonging to the company or vendors without the permission of the company's superior or management.",
-      ],
-      'Pasal 8\nMangkir': [
-        "1. If employee doesn't go to the office without permit or he/she can't give the accepted reason, so the concerned employee is assumed absent.",
-        "2. If employee absent for 5 (Five) working days continuously, and he/she has been called 2 times in writing, but he/she can't give valid prove, the employee is called as resign according to the Law No. 13/2003 about labour.",
-      ],
-      'Pasal 9\nBerakhirnya Kesepakatan': [
-        "1. The agreement of Certain Time finish to law by the end of time as mentioned in article 2, paragraph 1 of this agreement, so the company hasn't obliged to pay anything of severance and long service to the employee.",
-        '2. The Agreement of Certain is finish automatically because the concerned employee died.',
-        '3. Company can terminate this Agreement of Certain Time employee do weight mistake or forced reason regarding to Article 7 and 8.',
-        '4. The contract between the cooperative and PT Sankyu Indonesia International ended and the contract was not extended.',
-      ],
-      'Pasal 10\nTugas dan Tanggung Jawab': [
-        '1. Employee should do work job well regarding to instruction of superior or company leader.',
-        '2. The employee should keep secret all information get from the company during work and will not announce the information without permit from the company.',
-      ],
-      'Pasal 11\nPenyelesaian Keluh Kesah': [
-        '1. When there is contradiction of this agreement and work requirements will complete by mutual discussion before completed though to valid provision.',
-        '2. The valid Work requirements and not yet mention in this agreement will be valid according to the valid rule and law.',
-        '3. Government in this case Labour Department can make modifications or review if work requirements in this agreement is not comfort by the valid labour rule.',
-      ],
-    },
+    englishSections: pkwtEnglishSections('Warehouse Employee'),
+    englishBody: pkwtEnglishBody('Warehouse Employee'),
   },
   MITRA_DRIVER: {
     key: 'MITRA_DRIVER',
@@ -722,6 +732,31 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
     secondPartyLabel: 'PIHAK KEDUA',
     sections: mitraFullSections('MITRA_DRIVER'),
     requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'contract.baseCompensation'],
+  },
+  MITRA_DRIVER_TRUCK_B3: {
+    key: 'MITRA_DRIVER_TRUCK_B3',
+    family: 'MITRA',
+    title: 'PERJANJIAN KEMITRAAN DRIVER TRUCK B3',
+    sourceTemplateRelativePath: 'docs/sample-legal-doc/pdf/KONTRAK KERJA MITRA DRIVER TRUCK B3.pdf',
+    sourceTemplateFormat: 'PDF',
+    fidelityNote: DOCX_REMOVED_NOTE,
+    openingLine: 'Pada hari ini Para Pihak sepakat untuk mengikatkan diri dalam Perjanjian Kemitraan Driver Truck B3 dengan mematuhi keselamatan kerja dan ketentuan pengangkutan yang berlaku.',
+    recitals: [
+      'PIHAK PERTAMA adalah Koperasi Karyawan PT. Sankyu Indonesia Internasional yang membutuhkan dukungan layanan transportasi dan logistik.',
+      'PIHAK KEDUA adalah mitra perorangan yang memiliki kompetensi dan bersedia menjalankan tugas pengemudi truck secara aman, tertib, dan bertanggung jawab.',
+    ],
+    roleLabel: 'Driver Truck B3',
+    locationLine: 'Perjanjian kemitraan ini mengatur pekerjaan pengemudi truck untuk kebutuhan pengangkutan dan operasional logistik.',
+    termLine: 'Jangka waktu kemitraan mengikuti periode kontrak yang tercantum pada dokumen ini.',
+    compensationLabel: 'Imbalan Jasa Bulanan',
+    closingParagraphs: [
+      'Demikian perjanjian kemitraan ini dibuat dan disetujui oleh Para Pihak dalam keadaan sadar, tanpa tekanan dari pihak mana pun, untuk dilaksanakan dengan itikad baik.',
+      'Para Pihak wajib mengutamakan keselamatan manusia, kendaraan, muatan, dan lingkungan dalam setiap pelaksanaan pekerjaan.',
+    ],
+    firstPartyLabel: 'PIHAK PERTAMA',
+    secondPartyLabel: 'PIHAK KEDUA',
+    sections: mitraFullSections('MITRA_DRIVER_TRUCK_B3'),
+    requiredFields: ['employee.nik', 'employee.birthPlace', 'employee.address', 'employee.jobRole', 'contract.baseCompensation', 'contract.termRange'],
   },
   MITRA_KOMART: {
     key: 'MITRA_KOMART',
@@ -800,10 +835,41 @@ export const CONTRACT_DOCUMENT_DEFINITIONS: Record<string, ContractDocumentDefin
   },
 }
 
+/**
+ * Token legacy gaya lama yang TIDAK boleh muncul lagi di konten terbit.
+ * Bila tersisa, konten akan rusak saat dirender (menjadi titik-titik / gagal).
+ */
+export const LEGACY_CONTENT_TOKENS = [
+  '__MITRA_TERM__', '__MITRA_IMBALAN__', '__MITRA_ADDRESS__',
+  '__MITRA_PHONE__', '__MITRA_EMAIL__', '__PARTY_II_BLOCK__',
+] as const
+
+/** Pola teks uji yang tidak boleh ikut terbit. */
+export const CONTAMINATION_PATTERNS: RegExp[] = [
+  /lorem ipsum/i,
+  /dolor sit amet/i,
+  /consectetur adipisc/i,
+]
+
+/**
+ * Deteksi override legacy (`contentOverrides`) yang terkontaminasi: memuat
+ * token `__MITRA_*__` yang sudah tidak didukung, atau teks uji (Lorem ipsum).
+ * Override seperti ini harus DIABAIKAN agar tidak menimpa konten template.
+ */
+export function isContaminatedOverrides(overrides: unknown): boolean {
+  if (!overrides || typeof overrides !== 'object') return false
+  const txt = JSON.stringify(overrides)
+  if (LEGACY_CONTENT_TOKENS.some(t => txt.includes(t))) return true
+  return CONTAMINATION_PATTERNS.some(re => re.test(txt))
+}
+
 export function mergeDefinition(
   base: ContractDocumentDefinition,
   overrides: Record<string, any> | null | undefined,
 ): ContractDocumentDefinition {
+  // Override legacy yang terkontaminasi (token usang / teks uji) diabaikan
+  // sepenuhnya — definisi kode yang bersih menjadi sumber kebenaran.
+  if (isContaminatedOverrides(overrides)) return base
   if (!overrides || Object.keys(overrides).length === 0) return base
 
   const merged: ContractDocumentDefinition = { ...base }
@@ -821,6 +887,14 @@ export function mergeDefinition(
   }
 
   // Array fields (recitals, closingParagraphs)
+  //
+  // PENTING — override ini LEGACY dan menyimpan teks kolom INDONESIA saja.
+  // Karena itu ia hanya boleh mengubah definisi ID (`merged[field]`), BUKAN
+  // `englishBody`. Dulu override ini diterapkan tanpa batas bahasa, sehingga
+  // array `recitals` kolom ID bisa dipendekkan (mis. PIHAK PERTAMA hilang)
+  // sementara kolom EN tetap 2 paragraf — selisih itu yang menggeser seluruh
+  // dokumen saat dirender. Kolom EN sekarang selalu memakai redaksi Inggris dari
+  // definisi kode; override ID tidak lagi bocor ke sana.
   for (const field of ['recitals', 'closingParagraphs'] as const) {
     const val = overrides[field]
     if (Array.isArray(val) && val.length > 0) {
@@ -841,11 +915,56 @@ export function mergeDefinition(
     })
   }
 
-  // englishSections — merge per heading key
+  // englishSections — merge per key pasal.
+  //
+  // Nilai override lama berbentuk `string[]` (tipe sebelum koreksi judul
+  // Inggris). Itu diperlakukan sebagai paragraf saja, dan judulnya diambil dari
+  // definisi kode — supaya data lama tidak menghidupkan lagi judul Indonesia di
+  // kolom kanan.
   if (overrides.englishSections && typeof overrides.englishSections === 'object') {
-    merged.englishSections = {
-      ...(base.englishSections ?? {}),
-      ...overrides.englishSections,
+    const baseEn = base.englishSections ?? {}
+    const mergedEn: Record<string, { heading: string; paragraphs: string[] }> = { ...baseEn }
+    for (const [key, value] of Object.entries(overrides.englishSections as Record<string, any>)) {
+      if (Array.isArray(value)) {
+        mergedEn[key] = {
+          heading: baseEn[key]?.heading ?? key,
+          paragraphs: value.map(v => String(v)),
+        }
+      } else if (value && typeof value === 'object' && Array.isArray((value as any).paragraphs)) {
+        mergedEn[key] = {
+          heading: typeof (value as any).heading === 'string' && (value as any).heading.trim()
+            ? (value as any).heading
+            : (baseEn[key]?.heading ?? key),
+          paragraphs: (value as any).paragraphs.map((v: any) => String(v)),
+        }
+      }
+    }
+    merged.englishSections = mergedEn
+  }
+
+  // englishBody — merge per field, hanya nilai yang terisi.
+  if (overrides.englishBody && typeof overrides.englishBody === 'object') {
+    const baseBody = base.englishBody
+    const incoming = overrides.englishBody as Record<string, any>
+    const mergedBody: Record<string, any> = { ...(baseBody ?? {}) }
+    for (const [key, value] of Object.entries(incoming)) {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        mergedBody[key] = value
+      } else if (Array.isArray(value) && value.length > 0) {
+        mergedBody[key] = value
+      }
+    }
+    // Hanya pasang bila hasilnya memang sebuah `PkwtEnglishBody` yang lengkap
+    // (semua field wajib ada) — supaya tipe tetap jujur.
+    const required = [
+      'openingLine', 'recitalsHeading', 'recitals', 'roleHeading', 'roleLabel',
+      'locationLine', 'termHeading', 'termLine', 'compensationLabel',
+      'closingHeading', 'closingParagraphs',
+    ]
+    if (required.every(k => mergedBody[k] !== undefined)) {
+      merged.englishBody = mergedBody as ContractDocumentDefinition['englishBody']
+    } else if (baseBody) {
+      merged.englishBody = baseBody
     }
   }
 

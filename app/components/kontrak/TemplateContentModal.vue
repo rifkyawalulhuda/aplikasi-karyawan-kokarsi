@@ -1,389 +1,2030 @@
 <script setup lang="ts">
-import type { TemplateContentEditorState } from '~/composables/useTemplateContentEditor'
+import {
+  type BlockLike,
+  isDynamicField,
+  normalizeFieldKey,
+  scanFieldUsage,
+  uniqueBlockLabels
+} from '~/utils/field-usage'
+import { stripInlineMarks } from '~/utils/inline-marks'
 
-interface ContractTemplateMeta {
-  id: number
-  name: string
-  templateKey: string
-  family: 'PKWT' | 'MITRA'
+type InlineMarkWarning = { blockId: string; fieldPath: string; message: string }
+type TemplateValidationPreview = {
+  valid: boolean
+  placeholderCount: number
+  blockCount: number
+  markedBlockCount: number
+  alignedBlockCount: number
+  inlineMarkWarnings: InlineMarkWarning[]
 }
 
-const props = defineProps<{
-  open: boolean
-  template: ContractTemplateMeta | null
-}>()
+interface Template { id: number, name: string, family: 'PKWT' | 'MITRA' }
+interface Version { id: number, versionNumber: number, status: string, contentDefinition: any, fieldDefinitions: any, changeSummary?: string }
+const props = defineProps<{ open: boolean, template: Template | null }>(); const emit = defineEmits<{ 'update:open': [boolean], 'saved': [] }>()
+const open = computed({ get: () => props.open, set: v => emit('update:open', v) }); const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
+const { confirmActionToast } = useConfirmActionToast()
+const loading = ref(false), saving = ref(false), busy = ref(false), error = ref(''); const versions = ref<Version[]>([]), selected = ref<Version | null>(null), draft = ref<Version | null>(null), fields = ref<any[]>([])
+const lang = ref<'id' | 'en'>('id'); const preview = ref<TemplateValidationPreview | null>(null); const previewOpen = ref(false); const fieldOpen = ref(false); const fieldSaving = ref(false)
+/** PDF pratinjau (MITRA) — diambil dari backend, dirender `PdfViewer`. */
+const previewPdfBlob = ref<Blob | null>(null); const previewPdfLoading = ref(false); const previewPdfError = ref('')
+const fieldSearch = ref(''); const collapsedBlocks = ref<Record<string, boolean>>({}); const focusedBlockId = ref<string | null>(null)
+/**
+ * Pencarian "field ini dipakai di blok mana".
+ *
+ * Berbeda dari `fieldSearch` di panel kanan (yang mencari field untuk
+ * DISISIPKAN), state ini mencari LOKASI pemakaian field yang sudah ada.
+ */
+const usageSearch = ref('')
+const usageOpen = ref(false)
 
-const emit = defineEmits<{
-  'update:open': [value: boolean]
-  saved: []
-}>()
-
-const localOpen = computed({
-  get: () => props.open,
-  set: (val) => emit('update:open', val),
-})
-
-const toast = useToast()
-const { buildEditorState, buildOverridesPayload, countChanges, containsPlaceholder } = useTemplateContentEditor()
-
-// --- State ---
-const loading = ref(false)
-const saving = ref(false)
-const hardcoded = ref<any>(null)
-const baseline = ref<TemplateContentEditorState | null>(null)
-const editorState = ref<TemplateContentEditorState | null>(null)
-const activeTab = ref('umum')
-
-// --- Computed ---
-const changesCount = computed(() => {
-  if (!editorState.value || !baseline.value) return 0
-  // Bandingkan dengan baseline (apa yang tersimpan saat modal dibuka),
-  // bukan dengan hardcoded — sehingga tidak tampil "belum tersimpan" setelah save
-  return countChanges(editorState.value, baseline.value)
-})
-
-const isPkwt = computed(() => props.template?.family === 'PKWT')
-
-const tabItems = computed(() => {
-  const base = [
-    { label: 'Teks Umum', value: 'umum' },
-    { label: isPkwt.value ? 'Pasal (Indonesia)' : 'Pasal-pasal', value: 'pasal-id' },
-  ]
-  if (isPkwt.value) {
-    base.push({ label: 'Pasal (English)', value: 'pasal-en' })
-  }
-  return base
-})
-
-// englishSections sebagai array untuk iterasi yang type-safe
-const englishSectionEntries = computed<Array<[string, string[]]>>(() => {
-  if (!editorState.value) return []
-  return Object.entries(editorState.value.englishSections) as Array<[string, string[]]>
-})
-
-// --- Load data saat template berubah ---
-watch(() => props.template?.id, async (id) => {
-  if (!id || !props.open) return
-  await fetchContentPreview(id)
-}, { immediate: false })
-
-watch(() => props.open, async (isOpen) => {
-  if (isOpen && props.template?.id) {
-    activeTab.value = 'umum'
-    await fetchContentPreview(props.template.id)
-  }
-})
-
-async function fetchContentPreview(id: number) {
-  loading.value = true
+// ── Tata letak editor: panel samping + mode fokus ───────────────────────────
+// Pada layar ≥ xl, panel versi & field tampil sebagai kolom tetap dan dapat
+// disembunyikan lewat "Mode fokus". Pada layar < xl, panel tampil sebagai
+// overlay yang dibuka lewat tombol agar area edit tidak terasa sempit.
+const versionsHidden = ref(false)
+const fieldsHidden = ref(false)
+const showVersions = ref(false)
+const showFields = ref(false)
+const LAYOUT_PREFS_KEY = 'kokarsi.templateEditor.layout'
+function persistLayoutPrefs() {
+  if (import.meta.server) return
   try {
-    const res = await $fetch<any>(`/api/contract-templates/${id}/content-preview`)
-    // hardcoded = teks asli (untuk Reset Tab ke Default)
-    hardcoded.value = res.hardcoded
-    // editorState dibangun dari merged (sudah include override tersimpan)
-    editorState.value = buildEditorState(res.merged)
-    // baseline = snapshot dari merged saat modal dibuka,
-    // dipakai untuk diff "belum tersimpan" (bukan diff vs hardcode)
-    baseline.value = buildEditorState(res.merged)
-  }
-  catch (e: any) {
-    toast.add({ title: 'Gagal memuat konten template', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
-    localOpen.value = false
-  }
-  finally {
-    loading.value = false
-  }
+    localStorage.setItem(LAYOUT_PREFS_KEY, JSON.stringify({
+      versionsHidden: versionsHidden.value,
+      fieldsHidden: fieldsHidden.value
+    }))
+  } catch { /* localStorage bisa tidak tersedia (mode privat) — abaikan */ }
 }
-
-// --- Reset tab ke default ---
-function resetTab() {
-  if (!editorState.value || !hardcoded.value) return
-  const fresh = buildEditorState(hardcoded.value)
-
-  if (activeTab.value === 'umum') {
-    editorState.value.title = fresh.title
-    editorState.value.subtitle = fresh.subtitle
-    editorState.value.roleLabel = fresh.roleLabel
-    editorState.value.locationLine = fresh.locationLine
-    editorState.value.termLine = fresh.termLine
-    editorState.value.compensationLabel = fresh.compensationLabel
-    editorState.value.firstPartyLabel = fresh.firstPartyLabel
-    editorState.value.secondPartyLabel = fresh.secondPartyLabel
-  }
-  else if (activeTab.value === 'pendahuluan') {
-    editorState.value.recitals = [...fresh.recitals]
-    editorState.value.closingParagraphs = [...fresh.closingParagraphs]
-  }
-  else if (activeTab.value === 'pasal-id') {
-    editorState.value.sections = fresh.sections.map(s => ({ ...s, paragraphs: [...s.paragraphs] }))
-  }
-  else if (activeTab.value === 'pasal-en') {
-    editorState.value.englishSections = Object.fromEntries(
-      Object.entries(fresh.englishSections).map(([k, v]) => [k, [...v]]),
-    )
-  }
-
-  toast.add({ title: 'Tab direset ke default', color: 'info' })
-}
-
-// --- Simpan ---
-async function save() {
-  if (!editorState.value || !hardcoded.value || !props.template) return
-  saving.value = true
+onMounted(() => {
   try {
-    // buildOverridesPayload tetap dibandingkan dengan hardcoded
-    // agar payload berisi semua perbedaan dari default asli
-    const overrides = buildOverridesPayload(editorState.value, hardcoded.value)
-    await $fetch(`/api/contract-templates/${props.template.id}/content-overrides`, {
-      method: 'PUT',
-      body: { overrides },
+    const raw = localStorage.getItem(LAYOUT_PREFS_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as { versionsHidden?: boolean, fieldsHidden?: boolean }
+    versionsHidden.value = parsed.versionsHidden === true
+    fieldsHidden.value = parsed.fieldsHidden === true
+  } catch { /* prefs rusak — pakai default */ }
+})
+watch([versionsHidden, fieldsHidden], persistLayoutPrefs)
+
+/** Mode fokus: sembunyikan kedua panel samping agar editor memakai lebar penuh. */
+function toggleFocusMode() {
+  const next = !(versionsHidden.value && fieldsHidden.value)
+  versionsHidden.value = next
+  fieldsHidden.value = next
+}
+
+const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null>(null); const pendingVersion = ref<Version | null>(null)
+/** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
+const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
+const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
+const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
+const fieldItems = computed(() => {
+  // Gabungkan katalog field dengan status binding template. Field
+  // `CONTRACT_INPUT` yang BELUM di-bind ke template ini ditandai `bound:false`
+  // sehingga tidak dapat disisipkan: placeholder-nya tidak akan pernah punya
+  // nilai dan membuat publish gagal ("tidak terdaftar di katalog field").
+  type CatalogField = { key: string, label?: string, sourceType?: string, bound?: boolean }
+  const catalog: CatalogField[] = fields.value.length
+    ? (fields.value as CatalogField[])
+    : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? [])
+  if (!bindings.value.length) return catalog.map(f => ({ ...f, bound: true }))
+  const boundByKey = new Map<string, boolean>(bindings.value.map(b => [b.key, b.bound] as [string, boolean]))
+  return catalog.map(f => ({
+    ...f,
+    bound: f.sourceType === 'CONTRACT_INPUT' ? (boundByKey.get(f.key) ?? false) : true
+  }))
+})
+const placeholderText = (key: string) => `{{${key}}}`
+
+/**
+ * Key placeholder kanonik untuk sebuah field katalog.
+ *
+ * Field `CONTRACT_INPUT` disimpan TANPA prefix `custom.` (mis. `ktp_issued_date`),
+ * tetapi placeholder di konten HARUS memakai prefix (`{{custom.ktp_issued_date}}`)
+ * agar dikenali validator & resolver backend. Tanpa ini, menyisipkan field
+ * dinamis menghasilkan `{{ktp_issued_date}}` yang ditolak saat publish dengan
+ * "sintaks {{...}} rusak", dan nilainya tidak akan pernah ter-resolve.
+ */
+function fieldPlaceholderKey(field: { key?: unknown, sourceType?: unknown } | null | undefined): string {
+  const key = String(field?.key ?? '')
+  if (!key) return ''
+  const isCustom = field?.sourceType === 'CONTRACT_INPUT'
+  return isCustom && !key.startsWith('custom.') ? `custom.${key}` : key
+}
+
+const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
+watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
+async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
+async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
+async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+
+/**
+ * Hapus versi ARCHIVED/DRAFT setelah konfirmasi.
+ *
+ * PUBLISHED dan versi yang dipakai kontrak ditolak backend — pesannya
+ * ditampilkan apa adanya. Setelah sukses, daftar disegarkan; bila versi yang
+ * sedang dibuka ikut terhapus, editor pindah ke versi PUBLISHED (bukan draft),
+ * supaya mendarat di versi aktif.
+ */
+function removeVersion(v: Version) {
+  const isDraft = v.status === 'DRAFT'
+  confirmDeleteToast({
+    title: `Hapus versi v${v.versionNumber}?`,
+    description: isDraft
+      ? 'Draft ini belum pernah dipublikasikan. Seluruh perubahan di dalamnya akan hilang permanen.'
+      : 'Versi arsip ini akan dihapus permanen dari riwayat versi.',
+    confirmLabel: 'Hapus Versi',
+    onConfirm: async () => {
+      try {
+        await $fetch(`/api/contract-template-versions/${v.id}`, { method: 'DELETE' })
+        toast.add({ title: `Versi v${v.versionNumber} dihapus`, color: 'success' })
+        await refreshAfterDelete()
+        emit('saved')
+      } catch (e: unknown) {
+        toast.add({ title: 'Gagal menghapus versi', description: apiErrorMessage(e), color: 'error' })
+      }
+    }
+  })
+}
+
+/** Segarkan daftar versi; pilih PUBLISHED bila versi terpilih ikut terhapus. */
+async function refreshAfterDelete() {
+  if (!props.template) return
+  const vs = await $fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`)
+  versions.value = vs ?? []
+  // Versi yang sedang dibuka masih ada → biarkan pilihan tetap.
+  if (versions.value.some(x => x.id === selected.value?.id)) return
+  const target = versions.value.find(x => x.status === 'PUBLISHED') ?? versions.value[0]
+  if (target) {
+    await select(target)
+  } else {
+    selected.value = null
+    draft.value = null
+  }
+}
+async function save() { if (!draft.value) return; saving.value = true; try { const v = await $fetch<Version>(`/api/contract-template-versions/${draft.value.id}`, { method: 'PUT', body: { contentDefinition: draft.value.contentDefinition, fieldDefinitions: draft.value.fieldDefinitions, changeSummary: draft.value.changeSummary || 'Perubahan editor' } }); draft.value = cloneVersion(v); selected.value = v; versions.value = versions.value.map(x => x.id === v.id ? v : x); snapshotDraft(); toast.add({ title: 'Draft tersimpan', color: 'success' }); warnEmptyBlocks() } catch (e: any) { toast.add({ title: 'Gagal menyimpan', description: apiErrorMessage(e), color: 'error' }) } finally { saving.value = false } }
+async function action(name: 'preview' | 'publish' | 'rollback') { const v = draft.value ?? selected.value; if (!v) return; busy.value = true; try { if (name === 'preview') { await openPreview(v); return } const r = await $fetch<any>(`/api/contract-template-versions/${v.id}/${name}`, { method: 'POST' }); toast.add({ title: name === 'publish' ? 'Versi dipublish' : 'Rollback berhasil', color: 'success' }); await load(); emit('saved') } catch (e: any) { toast.add({ title: 'Aksi gagal', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
+
+/**
+ * Konfirmasi Publish.
+ *
+ * Publish mengubah versi AKTIF template (yang dipakai kontrak baru) dan
+ * mengarsipkan versi terbit sebelumnya — jadi selalu minta konfirmasi dulu.
+ *
+ * Publish mengirim versi yang TERSIMPAN, bukan editan yang masih di editor:
+ * kalau masih ada perubahan belum disimpan (`draftDirty`), peringatkan supaya
+ * petugas tidak mengira editan itu ikut terbit.
+ */
+function confirmPublish() {
+  const v = draft.value
+  if (!v || busy.value) return
+  const dirtyWarning = draftDirty.value
+    ? ' Perubahan yang belum disimpan TIDAK akan ikut terbit — tekan "Simpan" dulu bila ingin menyertakannya.'
+    : ''
+  confirmActionToast({
+    title: `Publish versi v${v.versionNumber}?`,
+    description: `Versi v${v.versionNumber} akan menjadi versi terbit dan langsung dipakai untuk kontrak baru. Versi terbit sebelumnya akan diarsipkan.${dirtyWarning}`,
+    confirmLabel: 'Publish Versi',
+    confirmColor: 'primary',
+    onConfirm: () => action('publish')
+  })
+}
+
+/**
+ * Konfirmasi Rollback.
+ *
+ * Rollback mengaktifkan kembali versi ARCHIVED sebagai versi terbit dan
+ * mengarsipkan versi terbit saat ini. Karena `select(v)` mengganti draft yang
+ * terbuka, peringatkan bila ada perubahan draft yang belum disimpan.
+ */
+function confirmRollback(v: Version) {
+  if (busy.value) return
+  const dirtyWarning = draftDirty.value
+    ? ' Perubahan pada draft yang sedang dibuka akan hilang.'
+    : ''
+  confirmActionToast({
+    title: `Rollback ke versi v${v.versionNumber}?`,
+    description: `Versi v${v.versionNumber} akan diaktifkan kembali sebagai versi terbit, dan versi terbit saat ini akan diarsipkan.${dirtyWarning}`,
+    confirmLabel: 'Rollback',
+    confirmColor: 'warning',
+    onConfirm: () => select(v).then(() => action('rollback'))
+  })
+}
+
+/**
+ * Buka pratinjau.
+ *
+ * 1. Validasi backend (`POST .../preview`) → mengisi panel status di modal.
+ * 2. Ambil PDF asli dari mesin render yang SAMA dengan Generate Kontrak (1:1),
+ *    baik untuk MITRA maupun PKWT. `contentDefinition` draft dikirim di body,
+ *    jadi editan yang BELUM disimpan tetap terlihat dan DB tidak perlu ditulis
+ *    lebih dulu.
+ */
+async function openPreview(v: Version) {
+  previewOpen.value = true
+  previewPdfBlob.value = null
+  previewPdfError.value = ''
+
+  // Validasi (dipakai panel status). Kegagalan validasi tidak memblokir PDF.
+  try {
+    preview.value = await $fetch<any>(`/api/contract-template-versions/${v.id}/preview`, {
+      method: 'POST',
+      body: { contentDefinition: draft.value?.contentDefinition ?? v.contentDefinition },
     })
-    // Update baseline ke state saat ini agar changesCount kembali ke 0
-    baseline.value = buildEditorState(editorState.value as any)
+  } catch (e: any) {
+    preview.value = null
+    toast.add({ title: 'Validasi gagal', description: apiErrorMessage(e), color: 'warning' })
+  }
+
+  previewPdfLoading.value = true
+  try {
+    const blob = await $fetch(`/api/contract-template-versions/${v.id}/preview-pdf`, {
+      method: 'POST',
+      body: { contentDefinition: draft.value?.contentDefinition ?? v.contentDefinition },
+      responseType: 'blob',
+    })
+    previewPdfBlob.value = blob as unknown as Blob
+  } catch (e: any) {
+    previewPdfError.value = apiErrorMessage(e, 'Gagal memuat pratinjau PDF')
+  } finally {
+    previewPdfLoading.value = false
+  }
+}
+/**
+ * Blok tanda tangan hanya boleh SATU per versi. Dua blok akan menghasilkan dua
+ * tabel tanda tangan di PDF dan membingungkan saat penandatanganan.
+ */
+const hasSignatureBlock = computed(() => (blocks.value ?? []).some((b: { type?: string }) => b?.type === 'signature'))
+
+function add(type: string) {
+  if (type === 'signature' && hasSignatureBlock.value) {
     toast.add({
-      title: 'Konten template disimpan',
-      description: `${Object.keys(overrides).length === 0 ? 'Tidak ada perubahan' : `${changesCount.value} perubahan`} tersimpan.`,
-      color: 'success',
+      title: 'Blok tanda tangan sudah ada',
+      description: 'Hapus blok tanda tangan yang lama dulu bila ingin menambah yang baru.',
+      color: 'warning'
     })
-    emit('saved')
-    localOpen.value = false
+    blockPickerOpen.value = false
+    return
   }
-  catch (e: any) {
-    toast.add({ title: 'Gagal menyimpan', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  const id = `${type}-${Date.now()}`
+  // Setiap tipe yang ditawarkan `BLOCK_PICKER` WAJIB punya entri di sini. Sebelum
+  // ini `title`/`subtitle` terdaftar di picker tapi tidak ada di map, sehingga
+  // `d[type]` menghasilkan `undefined` dan `push(undefined)` membuat render
+  // berikutnya membaca `b.id` dari undefined → TypeError → halaman membeku.
+  // `title`/`subtitle` memakai `text` (lihat `template-schema.validator.ts` dan
+  // `contract-block-renderer.ts`).
+  const d: Record<string, Record<string, unknown>> = {
+    paragraph: { id, type, text: '' },
+    title: { id, type, text: 'JUDUL DOKUMEN' },
+    subtitle: { id, type, text: 'Subjudul dokumen' },
+    article: { id, type, heading: 'Pasal baru', paragraphs: [''] },
+    list: { id, type, style: 'bullet', items: [''] },
+    table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] },
+    pageBreak: { id, type },
+    signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' }
   }
-  finally {
-    saving.value = false
+  const block = d[type]
+  // Jaring pengaman: bila suatu saat picker menambah tipe tanpa mengisi map ini,
+  // jangan pernah masukkan `undefined` ke `blocks`.
+  if (!block) {
+    toast.add({
+      title: 'Jenis blok belum didukung',
+      description: `Blok "${type}" belum dapat ditambahkan. Laporkan ke tim pengembang.`,
+      color: 'error'
+    })
+    blockPickerOpen.value = false
+    return
+  }
+  blocks.value.push(block as any)
+  setFocus(id)
+  collapsedBlocks.value[id] = false
+  blockPickerOpen.value = false
+}
+function move(i: number, d: number) { const j = i + d; if (j < 0 || j >= blocks.value.length) return; const x = blocks.value.splice(i, 1)[0]; blocks.value.splice(j, 0, x) }
+
+// ── Drag & drop urutan blok ──────────────────────────────────────────────────
+// Reorder murni mengubah URUTAN array blok; tidak menyentuh data model. Memakai
+// HTML5 DnD native (pola sama dengan spaces/KanbanBoard.vue) agar tanpa dependensi.
+const dragIndex = ref(-1)
+const dropIndex = ref(-1)
+const dropPosition = ref<'before' | 'after'>('before')
+const blocksListEl = ref<HTMLElement | null>(null)
+let scrollEl: HTMLElement | null = null
+let autoScrollRaf = 0
+let lastClientY = 0
+
+/** Cari leluhur yang bisa digulir (modal body) untuk auto-scroll saat drag. */
+function findScrollParent(el: HTMLElement | null): HTMLElement | null {
+  let node = el?.parentElement ?? null
+  while (node) {
+    const oy = getComputedStyle(node).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1) return node
+    node = node.parentElement
+  }
+  return null
+}
+
+function startAutoScroll() {
+  stopAutoScroll()
+  const tick = () => {
+    if (dragIndex.value < 0) return
+    const el = scrollEl
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      const EDGE = 64
+      const SPEED = 14
+      if (lastClientY < rect.top + EDGE) el.scrollTop -= SPEED
+      else if (lastClientY > rect.bottom - EDGE) el.scrollTop += SPEED
+    }
+    autoScrollRaf = requestAnimationFrame(tick)
+  }
+  autoScrollRaf = requestAnimationFrame(tick)
+}
+
+function stopAutoScroll() {
+  if (autoScrollRaf) cancelAnimationFrame(autoScrollRaf)
+  autoScrollRaf = 0
+}
+
+function onBlockDragStart(i: number, e: DragEvent) {
+  if (!draft.value) return
+  dragIndex.value = i
+  dropIndex.value = -1
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    // setData wajib agar event `drop` terpicu (Chrome/Firefox).
+    e.dataTransfer.setData('text/plain', String(i))
+  }
+  scrollEl = findScrollParent(blocksListEl.value)
+  lastClientY = e.clientY
+  startAutoScroll()
+}
+
+function onBlockDragOver(i: number, e: DragEvent) {
+  if (dragIndex.value < 0) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  lastClientY = e.clientY
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  dropIndex.value = i
+  dropPosition.value = e.clientY > rect.top + rect.height / 2 ? 'after' : 'before'
+}
+
+function onBlockDrop(i: number, e: DragEvent) {
+  if (dragIndex.value < 0) return
+  e.preventDefault()
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const after = e.clientY > rect.top + rect.height / 2
+  reorderBlocks(dragIndex.value, after ? i + 1 : i)
+  onBlockDragEnd()
+}
+
+/**
+ * Pindahkan blok `from` agar menempati posisi sebelum index `insertAt`
+ * (dihitung pada array SEBELUM penghapusan).
+ */
+function reorderBlocks(from: number, insertAt: number) {
+  const arr = blocks.value
+  if (from < 0 || from >= arr.length) return
+  let target = from < insertAt ? insertAt - 1 : insertAt
+  target = Math.max(0, Math.min(target, arr.length - 1))
+  if (target === from) return
+  const [item] = arr.splice(from, 1)
+  arr.splice(target, 0, item)
+}
+
+function onBlockDragEnd() {
+  dragIndex.value = -1
+  dropIndex.value = -1
+  stopAutoScroll()
+}
+
+/** Garis sisip hanya tampil pada kartu target (bukan kartu yang ditarik). */
+function blockDropIndicator(i: number): 'none' | 'before' | 'after' {
+  if (dragIndex.value < 0 || dropIndex.value !== i || i === dragIndex.value) return 'none'
+  return dropPosition.value
+}
+
+/** @deprecated gunakan `insertField()` — dipertahankan untuk kompatibilitas. */
+const useField = insertField
+async function createField() { fieldSaving.value = true; try { const f = await $fetch<any>('/api/template-fields', { method: 'POST', body: { key: form.key, label: form.label, dataType: form.dataType, sourceType: form.sourceType, options: form.dataType === 'DROPDOWN' ? form.options.split(',').map(x => x.trim()).filter(Boolean) : undefined } }); fields.value.push(f); fieldOpen.value = false; toast.add({ title: 'Field dibuat', color: 'success' }) } catch (e: any) { toast.add({ title: 'Field gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { fieldSaving.value = false } }
+const color = (s: string) => s === 'PUBLISHED' ? 'success' : s === 'DRAFT' ? 'warning' : 'neutral'
+
+// ── Panel binding: field katalog mana yang dipakai template ini + flag wajib ──
+// Bind/unbind bersifat PER-TEMPLATE (bukan per-versi), jadi disimpan segera saat
+// checkbox diklik — tidak menunggu "Simpan draft". Perubahan baru terlihat di
+// form kontrak setelah versi berikutnya dipublish.
+interface BindingView {
+  fieldId: number
+  key: string
+  label: string
+  dataType: string
+  sourceType: string
+  isSystem: boolean
+  bound: boolean
+  required: boolean
+  locked: boolean
+  usedInContent: boolean
+  sortOrder: number | null
+}
+const bindings = ref<BindingView[]>([])
+const bindingSaving = ref<number | null>(null)
+const bindingOpen = ref(false)
+const bindingSearch = ref('')
+
+const filteredBindings = computed(() => {
+  const q = bindingSearch.value.trim().toLowerCase()
+  if (!q) return bindings.value
+  return bindings.value.filter(b => [b.key, b.label].some(v => String(v ?? '').toLowerCase().includes(q)))
+})
+const boundCount = computed(() => bindings.value.filter(b => b.bound).length)
+
+/**
+ * Peringatan saat melepas field yang placeholder-nya masih ada di konten:
+ * publish akan ditolak sampai `{{...}}` dihapus dari teks template.
+ */
+function setBinding(row: BindingView, patch: { bound?: boolean; required?: boolean }) {
+  const nextBound = patch.bound ?? row.bound
+  const nextRequired = patch.required ?? row.required
+  if (nextBound === row.bound && nextRequired === row.required) return
+
+  if (!nextBound && row.usedInContent) {
+    const entry = toast.add({
+      title: `Lepas field "${row.label}"?`,
+      description: `Field masih dipakai di teks template (${placeholderText(fieldPlaceholderKey(row))}). Setelah dilepas, `
+        + 'field hilang dari form kontrak dan PENERBITAN versi akan gagal sampai placeholder itu dihapus dari teks.',
+      icon: 'i-lucide-triangle-alert',
+      color: 'warning',
+      duration: 0,
+      close: false,
+      actions: [
+        { label: 'Batal', color: 'neutral', variant: 'ghost', onClick: () => toast.remove(entry.id) },
+        {
+          label: 'Tetap lepas',
+          color: 'warning',
+          variant: 'solid',
+          onClick: () => { toast.remove(entry.id); void commitBinding(row, { bound: false, required: nextRequired }) },
+        },
+      ],
+    })
+    return
+  }
+  void commitBinding(row, { bound: nextBound, required: nextRequired })
+}
+
+async function commitBinding(row: BindingView, patch: { bound: boolean; required: boolean }) {
+  bindingSaving.value = row.fieldId
+  try {
+    const res = await $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', {
+      method: 'PUT',
+      body: { templateId: props.template!.id, fieldId: row.fieldId, bound: patch.bound, required: patch.required },
+    })
+    bindings.value = res.fields ?? bindings.value
+    if (!patch.bound && row.usedInContent) {
+      toast.add({
+        title: 'Field dilepas dari template',
+        description: `Hapus ${placeholderText(fieldPlaceholderKey(row))} dari teks template sebelum menerbitkan versi baru.`,
+        color: 'warning',
+      })
+    } else {
+      toast.add({ title: patch.bound ? 'Field dipakai di template' : 'Field dilepas dari template', color: 'success' })
+    }
+  } catch (e: any) {
+    toast.add({ title: 'Gagal mengubah field', description: apiErrorMessage(e), color: 'error' })
+  } finally {
+    bindingSaving.value = null
   }
 }
 
-function formatHeading(heading: string) {
-  return heading.replace('\n', ' — ')
+/** Katalog tipe blok untuk pemilih "Tambah blok" — label ramah pengguna. */
+const BLOCK_PICKER = [
+  { type: 'paragraph', label: 'Paragraf', icon: 'i-lucide-align-left', desc: 'Satu blok teks biasa' },
+  { type: 'article', label: 'Pasal', icon: 'i-lucide-scale', desc: 'Judul pasal + beberapa paragraf uraian' },
+  { type: 'list', label: 'Daftar', icon: 'i-lucide-list', desc: 'Poin bernomor, huruf, atau bullet' },
+  { type: 'table', label: 'Tabel', icon: 'i-lucide-table', desc: 'Baris dan kolom, mis. rincian upah' },
+  { type: 'signature', label: 'Tanda Tangan', icon: 'i-lucide-pen-line', desc: 'Blok tanda tangan dua pihak' },
+  { type: 'title', label: 'Judul Dokumen', icon: 'i-lucide-heading-1', desc: 'Judul utama di tengah halaman' },
+  { type: 'subtitle', label: 'Subjudul', icon: 'i-lucide-heading-2', desc: 'Baris kecil di bawah judul' },
+  { type: 'pageBreak', label: 'Ganti Halaman', icon: 'i-lucide-scissors', desc: 'Paksa halaman baru di PDF' }
+] as const
+
+/**
+ * Pilihan "Tambah blok", disaring per keluarga template.
+ *
+ * PKWT tidak punya subjudul dokumen: kop dua baris = Judul ID (blok `title`
+ * kolom ID) + Judul EN (blok `title` kolom EN). Menawarkan blok `subtitle` di
+ * sini hanya membingungkan — blok itu tidak pernah dirender sebagai subjudul di
+ * PKWT (lihat `normalizePkwtTitleBlocks` di backend). Blok `subtitle` lama yang
+ * telanjur tersimpan tetap dapat dilihat dan dihapus.
+ */
+const blockPickerOptions = computed(() =>
+  isPkwt.value ? BLOCK_PICKER.filter(opt => opt.type !== 'subtitle') : BLOCK_PICKER
+)
+
+/**
+ * Tipe blok yang menampilkan kontrol "Spasi antar blok" (`spaceAfter`) per
+ * keluarga. Disamakan dengan `spaceCapableBlocks()` di
+ * `backend/src/contract-templates/template-schema.validator.ts`.
+ *
+ * MITRA mengalirkan blok (semua blok konten); PKWT mengunci baris ID/EN per blok
+ * dan hanya `paragraph`/`article`/`list`/`table` yang benar-benar masuk kolom —
+ * `title`/`subtitle` jadi kop.
+ */
+const MITRA_SPACE_TYPES = ['title', 'subtitle', 'paragraph', 'article', 'list', 'table']
+const PKWT_SPACE_TYPES = ['paragraph', 'article', 'list', 'table']
+
+/** Apakah draft punya perubahan yang belum disimpan. */
+const draftDirty = ref(false)
+const originalDraftJson = ref('')
+function snapshotDraft() { originalDraftJson.value = draft.value ? JSON.stringify(draft.value) : ''; draftDirty.value = false }
+watch(draft, () => {
+  if (!draft.value) { draftDirty.value = false; return }
+  // Baseline diambil sekali per versi; perubahan apa pun membuat draft "kotor".
+  draftDirty.value = JSON.stringify(draft.value) !== originalDraftJson.value
+}, { deep: true })
+
+/** Field yang tampil di panel kanan, mengikuti kata kunci pencarian. */
+const filteredFieldItems = computed(() => {
+  const q = fieldSearch.value.trim().toLowerCase()
+  const items = fieldItems.value ?? []
+  if (!q) return items
+  return items.filter((f: any) => [f.key, f.label].some(v => String(v ?? '').toLowerCase().includes(q)))
+})
+
+/**
+ * Bentuk item panel field (`fieldItems`) yang dibutuhkan pencarian pemakaian.
+ *
+ * Dipakai menggantikan `any` pada `map`/`filter`, mengikuti gaya `CatalogField`
+ * di `fieldItems` — nilainya dibaca lewat helper yang menerima `unknown`.
+ */
+interface FieldItemLike {
+  key?: unknown
+  label?: unknown
+  sourceType?: unknown
+  bound?: unknown
+}
+
+/**
+ * Pemindaian pemakaian pada bahasa AKTIF — sumber utama fitur pencarian.
+ *
+ * Sengaja memakai `blocks.value` (= `draft ?? versi terpilih`) dan bukan
+ * `usedInContent` backend: `listTemplateBindings()` membaca versi PUBLISHED
+ * lebih dulu (`template-fields.service.ts:226`), sehingga hasilnya basi saat
+ * pengguna mengedit draft dan salah di mode baca.
+ */
+const usageScan = computed(() => scanFieldUsage(blocks.value))
+
+/**
+ * Pemindaian bahasa LAIN — hanya untuk peringatan.
+ *
+ * Tanpa ini, field yang hanya dipakai di bahasa `en` tampak "belum dipakai"
+ * saat editor berada di bahasa `id` — kesimpulan yang salah dan berbahaya.
+ */
+const usageOtherLang = computed(() => {
+  const other = lang.value === 'id' ? 'en' : 'id'
+  const content = draft.value?.contentDefinition ?? selected.value?.contentDefinition
+  return scanFieldUsage(content?.languages?.[other])
+})
+
+/** Daftar field beserta lokasi pemakaiannya, mengikuti kata kunci pencarian. */
+const usageRows = computed(() => {
+  const scan = usageScan.value
+  const otherKeys = new Set(usageOtherLang.value.byKey.keys())
+  const rows = (fieldItems.value ?? []).map((f: FieldItemLike) => {
+    const normalized = normalizeFieldKey(f.key)
+    const occurrences = scan.byKey.get(normalized) ?? []
+    return {
+      key: String(f.key ?? ''),
+      label: String(f.label || f.key || ''),
+      // `sourceType` wajib ikut: `fieldPlaceholderKey()` memakainya untuk
+      // menambah prefix `custom.` pada field dinamis. Tanpa ini, modal
+      // menampilkan `{{ktp_issued_date}}` — bentuk yang justru DITOLAK
+      // validator, sehingga pengguna disesatkan.
+      sourceType: f.sourceType,
+      isDynamic: isDynamicField(f),
+      bound: f.bound !== false,
+      occurrences,
+      // Membedakan "1 blok dipakai 4×" dari "4 blok masing-masing 1×".
+      blockCount: uniqueBlockLabels(occurrences).length,
+      usedInOtherLang: otherKeys.has(normalized)
+    }
+  })
+  const q = usageSearch.value.trim().toLowerCase()
+  const filtered = q
+    ? rows.filter(r => [r.label, r.key].some(v => String(v ?? '').toLowerCase().includes(q)))
+    : rows
+  // Yang paling sering dipakai di atas; sisanya alfabetis agar stabil.
+  return filtered.sort((a, b) => b.occurrences.length - a.occurrences.length || a.label.localeCompare(b.label))
+})
+
+/** Ringkasan untuk header modal. */
+const usageSummary = computed(() => {
+  const scan = usageScan.value
+  const used = (fieldItems.value ?? [])
+    .filter((f: FieldItemLike) => (scan.byKey.get(normalizeFieldKey(f.key)) ?? []).length > 0)
+    .length
+  return {
+    fields: (fieldItems.value ?? []).length,
+    used,
+    occurrences: scan.occurrences.length,
+    blocks: new Set(scan.occurrences.map(o => o.blockIndex)).size
+  }
+})
+
+/**
+ * Placeholder yang dipakai di teks tetapi TIDAK ada di katalog field.
+ * Publish menolaknya ("tidak terdaftar di katalog field"), jadi ini ditampilkan
+ * sebagai masalah, bukan sekadar hasil pencarian.
+ */
+const usageOrphans = computed(() => {
+  const catalogKeys = new Set((fieldItems.value ?? []).map((f: FieldItemLike) => normalizeFieldKey(f.key)))
+  return [...usageScan.value.byKey.keys()]
+    .filter(key => !catalogKeys.has(key))
+    .map(key => ({ key, occurrences: usageScan.value.byKey.get(key) ?? [] }))
+    .sort((a, b) => b.occurrences.length - a.occurrences.length)
+})
+
+/** Blok yang sedang dituju sisipan placeholder. */
+const focusedBlock = computed(() => (blocks.value ?? []).find((b: any) => b.id === focusedBlockId.value) ?? null)
+
+/** Label sub-bagian target (paragraf/poin/sel) untuk ditampilkan ke pengguna. */
+const focusedLocationLabel = computed(() => {
+  const b: any = focusedBlock.value
+  if (!b) return ''
+  const path = focusedTarget.value.path
+  if (!path) return b.type === 'article' ? 'paragraf 1' : b.type === 'list' ? 'poin 1' : b.type === 'table' ? 'sel pertama' : 'isi blok'
+  const parts = path.split(':')
+  const n = Number(parts[parts.length - 1])
+  if (path.startsWith('art:')) return `paragraf ${Number.isInteger(n) ? n + 1 : 1}`
+  if (path.startsWith('item:')) return `poin ${Number.isInteger(n) ? n + 1 : 1}`
+  if (path.startsWith('row:')) return `sel tabel (baris ${Number(parts[1]) + 1})`
+  return 'isi blok'
+})
+
+/**
+ * Tandai blok + sub-bagian yang difokuskan (dipanggil kartu blok).
+ * `path === undefined` = sinyal "blok aktif" saja (dari `focusin` umum): jangan
+ * menimpa sub-bagian yang sudah tercatat pada blok yang sama.
+ */
+function setFocus(blockId: string | null, path?: string | null) {
+  // PENTING: jangan beri default `= null` pada `path`. Default parameter JS
+  // menelan `undefined`, sehingga sinyal "blok aktif saja" dari `focusin`
+  // yang membubbling akan tampak seperti `null` dan menghapus sub-bagian
+  // (paragraf/poin) yang baru saja difokuskan.
+  if (path === undefined) {
+    if (focusedBlockId.value === blockId) return
+    focusedBlockId.value = blockId
+    focusedTarget.value = { blockId, path: null }
+    return
+  }
+  focusedBlockId.value = blockId
+  focusedTarget.value = { blockId, path }
+}
+
+/** Sisipkan placeholder field ke bagian blok yang sedang difokuskan. */
+function insertField(key: string) {
+  const list = blocks.value ?? []
+  const target = focusedBlock.value ?? list[0]
+  if (!target) {
+    toast.add({ title: 'Belum ada blok', description: 'Tambahkan minimal satu blok sebelum menyisipkan field.', color: 'warning' })
+    return
+  }
+  const text = `{{${key}}}`
+  // Sub-path hanya relevan kalau kita benar-benar memakai blok yang terfokus.
+  // Kalau jatuh ke `list[0]`, path lama tidak boleh dipakai (bisa nyasar ke blok lain).
+  const path = focusedBlock.value ? focusedTarget.value.path : null
+  const slotIndex = path ? Number(path.split(':').pop()) : NaN
+  const at = Number.isInteger(slotIndex) && slotIndex >= 0 ? slotIndex : 0
+  const appendTo = (cur: any) => `${cur ?? ''} ${text}`.trim()
+
+  if (target.type === 'article') {
+    if (!target.paragraphs?.length) target.paragraphs = ['']
+    const i = Math.min(at, target.paragraphs.length - 1)
+    target.paragraphs[i] = appendTo(target.paragraphs[i])
+  } else if (target.type === 'list') {
+    if (!target.items?.length) target.items = ['']
+    const i = Math.min(at, target.items.length - 1)
+    target.items[i] = appendTo(target.items[i])
+  } else if (target.type === 'table') {
+    if (!target.columns?.length) target.columns = [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }]
+    if (!target.rows?.length) target.rows = [{}]
+    // path berbentuk `row:<baris>:<kolom>`; jatuh ke sel pertama bila tak ada fokus.
+    const parts = path?.split(':') ?? []
+    const rowIdx = parts[0] === 'row' ? Number(parts[1]) : 0
+    const colIdx = parts[0] === 'row' ? Number(parts[2]) : 0
+    const r = Math.min(Number.isInteger(rowIdx) && rowIdx >= 0 ? rowIdx : 0, target.rows.length - 1)
+    const column = target.columns[Number.isInteger(colIdx) && colIdx >= 0 ? colIdx : 0] ?? target.columns[0]
+    target.rows[r][column.key] = appendTo(target.rows[r][column.key])
+  } else if (target.type === 'signature') {
+    toast.add({ title: 'Blok tanda tangan tidak menerima field', description: 'Sisipkan field ke blok teks, pasal, daftar, atau tabel.', color: 'warning' })
+    return
+  } else {
+    target.text = appendTo(target.text)
+  }
+  const where = target.type === 'article' ? `paragraf ${Math.min(at, Math.max(target.paragraphs.length - 1, 0)) + 1}`
+    : target.type === 'list' ? `poin ${Math.min(at, Math.max(target.items.length - 1, 0)) + 1}`
+      : target.type === 'table' ? 'sel tabel'
+        : 'isi blok'
+  toast.add({ title: `Field disisipkan ke Blok ${list.indexOf(target) + 1}`, description: `Ditempatkan di ${where}.`, color: 'success' })
+}
+
+/**
+ * Id DOM kartu blok — dipakai untuk menggulir dari hasil pencarian pemakaian.
+ *
+ * Dijadikan satu fungsi supaya id yang dipasang di template dan yang dicari
+ * saat menggulir tidak pernah menyimpang.
+ */
+function blockDomId(block: BlockLike | null | undefined, index: number): string {
+  return `template-block-${block?.id ?? `index-${index}`}`
+}
+
+/**
+ * Buka blok pemakai field: bentangkan kartunya, gulir ke sana, lalu jadikan
+ * target sisipan.
+ *
+ * Inilah inti fitur pencarian pemakaian. Tanpa lompatan ini, pengguna tetap
+ * harus membuka blok satu per satu — persis masalah yang ingin dihilangkan.
+ */
+function goToUsage(occurrence: { blockIndex: number, blockId: string, path: string | null }) {
+  const list = blocks.value ?? []
+  const block = list[occurrence.blockIndex]
+  if (!block) return
+  // Kunci `collapsedBlocks` harus sama dengan yang dipakai kartu blok di
+  // template (`collapsedBlocks[entry.block.id]`).
+  collapsedBlocks.value[String(block.id ?? occurrence.blockId)] = false
+  setFocus(String(block.id ?? occurrence.blockId), occurrence.path)
+  usageOpen.value = false
+  // Kartu baru terbentang setelah re-render, jadi gulir menunggu tick berikutnya.
+  nextTick(() => {
+    document.getElementById(blockDomId(block, occurrence.blockIndex))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+/** Label + ikon ramah tipe blok untuk daftar isi (cermin `BLOCK_META` di kartu). */
+const BLOCK_LABELS: Record<string, string> = {
+  title: 'Judul',
+  subtitle: 'Subjudul',
+  paragraph: 'Paragraf',
+  article: 'Pasal',
+  list: 'Daftar',
+  table: 'Tabel',
+  pageBreak: 'Ganti Halaman',
+  signature: 'Tanda Tangan'
+}
+const BLOCK_ICONS: Record<string, string> = {
+  title: 'i-lucide-heading-1',
+  subtitle: 'i-lucide-heading-2',
+  paragraph: 'i-lucide-align-left',
+  article: 'i-lucide-scale',
+  list: 'i-lucide-list',
+  table: 'i-lucide-table',
+  pageBreak: 'i-lucide-scissors',
+  signature: 'i-lucide-pen-line'
+}
+
+/** Judul ringkas sebuah blok untuk daftar isi. */
+function outlineTitle(block: any): string {
+  const clean = (v: any) => String(v ?? '').replace(/\s+/g, ' ').trim()
+  switch (block?.type) {
+    case 'article': return clean(block.heading) || 'Pasal tanpa judul'
+    case 'list': return `${(block.items ?? []).length} poin`
+    case 'table': return `${(block.rows ?? []).length} baris × ${(block.columns ?? []).length} kolom`
+    case 'signature': return 'Tanda tangan'
+    case 'pageBreak': return 'Ganti halaman'
+    default: return clean(stripInlineMarks(block?.text)) || 'Belum ada teks'
+  }
+}
+
+/** Daftar isi blok pada bahasa aktif, untuk lompat cepat pada template panjang. */
+const blockOutline = computed(() =>
+  (blocks.value ?? []).map((b: any, index: number) => ({
+    index,
+    id: String(b?.id ?? `index-${index}`),
+    label: BLOCK_LABELS[b?.type] ?? (b?.type ?? 'Blok'),
+    icon: BLOCK_ICONS[b?.type] ?? 'i-lucide-square',
+    title: outlineTitle(b)
+  }))
+)
+
+/** Buka + gulir ke blok dari daftar isi (pola sama dengan `goToUsage`). */
+function goToBlock(index: number) {
+  const list = blocks.value ?? []
+  const block = list[index]
+  if (!block) return
+  collapsedBlocks.value[String(block.id ?? `index-${index}`)] = false
+  setFocus(String(block.id ?? `index-${index}`))
+  showVersions.value = false
+  nextTick(() => {
+    document.getElementById(blockDomId(block, index))?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  })
+}
+
+/** Apakah isi sebuah blok masih kosong (diukur pada teks tanpa mark). */
+function blockIsEmpty(b: any): boolean {
+  const blank = (v: any) => !stripInlineMarks(String(v ?? '')).trim()
+  switch (b?.type) {
+    case 'title':
+    case 'subtitle':
+    case 'paragraph':
+      return blank(b.text)
+    case 'article':
+      return blank(b.heading) || (b.paragraphs ?? []).some((p: any) => blank(p))
+    case 'list':
+      return (b.items ?? []).some((i: any) => blank(i))
+    case 'table':
+      return (b.rows ?? []).some((r: any) => (b.columns ?? []).some((c: any) => blank(r?.[c.key])))
+    default:
+      return false
+  }
+}
+
+/** Indeks blok yang isinya masih kosong (untuk peringatan sebelum Publish). */
+const emptyBlockIndices = computed(() =>
+  (blocks.value ?? [])
+    .map((b: any, index: number) => ({ b, index }))
+    .filter(({ b }) => blockIsEmpty(b))
+    .map(({ index }) => index)
+)
+
+/** Peringatan (tidak memblokir) bila masih ada blok kosong saat menyimpan. */
+function warnEmptyBlocks() {
+  const empties = emptyBlockIndices.value
+  if (!empties.length) return
+  toast.add({
+    title: `${empties.length} isi masih kosong`,
+    description: 'Periksa blok bertanda sebelum menerbitkan versi.',
+    color: 'warning',
+    actions: [{ label: 'Lihat blok', color: 'warning', variant: 'soft', onClick: () => goToBlock(empties[0] ?? 0) }]
+  })
+}
+
+/** Duplikat blok, termasuk seluruh isinya. */
+function duplicateBlock(i: number) {
+  const list = blocks.value ?? []
+  const src = list[i]
+  if (!src) return
+  const copy = JSON.parse(JSON.stringify(src))
+  copy.id = `${src.type}-${Date.now()}`
+  list.splice(i + 1, 0, copy)
+  toast.add({ title: 'Blok diduplikat', color: 'success' })
+}
+
+/** Hapus blok setelah konfirmasi. */
+function confirmDeleteBlock() {
+  if (confirmDeleteIndex.value === null) return
+  const idx = confirmDeleteIndex.value
+  const list = blocks.value ?? []
+  if (idx < 0 || idx >= list.length) {
+    confirmDeleteIndex.value = null
+    return
+  }
+  list.splice(idx, 1)
+  confirmDeleteIndex.value = null
+  toast.add({ title: 'Blok dihapus', color: 'success' })
+}
+
+const confirmCloseOpen = ref(false)
+
+/** Pilih versi — kalau draft berubah, minta konfirmasi dulu. */
+async function requestSelect(v: Version) {
+  if (draftDirty.value && v.id !== selected.value?.id) { pendingVersion.value = v; return }
+  await select(v)
+  showVersions.value = false
+}
+
+/** Tutup modal — kalau draft berubah, minta konfirmasi dulu. */
+function requestClose() {
+  if (draftDirty.value) { pendingVersion.value = null; confirmCloseOpen.value = true; return }
+  open.value = false
+}
+
+/**
+ * Intersepsi permintaan tutup dari `UModal` (tombol X, Esc, klik luar).
+ *
+ * Tanpa ini, X/Esc menutup modal LANGSUNG dan melewati penjagaan draft —
+ * perubahan yang belum disimpan hilang tanpa peringatan. Semua jalur tutup
+ * kini lewat `requestClose()`.
+ */
+function onModalOpenChange(v: boolean) {
+  if (v) { open.value = true; return }
+  requestClose()
+}
+
+/**
+ * Penjaga refresh/tutup-tab: draft yang belum disimpan tidak boleh hilang
+ * diam-diam karena pengguna menekan F5 atau menutup tab.
+ */
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (!draftDirty.value) return
+  e.preventDefault()
+  e.returnValue = ''
+}
+onMounted(() => window.addEventListener('beforeunload', onBeforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+
+/** Ringkasan singkat isi blok untuk tampilan daftar. */
+const blocksCount = computed(() => (blocks.value ?? []).length)
+
+/**
+ * Blok yang aman dirender, beserta indeks ASLINYA di `blocks`.
+ *
+ * Versi lama `v-for` langsung atas `blocks` dan membaca `b.id`. Draft yang
+ * terlanjur menyimpan entri `undefined` (mis. akibat bug `add()` yang dulu
+ * mem-push `d[type]` untuk tipe tanpa cabang) membuat render melempar
+ * TypeError dan halaman membeku total. Filter ini menjaga halaman tetap bisa
+ * dibuka sehingga admin masih punya kesempatan memperbaiki draftnya.
+ *
+ * `index` sengaja dibawa terpisah: aksi kartu (pindah/hapus/duplikat/drag)
+ * harus menyasar indeks di `blocks`, bukan urutan hasil filter.
+ */
+const validBlocks = computed<Array<{ block: { id: string }, index: number }>>(() =>
+  (blocks.value ?? [])
+    .map((block, index) => ({ block: block as { id: string }, index }))
+    .filter(entry => !!entry.block?.id)
+)
+
+/**
+ * Entri rusak yang terlanjur tersimpan di draft (mis. `undefined` akibat bug
+ * `add()` lama). Disimpan terpisah supaya tetap bisa DILIHAT dan DIHAPUS —
+ * kalau hanya disembunyikan, entri ini mustahil dibersihkan dan ikut tersimpan
+ * ke backend setiap kali draft disimpan.
+ */
+const invalidBlocks = computed(() =>
+  (blocks.value ?? [])
+    .map((_block, index) => ({ index }))
+    .filter(entry => !(blocks.value ?? [])[entry.index]?.id)
+)
+
+/** Buang satu entri rusak dari draft berdasarkan indeks aslinya. */
+function removeInvalidBlock(index: number) {
+  blocks.value.splice(index, 1)
+  toast.add({ title: 'Blok rusak dihapus', color: 'success' })
 }
 </script>
 
 <template>
   <UModal
-    v-model:open="localOpen"
-    :ui="{ content: 'max-w-4xl' }"
-    :title="`Edit Konten Template: ${template?.name ?? ''}`"
-    @update:open="(v) => { if (!v) localOpen = false }"
+    :open="open"
+    fullscreen
+    :title="`Editor Template — ${template?.name ?? ''}`"
+    :description="draft ? 'Mode edit draft' : 'Mode baca: buat draft untuk mengubah isi'"
+    :ui="{ content: 'overflow-hidden', body: 'relative flex-1 min-h-0 p-0 sm:p-0', header: 'flex-wrap gap-y-2' }"
+    @update:open="onModalOpenChange"
   >
-    <template #body>
-      <!-- Loading -->
-      <div v-if="loading" class="flex flex-col items-center justify-center py-16 gap-3 text-muted">
-        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
-        <p class="text-sm">Memuat konten template...</p>
-      </div>
-
-      <div v-else-if="editorState" class="space-y-4">
-        <!-- Dirty indicator -->
-        <UAlert
-          v-if="changesCount > 0"
-          color="primary"
-          variant="subtle"
-          icon="i-lucide-pencil"
-          :title="`${changesCount} field diubah dari default`"
-          description="Perubahan belum tersimpan. Klik 'Simpan Perubahan' untuk menyimpan."
+    <!-- Command bar: aksi utama selalu terlihat di header yang tidak menggulir.
+         `me-12 sm:me-14` menyisakan ruang untuk tombol Close (X) yang absolute
+         di kanan-atas, supaya tidak menempel dengan Publish. -->
+    <template #actions>
+      <div class="ms-auto me-12 flex flex-wrap items-center justify-end gap-1.5 sm:me-14">
+        <!-- Toggle panel (overlay) pada layar < xl -->
+        <UButton
+          class="xl:hidden"
+          icon="i-lucide-history"
+          size="sm"
+          variant="ghost"
+          color="neutral"
+          aria-label="Riwayat versi"
+          @click="showVersions = !showVersions"
         />
-
-        <!-- Warning tentang placeholder -->
-        <UAlert
-          color="warning"
-          variant="subtle"
-          icon="i-lucide-alert-triangle"
-          title="Perhatian: Placeholder Dinamis"
-          description="Jangan hapus placeholder seperti __TERM_DATE__, __WAGE_AMOUNT__, __MITRA_IMBALAN__ karena digunakan untuk mengisi data kontrak secara otomatis."
+        <UButton
+          class="xl:hidden"
+          icon="i-lucide-list-plus"
+          size="sm"
+          variant="ghost"
+          color="neutral"
+          aria-label="Panel field dinamis"
+          @click="showFields = !showFields"
         />
+        <!-- Mode fokus (≥ xl): sembunyikan panel samping -->
+        <UTooltip text="Mode fokus — sembunyikan panel samping">
+          <UButton
+            class="hidden xl:inline-flex"
+            :icon="versionsHidden && fieldsHidden ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            :aria-pressed="versionsHidden && fieldsHidden"
+            aria-label="Mode fokus"
+            @click="toggleFocusMode"
+          />
+        </UTooltip>
 
-        <!-- Tab navigation manual — menghindari UTabs DynamicSlots type issue -->
-        <div class="border-b border-(--ui-border)">
-          <nav class="flex gap-1 -mb-px">
-            <button
-              v-for="tab in tabItems"
-              :key="tab.value"
-              type="button"
-              class="px-4 py-2 text-sm font-medium border-b-2 transition-colors"
-              :class="activeTab === tab.value
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted hover:text-highlighted hover:border-(--ui-border)'"
-              @click="activeTab = tab.value"
-            >
-              {{ tab.label }}
-            </button>
-          </nav>
-        </div>
-
-        <!-- Tab 1: Teks Umum -->
-        <div v-if="activeTab === 'umum'" class="space-y-4 pt-2">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UFormField label="Judul Dokumen">
-              <UInput v-model="editorState.title" class="w-full" :placeholder="hardcoded?.title" />
-            </UFormField>
-          <!-- Sub-judul hanya untuk PKWT -->
-          <UFormField v-if="isPkwt" label="Sub-judul (opsional)">
-            <UInput v-model="editorState.subtitle" class="w-full" :placeholder="hardcoded?.subtitle ?? '-'" />
-          </UFormField>
-          </div>
-          <UFormField label="Label Posisi / Peran">
-            <UInput v-model="editorState.roleLabel" class="w-full" :placeholder="hardcoded?.roleLabel" />
-          </UFormField>
-        </div>
-
-        <!-- Tab 2: Pendahuluan (hanya MITRA — recitals tidak dirender di dokumen PKWT) -->
-        <div v-else-if="activeTab === 'pendahuluan'" class="space-y-6 pt-2">
-          <!-- Info: teks pembuka tidak bisa diubah via UI -->
-          <UAlert
+        <!-- Status versi -->
+        <UTooltip
+          v-if="draft ?? selected"
+          :text="draft ? 'Perubahan berlaku setelah Publish.' : 'Versi terbit (mode baca) — buat draft untuk mengubah isi.'"
+        >
+          <UBadge
             color="neutral"
             variant="subtle"
-            icon="i-lucide-info"
-            title="Teks Pembuka Tidak Dapat Diubah"
-            description="Teks pembuka (identitas Para Pihak, kalimat pembukaan) sudah terstandarisasi secara hukum dan diisi otomatis dari data sistem. Hanya Paragraf Penutup yang dapat dikustomisasi di sini."
+            size="sm"
+            :label="`${draft ? 'Draft' : 'Versi'} v${(draft ?? selected)?.versionNumber}`"
           />
+        </UTooltip>
+        <UBadge
+          v-if="draft && draftDirty"
+          color="warning"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-circle-dot"
+          label="Belum disimpan"
+        />
+        <UBadge
+          v-else-if="draft"
+          color="success"
+          variant="subtle"
+          size="sm"
+          icon="i-lucide-check"
+          label="Tersimpan"
+        />
 
-          <!-- Closing Paragraphs -->
-          <div>
-            <p class="text-sm font-semibold text-highlighted mb-3">
-              Paragraf Penutup
+        <!-- Aksi utama -->
+        <UButton
+          label="Pratinjau PDF"
+          icon="i-lucide-eye"
+          size="sm"
+          variant="soft"
+          :loading="busy"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Pratinjau PDF"
+          @click="action('preview')"
+        />
+        <UButton
+          v-if="draft"
+          label="Simpan"
+          icon="i-lucide-save"
+          size="sm"
+          variant="soft"
+          :disabled="!draftDirty"
+          :loading="saving"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Simpan draft"
+          @click="save"
+        />
+        <UButton
+          v-if="draft"
+          label="Publish"
+          icon="i-lucide-rocket"
+          size="sm"
+          color="primary"
+          :loading="busy"
+          :ui="{ label: 'hidden lg:inline' }"
+          aria-label="Publish versi"
+          @click="confirmPublish"
+        />
+      </div>
+    </template>
+
+    <template #body>
+      <div v-if="error" class="space-y-3 p-4">
+        <UAlert
+          icon="i-lucide-circle-alert"
+          color="error"
+          variant="subtle"
+          title="Gagal memuat editor"
+          :description="error"
+        />
+        <UButton label="Coba lagi" icon="i-lucide-refresh-cw" @click="load" />
+      </div>
+
+      <div v-else-if="loading" class="flex flex-col items-center gap-3 p-12 text-muted">
+        <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin" />
+        <p class="text-sm">
+          Memuat versi template…
+        </p>
+      </div>
+
+      <div v-else class="flex h-full min-h-0">
+        <!-- ── Riwayat versi + daftar isi ── -->
+        <aside
+          :class="[
+            versionsHidden
+              ? 'hidden'
+              : (showVersions
+                ? 'absolute inset-y-0 left-0 z-30 w-[300px] bg-default shadow-xl xl:static xl:w-[250px] xl:shadow-none'
+                : 'hidden xl:static xl:block xl:w-[250px]'),
+            'shrink-0 space-y-3 overflow-y-auto border-default p-3 xl:border-r'
+          ]"
+        >
+          <!-- Daftar isi blok: lompat cepat pada template panjang -->
+          <div v-if="blockOutline.length" class="rounded-lg border border-default">
+            <p class="flex items-center gap-1.5 border-b border-default px-3 py-2 text-xs font-semibold text-muted">
+              <UIcon name="i-lucide-list-tree" class="size-3.5" />
+              Daftar isi · {{ blockOutline.length }} blok
             </p>
-            <div class="space-y-2">
-              <div
-                v-for="(para, idx) in editorState.closingParagraphs"
-                :key="idx"
-              >
-                <UTextarea
-                  v-model="editorState.closingParagraphs[idx]"
-                  :rows="2"
-                  class="w-full"
-                  :placeholder="hardcoded?.closingParagraphs?.[idx] ?? ''"
-                />
-                <UBadge
-                  v-if="containsPlaceholder(para)"
-                  color="warning"
-                  variant="subtle"
+            <ol class="p-1">
+              <li v-for="item in blockOutline" :key="item.id">
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition hover:bg-elevated"
+                  :class="focusedBlockId === item.id ? 'bg-primary/5 text-highlighted' : 'text-muted'"
+                  @click="goToBlock(item.index)"
+                >
+                  <span class="w-5 shrink-0 text-right tabular-nums">{{ item.index + 1 }}</span>
+                  <UIcon :name="item.icon" class="size-3.5 shrink-0 text-primary" />
+                  <span class="min-w-0 flex-1 truncate">{{ item.label }}</span>
+                  <span class="max-w-[45%] truncate text-[11px]">{{ item.title }}</span>
+                </button>
+              </li>
+            </ol>
+          </div>
+
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <p class="font-semibold">
+                Riwayat versi
+              </p>
+              <p class="text-xs text-muted">
+                {{ versions.length }} versi
+              </p>
+            </div>
+            <div class="flex items-center gap-1">
+              <UTooltip v-if="!draft" text="Buat draft baru untuk diedit">
+                <UButton
                   size="xs"
-                  class="mt-1"
-                  label="Mengandung placeholder dinamis"
-                  icon="i-lucide-alert-triangle"
+                  label="Draft baru"
+                  icon="i-lucide-plus"
+                  :loading="busy"
+                  @click="createDraft"
+                />
+              </UTooltip>
+              <UButton
+                class="xl:hidden"
+                icon="i-lucide-x"
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                aria-label="Tutup panel versi"
+                @click="showVersions = false"
+              />
+            </div>
+          </div>
+
+          <div v-if="!versions.length" class="rounded-lg border border-dashed border-default p-4 text-center">
+            <UIcon name="i-lucide-file-stack" class="mx-auto size-6 text-muted" />
+            <p class="mt-2 text-xs text-muted">
+              Belum ada versi. Buat draft baru untuk mulai menyusun template.
+            </p>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="v in versions"
+              :key="v.id"
+              class="cursor-pointer rounded-lg border p-3 transition hover:border-primary/50"
+              :class="selected?.id === v.id ? 'border-primary bg-primary/5' : 'border-default'"
+              @click="requestSelect(v)"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-1.5">
+                  <UIcon
+                    v-if="selected?.id === v.id"
+                    name="i-lucide-circle-dot"
+                    class="size-3.5 shrink-0 text-primary"
+                  />
+                  <b class="text-sm">v{{ v.versionNumber }}</b>
+                </div>
+                <div class="flex items-center gap-1">
+                  <UBadge
+                    :color="color(v.status)"
+                    variant="subtle"
+                    size="sm"
+                    :label="v.status"
+                  />
+                  <UTooltip
+                    v-if="v.status === 'ARCHIVED' || v.status === 'DRAFT'"
+                    text="Hapus versi"
+                  >
+                    <UButton
+                      icon="i-lucide-trash-2"
+                      size="xs"
+                      variant="ghost"
+                      color="error"
+                      aria-label="Hapus versi"
+                      @click.stop="removeVersion(v)"
+                    />
+                  </UTooltip>
+                </div>
+              </div>
+              <p class="mt-1 line-clamp-2 text-xs text-muted">
+                {{ v.changeSummary || 'Tanpa ringkasan' }}
+              </p>
+              <UButton
+                v-if="v.status === 'ARCHIVED'"
+                class="mt-2"
+                size="xs"
+                label="Rollback ke versi ini"
+                icon="i-lucide-undo-2"
+                variant="subtle"
+                color="warning"
+                @click.stop="confirmRollback(v)"
+              />
+            </div>
+          </div>
+        </aside>
+
+        <!-- ── Editor blok ── -->
+        <main class="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div class="space-y-3">
+            <UFormField
+              v-if="draft"
+              label="Ringkasan perubahan"
+              help="Muncul di riwayat versi supaya tim lain tahu apa yang berubah."
+            >
+              <UInput v-model="draft.changeSummary" placeholder="Contoh: Perbarui Pasal 5 tentang upah" class="w-full" />
+            </UFormField>
+
+            <!-- Bahasa + jumlah blok -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-default">
+              <div class="flex gap-1">
+                <UButton
+                  label="Indonesia"
+                  icon="i-lucide-languages"
+                  size="sm"
+                  :variant="lang === 'id' ? 'soft' : 'ghost'"
+                  :color="lang === 'id' ? 'primary' : 'neutral'"
+                  @click="lang = 'id'"
+                />
+                <UButton
+                  v-if="isPkwt"
+                  label="English"
+                  icon="i-lucide-languages"
+                  size="sm"
+                  :variant="lang === 'en' ? 'soft' : 'ghost'"
+                  :color="lang === 'en' ? 'primary' : 'neutral'"
+                  @click="lang = 'en'"
+                />
+              </div>
+              <p class="text-xs text-muted">
+                {{ blocksCount }} blok pada versi {{ lang === 'id' ? 'Indonesia' : 'English' }}
+              </p>
+            </div>
+            <div class="flex items-center justify-between gap-2 border-b border-default px-1 py-1.5">
+              <p class="text-xs text-muted">
+                Pemformatan teks didukung pada paragraf & uraian pasal.
+              </p>
+              <UPopover>
+                <UButton
+                  label="Bantuan pemformatan"
+                  icon="i-lucide-help-circle"
+                  size="xs"
+                  variant="link"
+                  color="neutral"
+                  class="px-0"
+                />
+                <template #content>
+                  <div class="w-72 space-y-2 p-3 text-xs">
+                    <p class="font-medium text-highlighted">
+                      Pemformatan teks
+                    </p>
+                    <ul class="space-y-1 text-muted">
+                      <li><b>**tebal**</b> — Tebal (Ctrl+B)</li>
+                      <li><i>*miring*</i> — Miring (Ctrl+I)</li>
+                      <li><u>__garis bawah__</u> — Garis bawah (Ctrl+U)</li>
+                    </ul>
+                    <p class="text-muted">
+                      Gunakan tombol di atas setiap field, atau ketik penandanya langsung.
+                      Acuan akhir tetap tombol <b>Pratinjau PDF</b>.
+                    </p>
+                  </div>
+                </template>
+              </UPopover>
+            </div>
+          </div>
+
+          <!-- Daftar blok -->
+          <div v-if="!blocksCount" class="rounded-xl border border-dashed border-default p-8 text-center">
+            <UIcon name="i-lucide-layout-list" class="mx-auto size-8 text-muted" />
+            <p class="mt-3 font-medium">
+              Belum ada blok di versi {{ lang === 'id' ? 'Indonesia' : 'English' }}
+            </p>
+            <p class="mx-auto mt-1 max-w-sm text-sm text-muted">
+              Blok adalah bagian dokumen (paragraf, pasal, tabel, tanda tangan).
+              Tambahkan blok pertama untuk mulai menyusun template.
+            </p>
+            <UButton
+              v-if="draft"
+              class="mt-4"
+              label="Tambah blok pertama"
+              icon="i-lucide-plus"
+              color="primary"
+              @click="blockPickerOpen = true"
+            />
+            <p v-else class="mt-3 text-xs text-muted">
+              Buat draft baru untuk mulai mengubah isi.
+            </p>
+          </div>
+
+          <div v-else ref="blocksListEl">
+            <div
+              v-if="invalidBlocks.length"
+              class="mb-3 rounded-lg border border-error/40 bg-error/5 p-3"
+            >
+              <p class="mb-2 flex items-center gap-2 text-sm font-medium text-error">
+                <UIcon name="i-lucide-triangle-alert" class="size-4 shrink-0" />
+                {{ invalidBlocks.length }} blok rusak pada draft ini
+              </p>
+              <p class="mb-3 text-xs text-muted">
+                Blok ini tidak dapat ditampilkan maupun dirender dan harus dihapus agar template bisa disimpan.
+              </p>
+              <ul class="grid gap-2">
+                <li
+                  v-for="entry in invalidBlocks"
+                  :key="`rusak-${entry.index}`"
+                  class="flex items-center justify-between gap-3 rounded-md bg-elevated px-3 py-2"
+                >
+                  <span class="text-xs text-muted">Blok ke-{{ entry.index + 1 }} · data tidak valid</span>
+                  <UButton
+                    size="xs"
+                    color="error"
+                    variant="soft"
+                    icon="i-lucide-trash-2"
+                    label="Hapus"
+                    @click="removeInvalidBlock(entry.index)"
+                  />
+                </li>
+              </ul>
+            </div>
+            <div
+              v-for="entry in validBlocks"
+              :id="blockDomId(entry.block, entry.index)"
+              :key="entry.block.id"
+              class="pb-2"
+              @dragover="onBlockDragOver(entry.index, $event)"
+              @drop="onBlockDrop(entry.index, $event)"
+            >
+              <KontrakTemplateBlockCard
+                :block="entry.block"
+                :index="entry.index"
+                :total="blocksCount"
+                :editable="!!draft"
+                :heading-align-default="isPkwt ? 'left' : 'center'"
+                :space-types="isPkwt ? PKWT_SPACE_TYPES : MITRA_SPACE_TYPES"
+                :collapsed="collapsedBlocks[entry.block.id] ?? true"
+                :selected="focusedBlockId === entry.block.id"
+                :dragging="dragIndex === entry.index"
+                :drop-indicator="blockDropIndicator(entry.index)"
+                @update:collapsed="v => collapsedBlocks[entry.block.id] = v"
+                @activate="(id, path) => setFocus(id, path)"
+                @move="d => move(entry.index, d)"
+                @duplicate="duplicateBlock(entry.index)"
+                @remove="confirmDeleteIndex = entry.index"
+                @dragstart="e => onBlockDragStart(entry.index, e)"
+                @dragend="onBlockDragEnd"
+              />
+            </div>
+          </div>
+
+          <UButton
+            v-if="draft"
+            block
+            label="Tambah blok"
+            icon="i-lucide-plus"
+            variant="soft"
+            size="lg"
+            @click="blockPickerOpen = true"
+          />
+          <div v-else-if="blocksCount" class="rounded-lg bg-elevated p-3 text-center text-sm text-muted">
+            Mode baca. Buat draft baru untuk menambah atau mengubah blok.
+          </div>
+        </main>
+
+        <!-- ── Field dinamis + Pratinjau + Validasi ── -->
+        <aside
+          :class="[
+            fieldsHidden
+              ? 'hidden'
+              : (showFields
+                ? 'absolute inset-y-0 right-0 z-30 w-[320px] bg-default shadow-xl xl:static xl:w-[320px] xl:shadow-none'
+                : 'hidden xl:static xl:block xl:w-[320px]'),
+            'shrink-0 space-y-3 overflow-y-auto border-default p-3 xl:border-l'
+          ]"
+        >
+          <div class="flex min-h-0 flex-col gap-2 rounded-lg border border-default bg-default p-3 shadow-sm">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="font-semibold">
+                  Field dinamis
+                </p>
+                <p class="text-xs text-muted">
+                  Klik untuk menyisipkan ke blok terpilih.
+                </p>
+              </div>
+              <div class="flex items-center gap-1">
+                <UButton
+                  class="xl:hidden"
+                  icon="i-lucide-x"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  aria-label="Tutup panel field"
+                  @click="showFields = false"
+                />
+                <UTooltip text="Cari di blok mana field dipakai">
+                  <UButton
+                    size="xs"
+                    icon="i-lucide-search-check"
+                    variant="soft"
+                    color="neutral"
+                    aria-label="Cari pemakaian field"
+                    @click="usageOpen = true"
+                  />
+                </UTooltip>
+                <UButton
+                  size="xs"
+                  label="Kelola"
+                  icon="i-lucide-list-checks"
+                  variant="soft"
+                  color="neutral"
+                  @click="bindingOpen = true"
+                />
+                <UButton
+                  size="xs"
+                  label="Baru"
+                  icon="i-lucide-plus"
+                  variant="soft"
+                  @click="fieldOpen = true"
                 />
               </div>
             </div>
+
+            <p v-if="focusedBlock" class="rounded-md bg-primary/5 px-2 py-1 text-xs text-muted">
+              Sisipkan ke
+              <b class="text-primary">Blok {{ blocks.indexOf(focusedBlock) + 1 }}</b>
+              <span v-if="focusedLocationLabel"> · {{ focusedLocationLabel }}</span>
+            </p>
+            <p v-else-if="blocksCount" class="rounded-md bg-elevated px-2 py-1 text-xs text-muted">
+              Belum ada blok terpilih — field masuk ke Blok 1.
+            </p>
+
+            <UInput
+              v-model="fieldSearch"
+              icon="i-lucide-search"
+              placeholder="Cari field…"
+              size="sm"
+              class="w-full shrink-0"
+            />
+
+            <div class="space-y-1.5">
+              <UButton
+                v-for="f in filteredFieldItems"
+                :key="f.key"
+                block
+                variant="outline"
+                color="neutral"
+                size="sm"
+                :disabled="!draft || f.bound === false"
+                class="justify-start text-left"
+                @click="insertField(fieldPlaceholderKey(f))"
+              >
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm">
+                    {{ f.label || f.key }}
+                  </p>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(f)) }}</code>
+                  <p v-if="f.bound === false" class="text-xs text-warning">
+                    Belum dipakai template ini — aktifkan di "Kelola" agar bisa disisipkan.
+                  </p>
+                </div>
+                <UIcon v-if="draft && f.bound !== false" name="i-lucide-corner-down-left" class="size-3.5 shrink-0" />
+              </UButton>
+
+              <div
+                v-if="!filteredFieldItems.length"
+                class="rounded border border-dashed border-default p-3 text-center text-xs text-muted"
+              >
+                {{ fieldSearch ? 'Tidak ada field yang cocok.' : 'Belum ada field. Buat field baru untuk dipakai di template.' }}
+              </div>
+            </div>
           </div>
-        </div>
-
-        <!-- Tab 3: Pasal Indonesia -->
-        <div v-else-if="activeTab === 'pasal-id'" class="space-y-3 pt-2">
-          <UAccordion
-            :items="editorState.sections.map((s, idx) => ({
-              label: formatHeading(s.heading),
-              slot: `section-${idx}`,
-              value: `section-${idx}`,
-            }))"
-          >
-            <template
-              v-for="(section, sIdx) in editorState.sections"
-              :key="sIdx"
-              #[`section-${sIdx}`]
-            >
-              <div class="space-y-2 py-3">
-                <div
-                  v-for="(para, pIdx) in section.paragraphs"
-                  :key="pIdx"
-                >
-                  <UTextarea
-                    v-model="editorState.sections[sIdx]!.paragraphs[pIdx]"
-                    :rows="para.length > 100 ? 3 : 2"
-                    class="w-full text-sm"
-                    :placeholder="hardcoded?.sections?.[sIdx]?.paragraphs?.[pIdx] ?? ''"
-                  />
-                  <UBadge
-                    v-if="containsPlaceholder(para)"
-                    color="warning"
-                    variant="subtle"
-                    size="xs"
-                    class="mt-0.5"
-                    label="Placeholder dinamis — jangan hapus"
-                    icon="i-lucide-alert-triangle"
-                  />
-                </div>
-              </div>
-            </template>
-          </UAccordion>
-        </div>
-
-        <!-- Tab 4: Pasal English (hanya PKWT) -->
-        <div v-else-if="activeTab === 'pasal-en' && isPkwt" class="space-y-3 pt-2">
-          <UAccordion
-            :items="englishSectionEntries.map(([heading], idx) => ({
-              label: formatHeading(heading),
-              slot: `eng-${idx}`,
-              value: `eng-${idx}`,
-            }))"
-          >
-            <template
-              v-for="(entry, eIdx) in englishSectionEntries"
-              :key="eIdx"
-              #[`eng-${eIdx}`]
-            >
-              <div class="space-y-2 py-3">
-                <div
-                  v-for="(para, pIdx) in entry[1]"
-                  :key="pIdx"
-                >
-                  <UTextarea
-                    v-model="editorState.englishSections[entry[0]]![pIdx]"
-                    :rows="para.length > 100 ? 3 : 2"
-                    class="w-full text-sm"
-                    :placeholder="hardcoded?.englishSections?.[entry[0]]?.[pIdx] ?? ''"
-                  />
-                  <UBadge
-                    v-if="containsPlaceholder(para)"
-                    color="warning"
-                    variant="subtle"
-                    size="xs"
-                    class="mt-0.5"
-                    label="Dynamic placeholder — do not remove"
-                    icon="i-lucide-alert-triangle"
-                  />
-                </div>
-              </div>
-            </template>
-          </UAccordion>
-        </div>
+          <div class="rounded-lg border border-default p-3">
+            <p class="font-semibold">
+              Validasi template
+            </p>
+            <div v-if="preview" class="mt-2 space-y-1 text-sm">
+              <p>
+                <span class="text-muted">Status:</span>
+                <UBadge :color="preview.valid ? 'success' : 'error'" :label="preview.valid ? 'Valid' : 'Tidak valid'" />
+              </p>
+              <p><span class="text-muted">Placeholder:</span> {{ preview.placeholderCount }}</p>
+              <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
+              <p><span class="text-muted">Blok berformat:</span> {{ preview.markedBlockCount }}</p>
+            </div>
+            <p v-else class="mt-2 text-xs text-muted">
+              Klik <b>Pratinjau</b> untuk menjalankan validasi backend.
+            </p>
+          </div>
+        </aside>
       </div>
     </template>
 
     <template #footer>
-      <div class="flex items-center justify-between gap-3 w-full">
-        <div class="flex items-center gap-3">
-          <UButton
-            label="Batal"
+      <div class="flex w-full items-center justify-between gap-2">
+        <p v-if="draftDirty" class="text-xs text-warning">
+          Ada perubahan yang belum disimpan — tekan Simpan di atas sebelum menutup.
+        </p>
+        <span v-else />
+        <UButton
+          label="Tutup"
+          color="neutral"
+          variant="subtle"
+          @click="requestClose"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <!-- ── Modal pratinjau ── -->
+  <!-- MITRA: PDF asli dari mesin render yang sama dengan Generate Kontrak (1:1).
+       PKWT: belum punya mesin pratinjau — tampilkan keterangan, bukan teks kasar. -->
+  <UModal v-model:open="previewOpen" title="Pratinjau dokumen" :ui="{ content: 'max-w-5xl w-full' }">
+    <template #body>
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+        <div class="max-h-[70vh] overflow-auto rounded-lg bg-neutral-200 p-3">
+          <!-- PDF asli dari mesin render yang sama dengan Generate Kontrak (1:1),
+               untuk MITRA maupun PKWT. -->
+          <div class="h-[68vh] rounded-lg bg-white">
+            <div v-if="previewPdfLoading" class="flex h-full items-center justify-center">
+              <UIcon name="i-lucide-loader-circle" class="size-8 animate-spin text-muted" />
+            </div>
+            <div v-else-if="previewPdfError" class="flex h-full items-center justify-center p-6 text-center text-sm text-error">
+              {{ previewPdfError }}
+            </div>
+            <PdfViewer v-else-if="previewPdfBlob" :src="previewPdfBlob" />
+            <div v-else class="flex h-full items-center justify-center text-sm text-muted">
+              Pratinjau belum tersedia.
+            </div>
+          </div>
+        </div>
+        <aside class="space-y-3">
+          <UAlert
+            v-if="preview"
+            :icon="preview.valid ? 'i-lucide-circle-check' : 'i-lucide-circle-alert'"
+            :color="preview.valid ? 'success' : 'error'"
+            variant="subtle"
+            :title="preview.valid ? 'Template valid' : 'Template tidak valid'"
+            :description="preview.valid ? 'Semua placeholder dan blok lolos validasi backend.' : 'Periksa kembali placeholder dan struktur blok.'"
+          />
+          <div v-if="preview" class="space-y-1 text-sm">
+            <p><span class="text-muted">Placeholder:</span> {{ preview.placeholderCount }}</p>
+            <p><span class="text-muted">Blok:</span> {{ preview.blockCount }}</p>
+            <p><span class="text-muted">Blok dengan pemformatan:</span> {{ preview.markedBlockCount }}</p>
+            <p><span class="text-muted">Blok diratakan:</span> {{ preview.alignedBlockCount }}</p>
+          </div>
+          <UAlert
+            v-if="preview?.inlineMarkWarnings?.length"
+            icon="i-lucide-triangle-alert"
+            color="warning"
+            variant="subtle"
+            title="Penanda format tanpa pasangan"
+            :description="preview.inlineMarkWarnings.map(warning => `${warning.fieldPath}: ${warning.message}`).join(' · ')"
+          />
+          <UAlert
+            icon="i-lucide-info"
             color="neutral"
             variant="subtle"
-            @click="localOpen = false"
+            title="1:1 dengan dokumen asli"
+            description="PDF ini dirender mesin yang sama dengan Generate Kontrak, memakai data contoh. Field yang kosong tampil sebagai penanda, bukan teks kasar."
           />
-          <UButton
-            label="Reset Tab ke Default"
-            color="warning"
-            variant="ghost"
-            icon="i-lucide-rotate-ccw"
-            :disabled="loading || !editorState"
-            @click="resetTab"
-          />
-        </div>
-        <div class="flex items-center gap-3">
-          <span v-if="changesCount > 0" class="text-xs text-muted">
-            {{ changesCount }} field diubah
-          </span>
-          <UButton
-            label="Simpan Perubahan"
-            color="primary"
-            icon="i-lucide-save"
-            :loading="saving"
-            :disabled="loading || !editorState"
-            @click="save"
-          />
-        </div>
+        </aside>
       </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Tutup"
+        color="neutral"
+        variant="subtle"
+        @click="previewOpen = false"
+      />
+    </template>
+  </UModal>
+
+  <!-- ── Modal pilih tipe blok ── -->
+  <UModal
+    v-model:open="blockPickerOpen"
+    title="Tambah blok"
+    description="Pilih jenis bagian dokumen yang ingin ditambahkan."
+    :ui="{ content: 'max-w-3xl w-full' }"
+  >
+    <template #body>
+      <div class="grid gap-2 sm:grid-cols-2">
+        <button
+          v-for="opt in blockPickerOptions"
+          :key="opt.type"
+          type="button"
+          :disabled="opt.type === 'signature' && hasSignatureBlock"
+          class="flex items-start gap-3 rounded-lg border border-default p-3 text-left transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-default disabled:hover:bg-transparent"
+          @click="add(opt.type)"
+        >
+          <UIcon :name="opt.icon" class="mt-0.5 size-5 shrink-0 text-primary" />
+          <div class="min-w-0">
+            <p class="font-medium">
+              {{ opt.label }}
+            </p>
+            <p class="text-xs text-muted">
+              {{ opt.type === 'signature' && hasSignatureBlock ? 'Sudah ada di versi ini (maksimal satu)' : opt.desc }}
+            </p>
+          </div>
+        </button>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Batal"
+        color="neutral"
+        variant="subtle"
+        @click="blockPickerOpen = false"
+      />
+    </template>
+  </UModal>
+
+  <!-- ── Konfirmasi hapus blok ── -->
+  <UModal
+    :open="confirmDeleteIndex !== null"
+    title="Hapus blok ini?"
+    description="Blok beserta seluruh isinya akan dihilangkan dari draft. Belum permanen sampai Publish."
+    @update:open="v => { if (!v) confirmDeleteIndex = null }"
+  >
+    <template #body>
+      <div v-if="confirmDeleteIndex !== null" class="rounded-lg bg-elevated p-3">
+        <p class="text-sm">
+          <span class="text-muted">Blok {{ confirmDeleteIndex + 1 }} ·</span>
+          <b>{{ blocks[confirmDeleteIndex]?.type }}</b>
+        </p>
+        <p class="mt-1 line-clamp-2 text-xs text-muted">
+          {{ String(blocks[confirmDeleteIndex]?.text || blocks[confirmDeleteIndex]?.heading || '') || 'Tanpa teks' }}
+        </p>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          label="Batal"
+          color="neutral"
+          variant="subtle"
+          @click="confirmDeleteIndex = null"
+        />
+        <UButton
+          label="Hapus blok"
+          icon="i-lucide-trash-2"
+          color="error"
+          @click="confirmDeleteBlock"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <!-- ── Konfirmasi perubahan belum disimpan ── -->
+  <UModal
+    v-model:open="confirmCloseOpen"
+    title="Perubahan belum disimpan"
+    description="Kalau ditutup sekarang, perubahan pada draft ini akan hilang."
+  >
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          label="Tetap di sini"
+          color="neutral"
+          variant="subtle"
+          @click="confirmCloseOpen = false"
+        />
+        <UButton
+          label="Buang perubahan"
+          color="error"
+          @click="confirmCloseOpen = false; open = false"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <!-- ── Konfirmasi pindah versi ── -->
+  <UModal
+    :open="pendingVersion !== null"
+    title="Pindah versi?"
+    description="Draft yang sedang diedit belum disimpan. Berpindah versi akan membuang perubahan itu."
+    @update:open="v => { if (!v) pendingVersion = null }"
+  >
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          label="Tetap di sini"
+          color="neutral"
+          variant="subtle"
+          @click="pendingVersion = null"
+        />
+        <UButton
+          label="Buang & pindah"
+          color="error"
+          @click="select(pendingVersion ?? undefined).then(() => pendingVersion = null)"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <!-- ── Modal field kustom ── -->
+  <UModal
+    v-model:open="fieldOpen"
+    title="Field kustom baru"
+    description="Field dipakai sebagai placeholder di dalam blok teks."
+  >
+    <template #body>
+      <div class="space-y-3">
+        <UFormField label="Kunci" help="Tanpa spasi; gunakan titik untuk pengelompokan, mis. employee.fullName" required>
+          <UInput v-model="form.key" placeholder="employee.namaPanggilan" class="w-full" />
+        </UFormField>
+        <UFormField label="Label" help="Nama yang tampil saat pengisian kontrak." required>
+          <UInput v-model="form.label" placeholder="Nama Panggilan" class="w-full" />
+        </UFormField>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <UFormField label="Tipe data">
+            <USelect v-model="form.dataType" :items="['TEXT', 'NUMBER', 'DATE', 'DROPDOWN', 'MASTER_REFERENCE']" class="w-full" />
+          </UFormField>
+          <UFormField label="Sumber nilai">
+            <USelect v-model="form.sourceType" :items="['CONTRACT_INPUT', 'MASTER_REFERENCE']" class="w-full" />
+          </UFormField>
+        </div>
+        <UFormField v-if="form.dataType === 'DROPDOWN'" label="Pilihan" help="Pisahkan tiap opsi dengan koma.">
+          <UInput v-model="form.options" placeholder="Tetap, Kontrak, Harian" class="w-full" />
+        </UFormField>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex w-full justify-end gap-2">
+        <UButton
+          label="Batal"
+          color="neutral"
+          variant="subtle"
+          @click="fieldOpen = false"
+        />
+        <UButton
+          label="Buat field"
+          color="primary"
+          :loading="fieldSaving"
+          @click="createField"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <!-- ── Modal kelola field template (binding + wajib) ── -->
+  <UModal
+    v-model:open="bindingOpen"
+    title="Field pada template ini"
+    description="Tentukan field mana yang muncul di form kontrak dan mana yang wajib diisi."
+    :ui="{ content: 'max-w-3xl w-full' }"
+  >
+    <template #body>
+      <div class="space-y-3">
+        <UAlert
+          icon="i-lucide-info"
+          color="neutral"
+          variant="subtle"
+          title="Berlaku setelah Publish"
+          description="Perubahan di sini tersimpan langsung ke template. Form kontrak mengikuti versi PUBLISHED, jadi terbitkan versi baru agar perubahan terlihat."
+        />
+
+        <UInput
+          v-model="bindingSearch"
+          icon="i-lucide-search"
+          placeholder="Cari field…"
+          size="sm"
+          class="w-full"
+        />
+
+        <div v-if="!bindings.length" class="flex items-center gap-2 py-6 text-sm text-muted">
+          <UIcon name="i-lucide-info" class="size-4" />
+          Belum ada field katalog. Tambahkan field lewat tombol "Baru".
+        </div>
+
+        <div v-else class="max-h-[55vh] overflow-auto rounded-lg border border-default">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 z-10 bg-elevated text-left text-xs uppercase tracking-wide text-muted">
+              <tr>
+                <th class="px-3 py-2 font-semibold">
+                  Field
+                </th>
+                <th class="w-20 px-3 py-2 text-center font-semibold">
+                  Pakai
+                </th>
+                <th class="w-20 px-3 py-2 text-center font-semibold">
+                  Wajib
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in filteredBindings"
+                :key="row.fieldId"
+                class="border-t border-default align-top"
+                :class="row.bound ? '' : 'opacity-70'"
+              >
+                <td class="px-3 py-2">
+                  <p class="font-medium text-highlighted">
+                    {{ row.label }}
+                  </p>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(row)) }}</code>
+                  <div class="mt-1 flex flex-wrap items-center gap-1">
+                    <UBadge
+                      :color="row.sourceType === 'SYSTEM' ? 'neutral' : 'primary'"
+                      variant="subtle"
+                      size="xs"
+                      :label="row.sourceType === 'SYSTEM' ? 'Otomatis' : 'Input manual'"
+                    />
+                    <UBadge
+                      v-if="row.usedInContent"
+                      color="warning"
+                      variant="subtle"
+                      size="xs"
+                      label="Dipakai di teks"
+                    />
+                  </div>
+                  <p v-if="row.usedInContent && !row.locked" class="mt-1 text-xs text-warning">
+                    Melepas field ini butuh menghapus {{ placeholderText(fieldPlaceholderKey(row)) }} dari teks template,
+                    atau Publish akan gagal.
+                  </p>
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <UCheckbox
+                    :model-value="row.bound"
+                    :disabled="row.locked || bindingSaving === row.fieldId"
+                    @update:model-value="v => setBinding(row, { bound: v === true })"
+                  />
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <UCheckbox
+                    :model-value="row.required"
+                    :disabled="row.locked || !row.bound || bindingSaving === row.fieldId"
+                    @update:model-value="v => setBinding(row, { required: v === true })"
+                  />
+                </td>
+              </tr>
+              <tr v-if="!filteredBindings.length">
+                <td colspan="3" class="px-3 py-6 text-center text-sm text-muted">
+                  Tidak ada field yang cocok.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-xs text-muted">
+          {{ boundCount }} dari {{ bindings.length }} field dipakai template ini.
+          Field "Otomatis" selalu dipakai dan wajib — nilainya diambil dari data karyawan/kontrak.
+        </p>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Tutup"
+        color="neutral"
+        variant="subtle"
+        @click="bindingOpen = false"
+      />
+    </template>
+  </UModal>
+
+  <!-- ── Pencarian pemakaian field: "field ini dipakai di blok mana" ── -->
+  <UModal
+    v-model:open="usageOpen"
+    title="Pemakaian field dinamis"
+    description="Cari field untuk melihat di blok mana ia dipakai, lalu klik untuk membuka bloknya."
+    :ui="{ content: 'max-w-4xl w-full' }"
+  >
+    <template #body>
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <UInput
+            v-model="usageSearch"
+            icon="i-lucide-search"
+            placeholder="Cari nama atau key field…"
+            size="sm"
+            class="min-w-56 flex-1"
+            autofocus
+          />
+          <UBadge color="neutral" variant="subtle" size="sm">
+            {{ usageSummary.used }} dari {{ usageSummary.fields }} field dipakai
+          </UBadge>
+          <UBadge color="neutral" variant="subtle" size="sm">
+            {{ usageSummary.occurrences }} kemunculan di {{ usageSummary.blocks }} blok
+          </UBadge>
+        </div>
+
+        <UAlert
+          v-if="!draft"
+          icon="i-lucide-eye"
+          color="neutral"
+          variant="subtle"
+          title="Mode baca"
+          description="Menampilkan versi terpilih (bukan draft). Hasil di bawah mengikuti versi ini."
+        />
+
+        <UAlert
+          v-if="usageOrphans.length"
+          icon="i-lucide-triangle-alert"
+          color="warning"
+          variant="subtle"
+          title="Placeholder tidak ada di katalog field"
+          :description="`${usageOrphans.length} placeholder tidak terdaftar: `
+            + usageOrphans.slice(0, 5).map(o => placeholderText(o.key)).join(', ')
+            + (usageOrphans.length > 5 ? `, +${usageOrphans.length - 5} lagi` : '')
+            + '. Penerbitan versi akan gagal sampai ini diperbaiki.'"
+        />
+
+        <div class="max-h-[55vh] overflow-auto rounded-lg border border-default">
+          <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-default text-xs text-muted">
+              <tr>
+                <th class="px-3 py-2 text-left font-medium">
+                  Field
+                </th>
+                <th class="px-3 py-2 text-left font-medium">
+                  Dipakai di
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in usageRows"
+                :key="row.key"
+                class="border-t border-default align-top"
+                :class="row.occurrences.length ? '' : 'opacity-60'"
+              >
+                <td class="px-3 py-2">
+                  <p class="font-medium text-highlighted">
+                    {{ row.label }}
+                  </p>
+                  <code class="text-xs text-muted">{{ placeholderText(fieldPlaceholderKey(row)) }}</code>
+                  <div class="mt-1 flex flex-wrap items-center gap-1">
+                    <UBadge
+                      :color="row.isDynamic ? 'primary' : 'neutral'"
+                      variant="subtle"
+                      size="xs"
+                      :label="row.isDynamic ? 'Dinamis' : 'Otomatis'"
+                    />
+                    <UBadge
+                      v-if="!row.bound"
+                      color="error"
+                      variant="subtle"
+                      size="xs"
+                      label="Belum di-bind"
+                    />
+                    <UBadge
+                      v-if="row.usedInOtherLang"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
+                      :label="`Dipakai di bahasa ${lang === 'id' ? 'EN' : 'ID'}`"
+                    />
+                  </div>
+                </td>
+                <td class="px-3 py-2">
+                  <div v-if="row.occurrences.length" class="flex flex-wrap gap-1">
+                    <UButton
+                      v-for="occ in row.occurrences"
+                      :key="`${occ.blockId}-${occ.path ?? 'x'}-${occ.locationLabel}`"
+                      size="xs"
+                      variant="soft"
+                      color="neutral"
+                      :label="`Blok ${occ.blockIndex + 1} · ${occ.locationLabel}`"
+                      @click="goToUsage(occ)"
+                    />
+                    <UBadge
+                      v-if="row.blockCount > 1"
+                      color="neutral"
+                      variant="subtle"
+                      size="xs"
+                      :label="`${row.blockCount} blok`"
+                    />
+                  </div>
+                  <div v-else class="flex items-center gap-1 text-xs text-muted">
+                    <UIcon name="i-lucide-minus" class="size-3.5" />
+                    Belum dipakai di bahasa ini
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!usageRows.length">
+                <td colspan="2" class="px-3 py-6 text-center text-sm text-muted">
+                  Tidak ada field yang cocok dengan pencarian.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-xs text-muted">
+          Klik lokasi untuk membuka bloknya dan menggulir ke sana. Field dinamis disisipkan
+          sebagai <code class="text-xs">{{ placeholderText('custom.key') }}</code>.
+        </p>
+      </div>
+    </template>
+    <template #footer>
+      <UButton
+        label="Tutup"
+        color="neutral"
+        variant="subtle"
+        @click="usageOpen = false"
+      />
     </template>
   </UModal>
 </template>

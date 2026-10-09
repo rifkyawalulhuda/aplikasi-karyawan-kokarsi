@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { Contract, ContractTemplate } from '~/types'
+import type { Contract, ContractTemplate, ContractInputField, ContractInputFieldsResponse } from '~/types'
 import { CalendarDate } from '@internationalized/date'
 
 interface LookupOption { label: string; value: number }
@@ -44,12 +44,25 @@ const contractTypeOptions = computed<LookupOption[]>(() =>
   })),
 )
 
-const contractTemplateOptions = computed<LookupOption[]>(() =>
-  (contractTemplatesRes.value ?? []).map(template => ({
+const contractTemplateOptions = computed<LookupOption[]>(() => {
+  const options = (contractTemplatesRes.value ?? []).map(template => ({
     label: `${template.name} (${template.family})`,
     value: template.id,
-  })),
-)
+  }))
+
+  // Template kontrak induk bisa sudah dinonaktifkan. Daftar hanya memuat
+  // template aktif, jadi tanpa disisipkan di sini admin tidak bisa memilih
+  // template yang sama (bertanda "Nonaktif") saat memperpanjang.
+  const parentTemplate = props.parentContract?.template
+  if (parentTemplate && !options.some(option => option.value === parentTemplate.id)) {
+    options.push({
+      label: `${parentTemplate.name} (${parentTemplate.family}) — Nonaktif`,
+      value: parentTemplate.id,
+    })
+  }
+
+  return options
+})
 
 const minStartDate = computed(() => {
   if (!props.parentContract?.endDate) return ''
@@ -131,7 +144,54 @@ function resetForm() {
   startDateCal.value = null
   endDateCal.value = null
   signedDateCal.value = null
+  parentTemplateData.value = {}
 }
+
+// ── Field dinamis template (CONTRACT_INPUT) ──────────────────────────────
+// Perpanjangan tidak mengubah data tambahan: backend mewarisi `templateData`
+// kontrak induk. Nilainya ditampilkan read-only supaya petugas melihat apa yang
+// akan diwariskan, tanpa mengirimkannya kembali.
+const parentTemplateData = shallowRef<Record<string, any>>({})
+const templateFields = ref<ContractInputField[]>([])
+// Template tanpa versi terbit → kontrak perpanjangan tidak akan punya snapshot,
+// sehingga data tambahan yang diwarisi tidak tercetak ke PDF. Perpanjangan tetap
+// diizinkan (kontrak induknya memang legacy), tapi pengguna diberi tahu.
+const templateNotPublished = ref(false)
+
+async function fetchTemplateFields(templateId?: number) {
+  templateFields.value = []
+  templateNotPublished.value = false
+  if (!templateId) return
+  try {
+    const res = await $fetch<ContractInputFieldsResponse>(
+      `/api/contract-templates/${templateId}/fields`,
+      { credentials: 'include' },
+    )
+    templateFields.value = res.fields ?? []
+    templateNotPublished.value = res.published === false
+  } catch {
+    // Perpanjangan tetap boleh jalan walau field tambahan tidak bisa dimuat.
+    templateFields.value = []
+  }
+}
+
+/** Tampilkan nilai warisan dalam bentuk yang enak dibaca. */
+function formatTemplateValue(field: ContractInputField, value: any): string {
+  if (value === undefined || value === null || String(value).trim() === '') return '-'
+  if (field.dataType === 'DATE') {
+    const iso = String(value).slice(0, 10)
+    return toCalDate(iso) ? formatDisplay(toCalDate(iso)!) : iso
+  }
+  return String(value)
+}
+
+watch(() => props.parentContract, (parent) => {
+  const source = (parent as any)?.templateData
+  parentTemplateData.value = source && typeof source === 'object' ? { ...source } : {}
+}, { immediate: true })
+
+// Field mengikuti template yang dipilih; nilainya tetap milik kontrak induk.
+watch(() => state.templateId, (templateId) => { fetchTemplateFields(templateId) }, { immediate: true })
 
 const statusLabelMap: Record<string, string> = {
   AKTIF: 'Aktif',
@@ -230,6 +290,43 @@ watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
             class="w-full"
           />
         </UFormField>
+
+        <!-- Data tambahan diwarisi dari kontrak induk (backend menyalinnya),
+             jadi hanya ditampilkan sebagai informasi. -->
+        <div v-if="templateFields.length" class="rounded-lg border border-default p-3 space-y-2">
+          <p class="text-sm font-medium text-highlighted">Data Tambahan Template</p>
+          <p class="text-xs text-muted">
+            Nilai berikut diwarisi dari kontrak sebelumnya dan akan dipakai pada kontrak perpanjangan.
+          </p>
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+            <div v-for="field in templateFields" :key="field.key">
+              <dt class="text-xs text-muted">{{ field.label }}</dt>
+              <dd class="text-sm text-highlighted">
+                {{ formatTemplateValue(field, parentTemplateData[field.key]) }}
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div
+          v-if="templateNotPublished"
+          class="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+        >
+          <UIcon
+            name="i-lucide-triangle-alert"
+            class="mt-0.5 w-4 h-4 shrink-0 text-warning"
+          />
+          <div>
+            <p class="font-medium">
+              Template ini belum memiliki versi terbit.
+            </p>
+            <p class="text-muted">
+              Kontrak perpanjangan tidak akan memiliki snapshot dokumen, sehingga data tambahan
+              yang diwarisi di atas tidak ikut tercetak ke PDF. Pilih template yang sudah terbit
+              atau terbitkan template ini terlebih dahulu.
+            </p>
+          </div>
+        </div>
 
         <div class="grid grid-cols-2 gap-3">
           <UFormField label="Tanggal Tanda Tangan" name="signedDate" required>

@@ -1,4 +1,10 @@
-﻿// https://nuxt.com/docs/api/configuration/nuxt-config
+﻿import { readFileSync } from 'node:fs'
+
+// https://nuxt.com/docs/api/configuration/nuxt-config
+const appPackage = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
+) as { version?: string }
+
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
@@ -7,13 +13,27 @@ export default defineNuxtConfig({
     '@pinia/nuxt'
   ],
 
+  runtimeConfig: {
+    public: {
+      appVersion: appPackage.version ?? '1.0.0'
+    }
+  },
+
   devtools: {
     enabled: process.env.NODE_ENV !== 'production'
   },
 
   app: {
     head: {
-      title: 'Kokarsi PT. Sankyu'
+      title: 'Kokarsi PT. Sankyu',
+      link: [
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        {
+          rel: 'stylesheet',
+          href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap',
+        },
+      ],
     }
   },
 
@@ -21,6 +41,12 @@ export default defineNuxtConfig({
 
   icon: {
     mode: 'svg',
+    // Scan source files agar semua ikon yang dipakai app ikut di-bundle ke client.
+    // Tanpa ini ikon di luar bundle hanya di-fetch async → sempat kosong saat refresh
+    // (hydration mismatch) sehingga ikon menghilang.
+    clientBundle: {
+      scan: true,
+    },
     serverBundle: {
       collections: ['lucide', 'simple-icons']
     },

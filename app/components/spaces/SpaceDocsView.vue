@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { SpaceDocument } from '~/types/space'
+import { errorMessage } from './board-meta'
 
 const props = defineProps<{
   spaceId: number
 }>()
 
-const router = useRouter()
 const toast = useToast()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const { confirmActionToast } = useConfirmActionToast()
@@ -33,16 +33,16 @@ async function createDoc() {
       body: {
         title: newTitle.value.trim(),
         emoji: newEmoji.value,
-        content: JSON.stringify({ type: 'doc', content: [] }),
+        content: JSON.stringify({ type: 'doc', content: [] })
       },
-      credentials: 'include',
+      credentials: 'include'
     })
     newTitle.value = ''
     creating.value = false
     await refresh()
     openDoc(doc)
-  } catch (e: any) {
-    toast.add({ title: 'Gagal membuat dokumen', description: e?.data?.message ?? 'Error', color: 'error' })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal membuat dokumen', description: errorMessage(err), color: 'error' })
   } finally {
     saving.value = false
   }
@@ -56,12 +56,12 @@ function deleteDoc(doc: SpaceDocument) {
     onConfirm: async () => {
       await $fetch(`/api/spaces/${props.spaceId}/documents/${doc.id}`, {
         method: 'DELETE',
-        credentials: 'include',
+        credentials: 'include'
       })
       if (editorDocId.value === doc.id) closeEditor()
       refresh()
       toast.add({ title: 'Dokumen dihapus', color: 'success' })
-    },
+    }
   })
 }
 
@@ -103,7 +103,10 @@ async function downloadPdf() {
   try {
     // Simpan dulu jika ada perubahan
     if (hasUnsavedChanges.value) {
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+      if (saveTimer) {
+        clearTimeout(saveTimer)
+        saveTimer = null
+      }
       await saveDoc()
     }
     await exportDocPdf(editorTitle.value || 'Untitled', editorEmoji.value, editorContent.value)
@@ -134,7 +137,7 @@ async function openDoc(doc: SpaceDocument) {
     if (full.updatedAt) {
       lastSavedAt.value = new Date(full.updatedAt)
     }
-  } catch (e: any) {
+  } catch {
     toast.add({ title: 'Gagal memuat dokumen', color: 'error' })
     editorOpen.value = false
   } finally {
@@ -147,7 +150,10 @@ async function openDoc(doc: SpaceDocument) {
 }
 
 function closeEditor() {
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
   editorOpen.value = false
   editorDocId.value = null
   editorContent.value = ''
@@ -165,7 +171,7 @@ function handleCloseEditor() {
     isNavigatingToFullPage.value = false
     return
   }
-  
+
   if (hasUnsavedChanges.value) {
     confirmActionToast({
       title: 'Perubahan Belum Disimpan',
@@ -176,7 +182,7 @@ function handleCloseEditor() {
       confirmColor: 'error',
       onConfirm: () => {
         closeEditor()
-      },
+      }
     })
   } else {
     closeEditor()
@@ -200,9 +206,9 @@ async function saveDoc() {
       body: {
         title: editorTitle.value.trim() || 'Untitled',
         content: editorContent.value,
-        emoji: editorEmoji.value,
+        emoji: editorEmoji.value
       },
-      credentials: 'include',
+      credentials: 'include'
     })
     lastSavedAt.value = new Date()
     docStatus.value = 'saved'
@@ -215,7 +221,10 @@ async function saveDoc() {
 // Simpan langsung (untuk tombol & Ctrl+S)
 function saveNow() {
   if (!hasUnsavedChanges.value) return
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
   saveDoc()
 }
 
@@ -224,17 +233,20 @@ async function openFullPage() {
   const docId = editorDocId.value
   const spaceId = props.spaceId
   if (!docId) return
-  
+
   // Auto-save jika ada perubahan belum disimpan
   if (hasUnsavedChanges.value) {
-    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+    if (saveTimer) {
+      clearTimeout(saveTimer)
+      saveTimer = null
+    }
     await saveDoc()
   }
-  
+
   // Set flag agar handleCloseEditor tidak memproses
   isNavigatingToFullPage.value = true
   editorOpen.value = false
-  
+
   // Route flat: /spaces/[id]-docs-[docId]
   await navigateTo(`/spaces/${spaceId}-docs-${docId}`)
 }
@@ -271,15 +283,27 @@ function formatDate(d: string) {
     <!-- Header -->
     <div class="mb-6 flex items-center justify-between">
       <div>
-        <h2 class="text-lg font-semibold text-highlighted">Dokumen</h2>
-        <p class="text-sm text-muted">Catatan dan dokumentasi bersama untuk Space ini</p>
+        <h2 class="text-lg font-semibold text-highlighted">
+          Dokumen
+        </h2>
+        <p class="text-sm text-muted">
+          Catatan dan dokumentasi bersama untuk Space ini
+        </p>
       </div>
-      <UButton label="Dokumen Baru" icon="i-lucide-plus" color="primary" size="sm" @click="creating = true" />
+      <UButton
+        label="Dokumen Baru"
+        icon="i-lucide-plus"
+        color="primary"
+        size="sm"
+        @click="creating = true"
+      />
     </div>
 
     <!-- Create form -->
     <div v-if="creating" class="mb-6 rounded-xl border border-primary/40 bg-elevated/30 p-4">
-      <p class="mb-3 text-sm font-medium text-highlighted">Dokumen Baru</p>
+      <p class="mb-3 text-sm font-medium text-highlighted">
+        Dokumen Baru
+      </p>
       <div class="flex items-center gap-3">
         <UPopover :content="{ side: 'bottom' }">
           <button type="button" class="flex size-10 items-center justify-center rounded-lg border border-default bg-elevated/50 text-xl hover:bg-elevated">
@@ -287,18 +311,42 @@ function formatDate(d: string) {
           </button>
           <template #content>
             <div class="grid grid-cols-6 gap-1 p-2">
-              <button v-for="e in EMOJIS" :key="e" type="button"
+              <button
+                v-for="e in EMOJIS"
+                :key="e"
+                type="button"
                 class="flex size-8 items-center justify-center rounded text-lg hover:bg-elevated"
-                @click="newEmoji = e">{{ e }}</button>
+                @click="newEmoji = e"
+              >
+                {{ e }}
+              </button>
             </div>
           </template>
         </UPopover>
-        <UInput v-model="newTitle" class="flex-1" placeholder="Judul dokumen..." autofocus
-          @keydown.enter="createDoc" @keydown.escape="creating = false" />
+        <UInput
+          v-model="newTitle"
+          class="flex-1"
+          placeholder="Judul dokumen..."
+          autofocus
+          @keydown.enter="createDoc"
+          @keydown.escape="creating = false"
+        />
       </div>
       <div class="mt-3 flex gap-2">
-        <UButton label="Buat" size="sm" color="primary" :loading="saving" @click="createDoc" />
-        <UButton label="Batal" size="sm" color="neutral" variant="ghost" @click="creating = false; newTitle = ''" />
+        <UButton
+          label="Buat"
+          size="sm"
+          color="primary"
+          :loading="saving"
+          @click="createDoc"
+        />
+        <UButton
+          label="Batal"
+          size="sm"
+          color="neutral"
+          variant="ghost"
+          @click="creating = false; newTitle = ''"
+        />
       </div>
     </div>
 
@@ -313,20 +361,35 @@ function formatDate(d: string) {
         <UIcon name="i-lucide-file-text" class="size-8 text-muted" />
       </div>
       <div>
-        <p class="font-medium text-highlighted">Belum ada dokumen</p>
-        <p class="text-sm text-muted">Buat dokumen pertama untuk Space ini</p>
+        <p class="font-medium text-highlighted">
+          Belum ada dokumen
+        </p>
+        <p class="text-sm text-muted">
+          Buat dokumen pertama untuk Space ini
+        </p>
       </div>
-      <UButton label="Dokumen Baru" icon="i-lucide-plus" color="primary" size="sm" @click="creating = true" />
+      <UButton
+        label="Dokumen Baru"
+        icon="i-lucide-plus"
+        color="primary"
+        size="sm"
+        @click="creating = true"
+      />
     </div>
 
     <!-- Doc grid -->
     <div v-else-if="docs?.length" class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      <div v-for="doc in docs" :key="doc.id"
+      <div
+        v-for="doc in docs"
+        :key="doc.id"
         class="group relative overflow-hidden rounded-xl border border-default bg-default p-4 transition-all hover:border-primary/40 hover:shadow-sm cursor-pointer"
-        @click="openDoc(doc)">
+        @click="openDoc(doc)"
+      >
         <div class="mb-2 flex items-center gap-2.5">
           <span class="text-2xl">{{ doc.emoji ?? '📄' }}</span>
-          <p class="flex-1 truncate font-semibold text-highlighted group-hover:text-primary">{{ doc.title }}</p>
+          <p class="flex-1 truncate font-semibold text-highlighted group-hover:text-primary">
+            {{ doc.title }}
+          </p>
         </div>
         <div class="flex items-center gap-2 text-xs text-muted">
           <UIcon name="i-lucide-user" class="size-3" />
@@ -334,9 +397,14 @@ function formatDate(d: string) {
           <span>·</span>
           <span>{{ formatDate(doc.updatedAt) }}</span>
         </div>
-        <UButton icon="i-lucide-trash-2" variant="ghost" color="error" size="xs"
+        <UButton
+          icon="i-lucide-trash-2"
+          variant="ghost"
+          color="error"
+          size="xs"
           class="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity"
-          @click.stop="deleteDoc(doc)" />
+          @click.stop="deleteDoc(doc)"
+        />
       </div>
     </div>
   </div>
@@ -357,10 +425,16 @@ function formatDate(d: string) {
           </button>
           <template #content>
             <div class="grid grid-cols-6 gap-1 p-2">
-              <button v-for="e in EMOJIS" :key="e" type="button"
+              <button
+                v-for="e in EMOJIS"
+                :key="e"
+                type="button"
                 class="flex size-8 items-center justify-center rounded text-lg hover:bg-elevated"
                 :class="editorEmoji === e ? 'bg-elevated ring-1 ring-primary' : ''"
-                @click="editorEmoji = e">{{ e }}</button>
+                @click="editorEmoji = e"
+              >
+                {{ e }}
+              </button>
             </div>
           </template>
         </UPopover>
@@ -371,7 +445,7 @@ function formatDate(d: string) {
           class="flex-1 min-w-0 bg-transparent text-lg font-semibold text-highlighted outline-none placeholder:text-muted truncate"
           placeholder="Untitled"
           @keydown.enter.prevent
-        />
+        >
 
         <!-- Expand to full page -->
         <UButton

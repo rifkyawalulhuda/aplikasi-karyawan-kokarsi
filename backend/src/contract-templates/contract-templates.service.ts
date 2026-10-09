@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ContractFamily } from '@prisma/client'
 import { CONTRACT_DOCUMENT_DEFINITIONS, mergeDefinition } from '../contracts/contract-document-definitions'
 import { ActivityLogService } from '../activity-log/activity-log.service'
+import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
+import { validateContentDefinition } from './template-schema.validator'
+import { TemplateFieldsService } from './template-fields.service'
+import { applyTemplateBindings } from './template-field-bindings.helpers'
 
 export interface ContractTemplatePayload {
   code: string
@@ -23,10 +27,12 @@ export class ContractTemplatesService {
   constructor(
     private prisma: PrismaService,
     private activityLog: ActivityLogService,
+    private fieldsService: TemplateFieldsService,
   ) {}
 
   private readonly defaultTemplateSeeds = [
     { code: 'MITRA_DRIVER', name: 'Mitra Driver', family: 'MITRA' as const, templateKey: 'MITRA_DRIVER', contractTypeName: 'MITRA', jobRoleName: 'Driver' },
+    { code: 'MITRA_DRIVER_TRUCK_B3', name: 'Mitra Driver Truck B3', family: 'MITRA' as const, templateKey: 'MITRA_DRIVER_TRUCK_B3', contractTypeName: 'MITRA', jobRoleName: 'Driver Truck B3' },
     { code: 'MITRA_KOMART', name: 'Mitra Kasir Komart', family: 'MITRA' as const, templateKey: 'MITRA_KOMART', contractTypeName: 'MITRA', jobRoleName: 'Kasir' },
     { code: 'MITRA_STAFF', name: 'Mitra Staff Admin', family: 'MITRA' as const, templateKey: 'MITRA_STAFF', contractTypeName: 'MITRA', jobRoleName: 'Staff Admin' },
     { code: 'MITRA_WAREHOUSE', name: 'Mitra Warehouse', family: 'MITRA' as const, templateKey: 'MITRA_WAREHOUSE', contractTypeName: 'MITRA', jobRoleName: 'Karyawan Gudang' },
@@ -39,6 +45,25 @@ export class ContractTemplatesService {
   private include = {
     contractType: { select: { id: true, name: true } },
     jobRole: { select: { id: true, name: true } },
+    // Daftar template perlu menunjukkan status dokumen yang sebenarnya:
+    // berapa kontrak memakainya (menentukan boleh/tidaknya dihapus dan
+    // risikonya saat mengubah konten) dan versi mana yang sedang aktif.
+    // `contracts` sengaja TIDAK di-select penuh — hanya jumlahnya.
+    _count: {
+      select: {
+        contracts: true,
+        // Draft = ada perubahan yang belum diterbitkan (lihat
+        // docs/superpowers/plans/2026-09-29-dynamic-contract-template-versioning.md,
+        // "Draft menampilkan badge DRAFT").
+        versions: { where: { status: 'DRAFT' as const } },
+      },
+    },
+    versions: {
+      where: { status: 'PUBLISHED' as const },
+      orderBy: { versionNumber: 'desc' as const },
+      take: 1,
+      select: { id: true, versionNumber: true, publishedAt: true, publishedByName: true },
+    },
   }
 
   private async ensureDefaultTemplates() {
@@ -64,19 +89,19 @@ export class ContractTemplatesService {
     for (const seed of this.defaultTemplateSeeds) {
       const definition = CONTRACT_DOCUMENT_DEFINITIONS[seed.templateKey]
 
+      // Seed ini HANYA membuat template yang belum ada (`update: {}`).
+      //
+      // Sebelumnya blok `update` mengembalikan `isActive: true` dan `version: 1`
+      // pada setiap pemuatan halaman (`findAll()` → `ensureDefaultTemplates()`),
+      // sehingga admin TIDAK PERNAH bisa menonaktifkan template bawaan: PUT
+      // berhasil, tetapi GET berikutnya langsung mengaktifkannya kembali.
+      // Efek samping yang sama juga mengembalikan nama/deskripsi/jabatan/tipe
+      // kontrak yang sudah disunting admin ke nilai seed. Karena itu perubahan
+      // admin tidak boleh ditimpa; template key default yang benar-benar baru
+      // tetap dibuat lewat blok `create` di bawah.
       await this.prisma.contractTemplate.upsert({
         where: { code: seed.code },
-        update: {
-          name: seed.name,
-          family: seed.family,
-          templateKey: seed.templateKey,
-          description: definition?.fidelityNote ?? null,
-          requiredFields: definition?.requiredFields ?? null,
-          contractTypeId: contractTypeMap.get(seed.contractTypeName) ?? null,
-          jobRoleId: jobRoleMap.get(seed.jobRoleName) ?? null,
-          isActive: true,
-          version: 1,
-        },
+        update: {},
         create: {
           code: seed.code,
           name: seed.name,
@@ -90,6 +115,41 @@ export class ContractTemplatesService {
           version: 1,
         },
       })
+
+      const template = await this.prisma.contractTemplate.findUnique({ where: { code: seed.code } })
+      if (!template || !definition) continue
+
+      // Bootstrap only: never overwrite an existing draft/published/archived version.
+      // This keeps the operation idempotent and preserves administrator changes.
+      const versionCount = await this.prisma.client.contractTemplateVersion.count({ where: { templateId: template.id } })
+      if (versionCount === 0) {
+        const contentDefinition = definitionToContentDefinition(definition)
+        // Binding katalog (checkbox "wajib diisi" per template) ikut di-overlay di
+        // sini. Jalur bootstrap ini adalah jalur KETIGA yang membuat versi
+        // PUBLISHED langsung (selain createDraft/publish dan seed) dan dulu
+        // melewatkan binding, sehingga template bawaan yang belum pernah punya
+        // versi bisa terbit tanpa field dinamisnya. Untuk DB baru binding memang
+        // belum ada (overlay = no-op), tetapi begitu seed mengisi binding, jalur
+        // ini tetap menghasilkan snapshot yang konsisten dengan createDraft().
+        const fieldDefinitions = applyTemplateBindings(
+          definitionToFieldDefinitions(definition),
+          await this.fieldsService.findTemplateBindings(template.id),
+        )
+        validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), seed.family)
+        await this.prisma.client.contractTemplateVersion.create({
+          data: {
+            templateId: template.id,
+            versionNumber: 1,
+            status: 'PUBLISHED',
+            contentDefinition: contentDefinition as any,
+            fieldDefinitions: fieldDefinitions as any,
+            changeSummary: 'Versi awal dari definisi template bawaan aplikasi',
+            createdByName: 'System seed',
+            publishedByName: 'System seed',
+            publishedAt: new Date(),
+          },
+        })
+      }
     }
   }
 
@@ -164,8 +224,16 @@ export class ContractTemplatesService {
           description: payload.description ?? null,
           notes: payload.notes ?? null,
           requiredFields: (payload.requiredFields as any) ?? null,
-          isActive: payload.isActive ?? true,
-          version: payload.version ?? 1,
+          // `undefined` = jangan sentuh kolom `isActive`. Sebelumnya `?? true`
+          // membuat setiap PUT yang tidak menyertakan `isActive` (mis. hanya
+          // mengubah deskripsi) mengaktifkan kembali template yang sengaja
+          // dinonaktifkan admin.
+          isActive: payload.isActive ?? undefined,
+          // `undefined` = jangan sentuh kolom `version`. Sebelumnya `?? 1`
+          // membuat setiap PUT yang tidak menyertakan `version` (mis. form
+          // edit template di halaman Master Template Kontrak) menurunkan
+          // kembali counter `version` ke 1.
+          version: payload.version ?? undefined,
         },
         include: this.include,
       })
@@ -194,16 +262,60 @@ export class ContractTemplatesService {
       throw new BadRequestException(`Template ${template.name} sedang dipakai oleh ${usageCount} kontrak`)
     }
 
-    const deleted = await this.prisma.contractTemplate.delete({ where: { id } })
-    void this.activityLog.log({
-      action: 'DELETE',
-      module: 'Template Kontrak',
-      targetLabel: template.name,
-      performedBy: actor.name,
-      performedByRole: actor.role,
-      detail: `Nama: ${template.name}`,
-    })
-    return deleted
+    const versionIds = (
+      await this.prisma.client.contractTemplateVersion.findMany({
+        where: { templateId: id },
+        select: { id: true },
+      })
+    ).map(version => version.id)
+
+    // Kontrak yang masih menunjuk salah satu versi template ini lewat
+    // `templateVersionId` harus ditolak. FK-nya `SET NULL`, jadi menghapus
+    // versinya akan menghilangkan jejak audit "kontrak ini dulu memakai versi
+    // berapa". Sejalan dengan aturan di
+    // `ContractTemplateVersionsService.deleteVersion`.
+    if (versionIds.length > 0) {
+      const versionUsage = await this.prisma.contract.count({
+        where: { templateVersionId: { in: versionIds } },
+      })
+      if (versionUsage > 0) {
+        throw new BadRequestException(
+          `Template ${template.name} masih dirujuk oleh ${versionUsage} kontrak melalui versi template-nya`,
+        )
+      }
+    }
+
+    try {
+      // Versi template & binding field adalah anak template dengan FK
+      // `ON DELETE RESTRICT`. Memanggil `delete()` pada template secara langsung
+      // SELALU gagal (P2003) selama baris-baris itu ada — dulu berujung 500
+      // "Internal server error" tanpa keterangan. Keduanya dihapus lebih dulu
+      // dalam satu transaksi agar template tidak pernah terhapus setengah jalan.
+      const deleted = await this.prisma.client.$transaction(async (tx) => {
+        await tx.contractTemplateField.deleteMany({ where: { templateId: id } })
+        await tx.contractTemplateVersion.deleteMany({ where: { templateId: id } })
+        return tx.contractTemplate.delete({ where: { id } })
+      })
+      void this.activityLog.log({
+        action: 'DELETE',
+        module: 'Template Kontrak',
+        targetLabel: template.name,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+        detail: `Nama: ${template.name}`,
+      })
+      return deleted
+    } catch (error: any) {
+      // Jaring pengaman: bila masih ada referensi yang belum tertangkap guard di
+      // atas (mis. ditulis bersamaan oleh permintaan lain), balas 409 dengan
+      // pesan yang bisa ditindaklanjuti alih-alih 500 tanpa keterangan.
+      if (error?.code === 'P2003' || error?.meta?.cause?.originalCode === '23503') {
+        throw new ConflictException(
+          `Template ${template.name} masih direferensikan data lain dan tidak bisa dihapus`,
+        )
+      }
+      throw error
+    }
   }
 
   async getContentPreview(id: number) {
@@ -223,10 +335,14 @@ export class ContractTemplatesService {
 
   async updateContentOverrides(id: number, overrides: Record<string, any>) {
     await this.findOne(id) // throws if not found
-    return this.prisma.contractTemplate.update({
-      where: { id },
-      data: { contentOverrides: overrides },
-      include: this.include,
-    })
+    // DoD #10: jalur runtime `contentOverrides` sudah dinonaktifkan. Kontrak
+    // dirender dari versi template (immutable snapshot) yang dikelola lewat
+    // endpoint versi template, jadi menulis override di sini tidak lagi punya
+    // efek apa pun pada PDF. Ditolak eksplisit supaya admin tidak mengira
+    // perubahannya tersimpan.
+    void overrides
+    throw new ForbiddenException(
+      'Pengaturan konten langsung sudah tidak digunakan. Kelola konten lewat versi template (Master Template Kontrak → Versi).',
+    )
   }
 }

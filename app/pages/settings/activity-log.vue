@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-import { h } from 'vue'
 import { CalendarDate } from '@internationalized/date'
 
 const auth = useAuthStore()
@@ -37,6 +35,10 @@ const dateTo = ref('')
 const pagination = ref({ pageIndex: 0, pageSize: 50 })
 const pageSizeOptions = [25, 50, 100, 200]
 
+// Panel state
+const filtersOpen = ref(false)
+const retentionOpen = ref(false)
+
 // Data state
 const loading = ref(false)
 const exportLoading = ref(false)
@@ -49,8 +51,6 @@ const retentionDays = ref(365)
 const retentionLoading = ref(false)
 const purgeLoading = ref(false)
 const purgeDate = ref('')
-
-const table = useTemplateRef('table')
 
 // Computed purge date label
 const purgeDateLabel = computed(() => {
@@ -148,9 +148,17 @@ function resetFilters() {
   fetchLogs()
 }
 
-const hasActiveFilters = computed(() =>
-  moduleFilter.value || actionFilter.value || performedByFilter.value || dateFrom.value || dateTo.value
-)
+const activeFilterCount = computed(() => {
+  let n = 0
+  if (moduleFilter.value && moduleFilter.value !== 'all') n++
+  if (actionFilter.value && actionFilter.value !== 'all') n++
+  if (performedByFilter.value) n++
+  if (dateFrom.value) n++
+  if (dateTo.value) n++
+  return n
+})
+
+const hasActiveFilters = computed(() => activeFilterCount.value > 0)
 
 function applyFilters() {
   pagination.value.pageIndex = 0
@@ -187,17 +195,11 @@ async function handleExport() {
   }
 }
 
-function formatDate(ts: string) {
-  return new Date(ts).toLocaleString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
-const actionColorMap: Record<string, string> = {
-  CREATE: 'success',
-  UPDATE: 'warning',
-  DELETE: 'error',
+// ── Format baris terminal ─────────────────────────────────────────────────────
+function formatTimestamp(ts: string) {
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 const actionLabelMap: Record<string, string> = {
@@ -206,48 +208,22 @@ const actionLabelMap: Record<string, string> = {
   DELETE: 'Hapus',
 }
 
-const UBadge = resolveComponent('UBadge')
+const actionTextClass: Record<string, string> = {
+  CREATE: 'text-emerald-600 dark:text-emerald-400',
+  UPDATE: 'text-amber-600 dark:text-amber-400',
+  DELETE: 'text-rose-600 dark:text-rose-400',
+}
 
-const columns: TableColumn<ActivityLog>[] = [
-  {
-    accessorKey: 'timestamp',
-    header: 'Waktu',
-    cell: ({ row }) => h('span', { class: 'text-sm text-muted whitespace-nowrap tabular-nums' }, formatDate(row.original.timestamp)),
-  },
-  {
-    accessorKey: 'action',
-    header: 'Aksi',
-    cell: ({ row }) => h(UBadge, {
-      label: actionLabelMap[row.original.action] ?? row.original.action,
-      color: actionColorMap[row.original.action] ?? 'neutral',
-      variant: 'subtle',
-      size: 'sm',
-    }),
-  },
-  {
-    accessorKey: 'module',
-    header: 'Modul',
-    cell: ({ row }) => h('span', { class: 'text-sm font-medium' }, row.original.module),
-  },
-  {
-    accessorKey: 'targetLabel',
-    header: 'Data',
-    cell: ({ row }) => h('div', { class: 'max-w-xs min-w-0' }, [
-      h('p', { class: 'text-sm text-highlighted truncate' }, row.original.targetLabel),
-      row.original.detail
-        ? h('p', { class: 'text-xs text-muted truncate' }, row.original.detail)
-        : null,
-    ]),
-  },
-  {
-    accessorKey: 'performedBy',
-    header: 'Dilakukan Oleh',
-    cell: ({ row }) => h('div', undefined, [
-      h('p', { class: 'text-sm' }, row.original.performedBy),
-      h('p', { class: 'text-xs text-muted' }, row.original.performedByRole),
-    ]),
-  },
-]
+function rowTooltip(log: ActivityLog) {
+  const label = actionLabelMap[log.action] ?? log.action
+  const parts = [
+    `${formatTimestamp(log.timestamp)} · ${label} (${log.action})`,
+    `${log.module} · ${log.targetLabel}`,
+  ]
+  if (log.detail) parts.push(log.detail)
+  parts.push(`oleh ${log.performedBy} (${log.performedByRole})`)
+  return parts.join('  —  ')
+}
 
 // Init
 onMounted(async () => {
@@ -286,126 +262,188 @@ watch(() => pagination.value.pageSize, () => {
         Rekam jejak semua perubahan data di sistem — tambah, edit, dan hapus — untuk keperluan audit dan pelacakan ketidaksesuaian data.
       </p>
 
-      <!-- Filter bar -->
-      <div class="flex flex-wrap items-end gap-2 mb-4">
-        <USelect
-          v-model="moduleFilter"
-          :items="[{ label: 'Semua Modul', value: 'all' }, ...modules.map(m => ({ label: m, value: m }))]"
-          value-key="value"
-          class="min-w-40"
-        />
-        <USelect
-          v-model="actionFilter"
-          :items="[
-            { label: 'Semua Aksi', value: 'all' },
-            { label: 'Buat', value: 'CREATE' },
-            { label: 'Edit', value: 'UPDATE' },
-            { label: 'Hapus', value: 'DELETE' },
-          ]"
-          value-key="value"
-          class="min-w-36"
-        />
-        <UInput
-          v-model="performedByFilter"
-          placeholder="Cari nama user..."
-          icon="i-lucide-user"
-          class="min-w-40"
-        />
-        <div class="flex items-center gap-2">
-          <UPopover>
-            <UButton
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-calendar"
-              class="min-w-36 justify-start font-normal"
-              :class="!dateFromCal && 'text-muted'"
-            >
-              {{ dateFromCal ? formatDisplay(dateFromCal) : 'Dari tanggal' }}
-            </UButton>
-            <template #content>
-              <CalendarPicker v-model="dateFromCal" class="p-2" />
-            </template>
-          </UPopover>
+      <!-- Filter toolbar (collapsible) -->
+      <UCollapsible v-model:open="filtersOpen" :unmount-on-hide="false" class="mb-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <UButton
-            v-if="dateFromCal"
-            icon="i-lucide-x"
+            :label="filtersOpen ? 'Sembunyikan filter' : 'Tampilkan filter'"
+            icon="i-lucide-sliders-horizontal"
             color="neutral"
             variant="ghost"
             size="sm"
-            @click="dateFromCal = null"
+            :trailing-icon="filtersOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
           />
+          <div class="flex items-center gap-2">
+            <UBadge
+              v-if="activeFilterCount"
+              :label="`${activeFilterCount} filter aktif`"
+              color="primary"
+              variant="subtle"
+              size="sm"
+            />
+            <span class="text-xs text-muted tabular-nums">{{ total }} baris</span>
+          </div>
         </div>
-        <span class="text-sm text-muted self-center">s/d</span>
-        <div class="flex items-center gap-2">
-          <UPopover>
-            <UButton
-              color="neutral"
-              variant="outline"
-              icon="i-lucide-calendar"
-              class="min-w-36 justify-start font-normal"
-              :class="!dateToCal && 'text-muted'"
-            >
-              {{ dateToCal ? formatDisplay(dateToCal) : 'Sampai tanggal' }}
-            </UButton>
-            <template #content>
-              <CalendarPicker v-model="dateToCal" class="p-2" />
-            </template>
-          </UPopover>
-          <UButton
-            v-if="dateToCal"
-            icon="i-lucide-x"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            @click="dateToCal = null"
-          />
-        </div>
-        <UButton
-          label="Terapkan"
-          icon="i-lucide-search"
-          color="primary"
-          @click="applyFilters"
-        />
-        <UButton
-          v-if="hasActiveFilters"
-          label="Reset"
-          icon="i-lucide-x"
-          color="neutral"
-          variant="ghost"
-          @click="resetFilters"
-        />
-      </div>
 
-      <!-- Table -->
-      <UTable
-        ref="table"
-        :data="logs"
-        :columns="columns"
-        :loading="loading"
-        class="shrink-0"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0',
-        }"
-      >
-        <template #empty>
-          <div class="flex flex-col items-center gap-2 py-12 text-muted">
-            <UIcon name="i-lucide-activity" class="size-10 opacity-40" />
-            <p class="text-sm">Belum ada log aktivitas</p>
+        <template #content>
+          <div class="flex flex-wrap items-end gap-2 pt-3">
+            <USelect
+              v-model="moduleFilter"
+              :items="[{ label: 'Semua Modul', value: 'all' }, ...modules.map(m => ({ label: m, value: m }))]"
+              value-key="value"
+              class="min-w-40"
+            />
+            <USelect
+              v-model="actionFilter"
+              :items="[
+                { label: 'Semua Aksi', value: 'all' },
+                { label: 'Buat', value: 'CREATE' },
+                { label: 'Edit', value: 'UPDATE' },
+                { label: 'Hapus', value: 'DELETE' },
+              ]"
+              value-key="value"
+              class="min-w-36"
+            />
+            <UInput
+              v-model="performedByFilter"
+              placeholder="Cari nama user..."
+              icon="i-lucide-user"
+              class="min-w-40"
+            />
+            <div class="flex items-center gap-2">
+              <UPopover>
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-calendar"
+                  class="min-w-36 justify-start font-normal"
+                  :class="!dateFromCal && 'text-muted'"
+                >
+                  {{ dateFromCal ? formatDisplay(dateFromCal) : 'Dari tanggal' }}
+                </UButton>
+                <template #content>
+                  <CalendarPicker v-model="dateFromCal" class="p-2" />
+                </template>
+              </UPopover>
+              <UButton
+                v-if="dateFromCal"
+                icon="i-lucide-x"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                aria-label="Hapus tanggal awal"
+                @click="dateFromCal = null"
+              />
+            </div>
+            <span class="text-sm text-muted self-center">s/d</span>
+            <div class="flex items-center gap-2">
+              <UPopover>
+                <UButton
+                  color="neutral"
+                  variant="outline"
+                  icon="i-lucide-calendar"
+                  class="min-w-36 justify-start font-normal"
+                  :class="!dateToCal && 'text-muted'"
+                >
+                  {{ dateToCal ? formatDisplay(dateToCal) : 'Sampai tanggal' }}
+                </UButton>
+                <template #content>
+                  <CalendarPicker v-model="dateToCal" class="p-2" />
+                </template>
+              </UPopover>
+              <UButton
+                v-if="dateToCal"
+                icon="i-lucide-x"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                aria-label="Hapus tanggal akhir"
+                @click="dateToCal = null"
+              />
+            </div>
+            <UButton
+              label="Terapkan"
+              icon="i-lucide-search"
+              color="primary"
+              @click="applyFilters"
+            />
+            <UButton
+              v-if="hasActiveFilters"
+              label="Reset"
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              @click="resetFilters"
+            />
           </div>
         </template>
-      </UTable>
+      </UCollapsible>
+
+      <!-- Terminal log -->
+      <div class="overflow-hidden rounded-xl border border-default bg-zinc-50 font-mono dark:bg-zinc-950">
+        <!-- Title bar -->
+        <div class="flex items-center gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+          <span class="flex items-center gap-1.5" aria-hidden="true">
+            <span class="size-2.5 rounded-full bg-rose-400/80" />
+            <span class="size-2.5 rounded-full bg-amber-400/80" />
+            <span class="size-2.5 rounded-full bg-emerald-400/80" />
+          </span>
+          <UIcon name="i-lucide-terminal" class="ml-1 size-3.5 text-zinc-500" />
+          <span class="text-xs font-medium text-zinc-500">activity.log</span>
+          <span class="ml-auto text-xs text-zinc-400 tabular-nums dark:text-zinc-500">{{ total }} baris</span>
+        </div>
+
+        <!-- Viewport -->
+        <div class="terminal-viewport" role="log" aria-live="polite" :aria-busy="loading">
+          <p v-if="loading" class="terminal-empty text-zinc-500">memuat log...</p>
+          <p v-else-if="!logs.length" class="terminal-empty text-zinc-500">-- tidak ada log aktivitas --</p>
+          <template v-else>
+            <UPopover
+              v-for="log in logs"
+              :key="log.id"
+              mode="hover"
+              enable-touch
+              :open-delay="80"
+              :close-delay="80"
+              :content="{ side: 'top', align: 'start', collisionPadding: 12, sideOffset: 6 }"
+            >
+              <button
+                type="button"
+                class="terminal-row text-zinc-700 hover:bg-black/[0.045] focus-visible:bg-black/[0.045] focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset focus-visible:outline-none dark:text-zinc-300 dark:hover:bg-white/[0.06] dark:focus-visible:bg-white/[0.06]"
+                :aria-label="rowTooltip(log)"
+              >
+                <span class="cell cell--time text-zinc-500">{{ formatTimestamp(log.timestamp) }}</span>
+                <span class="cell cell--action font-semibold tracking-wide" :class="actionTextClass[log.action]">{{ log.action }}</span>
+                <span class="cell cell--module text-zinc-600 dark:text-zinc-400">{{ log.module }}</span>
+                <span class="cell cell--data font-medium text-zinc-900 dark:text-zinc-50">{{ log.targetLabel }}</span>
+                <span class="cell cell--user text-zinc-600 dark:text-zinc-400">{{ log.performedBy }} <span class="text-zinc-400 dark:text-zinc-500">({{ log.performedByRole }})</span></span>
+              </button>
+
+              <template #content>
+                <div class="w-72 space-y-1.5 p-3 font-mono text-xs">
+                  <div class="flex items-center gap-2">
+                    <span class="font-semibold" :class="actionTextClass[log.action]">{{ log.action }}</span>
+                    <span class="text-muted">{{ actionLabelMap[log.action] ?? log.action }}</span>
+                    <span class="ml-auto text-muted tabular-nums">{{ formatTimestamp(log.timestamp) }}</span>
+                  </div>
+                  <div class="text-highlighted break-words">
+                    <span class="text-muted">{{ log.module }}</span> · {{ log.targetLabel }}
+                  </div>
+                  <div v-if="log.detail" class="text-muted whitespace-pre-wrap break-words">{{ log.detail }}</div>
+                  <div class="border-t border-default pt-1.5 text-muted">
+                    oleh {{ log.performedBy }} ({{ log.performedByRole }})
+                  </div>
+                </div>
+              </template>
+            </UPopover>
+          </template>
+        </div>
+      </div>
 
       <!-- Pagination -->
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
+      <div class="flex items-center justify-between gap-3 pt-4">
         <div class="flex items-center gap-3">
-          <div class="text-sm text-muted">
-            {{ total }} log
-          </div>
+          <div class="text-sm text-muted">{{ total }} log</div>
           <USelect
             v-model="pagination.pageSize"
             :items="pageSizeOptions.map(n => ({ label: `${n}`, value: n }))"
@@ -422,77 +460,171 @@ watch(() => pagination.value.pageSize, () => {
         />
       </div>
 
-      <!-- Retention settings -->
-      <div class="mt-8 rounded-xl border border-default bg-elevated/30 p-5 space-y-4">
-        <div>
-          <p class="font-semibold text-highlighted">Pengaturan Retensi Log</p>
-          <p class="text-sm text-muted mt-0.5">Tentukan berapa lama log aktivitas disimpan sebelum bisa dihapus secara manual.</p>
+      <!-- Retention settings (collapsible) -->
+      <UCollapsible v-model:open="retentionOpen" class="mt-8">
+        <div class="flex items-center justify-between gap-3 rounded-xl border border-default bg-elevated/30 px-4 py-3">
+          <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <UIcon name="i-lucide-shield-alert" class="size-4 text-muted" />
+            <span class="text-sm font-medium text-highlighted">Retensi & Pembersihan Log</span>
+            <span class="text-xs text-muted">· simpan {{ retentionDays }} hari</span>
+          </div>
+          <UIcon
+            :name="retentionOpen ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+            class="size-4 shrink-0 text-muted"
+          />
         </div>
 
-        <div class="flex flex-wrap items-end gap-3">
-          <UFormField label="Simpan log selama (hari)">
-            <div class="flex items-center gap-2">
-              <UInput
-                v-model.number="retentionDays"
-                type="number"
-                :min="1"
-                :max="3650"
-                class="w-28"
-              />
-              <UButton
-                label="Simpan"
-                icon="i-lucide-save"
-                color="primary"
-                variant="subtle"
-                :loading="retentionLoading"
-                @click="saveRetention"
-              />
+        <template #content>
+          <div class="mt-2 space-y-4 rounded-xl border border-default bg-elevated/30 p-5">
+            <div>
+              <p class="font-semibold text-highlighted">Pengaturan Retensi Log</p>
+              <p class="text-sm text-muted mt-0.5">Tentukan berapa lama log aktivitas disimpan sebelum bisa dihapus secara manual.</p>
             </div>
-          </UFormField>
-        </div>
 
-        <div class="border-t border-default pt-4">
-          <p class="text-sm font-medium text-highlighted mb-2">Hapus Log Lama</p>
-          <p class="text-xs text-muted mb-3">Hapus semua log aktivitas sebelum tanggal tertentu. Tindakan ini permanen dan tidak bisa dibatalkan.</p>
-          <div class="flex flex-wrap items-end gap-3">
-            <UFormField label="Hapus log sebelum">
-              <div class="flex items-center gap-2">
-                <UPopover>
+            <div class="flex flex-wrap items-end gap-3">
+              <UFormField label="Simpan log selama (hari)">
+                <div class="flex items-center gap-2">
+                  <UInput
+                    v-model.number="retentionDays"
+                    type="number"
+                    :min="1"
+                    :max="3650"
+                    class="w-28"
+                  />
                   <UButton
-                    color="neutral"
-                    variant="outline"
-                    icon="i-lucide-calendar"
-                    class="min-w-40 justify-start font-normal"
-                    :class="!purgeDateCal && 'text-muted'"
-                  >
-                    {{ purgeDateCal ? formatDisplay(purgeDateCal) : 'Pilih tanggal' }}
-                  </UButton>
-                  <template #content>
-                    <CalendarPicker v-model="purgeDateCal" class="p-2" />
-                  </template>
-                </UPopover>
+                    label="Simpan"
+                    icon="i-lucide-save"
+                    color="primary"
+                    variant="subtle"
+                    :loading="retentionLoading"
+                    @click="saveRetention"
+                  />
+                </div>
+              </UFormField>
+            </div>
+
+            <div class="border-t border-default pt-4">
+              <p class="text-sm font-medium text-highlighted mb-2">Hapus Log Lama</p>
+              <p class="text-xs text-muted mb-3">Hapus semua log aktivitas sebelum tanggal tertentu. Tindakan ini permanen dan tidak bisa dibatalkan.</p>
+              <div class="flex flex-wrap items-end gap-3">
+                <UFormField label="Hapus log sebelum">
+                  <div class="flex items-center gap-2">
+                    <UPopover>
+                      <UButton
+                        color="neutral"
+                        variant="outline"
+                        icon="i-lucide-calendar"
+                        class="min-w-40 justify-start font-normal"
+                        :class="!purgeDateCal && 'text-muted'"
+                      >
+                        {{ purgeDateCal ? formatDisplay(purgeDateCal) : 'Pilih tanggal' }}
+                      </UButton>
+                      <template #content>
+                        <CalendarPicker v-model="purgeDateCal" class="p-2" />
+                      </template>
+                    </UPopover>
+                    <UButton
+                      v-if="purgeDateCal"
+                      icon="i-lucide-x"
+                      color="neutral"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Hapus tanggal"
+                      @click="purgeDateCal = null"
+                    />
+                  </div>
+                </UFormField>
                 <UButton
-                  v-if="purgeDateCal"
-                  icon="i-lucide-x"
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  @click="purgeDateCal = null"
+                  :label="purgeDate ? `Hapus Log Sebelum ${purgeDateLabel}` : 'Pilih tanggal dulu'"
+                  icon="i-lucide-trash-2"
+                  color="error"
+                  variant="subtle"
+                  :disabled="!purgeDate"
+                  :loading="purgeLoading"
+                  @click="doPurge"
                 />
               </div>
-            </UFormField>
-            <UButton
-              :label="purgeDate ? `Hapus Log Sebelum ${purgeDateLabel}` : 'Pilih tanggal dulu'"
-              icon="i-lucide-trash-2"
-              color="error"
-              variant="subtle"
-              :disabled="!purgeDate"
-              :loading="purgeLoading"
-              @click="doPurge"
-            />
+            </div>
           </div>
-        </div>
-      </div>
+        </template>
+      </UCollapsible>
     </template>
   </UDashboardPanel>
 </template>
+
+<style scoped>
+.terminal-viewport {
+  max-height: 62vh;
+  min-height: 16rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.terminal-row {
+  display: grid;
+  grid-template-columns: 19ch 7ch 14ch minmax(0, 1fr) 18ch;
+  align-items: baseline;
+  column-gap: 1.5rem;
+  width: 100%;
+  padding: 0.3rem 0.9rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  cursor: default;
+  transition: background-color 120ms ease;
+}
+
+.cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-empty {
+  padding: 3.5rem 1rem;
+  text-align: center;
+  font-size: 0.8125rem;
+}
+
+.terminal-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.terminal-viewport::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@media (max-width: 1024px) {
+  .terminal-row {
+    grid-template-columns: 19ch 7ch 14ch minmax(0, 1fr);
+  }
+  .cell--user {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .terminal-row {
+    grid-template-columns: 19ch 7ch minmax(0, 1fr);
+  }
+  .cell--module {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .terminal-row {
+    display: block;
+    padding: 0.5rem 0.9rem;
+  }
+  .terminal-row .cell {
+    display: block;
+  }
+  .cell--time {
+    font-size: 0.75rem;
+  }
+}
+</style>

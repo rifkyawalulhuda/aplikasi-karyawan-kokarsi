@@ -1,46 +1,160 @@
 <script setup lang="ts">
 import type { Space, SpaceCard, SpaceColumn, SpaceEvent } from '~/types/space'
+import { useSpaceSseContext } from '~/composables/useSpaceSSE'
+import { applyCardFilters, useSpaceViewState } from '~/composables/useSpaceViewState'
+import { useFlip } from '~/composables/useFlip'
+import { errorMessage } from './board-meta'
+import { BOARD_DND_KEY, useBoardDnd } from '~/composables/useBoardDnd'
 
-const props = defineProps<{ space: Space }>()
+const props = defineProps<{
+  space: Space
+  memberMap?: Record<number, string>
+}>()
+
 const emit = defineEmits<{
   refresh: []
   cardClick: [card: SpaceCard]
 }>()
 
 const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const spaceId = computed(() => props.space.id)
 
-// Fetch user map untuk resolve assignee names di card
-const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
-  credentials: 'include',
-  lazy: true,
-})
-const memberMap = computed<Record<number, string>>(() =>
-  Object.fromEntries((usersRes.value ?? []).map(u => [u.id, u.name]))
-)
+provide('space-member-map', props.memberMap ?? {})
 
-// SSE real-time
-const { events } = useSpaceSSE(spaceId)
-
-// Local reactive copy of columns + cards
+// ── State kolom lokal (sumber render) ────────────────────────────────────────
 const columns = ref<SpaceColumn[]>([])
 
-watch(() => props.space, (s) => {
-  columns.value = s.columns ? JSON.parse(JSON.stringify(s.columns)) : []
-}, { immediate: true, deep: true })
+watch(() => props.space.columns, (cols) => {
+  // Salin dangkal per kolom/kartu — tanpa JSON round-trip yang mahal.
+  columns.value = (cols ?? []).map(col => ({ ...col, cards: [...(col.cards ?? [])] }))
+}, { immediate: true })
 
-// Handle SSE events
-watch(events, (evts) => {
-  const latest = evts[evts.length - 1]
-  if (!latest) return
-  handleSpaceEvent(latest)
+// ── Filter (URL) ─────────────────────────────────────────────────────────────
+const viewState = useSpaceViewState()
+
+const cardMatches = (card: SpaceCard) => applyCardFilters([card], viewState).length === 1
+
+const totalVisible = computed(() =>
+  columns.value.reduce((sum, col) => sum + (col.cards ?? []).filter(c => cardMatches(c)).length, 0)
+)
+
+/** Kartu tampil bila lolos filter, ATAU sedang di-drag (agar tidak menghilang). */
+function isCardVisible(card: SpaceCard): boolean {
+  if (dnd.draggingCardId.value === card.id || dnd.grabbedCardId.value === card.id) return true
+  return cardMatches(card)
+}
+
+// ── FLIP ─────────────────────────────────────────────────────────────────────
+const boardRef = ref<HTMLElement | null>(null)
+const flip = useFlip()
+
+function boardFlipKeys(): HTMLElement[] {
+  if (!boardRef.value) return []
+  return [...boardRef.value.querySelectorAll<HTMLElement>('[data-flip-key]')]
+}
+
+/** Mutasi layout + animasikan perpindahan (kecuali kartu yang di-drag). */
+function withFlip(mutate: () => void, excludeCardId: number | null = null) {
+  const before = flip.first(boardFlipKeys())
+  mutate()
+  nextTick(() => {
+    const els = boardFlipKeys().filter(el =>
+      el.dataset.flipKey !== `card-${excludeCardId}` && el.dataset.flipKey !== `col-${excludeCardId}`
+    )
+    flip.play(before, els)
+  })
+}
+
+// ── Layout logika untuk engine ───────────────────────────────────────────────
+function getLayout() {
+  return columns.value.map(col => ({ id: col.id, cardIds: (col.cards ?? []).map(c => c.id) }))
+}
+
+function moveCardLocal(intent: { cardId: number, fromColumnId: number, toColumnId: number, position: number }) {
+  const fromCol = columns.value.find(c => c.id === intent.fromColumnId)
+  const toCol = columns.value.find(c => c.id === intent.toColumnId)
+  if (!fromCol || !toCol) return
+  const fromIdx = fromCol.cards?.findIndex(c => c.id === intent.cardId) ?? -1
+  if (fromIdx === -1 || !fromCol.cards) return
+  const [card] = fromCol.cards.splice(fromIdx, 1)
+  if (!card) return
+  if (!toCol.cards) toCol.cards = []
+  const pos = Math.max(0, Math.min(intent.position, toCol.cards.length))
+  toCol.cards.splice(pos, 0, { ...card, columnId: intent.toColumnId, position: pos })
+}
+
+function moveColumnLocal(columnId: number, toIndex: number) {
+  const fromIdx = columns.value.findIndex(c => c.id === columnId)
+  if (fromIdx === -1) return
+  const [col] = columns.value.splice(fromIdx, 1)
+  if (!col) return
+  const pos = Math.max(0, Math.min(toIndex, columns.value.length))
+  columns.value.splice(pos, 0, col)
+}
+
+// ── Engine ───────────────────────────────────────────────────────────────────
+const announceMsg = ref('')
+
+const dnd = useBoardDnd({
+  boardRef,
+  getLayout,
+  moveCard: (intent) => {
+    withFlip(() => moveCardLocal(intent), intent.cardId)
+  },
+  commitCard: (cardId) => {
+    const col = columns.value.find(c => c.cards?.some(c2 => c2.id === cardId))
+    if (!col) return
+    const position = col.cards!.findIndex(c => c.id === cardId)
+    $fetch(`/api/spaces/${spaceId.value}/cards/${cardId}/move`, {
+      method: 'POST',
+      body: { toColumnId: col.id, position },
+      credentials: 'include'
+    }).catch((err: unknown) => {
+      toast.add({ title: 'Gagal memindahkan kartu', description: errorMessage(err), color: 'error' })
+      emit('refresh')
+    })
+  },
+  moveColumn: (columnId, toIndex) => {
+    withFlip(() => moveColumnLocal(columnId, toIndex))
+  },
+  commitColumn: () => {
+    const columnIds = columns.value.map(c => c.id)
+    $fetch(`/api/spaces/${spaceId.value}/columns/reorder`, {
+      method: 'POST',
+      body: { columnIds },
+      credentials: 'include'
+    }).catch((err: unknown) => {
+      toast.add({ title: 'Gagal mengurutkan kolom', description: errorMessage(err), color: 'error' })
+      emit('refresh')
+    })
+  },
+  onCardClick: (cardId) => {
+    const card = columns.value.flatMap(c => c.cards ?? []).find(c => c.id === cardId)
+    if (card) emit('cardClick', card)
+  },
+  announce: (message) => {
+    announceMsg.value = message
+  }
+})
+
+provide(BOARD_DND_KEY, dnd)
+
+// ── SSE ──────────────────────────────────────────────────────────────────────
+const sse = useSpaceSseContext()
+
+watch(() => sse?.events.value ?? [], (list) => {
+  const latest = list[list.length - 1]
+  if (latest) handleSpaceEvent(latest)
 }, { deep: true })
 
 function handleSpaceEvent(event: SpaceEvent) {
   switch (event.type) {
     case 'CARD_CREATED': {
       const col = columns.value.find(c => c.id === event.payload.columnId)
-      if (col) { if (!col.cards) col.cards = []; col.cards.push(event.payload) }
+      if (col && !col.cards?.some(c => c.id === event.payload.id)) {
+        col.cards = [...(col.cards ?? []), event.payload]
+      }
       break
     }
     case 'CARD_UPDATED': {
@@ -52,7 +166,9 @@ function handleSpaceEvent(event: SpaceEvent) {
     }
     case 'CARD_DELETED': {
       for (const col of columns.value) {
-        if (col.cards) col.cards = col.cards.filter(c => c.id !== event.payload.cardId)
+        if (col.cards?.some(c => c.id === event.payload.cardId)) {
+          col.cards = col.cards.filter(c => c.id !== event.payload.cardId)
+        }
       }
       break
     }
@@ -60,367 +176,229 @@ function handleSpaceEvent(event: SpaceEvent) {
       const { cardId, fromColumnId, toColumnId, position } = event.payload
       const fromCol = columns.value.find(c => c.id === fromColumnId)
       const toCol = columns.value.find(c => c.id === toColumnId)
-      if (fromCol && toCol) {
-        const cardIdx = fromCol.cards?.findIndex(c => c.id === cardId) ?? -1
-        if (cardIdx !== -1 && fromCol.cards) {
+      if (!fromCol || !toCol || fromCol.cards?.every(c => c.id !== cardId)) break
+      if (fromCol.cards && toCol) {
+        const cardIdx = fromCol.cards.findIndex(c => c.id === cardId)
+        if (cardIdx !== -1) {
           const [card] = fromCol.cards.splice(cardIdx, 1)
           if (!card) break
           if (!toCol.cards) toCol.cards = []
-          toCol.cards.splice(position, 0, { ...card, columnId: toColumnId })
+          toCol.cards.splice(Math.min(position, toCol.cards.length), 0, { ...card, columnId: toColumnId })
         }
       }
       break
     }
-    case 'COLUMN_CREATED': columns.value.push({ ...event.payload, cards: [] }); break
+    case 'COLUMN_CREATED':
+      if (!columns.value.some(c => c.id === event.payload.id)) {
+        columns.value.push({ ...event.payload, cards: [] })
+      }
+      break
     case 'COLUMN_UPDATED': {
       const idx = columns.value.findIndex(c => c.id === event.payload.id)
-      if (idx !== -1) columns.value[idx] = { ...columns.value[idx], ...event.payload }
+      if (idx !== -1) columns.value[idx] = { ...columns.value[idx], ...event.payload, cards: columns.value[idx]!.cards }
       break
     }
-    case 'COLUMN_DELETED': columns.value = columns.value.filter(c => c.id !== event.payload.columnId); break
+    case 'COLUMN_DELETED':
+      columns.value = columns.value.filter(c => c.id !== event.payload.columnId)
+      break
+    case 'COLUMNS_REORDERED': {
+      const order: number[] = event.payload.columnIds ?? []
+      columns.value = order
+        .map(id => columns.value.find(c => c.id === id))
+        .filter((c): c is SpaceColumn => !!c)
+      break
+    }
     default: break
   }
 }
 
-// ── Drag & Drop ──────────────────────────────────────────────────────────────
-// Store drag state in module-level vars (not reactive) to avoid Vue overhead during drag
-let dragCardId = -1
-let dragFromColId = -1
-let dragFromIdx = -1
+// ── CRUD kolom ───────────────────────────────────────────────────────────────
+const COLUMN_COLORS = ['gray', 'blue', 'sky', 'teal', 'green', 'yellow', 'orange', 'red', 'pink', 'purple', 'indigo', 'slate']
 
-// Reactive only for visual feedback
-const dragOverColId = ref<number | null>(null)
-
-const COLUMN_COLORS: Record<string, string> = {
-  gray: 'bg-gray-400', blue: 'bg-blue-500', sky: 'bg-sky-500', teal: 'bg-teal-500',
-  green: 'bg-green-500', yellow: 'bg-amber-400', orange: 'bg-orange-500',
-  red: 'bg-red-500', pink: 'bg-pink-500', purple: 'bg-purple-500', indigo: 'bg-indigo-500',
-  slate: 'bg-slate-500',
-}
-
-function onDragStart(e: DragEvent, colId: number, cardIdx: number, cardId: number) {
-  dragCardId = cardId
-  dragFromColId = colId
-  dragFromIdx = cardIdx
-  // MUST call setData for HTML5 DnD drop event to fire
-  e.dataTransfer!.setData('application/x-card-id', String(cardId))
-  e.dataTransfer!.effectAllowed = 'move'
-}
-
-function onDragEnd() {
-  dragCardId = -1
-  dragFromColId = -1
-  dragFromIdx = -1
-  dragOverColId.value = null
-}
-
-function onColumnDragOver(e: DragEvent, colId: number) {
-  e.preventDefault()
-  e.dataTransfer!.dropEffect = 'move'
-  dragOverColId.value = colId
-}
-
-function onColumnDragLeave(e: DragEvent, colId: number) {
-  // Only clear if the mouse is actually leaving the column element
-  const related = e.relatedTarget as HTMLElement | null
-  if (!related?.closest(`[data-col-id="${colId}"]`)) {
-    if (dragOverColId.value === colId) dragOverColId.value = null
-  }
-}
-
-async function onColumnDrop(e: DragEvent, toColId: number) {
-  e.preventDefault()
-  dragOverColId.value = null
-
-  if (dragCardId === -1) return
-
-  const cardId = dragCardId
-  const fromColId = dragFromColId
-  const fromIdx = dragFromIdx
-
-  // Calculate drop position based on mouse Y within the column cards
-  const col = columns.value.find(c => c.id === toColId)
-  const toIdx = col?.cards?.length ?? 0
-
-  // No-op: same position
-  if (fromColId === toColId && fromIdx === toIdx) { onDragEnd(); return }
-
-  // Optimistic local update
-  const fromCol = columns.value.find(c => c.id === fromColId)
-  const toCol = columns.value.find(c => c.id === toColId)
-  if (fromCol && toCol) {
-    const cardIdx = fromCol.cards?.findIndex(c => c.id === cardId) ?? -1
-      if (cardIdx !== -1 && fromCol.cards) {
-        const [card] = fromCol.cards.splice(cardIdx, 1)
-        if (!card) return
-        if (!toCol.cards) toCol.cards = []
-        const adjustedIdx = fromColId === toColId && toIdx > cardIdx ? toIdx - 1 : toIdx
-        toCol.cards.splice(adjustedIdx, 0, { ...card, columnId: toColId })
-      }
-  }
-
-  onDragEnd()
-
-  try {
-    await $fetch(`/api/spaces/${props.space.id}/cards/${cardId}/move`, {
-      method: 'POST',
-      body: { toColumnId: toColId, position: toIdx },
-      credentials: 'include',
-    })
-  } catch (err: any) {
-    toast.add({ title: 'Gagal memindahkan card', description: err?.data?.message ?? 'Error', color: 'error' })
-    emit('refresh')
-  }
-}
-
-// ── Add column ───────────────────────────────────────────────────────────────
 const addingColumn = ref(false)
 const newColName = ref('')
 const savingCol = ref(false)
 
 async function addColumn() {
-  if (!newColName.value.trim()) { addingColumn.value = false; return }
+  const name = newColName.value.trim()
+  if (!name) {
+    addingColumn.value = false
+    return
+  }
   savingCol.value = true
   try {
-    await $fetch(`/api/spaces/${props.space.id}/columns`, {
-      method: 'POST',
-      body: { name: newColName.value.trim() },
-      credentials: 'include',
+    await $fetch(`/api/spaces/${spaceId.value}/columns`, {
+      method: 'POST', body: { name }, credentials: 'include'
     })
     newColName.value = ''
     addingColumn.value = false
-  } catch (e: any) {
-    toast.add({ title: 'Gagal tambah kolom', description: e?.data?.message ?? 'Error', color: 'error' })
+    emit('refresh')
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal menambah kolom', description: errorMessage(err), color: 'error' })
   } finally {
     savingCol.value = false
   }
 }
 
-// ── Column management ────────────────────────────────────────────────────────
-const { confirmDeleteToast } = useConfirmDeleteToast()
+async function renameColumn(colId: number, name: string) {
+  try {
+    await $fetch(`/api/spaces/${spaceId.value}/columns/${colId}`, {
+      method: 'PUT', body: { name }, credentials: 'include'
+    })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal mengganti nama kolom', description: errorMessage(err), color: 'error' })
+  }
+}
 
-async function renameColumn(colId: number, newName: string) {
-  await $fetch(`/api/spaces/${props.space.id}/columns/${colId}`, {
-    method: 'PUT', body: { name: newName }, credentials: 'include',
-  })
-  emit('refresh')
+async function changeColumnColor(colId: number, color: string) {
+  try {
+    await $fetch(`/api/spaces/${spaceId.value}/columns/${colId}`, {
+      method: 'PUT', body: { color }, credentials: 'include'
+    })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal mengubah warna kolom', description: errorMessage(err), color: 'error' })
+  }
 }
 
 function deleteColumn(col: SpaceColumn) {
   confirmDeleteToast({
     title: 'Hapus Kolom',
-    description: `Kolom "${col.name}" akan dihapus. Pastikan semua card sudah dipindahkan.`,
+    description: `Kolom "${col.name}" akan dihapus. Pastikan semua kartu sudah dipindahkan.`,
     onConfirm: async () => {
-      await $fetch(`/api/spaces/${props.space.id}/columns/${col.id}`, {
-        method: 'DELETE', credentials: 'include',
+      await $fetch(`/api/spaces/${spaceId.value}/columns/${col.id}`, {
+        method: 'DELETE', credentials: 'include'
       })
-      emit('refresh')
-    },
+      columns.value = columns.value.filter(c => c.id !== col.id)
+    }
   })
 }
 
-// ── Add card inline ──────────────────────────────────────────────────────────
-const addingCardColId = ref<number | null>(null)
-const newCardTitle = ref('')
-const savingCard = ref(false)
-
-function startAddCard(colId: number) {
-  addingCardColId.value = colId
-  newCardTitle.value = ''
-}
-
-async function saveCard() {
-  if (!newCardTitle.value.trim() || !addingCardColId.value) {
-    addingCardColId.value = null; return
-  }
-  savingCard.value = true
+// ── Tambah kartu (dipanggil KanbanColumn) ────────────────────────────────────
+async function addCard(colId: number, title: string) {
   try {
-    await $fetch(`/api/spaces/${props.space.id}/columns/${addingCardColId.value}/cards`, {
-      method: 'POST', body: { title: newCardTitle.value.trim() }, credentials: 'include',
+    await $fetch(`/api/spaces/${spaceId.value}/columns/${colId}/cards`, {
+      method: 'POST', body: { title }, credentials: 'include'
     })
-    newCardTitle.value = ''
-    addingCardColId.value = null
-    emit('refresh')
-  } catch (e: any) {
-    toast.add({ title: 'Gagal tambah card', description: e?.data?.message ?? 'Error', color: 'error' })
-  } finally {
-    savingCard.value = false
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal menambah kartu', description: errorMessage(err), color: 'error' })
   }
 }
 
-// Editing column name inline
-const editingColId = ref<number | null>(null)
-const editColName = ref('')
-
-function startRenameCol(col: SpaceColumn) {
-  editingColId.value = col.id
-  editColName.value = col.name
-}
-
-async function saveColName() {
-  if (!editColName.value.trim() || editingColId.value === null) { editingColId.value = null; return }
-  await renameColumn(editingColId.value, editColName.value.trim())
-  editingColId.value = null
-}
-
-// ── Click vs drag detection ───────────────────────────────────────────────────
-// Chrome suppresses click events on draggable="true" elements.
-// We use mousedown/mouseup + movement threshold to detect intentional clicks.
-const CLICK_THRESHOLD = 5 // pixels
-let mouseDownX = 0
-let mouseDownY = 0
-
-function onCardMouseDown(e: MouseEvent) {
-  mouseDownX = e.clientX
-  mouseDownY = e.clientY
-}
-
-function onCardMouseUp(e: MouseEvent, card: SpaceCard) {
-  const dx = Math.abs(e.clientX - mouseDownX)
-  const dy = Math.abs(e.clientY - mouseDownY)
-  if (dx < CLICK_THRESHOLD && dy < CLICK_THRESHOLD) {
-    emit('cardClick', card)
-  }
-}
+const hasColumns = computed(() => columns.value.length > 0)
 </script>
 
 <template>
-  <div class="flex h-full gap-4 overflow-x-auto p-4 pb-6">
-    <!-- Each column is self-contained with its own drag target -->
-    <div
-      v-for="col in columns"
-      :key="col.id"
-      :data-col-id="col.id"
-      class="flex w-72 shrink-0 flex-col rounded-xl border transition-colors duration-150"
-      :class="dragOverColId === col.id
-        ? 'border-primary bg-primary/5'
-        : 'border-default bg-elevated/30'"
-      @dragover="onColumnDragOver($event, col.id)"
-      @dragleave="onColumnDragLeave($event, col.id)"
-      @drop="onColumnDrop($event, col.id)"
-    >
-      <!-- Column Header -->
-      <div class="flex items-center gap-2 px-3 pt-3 pb-2">
-        <div class="size-2 shrink-0 rounded-full" :class="COLUMN_COLORS[col.color] ?? 'bg-gray-400'" />
+  <div class="flex h-full flex-col overflow-hidden">
+    <!-- Toolbar filter (Hanya board) -->
+    <SpacesSpaceBoardToolbar :space="space" :member-names="memberMap" :visible-count="totalVisible" />
 
-        <!-- Editable column name -->
-        <div class="flex-1 min-w-0">
-          <input
-            v-if="editingColId === col.id"
-            v-model="editColName"
-            class="w-full rounded bg-default px-1.5 py-0.5 text-sm font-semibold text-highlighted outline-none ring-1 ring-primary"
-            autofocus
-            @blur="saveColName"
-            @keydown.enter="saveColName"
-            @keydown.escape="editingColId = null"
-          />
-          <button
-            v-else
-            type="button"
-            class="truncate text-sm font-semibold text-highlighted hover:text-primary"
-            @dblclick="startRenameCol(col)"
-          >{{ col.name }}</button>
-        </div>
-
-        <span class="text-xs text-muted shrink-0">{{ col.cards?.length ?? 0 }}</span>
-
-        <UDropdownMenu
-          :items="[[
-            { label: 'Tambah Card', icon: 'i-lucide-plus', onSelect: () => startAddCard(col.id) },
-            { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => startRenameCol(col) },
-            { label: 'Hapus Kolom', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => deleteColumn(col) },
-          ]]"
-        >
-          <UButton icon="i-lucide-more-horizontal" variant="ghost" color="neutral" size="xs" />
-        </UDropdownMenu>
+    <!-- Empty: belum ada kolom -->
+    <div v-if="!hasColumns" class="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+      <div class="rounded-full bg-elevated p-4">
+        <UIcon name="i-lucide-columns-2" class="size-10 text-dimmed" />
       </div>
+      <div>
+        <p class="font-semibold text-highlighted">
+          Board masih kosong
+        </p>
+        <p class="mt-1 text-sm text-muted">
+          Buat kolom pertama untuk mulai mengatur kartu
+        </p>
+      </div>
+      <UButton
+        label="Tambah Kolom"
+        icon="i-lucide-plus"
+        color="primary"
+        size="sm"
+        @click="addingColumn = true"
+      />
+    </div>
 
-      <!-- Cards list — this is the actual drop target area -->
-      <div class="flex-1 space-y-2 overflow-y-auto px-3 pb-2" style="max-height: calc(100vh - 280px)">
-        <!-- Empty column hint -->
-        <div
-          v-if="!col.cards?.length && dragOverColId === col.id"
-          class="flex h-16 items-center justify-center rounded-lg border-2 border-dashed border-primary/40 text-xs text-primary/60"
-        >
-          Lepaskan di sini
-        </div>
+    <!-- Empty hasil filter -->
+    <div v-else-if="totalVisible === 0" class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+      <UIcon name="i-lucide-search-x" class="size-10 text-dimmed" />
+      <div>
+        <p class="font-medium text-highlighted">
+          Tidak ada kartu yang cocok
+        </p>
+        <p class="mt-1 text-sm text-muted">
+          Coba ubah atau reset filter
+        </p>
+      </div>
+      <UButton
+        label="Reset Filter"
+        color="neutral"
+        variant="outline"
+        size="sm"
+        @click="viewState.clearFilters()"
+      />
+    </div>
 
-        <!-- Draggable cards -->
-        <div
-          v-for="(card, idx) in (col.cards ?? [])"
-          :key="card.id"
-          draggable="true"
-          class="cursor-grab active:cursor-grabbing select-none"
-          :class="dragCardId === card.id ? 'opacity-40 ring-2 ring-primary/30 rounded-lg' : ''"
-          @dragstart="onDragStart($event, col.id, idx, card.id)"
-          @dragend="onDragEnd"
-          @mousedown="onCardMouseDown"
-          @mouseup="onCardMouseUp($event, card)"
-        >
+    <!-- Board -->
+    <div v-else ref="boardRef" class="flex flex-1 gap-4 overflow-x-auto p-4 pb-6">
+      <SpacesKanbanColumn
+        v-for="col in columns"
+        :key="col.id"
+        :column="col"
+        :colors="COLUMN_COLORS"
+        @add-card="(title: string) => addCard(col.id, title)"
+        @rename="(name: string) => renameColumn(col.id, name)"
+        @color-change="(color: string) => changeColumnColor(col.id, color)"
+        @delete="deleteColumn(col)"
+      >
+        <template v-for="card in col.cards ?? []" :key="card.id">
           <SpacesKanbanCard
+            v-if="isCardVisible(card)"
             :card="card"
-            :space-id="space.id"
             :member-map="memberMap"
+            @open="emit('cardClick', $event)"
           />
-        </div>
+        </template>
+      </SpacesKanbanColumn>
 
-        <!-- Inline add card form -->
-        <div v-if="addingCardColId === col.id" class="rounded-lg border border-primary/40 bg-default p-2.5">
-          <UTextarea
-            v-model="newCardTitle"
-            :rows="2"
-            class="w-full text-sm"
-            placeholder="Judul card..."
+      <!-- Tambah kolom -->
+      <div class="w-72 shrink-0">
+        <div v-if="addingColumn" class="rounded-xl border border-primary/40 bg-elevated/40 p-3" data-no-drag>
+          <UInput
+            v-model="newColName"
+            class="w-full"
+            placeholder="Nama kolom…"
             autofocus
-            @keydown.enter.exact.prevent="saveCard"
-            @keydown.escape="addingCardColId = null; newCardTitle = ''"
+            @keydown.enter="addColumn"
+            @keydown.escape="addingColumn = false; newColName = ''"
           />
           <div class="mt-2 flex gap-1.5">
-            <UButton label="Tambah" size="xs" color="primary" :loading="savingCard" @click="saveCard" />
-            <UButton label="Batal" size="xs" color="neutral" variant="ghost" @click="addingCardColId = null; newCardTitle = ''" />
+            <UButton
+              label="Tambah"
+              size="xs"
+              color="primary"
+              :loading="savingCol"
+              @click="addColumn"
+            />
+            <UButton
+              label="Batal"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              @click="addingColumn = false; newColName = ''"
+            />
           </div>
         </div>
-      </div>
-
-      <!-- Add card button -->
-      <div class="px-3 pb-3">
         <button
-          v-if="addingCardColId !== col.id"
+          v-else
           type="button"
-          class="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted transition-colors hover:bg-elevated hover:text-highlighted"
-          @click="startAddCard(col.id)"
+          class="flex w-full items-center gap-2 rounded-xl border border-dashed border-default px-4 py-3 text-sm text-muted transition-colors hover:border-primary/40 hover:bg-elevated/40 hover:text-highlighted"
+          @click="addingColumn = true"
         >
           <UIcon name="i-lucide-plus" class="size-4" />
-          Tambah card
+          Tambah Kolom
         </button>
       </div>
     </div>
 
-    <!-- Add column -->
-    <div class="w-72 shrink-0">
-      <div v-if="addingColumn" class="rounded-xl border border-primary/40 bg-elevated/30 p-3">
-        <UInput
-          v-model="newColName"
-          class="w-full"
-          placeholder="Nama kolom..."
-          autofocus
-          @keydown.enter="addColumn"
-          @keydown.escape="addingColumn = false; newColName = ''"
-        />
-        <div class="mt-2 flex gap-1.5">
-          <UButton label="Tambah" size="xs" color="primary" :loading="savingCol" @click="addColumn" />
-          <UButton label="Batal" size="xs" color="neutral" variant="ghost" @click="addingColumn = false; newColName = ''" />
-        </div>
-      </div>
-      <button
-        v-else
-        type="button"
-        class="flex w-full items-center gap-2 rounded-xl border border-dashed border-default px-4 py-3 text-sm text-muted transition-colors hover:border-primary/40 hover:bg-elevated/30 hover:text-highlighted"
-        @click="addingColumn = true"
-      >
-        <UIcon name="i-lucide-plus" class="size-4" />
-        Tambah Kolom
-      </button>
-    </div>
+    <!-- Live region untuk mode keyboard -->
+    <p class="sr-only" role="status" aria-live="polite">
+      {{ announceMsg }}
+    </p>
   </div>
 </template>

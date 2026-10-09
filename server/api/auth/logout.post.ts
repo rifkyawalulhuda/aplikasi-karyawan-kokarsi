@@ -1,14 +1,23 @@
-import { deleteCookie, defineEventHandler, getCookie } from 'h3'
+import { defineEventHandler, getCookie } from 'h3'
 
 export default defineEventHandler(async (event) => {
-  const token = getCookie(event, 'auth_token')
-  if (token) {
-    await $fetch(`${BACKEND}/auth/logout`, {
+  const refresh = getCookie(event, REFRESH_COOKIE)
+  if (refresh) {
+    // Cabut seluruh sesi via refresh token (bekerja walau access token expired).
+    await $fetch(`${BACKEND}/auth/revoke`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      body: { refreshToken: refresh }
     }).catch(() => undefined)
+  } else {
+    // Fallback sesi lama yang belum punya refresh token.
+    const token = getCookie(event, ACCESS_COOKIE)
+    if (token) {
+      await $fetch(`${BACKEND}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => undefined)
+    }
   }
-  deleteCookie(event, 'auth_token', { path: '/' })
-  deleteCookie(event, 'auth_admin', { path: '/' })
+  clearAuthCookies(event)
   return { success: true }
 })

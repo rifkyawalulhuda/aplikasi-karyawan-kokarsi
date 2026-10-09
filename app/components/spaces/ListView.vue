@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Space, SpaceCard, SpaceColumn } from '~/types/space'
+import type { Space, SpaceCard } from '~/types/space'
 
 const props = defineProps<{
   space: Space
@@ -30,8 +30,8 @@ watch(() => props.space.columns, (cols) => {
 }, { immediate: true })
 
 // ── All cards flat ────────────────────────────────────────────────────────────
-const allCards = computed<(SpaceCard & { columnName: string; columnColor: string })[]>(() => {
-  const result: (SpaceCard & { columnName: string; columnColor: string })[] = []
+const allCards = computed<(SpaceCard & { columnName: string, columnColor: string })[]>(() => {
+  const result: (SpaceCard & { columnName: string, columnColor: string })[] = []
   for (const col of props.space.columns ?? []) {
     for (const card of col.cards ?? []) {
       result.push({ ...card, columnName: col.name, columnColor: col.color })
@@ -58,16 +58,26 @@ const filteredCards = computed(() => {
   }
 
   // Sort
+  const PRIORITY_ORDER: Record<string, number> = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 }
   cards = [...cards].sort((a, b) => {
-    let va: any, vb: any
-    if (sortKey.value === 'title') { va = a.title; vb = b.title }
-    else if (sortKey.value === 'priority') {
-      const order = { URGENT: 0, HIGH: 1, MEDIUM: 2, LOW: 3, NONE: 4 }
-      va = order[a.priority]; vb = order[b.priority]
+    let va: string | number = ''
+    let vb: string | number = ''
+    if (sortKey.value === 'title') {
+      va = a.title
+      vb = b.title
+    } else if (sortKey.value === 'priority') {
+      va = PRIORITY_ORDER[a.priority] ?? 9
+      vb = PRIORITY_ORDER[b.priority] ?? 9
+    } else if (sortKey.value === 'dueDate') {
+      va = a.dueDate ?? '9999'
+      vb = b.dueDate ?? '9999'
+    } else if (sortKey.value === 'createdAt') {
+      va = a.createdAt
+      vb = b.createdAt
+    } else {
+      va = a.updatedAt
+      vb = b.updatedAt
     }
-    else if (sortKey.value === 'dueDate') { va = a.dueDate ?? '9999'; vb = b.dueDate ?? '9999' }
-    else if (sortKey.value === 'createdAt') { va = a.createdAt; vb = b.createdAt }
-    else { va = a.updatedAt; vb = b.updatedAt }
 
     const cmp = va < vb ? -1 : va > vb ? 1 : 0
     return sortDir.value === 'asc' ? cmp : -cmp
@@ -81,48 +91,16 @@ const groupedCards = computed(() => {
   const cols = props.space.columns ?? []
   return cols.map(col => ({
     col,
-    cards: filteredCards.value.filter(c => c.columnId === col.id),
+    cards: filteredCards.value.filter(c => c.columnId === col.id)
   }))
 })
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const PRIORITY_CONFIG: Record<string, { label: string; pillClass: string }> = {
-  NONE: { label: '—', pillClass: 'text-muted' },
-  LOW: { label: 'Low', pillClass: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
-  MEDIUM: { label: 'Medium', pillClass: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' },
-  HIGH: { label: 'High', pillClass: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' },
-  URGENT: { label: 'Urgent', pillClass: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
-}
-
 const COLUMN_COLOR_MAP: Record<string, string> = {
   gray: 'bg-gray-400', blue: 'bg-blue-500', sky: 'bg-sky-500', teal: 'bg-teal-500',
   green: 'bg-green-500', yellow: 'bg-amber-400', orange: 'bg-orange-500',
   red: 'bg-red-500', pink: 'bg-pink-500', purple: 'bg-purple-500', indigo: 'bg-indigo-500',
-  slate: 'bg-slate-500',
-}
-
-function assigneeName(id: number): string {
-  const name = props.memberMap?.[id]
-  if (!name) return `U${id}`
-  return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
-}
-
-const AVATAR_COLORS = [
-  'bg-blue-100 text-blue-700', 'bg-emerald-100 text-emerald-700',
-  'bg-violet-100 text-violet-700', 'bg-orange-100 text-orange-700',
-  'bg-pink-100 text-pink-700', 'bg-teal-100 text-teal-700',
-]
-
-function assigneeColor(id: number): string {
-  return AVATAR_COLORS[id % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!
-}
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
-}
-
-function isOverdue(card: SpaceCard) {
-  return card.dueDate ? new Date(card.dueDate) < new Date() : false
+  slate: 'bg-slate-500'
 }
 
 function toggleSort(key: SortKey) {
@@ -144,7 +122,7 @@ const sortOptions = [
   { label: 'Prioritas', value: 'priority' },
   { label: 'Due Date', value: 'dueDate' },
   { label: 'Dibuat', value: 'createdAt' },
-  { label: 'Diperbarui', value: 'updatedAt' },
+  { label: 'Diperbarui', value: 'updatedAt' }
 ]
 
 const priorityOptions = [
@@ -152,7 +130,7 @@ const priorityOptions = [
   { label: 'High', value: 'HIGH' },
   { label: 'Medium', value: 'MEDIUM' },
   { label: 'Low', value: 'LOW' },
-  { label: 'None', value: 'NONE' },
+  { label: 'None', value: 'NONE' }
 ]
 
 const columnOptions = computed(() =>
@@ -164,8 +142,8 @@ const memberOptions = computed(() =>
 )
 
 const hasFilters = computed(() =>
-  filterPriority.value.length > 0 || filterAssignee.value.length > 0 ||
-  filterColumn.value.length > 0 || filterOverdueOnly.value
+  filterPriority.value.length > 0 || filterAssignee.value.length > 0
+  || filterColumn.value.length > 0 || filterOverdueOnly.value
 )
 
 function clearFilters() {
@@ -253,7 +231,7 @@ function clearFilters() {
 
       <!-- Overdue toggle -->
       <label class="flex cursor-pointer items-center gap-1.5 text-xs text-muted hover:text-highlighted">
-        <input v-model="filterOverdueOnly" type="checkbox" class="rounded" />
+        <input v-model="filterOverdueOnly" type="checkbox" class="rounded">
         Overdue
       </label>
 
@@ -271,18 +249,18 @@ function clearFilters() {
       <span class="ml-auto text-xs text-muted">{{ filteredCards.length }} card</span>
     </div>
 
-    <!-- Table header -->
-    <div class="grid grid-cols-[1fr_120px_100px_130px_120px_60px] gap-2 border-b border-default bg-elevated/30 px-4 py-2 text-xs font-medium text-muted">
-      <button class="text-left flex items-center gap-1" @click="toggleSort('title')">
+    <!-- Table header (desktop) -->
+    <div class="hidden border-b border-default bg-elevated/30 px-4 py-2 text-xs font-medium text-muted md:grid md:grid-cols-[1fr_130px_100px_120px_120px_70px] md:gap-2">
+      <button class="flex items-center gap-1 text-left" @click="toggleSort('title')">
         Judul
         <UIcon v-if="sortKey === 'title'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="size-3" />
       </button>
       <span>Status</span>
-      <button class="text-left flex items-center gap-1" @click="toggleSort('priority')">
+      <button class="flex items-center gap-1 text-left" @click="toggleSort('priority')">
         Prioritas
         <UIcon v-if="sortKey === 'priority'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="size-3" />
       </button>
-      <button class="text-left flex items-center gap-1" @click="toggleSort('dueDate')">
+      <button class="flex items-center gap-1 text-left" @click="toggleSort('dueDate')">
         Due Date
         <UIcon v-if="sortKey === 'dueDate'" :name="sortDir === 'asc' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="size-3" />
       </button>
@@ -292,7 +270,6 @@ function clearFilters() {
 
     <!-- Table body (scrollable) -->
     <div class="flex-1 overflow-y-auto">
-
       <!-- GROUPED MODE -->
       <template v-if="groupMode === 'grouped'">
         <div v-for="{ col, cards } in groupedCards" :key="col.id">
@@ -341,7 +318,6 @@ function clearFilters() {
           Tidak ada card yang sesuai filter
         </div>
       </template>
-
     </div>
   </div>
 </template>

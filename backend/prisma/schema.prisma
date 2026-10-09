@@ -23,8 +23,8 @@ model TaxStatus {
 }
 
 model ContractType {
-  id        Int        @id @default(autoincrement())
-  name      String     @unique @db.VarChar(255)
+  id        Int                @id @default(autoincrement())
+  name      String             @unique @db.VarChar(255)
   contracts Contract[]
   templates ContractTemplate[]
 
@@ -39,6 +39,15 @@ model Department {
   @@map("departments")
 }
 
+model Bank {
+  id        Int        @id @default(autoincrement())
+  name      String     @db.VarChar(255)
+  branch    String?    @db.VarChar(255)
+  employees Employee[]
+
+  @@map("banks")
+}
+
 model AppSetting {
   id        Int      @id @default(autoincrement())
   key       String   @unique @db.VarChar(100)
@@ -50,16 +59,16 @@ model AppSetting {
 }
 
 model UserAccount {
-  id        Int       @id @default(autoincrement())
-  name      String    @db.VarChar(255)
-  nik       String    @unique @db.VarChar(100)
-  email     String    @unique @db.VarChar(255)
-  role      AdminRole @default(PENGELOLA_KOPERASI)
-  username  String    @unique @db.VarChar(100)
-  password  String    @db.VarChar(255)
-  photoUrl  String?   @db.VarChar(500)
-  isActive  Boolean   @default(true)
-  tokenVersion Int     @default(0)
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(255)
+  nik          String    @unique @db.VarChar(100)
+  email        String    @unique @db.VarChar(255)
+  role         AdminRole @default(PENGELOLA_KOPERASI)
+  username     String    @unique @db.VarChar(100)
+  password     String    @db.VarChar(255)
+  photoUrl     String?   @db.VarChar(500)
+  isActive     Boolean   @default(true)
+  tokenVersion Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -70,9 +79,9 @@ model UserAccount {
 }
 
 model JobRole {
-  id        Int        @id @default(autoincrement())
-  name      String     @db.VarChar(255)
-  employees Employee[]
+  id                Int                @id @default(autoincrement())
+  name              String             @db.VarChar(255)
+  employees         Employee[]
   contractTemplates ContractTemplate[]
 
   @@map("job_roles")
@@ -107,19 +116,23 @@ model Employee {
   phoneNumber      String?          @db.VarChar(50)
   email            String           @unique @db.VarChar(255)
   fotoKaryawan     String?
+  bankId           Int?
+  bankAccountNumber String?         @db.VarChar(50)
 
   taxStatus    TaxStatus    @relation(fields: [taxStatusId], references: [id])
   department   Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   workLocation WorkLocation @relation(fields: [workLocationId], references: [id])
   jobRole      JobRole      @relation(fields: [jobRoleId], references: [id])
   jobLevel     JobLevel     @relation(fields: [jobLevelId], references: [id])
+  bank         Bank?       @relation(fields: [bankId], references: [id], onDelete: SetNull)
 
-  contracts             Contract[]
-  statusHistory         EmployeeStatusHistory[]
-  offboarding           EmployeeOffboarding?
-  masterAdmin           MasterAdmin?
-  warningLetters        WarningLetter[]
-  employeeDocuments     EmployeeDocument[]
+  contracts         Contract[]
+  statusHistory     EmployeeStatusHistory[]
+  offboarding       EmployeeOffboarding?
+  masterAdmin       MasterAdmin?
+  warningLetters    WarningLetter[]
+  employeeDocuments EmployeeDocument[]
+  orgPositions      OrgPosition[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -148,42 +161,46 @@ model WarningLetter {
 }
 
 model MasterAdmin {
-  id         Int       @id @default(autoincrement())
-  employeeNo String    @unique @db.VarChar(100)
-  fullName   String    @db.VarChar(255)
-  password   String    @db.VarChar(255)
-  role       AdminRole @default(ADMIN)
-  photoUrl   String?   @db.VarChar(500)
-  isActive   Boolean   @default(true)
-  tokenVersion Int     @default(0)
-  employee   Employee  @relation(fields: [employeeNo], references: [employeeNo])
+  id           Int       @id @default(autoincrement())
+  employeeNo   String    @unique @db.VarChar(100)
+  fullName     String    @db.VarChar(255)
+  password     String    @db.VarChar(255)
+  role         AdminRole @default(ADMIN)
+  photoUrl     String?   @db.VarChar(500)
+  isActive     Boolean   @default(true)
+  tokenVersion Int       @default(0)
+  employee     Employee  @relation(fields: [employeeNo], references: [employeeNo])
 
   @@map("master_admin")
 }
 
 model Contract {
-  id             Int            @id @default(autoincrement())
-  employeeId     Int
-  contractNo     String         @unique @db.VarChar(100)
-  startDate      DateTime       @db.Date
-  endDate        DateTime       @db.Date
-  contractTypeId Int?
-  templateId     Int?
-  status         ContractStatus @default(AKTIF)
-  signedDate     DateTime?      @db.Date
-  baseCompensation Int?
-  templateData   Json?
-  documentUrl    String?
-  generatedPdfUrl String?
-  generatedAt    DateTime?
-  parentContractId Int?
+  id                   Int            @id @default(autoincrement())
+  employeeId           Int
+  contractNo           String         @unique @db.VarChar(100)
+  startDate            DateTime       @db.Date
+  endDate              DateTime       @db.Date
+  contractTypeId       Int?
+  templateId           Int?
+  status               ContractStatus @default(AKTIF)
+  signedDate           DateTime?      @db.Date
+  baseCompensation     Int?
+  templateData         Json?
+  templateVersionId    Int?
+  templateSnapshot     Json?
+  resolvedTemplateData Json?
+  documentUrl          String?
+  generatedPdfUrl      String?
+  generatedAt          DateTime?
+  parentContractId     Int?
 
-  employee       Employee           @relation(fields: [employeeId], references: [id])
-  contractType   ContractType?      @relation(fields: [contractTypeId], references: [id])
-  template       ContractTemplate?  @relation(fields: [templateId], references: [id])
-  parentContract Contract?          @relation("ContractChain", fields: [parentContractId], references: [id])
-  childContracts Contract[]         @relation("ContractChain")
-  documents      ContractDocument[]
+  employee        Employee                 @relation(fields: [employeeId], references: [id])
+  contractType    ContractType?            @relation(fields: [contractTypeId], references: [id])
+  template        ContractTemplate?        @relation(fields: [templateId], references: [id])
+  templateVersion ContractTemplateVersion? @relation(fields: [templateVersionId], references: [id])
+  parentContract  Contract?                @relation("ContractChain", fields: [parentContractId], references: [id])
+  childContracts  Contract[]               @relation("ContractChain")
+  documents       ContractDocument[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -192,28 +209,84 @@ model Contract {
 }
 
 model ContractTemplate {
-  id             Int            @id @default(autoincrement())
-  code           String         @unique @db.VarChar(100)
-  name           String         @db.VarChar(255)
-  family         ContractFamily
-  contractTypeId Int?
-  jobRoleId      Int?
-  description    String?
-  templateKey    String         @db.VarChar(100)
+  id               Int            @id @default(autoincrement())
+  code             String         @unique @db.VarChar(100)
+  name             String         @db.VarChar(255)
+  family           ContractFamily
+  contractTypeId   Int?
+  jobRoleId        Int?
+  description      String?
+  templateKey      String         @db.VarChar(100)
   requiredFields   Json?
   contentOverrides Json?
   isActive         Boolean        @default(true)
-  version        Int            @default(1)
-  notes          String?
+  version          Int            @default(1)
+  notes            String?
 
-  contractType ContractType? @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
-  jobRole      JobRole?      @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
-  contracts    Contract[]
+  contractType  ContractType?             @relation(fields: [contractTypeId], references: [id], onDelete: SetNull)
+  jobRole       JobRole?                  @relation(fields: [jobRoleId], references: [id], onDelete: SetNull)
+  contracts     Contract[]
+  versions      ContractTemplateVersion[]
+  fieldBindings ContractTemplateField[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("contract_templates")
+}
+
+model ContractTemplateVersion {
+  id                Int                   @id @default(autoincrement())
+  templateId        Int
+  versionNumber     Int
+  status            TemplateVersionStatus @default(DRAFT)
+  contentDefinition Json
+  fieldDefinitions  Json
+  changeSummary     String?
+  createdByName     String?
+  publishedByName   String?
+  createdAt         DateTime              @default(now())
+  publishedAt       DateTime?
+
+  template  ContractTemplate @relation(fields: [templateId], references: [id])
+  contracts Contract[]
+
+  @@unique([templateId, versionNumber])
+  @@map("contract_template_versions")
+}
+
+model TemplateFieldDefinition {
+  id            Int                     @id @default(autoincrement())
+  key           String                  @unique @db.VarChar(150)
+  label         String                  @db.VarChar(255)
+  dataType      TemplateFieldType
+  sourceType    TemplateFieldSourceType
+  sourceConfig  Json?
+  options       Json?
+  isSystem      Boolean                 @default(false)
+  isActive      Boolean                 @default(true)
+  createdByName String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  templateBindings ContractTemplateField[]
+
+  @@map("template_field_definitions")
+}
+
+model ContractTemplateField {
+  id         Int     @id @default(autoincrement())
+  templateId Int
+  fieldId    Int
+  required   Boolean @default(false)
+  sortOrder  Int     @default(0)
+  config     Json?
+
+  template ContractTemplate        @relation(fields: [templateId], references: [id])
+  field    TemplateFieldDefinition @relation(fields: [fieldId], references: [id])
+
+  @@unique([templateId, fieldId])
+  @@map("contract_template_fields")
 }
 
 model ContractDocument {
@@ -263,20 +336,20 @@ model EmployeeOffboarding {
 }
 
 model OperationalVehicleUsage {
-  id                Int                               @id @default(autoincrement())
-  usedAt            DateTime
-  vehicleNumber     String                            @db.VarChar(30)
-  driver            String                            @db.VarChar(255)
-  destination       String                            @db.VarChar(255)
-  user              String                            @db.VarChar(255)
-  requester         String                            @db.VarChar(255)
-  status            OperationalVehicleUsageStatus?
-  cancelledAt       DateTime?
-  cancelledByName   String?                           @db.VarChar(255)
-  cancelledByRole   String?                           @db.VarChar(50)
-  createdAt         DateTime                          @default(now())
-  createdByName     String                            @db.VarChar(255)
-  createdByRole     String                            @db.VarChar(50)
+  id              Int                            @id @default(autoincrement())
+  usedAt          DateTime
+  vehicleNumber   String                         @db.VarChar(30)
+  driver          String                         @db.VarChar(255)
+  destination     String                         @db.VarChar(255)
+  user            String                         @db.VarChar(255)
+  requester       String                         @db.VarChar(255)
+  status          OperationalVehicleUsageStatus?
+  cancelledAt     DateTime?
+  cancelledByName String?                        @db.VarChar(255)
+  cancelledByRole String?                        @db.VarChar(50)
+  createdAt       DateTime                       @default(now())
+  createdByName   String                         @db.VarChar(255)
+  createdByRole   String                         @db.VarChar(50)
 
   @@index([usedAt])
   @@index([status])
@@ -314,6 +387,26 @@ enum ContractStatus {
 enum ContractFamily {
   MITRA
   PKWT
+}
+
+enum TemplateVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TemplateFieldType {
+  TEXT
+  NUMBER
+  DATE
+  DROPDOWN
+  MASTER_REFERENCE
+}
+
+enum TemplateFieldSourceType {
+  SYSTEM
+  CONTRACT_INPUT
+  MASTER_REFERENCE
 }
 
 enum TerminationType {
@@ -377,7 +470,7 @@ model Company {
   email   String? @db.VarChar(255)
   phone   String? @db.VarChar(50)
 
-  vendorContracts    VendorContract[]
+  vendorContracts VendorContract[]
 
   @@map("companies")
 }
@@ -404,29 +497,29 @@ enum VendorDocType {
 }
 
 model VendorContract {
-  id                Int                     @id @default(autoincrement())
+  id                Int                    @id @default(autoincrement())
   category          VendorContractCategory
   companyId         Int
-  documentName      String                  @db.VarChar(255)
-  documentNumber    String                  @db.VarChar(100)
+  documentName      String                 @db.VarChar(255)
+  documentNumber    String                 @db.VarChar(100)
   documentType      VendorDocType
-  createdDate       DateTime                @db.Date
-  needsRenewal      Boolean                 @default(false)
-  startDate         DateTime?               @db.Date
-  endDate           DateTime?               @db.Date
-  status            VendorContractStatus    @default(TIDAK_AKTIF)
+  createdDate       DateTime               @db.Date
+  needsRenewal      Boolean                @default(false)
+  startDate         DateTime?              @db.Date
+  endDate           DateTime?              @db.Date
+  status            VendorContractStatus   @default(TIDAK_AKTIF)
   motherAgreementId Int?
-  renewedFromId     Int?                    @unique
-  location          String?                 @db.VarChar(255)
-  notes             String?                 @db.Text
-  fileUrl           String?                 @db.VarChar(500)
-  company           Company                 @relation(fields: [companyId], references: [id])
-  motherAgreement   VendorContract?         @relation("VendorContractRenewal", fields: [motherAgreementId], references: [id])
-  renewals          VendorContract[]        @relation("VendorContractRenewal")
-  renewedFrom       VendorContract?         @relation("ContractSuccession", fields: [renewedFromId], references: [id])
-  renewedTo         VendorContract?         @relation("ContractSuccession")
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  renewedFromId     Int?                   @unique
+  location          String?                @db.VarChar(255)
+  notes             String?                @db.Text
+  fileUrl           String?                @db.VarChar(500)
+  company           Company                @relation(fields: [companyId], references: [id])
+  motherAgreement   VendorContract?        @relation("VendorContractRenewal", fields: [motherAgreementId], references: [id])
+  renewals          VendorContract[]       @relation("VendorContractRenewal")
+  renewedFrom       VendorContract?        @relation("ContractSuccession", fields: [renewedFromId], references: [id])
+  renewedTo         VendorContract?        @relation("ContractSuccession")
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
 
   @@map("vendor_contracts")
 }
@@ -448,40 +541,40 @@ enum LegalKoperasiStatus {
 }
 
 model LegalKoperasi {
-  id              Int                     @id @default(autoincrement())
-  category        LegalKoperasiCategory
-  documentName    String                  @db.VarChar(255)
-  documentNumber  String                  @db.VarChar(100)
-  publisher       String                  @db.VarChar(255)
-  documentDate    DateTime                @db.Date
-  needsRenewal    Boolean                 @default(false)
-  startDate       DateTime?               @db.Date
-  endDate         DateTime?               @db.Date
-  status          LegalKoperasiStatus     @default(TIDAK_AKTIF)
-  location        String?                 @db.VarChar(255)
-  notes           String?                 @db.Text
-  fileUrl         String?                 @db.VarChar(500)
-  renewedFromId   Int?                    @unique
-  renewedFrom     LegalKoperasi?          @relation("LegalSuccession", fields: [renewedFromId], references: [id])
-  renewedTo       LegalKoperasi?          @relation("LegalSuccession")
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  id             Int                   @id @default(autoincrement())
+  category       LegalKoperasiCategory
+  documentName   String                @db.VarChar(255)
+  documentNumber String                @db.VarChar(100)
+  publisher      String                @db.VarChar(255)
+  documentDate   DateTime              @db.Date
+  needsRenewal   Boolean               @default(false)
+  startDate      DateTime?             @db.Date
+  endDate        DateTime?             @db.Date
+  status         LegalKoperasiStatus   @default(TIDAK_AKTIF)
+  location       String?               @db.VarChar(255)
+  notes          String?               @db.Text
+  fileUrl        String?               @db.VarChar(500)
+  renewedFromId  Int?                  @unique
+  renewedFrom    LegalKoperasi?        @relation("LegalSuccession", fields: [renewedFromId], references: [id])
+  renewedTo      LegalKoperasi?        @relation("LegalSuccession")
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
 
   @@map("legal_koperasi")
 }
 
 model AkteDokumen {
-  id          Int       @id @default(autoincrement())
-  tanggal     DateTime  @db.Date
-  notaris     String    @db.VarChar(255)
-  nomorAkte   String    @map("nomor_akte") @db.VarChar(100)
-  judulAkte   String    @map("judul_akte") @db.VarChar(255)
-  nomorSk     String?   @map("nomor_sk") @db.VarChar(100)
-  tanggalSk   DateTime? @map("tanggal_sk") @db.Date
-  keterangan  String?   @db.Text
-  fileUrl     String?   @map("file_url") @db.VarChar(500)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id         Int       @id @default(autoincrement())
+  tanggal    DateTime  @db.Date
+  notaris    String    @db.VarChar(255)
+  nomorAkte  String    @map("nomor_akte") @db.VarChar(100)
+  judulAkte  String    @map("judul_akte") @db.VarChar(255)
+  nomorSk    String?   @map("nomor_sk") @db.VarChar(100)
+  tanggalSk  DateTime? @map("tanggal_sk") @db.Date
+  keterangan String?   @db.Text
+  fileUrl    String?   @map("file_url") @db.VarChar(500)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   @@map("akte_dokumen")
 }
@@ -518,37 +611,57 @@ enum NotificationSeverity {
 }
 
 model Notification {
-  id          Int                    @id @default(autoincrement())
-  category    NotificationCategory
-  severity    NotificationSeverity
-  title       String                 @db.VarChar(255)
-  message     String                 @db.VarChar(500)
-  sourceType  String                 @db.VarChar(50)
-  sourceId    Int
-  triggerDay  Int
-  deeplink    String                 @db.VarChar(255)
-  userId      Int?
-  userType    String?                @db.VarChar(20)
-  isRead      Boolean                @default(false)
+  id         Int                  @id @default(autoincrement())
+  category   NotificationCategory
+  severity   NotificationSeverity
+  title      String               @db.VarChar(255)
+  message    String               @db.VarChar(500)
+  sourceType String               @db.VarChar(50)
+  sourceId   Int
+  triggerDay Int
+  deeplink   String               @db.VarChar(255)
+  userId     Int?
+  userType   String?              @db.VarChar(20)
+  isRead      Boolean              @default(false)
   readAt      DateTime?
   resolvedAt  DateTime?
-  expiryDate  DateTime               @db.Date
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  dismissedAt DateTime?
+  pinnedAt    DateTime?
+  expiryDate  DateTime             @db.Date
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   @@unique([sourceType, sourceId, triggerDay])
   @@index([isRead, resolvedAt])
   @@index([userId, userType])
+  @@index([userId, userType, dismissedAt])
   @@map("notifications")
 }
 
-model EmailNotificationRecipient {
-  id            Int         @id @default(autoincrement())
-  userAccountId Int
-  userAccount   UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
-  createdAt     DateTime    @default(now())
+model NotificationPreference {
+  id                    Int      @id @default(autoincrement())
+  userId                Int
+  userType              String   @db.VarChar(20)
+  mutedCategories       String[] @default([])
+  quietHoursStart       String?  @db.VarChar(5)
+  quietHoursEnd         String?  @db.VarChar(5)
+  soundEnabled          Boolean  @default(false)
+  osNotificationEnabled Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
-  @@unique([userAccountId])
+  @@unique([userId, userType])
+  @@map("notification_preferences")
+}
+
+model EmailNotificationRecipient {
+  id            Int          @id @default(autoincrement())
+  userAccountId Int?         @unique
+  userAccount   UserAccount? @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+  email         String?      @unique @db.VarChar(255)
+  name          String?      @db.VarChar(255)
+  createdAt     DateTime     @default(now())
+
   @@map("email_notification_recipients")
 }
 
@@ -609,17 +722,17 @@ enum AttachmentType {
 }
 
 model Space {
-  id            Int           @id @default(autoincrement())
-  name          String        @db.VarChar(255)
-  description   String?       @db.Text
-  icon          String?       @db.VarChar(50)
-  color         String        @default("blue") @db.VarChar(20)
+  id            Int                 @id @default(autoincrement())
+  name          String              @db.VarChar(255)
+  description   String?             @db.Text
+  icon          String?             @db.VarChar(50)
+  color         String              @default("blue") @db.VarChar(20)
   createdById   Int
-  createdByType String        @db.VarChar(20)
-  memberIds     Int[]         @default([])
-  memberTypes   String[]      @default([])
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdByType String              @db.VarChar(20)
+  memberIds     Int[]               @default([])
+  memberTypes   String[]            @default([])
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   columns       SpaceColumn[]
   announcements SpaceAnnouncement[]
   documents     SpaceDocument[]
@@ -643,24 +756,24 @@ model SpaceColumn {
 }
 
 model SpaceCard {
-  id          Int                   @id @default(autoincrement())
-  columnId    Int
-  column      SpaceColumn           @relation(fields: [columnId], references: [id], onDelete: Cascade)
-  title       String                @db.VarChar(255)
-  description String?               @db.Text
-  position    Int
-  priority    CardPriority          @default(NONE)
-  dueDate     DateTime?             @db.Date
-  assigneeIds Int[]                 @default([])
-  labels      String[]              @default([])
-  coverColor  String?               @db.VarChar(20)
-  createdById Int
-  createdByType String              @db.VarChar(20)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  checklists  SpaceCardChecklist[]
-  attachments SpaceCardAttachment[]
-  comments    SpaceCardComment[]
+  id            Int                   @id @default(autoincrement())
+  columnId      Int
+  column        SpaceColumn           @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  title         String                @db.VarChar(255)
+  description   String?               @db.Text
+  position      Int
+  priority      CardPriority          @default(NONE)
+  dueDate       DateTime?             @db.Date
+  assigneeIds   Int[]                 @default([])
+  labels        String[]              @default([])
+  coverColor    String?               @db.VarChar(20)
+  createdById   Int
+  createdByType String                @db.VarChar(20)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  checklists    SpaceCardChecklist[]
+  attachments   SpaceCardAttachment[]
+  comments      SpaceCardComment[]
 
   @@index([columnId, position])
   @@map("space_cards")
@@ -695,20 +808,20 @@ model SpaceCardAttachment {
 }
 
 model SpaceCardComment {
-  id          Int       @id @default(autoincrement())
-  cardId      Int
-  card        SpaceCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
-  content     String    @db.Text
-  authorId    Int
-  authorType  String    @db.VarChar(20)
-  authorName  String    @db.VarChar(255)
-  authorPhotoUrl String? @db.Text
-  isEdited    Boolean   @default(false)
-  editedAt    DateTime?
-  isDeleted   Boolean   @default(false)
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             Int       @id @default(autoincrement())
+  cardId         Int
+  card           SpaceCard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  content        String    @db.Text
+  authorId       Int
+  authorType     String    @db.VarChar(20)
+  authorName     String    @db.VarChar(255)
+  authorPhotoUrl String?   @db.Text
+  isEdited       Boolean   @default(false)
+  editedAt       DateTime?
+  isDeleted      Boolean   @default(false)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([cardId])
   @@map("space_card_comments")
@@ -759,4 +872,56 @@ model ActivityLog {
   @@index([timestamp])
   @@index([performedBy])
   @@map("activity_logs")
+}
+
+enum OrgPositionStatus {
+  AKTIF
+  AKAN_BERAKHIR
+  EXPIRED
+  TIDAK_AKTIF
+}
+
+model OrgPeriod {
+  id        Int           @id @default(autoincrement())
+  name      String        @db.VarChar(255)
+  startDate DateTime      @db.Date
+  endDate   DateTime?     @db.Date
+  isActive  Boolean       @default(true)
+  notes     String?       @db.Text
+  nodes     OrgPosition[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("org_periods")
+}
+
+model OrgPosition {
+  id         Int               @id @default(autoincrement())
+  periodId   Int
+  parentId   Int?
+  employeeId Int?
+  name       String            @db.VarChar(255)
+  position   String            @db.VarChar(255)
+  unitUsaha  String?           @db.VarChar(255)
+  photoUrl   String?           @db.VarChar(500)
+  skNumber   String?           @db.VarChar(255)
+  skDate     DateTime?         @db.Date
+  startDate  DateTime?         @db.Date
+  endDate    DateTime?         @db.Date
+  status     OrgPositionStatus @default(AKTIF)
+  sortOrder  Int               @default(0)
+  notes      String?           @db.Text
+
+  period   OrgPeriod     @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  parent   OrgPosition?  @relation("OrgHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children OrgPosition[] @relation("OrgHierarchy")
+  employee Employee?     @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([periodId])
+  @@index([parentId])
+  @@map("org_positions")
 }

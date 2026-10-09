@@ -6,6 +6,10 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 import * as bcrypt from 'bcrypt'
+import { CONTRACT_DOCUMENT_DEFINITIONS } from '../src/contracts/contract-document-definitions'
+import { definitionToContentDefinition, definitionToFieldDefinitions } from '../src/contract-templates/default-template-definition'
+import { validateContentDefinition } from '../src/contract-templates/template-schema.validator'
+import { applyTemplateBindings } from '../src/contract-templates/template-field-bindings.helpers'
 
 const DB_URL = process.env.DATABASE_URL
 if (!DB_URL) throw new Error('DATABASE_URL tidak ditemukan di .env')
@@ -32,6 +36,7 @@ async function main() {
     prisma.jobRole.upsert({ where: { id: 6 }, update: {}, create: { name: 'Kasir' } }),
     prisma.jobRole.upsert({ where: { id: 7 }, update: {}, create: { name: 'Karyawan Gudang' } }),
     prisma.jobRole.upsert({ where: { id: 8 }, update: {}, create: { name: 'Staff Admin' } }),
+    prisma.jobRole.upsert({ where: { id: 9 }, update: {}, create: { name: 'Driver Truck B3' } }),
   ])
 
   const jobLevels = await Promise.all([
@@ -177,6 +182,14 @@ async function main() {
       jobRoleId: jobRoles.find(item => item.name === 'Driver')?.id,
     },
     {
+      code: 'MITRA_DRIVER_TRUCK_B3',
+      name: 'Mitra Driver Truck B3',
+      family: 'MITRA' as const,
+      templateKey: 'MITRA_DRIVER_TRUCK_B3',
+      contractTypeId: contractTypes.find(item => item.name === 'MITRA')?.id,
+      jobRoleId: jobRoles.find(item => item.name === 'Driver Truck B3')?.id,
+    },
+    {
       code: 'MITRA_KOMART',
       name: 'Mitra Kasir Komart',
       family: 'MITRA' as const,
@@ -234,8 +247,28 @@ async function main() {
     },
   ]
 
+  // Field custom wajib untuk template keluarga MITRA.
+  const ktpIssuedDateField = await prisma.templateFieldDefinition.upsert({
+    where: { key: 'ktp_issued_date' },
+    update: {
+      label: 'Tanggal Terbit KTP Mitra',
+      dataType: 'DATE',
+      sourceType: 'CONTRACT_INPUT',
+      isSystem: false,
+      isActive: true,
+    },
+    create: {
+      key: 'ktp_issued_date',
+      label: 'Tanggal Terbit KTP Mitra',
+      dataType: 'DATE',
+      sourceType: 'CONTRACT_INPUT',
+      isSystem: false,
+      isActive: true,
+    },
+  })
+
   for (const templateSeed of templateSeeds) {
-    await prisma.contractTemplate.upsert({
+    const template = await prisma.contractTemplate.upsert({
       where: { code: templateSeed.code },
       update: {
         name: templateSeed.name,
@@ -250,6 +283,86 @@ async function main() {
         isActive: true,
       },
     })
+
+    const definition = CONTRACT_DOCUMENT_DEFINITIONS[templateSeed.templateKey]
+
+    // Simpan binding katalog untuk template agar field yang dipakai versi
+    // pertama juga dapat dipakai editor dan endpoint katalog secara konsisten.
+    // Binding WAJIB ditulis sebelum versi PUBLISHED dibuat: `fieldDefinitions`
+    // versi adalah snapshot beku dan `publish()`/`createDraft` membacanya dari
+    // tabel binding. Kalau binding ditulis setelah versi, versi v1 lahir tanpa
+    // field dinamis (mis. ktp_issued_date untuk MITRA).
+    const definitionFields = definition ? definitionToFieldDefinitions(definition) : []
+
+    for (const [sortOrder, field] of definitionFields.entries()) {
+      const catalogField = await prisma.templateFieldDefinition.upsert({
+        where: { key: field.key },
+        update: {
+          label: field.label,
+          dataType: field.dataType,
+          sourceType: field.sourceType,
+          isActive: true,
+        },
+        create: {
+          key: field.key,
+          label: field.label,
+          dataType: field.dataType,
+          sourceType: field.sourceType,
+          isSystem: field.sourceType === 'SYSTEM',
+          isActive: true,
+        },
+      })
+      await prisma.contractTemplateField.upsert({
+        where: { templateId_fieldId: { templateId: template.id, fieldId: catalogField.id } },
+        update: { required: field.required, sortOrder },
+        create: { templateId: template.id, fieldId: catalogField.id, required: field.required, sortOrder },
+      })
+    }
+
+    if (templateSeed.family === 'MITRA') {
+      // `required: false` — field tetap tampil di form kontrak (opsional), dan
+      // admin dapat mencentang "Wajib" dari panel Field template kapan saja.
+      // Jangan hardcode wajib: kontrak yang tidak butuh tanggal terbit KTP
+      // (mis. mitra lama) tidak boleh diblokir saat submit.
+      await prisma.contractTemplateField.upsert({
+        where: { templateId_fieldId: { templateId: template.id, fieldId: ktpIssuedDateField.id } },
+        update: { required: false, sortOrder: definitionFields.length },
+        create: {
+          templateId: template.id,
+          fieldId: ktpIssuedDateField.id,
+          required: false,
+          sortOrder: definitionFields.length,
+        },
+      })
+    }
+
+    // Versi PUBLISHED pertama dibuat SETELAH binding katalog lengkap, lalu
+    // `fieldDefinitions`-nya di-overlay memakai helper yang sama dengan
+    // `createDraft`/`publish` agar v1 seed setara versi hasil alur normal.
+    const versionCount = await prisma.contractTemplateVersion.count({ where: { templateId: template.id } })
+    if (definition && versionCount === 0) {
+      const contentDefinition = definitionToContentDefinition(definition)
+      const bindings = await prisma.contractTemplateField.findMany({
+        where: { templateId: template.id, field: { is: { isActive: true } } },
+        include: { field: true },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+      })
+      const fieldDefinitions = applyTemplateBindings(definitionToFieldDefinitions(definition), bindings)
+      validateContentDefinition(contentDefinition, fieldDefinitions.map(field => field.key), templateSeed.family)
+      await prisma.contractTemplateVersion.create({
+        data: {
+          templateId: template.id,
+          versionNumber: 1,
+          status: 'PUBLISHED',
+          contentDefinition: contentDefinition as any,
+          fieldDefinitions: fieldDefinitions as any,
+          changeSummary: 'Versi awal dari definisi template bawaan aplikasi',
+          createdByName: 'System seed',
+          publishedByName: 'System seed',
+          publishedAt: new Date(),
+        },
+      })
+    }
   }
 
   const personalDocTypes = [

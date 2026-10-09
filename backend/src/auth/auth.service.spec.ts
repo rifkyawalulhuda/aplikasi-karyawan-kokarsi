@@ -12,6 +12,9 @@ jest.mock('bcrypt', () => ({
 import { AuthService } from './auth.service'
 import { UnauthorizedException } from '@nestjs/common'
 
+// JWT secret fallback untuk unit test (refreshSecret getter membaca env ini)
+process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret-32-karakter-untuk-jest'
+
 const bcrypt = require('bcrypt')
 
 // Mock PrismaService instance
@@ -111,10 +114,18 @@ describe('AuthService', () => {
       const result = await service.login(mockAdmin)
 
       expect(result).toHaveProperty('access_token', 'mock.jwt.token')
+      expect(result).toHaveProperty('refresh_token', 'mock.jwt.token')
       expect(result).toHaveProperty('admin')
       expect(result.admin).toMatchObject({ id: 1, employeeNo: 'EMP001', role: 'ADMIN' })
+      // Access token: payload berisi identitas + tipe 'access'
       expect(mockJwt.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ sub: 1, role: 'ADMIN' })
+        expect.objectContaining({ sub: 1, role: 'ADMIN', type: 'access' }),
+        expect.objectContaining({ expiresIn: expect.anything() })
+      )
+      // Refresh token: payload tipe 'refresh' + secret terpisah
+      expect(mockJwt.sign).toHaveBeenCalledWith(
+        expect.objectContaining({ sub: 1, type: 'refresh' }),
+        expect.objectContaining({ secret: expect.any(String), expiresIn: expect.anything() })
       )
     })
 

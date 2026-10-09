@@ -3,6 +3,7 @@
 
 @theme static {
   --font-sans: 'Public Sans', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 
   --color-green-50: #EFFDF5;
   --color-green-100: #D9FBE8;
@@ -17,22 +18,353 @@
   --color-green-950: #052E16;
 }
 
+/* ── Detail karyawan: gerak masuk & hover ──────────────────────────────────── */
+/* Dipakai untuk reveal bertahap (stagger) hero, tile KPI, dan item timeline.
+   `both` menjaga keadaan akhir setelah animasi selesai. */
+@keyframes dossier-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dossier-rise {
+  animation: dossier-rise 280ms cubic-bezier(0.25, 0.1, 0.25, 1) both;
+}
+
+/* Angkat halus pada kartu yang bisa diklik/di-hover. */
+.dossier-lift {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out, border-color 150ms ease-out;
+}
+
+.dossier-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06);
+}
+
+html.dark .dossier-lift:hover {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.45), 0 4px 6px -4px rgb(0 0 0 / 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dossier-rise {
+    animation: none;
+  }
+
+  .dossier-lift,
+  .dossier-lift:hover {
+    transition: none;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* ── Riwayat kontrak: segmen timeline tumbuh masuk ─────────────────────────── */
+@keyframes contract-seg-in {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.contract-seg-in {
+  transform-origin: left center;
+  animation: contract-seg-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contract-seg-in {
+    animation: none;
+  }
+}
+
+/* ── Drag & drop widget dashboard ──────────────────────────────────────────── */
+/* Handle grip: cegah scroll bawaan browser saat mulai drag di perangkat sentuh. */
+.dashboard-drag-handle {
+  touch-action: none;
+}
+
+/* Saat drag berlangsung: matikan seleksi teks & tampilkan kursor grabbing. */
+body.dashboard-dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+body.dashboard-dragging * {
+  cursor: grabbing !important;
+}
+
+/* Ghost = klon widget yang mengikuti kursor/jari. */
+.dashboard-drag-ghost {
+  border-radius: 0.5rem;
+  box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.35), 0 8px 16px -8px rgb(0 0 0 / 0.25);
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+  overflow: hidden;
+  opacity: 0.96;
+  will-change: transform;
+  transition: transform 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-drag-ghost {
+    transition: none;
+  }
+}
+
+/* ── Board (Space) drag & drop ─────────────────────────────────────────────── */
+body.board-dragging {
+  user-select: none;
+  cursor: grabbing;
+}
+
+body.board-dragging * {
+  cursor: grabbing !important;
+}
+
+/* Ghost kartu/kolom yang mengikuti kursor. */
+.board-drag-ghost {
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4), 0 8px 16px -8px rgb(0 0 0 / 0.3);
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
+  opacity: 0.97;
+  will-change: transform;
+  pointer-events: none;
+}
+
+/* Daftar kartu dalam kolom: scroll halus + area drag. */
+.board-col-list {
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-drag-ghost {
+    transition: none !important;
+  }
+}
+
+/* ── Tooltip chart dashboard (Unovis) ──────────────────────────────────────── */
+/* Unovis mengaktifkan tema gelapnya lewat `html.dark-theme`, sedangkan Nuxt UI
+   memakai `html.dark` — jadi tema gelap tooltip di-override manual di sini. */
+.dashboard-chart-tooltip {
+  --vis-tooltip-padding: 8px 10px;
+  --vis-tooltip-border-radius: 0.5rem;
+  --vis-tooltip-transition-duration: 120ms;
+  --vis-tooltip-box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+html.dark .dashboard-chart-tooltip {
+  --vis-tooltip-background-color: rgb(24 24 27 / 0.97);
+  --vis-tooltip-text-color: #e4e4e7;
+  --vis-tooltip-border-color: rgb(63 63 70);
+  --vis-tooltip-box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+}
+
 /* ── CV dokumen karyawan (layar & print) ───────────────────────────────────── */
-.cv-section-title {
-  font-size: 0.75rem;
+/* Dokumen selalu dirender sebagai kertas putih dengan palet tetap — sengaja tidak
+   memakai token tema, agar hasil cetak identik di mode terang maupun gelap. */
+.cv-doc {
+  --cv-accent: #1d4ed8;
+  --cv-accent-soft: #eff6ff;
+  --cv-ink: #0f172a;
+  --cv-ink-soft: #334155;
+  --cv-muted: #64748b;
+  --cv-line: #e2e8f0;
+  --cv-line-strong: #cbd5e1;
+  --cv-zebra: #f8fafc;
+
+  color: var(--cv-ink);
+  background: #ffffff;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* Baris tipis identitas dokumen */
+.cv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cv-doctype {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--cv-accent);
+}
+
+.cv-docref {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--cv-muted);
+}
+
+.cv-toprule {
+  height: 3px;
+  margin-top: 0.5rem;
+  background: var(--cv-accent);
+}
+
+/* Hero band: foto + identitas */
+.cv-band {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--cv-line);
+  border-left: 4px solid var(--cv-accent);
+  border-radius: 0.5rem;
+  background: var(--cv-accent-soft);
+  break-inside: avoid;
+}
+
+.cv-photo {
+  width: 5.25rem;
+  height: 5.25rem;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 2px solid #ffffff;
+  background: #e2e8f0;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.18);
+}
+
+.cv-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cv-photo-fallback {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--cv-accent);
+}
+
+.cv-name {
+  font-size: 1.55rem;
+  line-height: 1.15;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--cv-ink);
+}
+
+.cv-role {
+  margin-top: 0.15rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--cv-accent);
+}
+
+.cv-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  color: var(--cv-ink-soft);
+}
+
+.cv-contact > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Stat strip */
+.cv-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0.9rem;
+  border: 1px solid var(--cv-line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  break-inside: avoid;
+}
+
+.cv-stat {
+  padding: 0.6rem 0.8rem;
+  border-left: 1px solid var(--cv-line);
+}
+
+.cv-stat:first-child {
+  border-left: 0;
+}
+
+.cv-stat-label {
+  font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #475569;
-  border-bottom: 1px solid #e2e8f0;
+  letter-spacing: 0.06em;
+  color: var(--cv-muted);
+}
+
+.cv-stat-value {
+  margin-top: 0.15rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--cv-ink);
+}
+
+/* Ringkasan profil */
+.cv-summary {
+  margin-top: 1.4rem;
+  font-size: 0.84rem;
+  line-height: 1.6;
+  color: var(--cv-ink-soft);
+}
+
+/* Bagian */
+.cv-section {
+  margin-top: 1.5rem;
+}
+
+.cv-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--cv-accent);
+  border-bottom: 1px solid var(--cv-line-strong);
   padding-bottom: 0.4rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.8rem;
+  break-after: avoid;
+}
+
+.cv-section-title::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--cv-accent);
 }
 
 .cv-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem 2rem;
+  gap: 0.55rem 2rem;
 }
 
 .cv-item {
@@ -44,15 +376,15 @@
 
 .cv-item dt {
   flex-shrink: 0;
-  width: 7.5rem;
-  font-size: 0.75rem;
-  color: #64748b;
+  width: 7.2rem;
+  font-size: 0.74rem;
+  color: var(--cv-muted);
 }
 
 .cv-item dd {
-  font-size: 0.85rem;
-  color: #0f172a;
-  font-weight: 500;
+  font-size: 0.84rem;
+  color: var(--cv-ink);
+  font-weight: 600;
 }
 
 .cv-item-full {
@@ -62,32 +394,37 @@
 .cv-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
 }
 
 .cv-table th {
   text-align: left;
-  font-size: 0.68rem;
+  font-size: 0.63rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748b;
-  font-weight: 600;
-  border-bottom: 1px solid #cbd5e1;
-  padding: 0.35rem 0.6rem;
+  color: var(--cv-muted);
+  font-weight: 700;
+  background: var(--cv-zebra);
+  border-bottom: 1px solid var(--cv-line-strong);
+  padding: 0.4rem 0.6rem;
 }
 
 .cv-table td {
   padding: 0.45rem 0.6rem;
-  border-bottom: 1px solid #e2e8f0;
-  color: #1e293b;
+  border-bottom: 1px solid var(--cv-line);
+  color: var(--cv-ink-soft);
   vertical-align: top;
+}
+
+.cv-table tbody tr:nth-child(even) {
+  background: var(--cv-zebra);
 }
 
 .cv-status {
   display: inline-block;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.1rem 0.5rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.12rem 0.5rem;
   border-radius: 9999px;
 }
 
@@ -96,6 +433,63 @@
 .cv-status-error   { background: #fee2e2; color: #991b1b; }
 .cv-status-info    { background: #e0f2fe; color: #075985; }
 .cv-status-neutral { background: #f1f5f9; color: #475569; }
+
+/* Blok tanda tangan */
+.cv-sign {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 2.2rem;
+  break-inside: avoid;
+}
+
+.cv-sign-box {
+  min-width: 13rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--cv-ink-soft);
+}
+
+.cv-sign-gap {
+  height: 3rem;
+}
+
+.cv-sign-line {
+  margin: 0 auto 0.3rem;
+  width: 11rem;
+  border-top: 1px solid var(--cv-ink-soft);
+}
+
+.cv-sign-name {
+  font-weight: 700;
+  color: var(--cv-ink);
+}
+
+.cv-sign-meta {
+  font-size: 0.7rem;
+  color: var(--cv-muted);
+}
+
+/* Footer dokumen */
+.cv-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--cv-line);
+  font-size: 0.64rem;
+  color: var(--cv-muted);
+}
+
+/* Preview di modal: tampilkan sebagai kertas A4 putih */
+.cv-preview .cv-doc {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm;
+  margin: 0 auto;
+  border-radius: 2px;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.18);
+}
 
 /* Print-only target (teleport ke body) — tersembunyi di layar */
 .print-only-cv {
@@ -109,6 +503,13 @@
 }
 
 @media print {
+  /* Dialog modal mengunci `overflow: hidden` pada body saat terbuka — dilepas
+     agar dokumen multi-halaman tidak terpotong di kertas. */
+  html,
+  body {
+    overflow: visible !important;
+    height: auto !important;
+  }
   body * {
     visibility: hidden;
   }
@@ -123,29 +524,53 @@
     background: #ffffff !important;
     color: #0f172a !important;
   }
+  /* Di kertas, margin halaman berasal dari @page — bukan padding dokumen. */
+  .print-only-cv .cv-doc {
+    width: 100% !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
   .cv-preview,
   .no-print {
     display: none !important;
   }
-  .cv-section-title,
   .cv-item dt,
   .cv-table th {
-    color: #334155 !important;
+    color: var(--cv-muted) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cv-doctype,
+  .cv-section-title {
+    color: var(--cv-accent) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .cv-section-title::before,
+  .cv-toprule,
+  .cv-band,
+  .cv-stat,
+  .cv-status {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
   .cv-table th,
   .cv-table td {
-    border-color: #cbd5e1 !important;
-  }
-  .cv-status {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    border-color: var(--cv-line-strong) !important;
   }
   thead {
     display: table-header-group;
   }
   tr {
+    break-inside: avoid;
+  }
+  .cv-band,
+  .cv-stats,
+  .cv-sign,
+  .cv-section-title {
     break-inside: avoid;
   }
 }

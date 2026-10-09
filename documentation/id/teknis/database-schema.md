@@ -76,6 +76,43 @@ Tabel yang dipakai bersama oleh modul Dok. Karyawan (PERSONAL) dan Sertifikasi &
 | `validUntil` | DATE | Berlaku sampai |
 | `documentUrl` | VARCHAR | Path file SP |
 
+## Tabel Struktur Organisasi
+
+### `org_periods`
+Periode kepengurusan koperasi. Menghapus periode menghapus seluruh jabatan di dalamnya (cascade).
+
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| `id` | INT | Primary key |
+| `name` | VARCHAR | Nama periode (mis. "2024–2027") |
+| `startDate` | DATE | Tanggal mulai periode |
+| `endDate` | DATE? | Tanggal selesai (opsional) |
+| `isActive` | BOOL | Periode yang sedang berjalan |
+| `notes` | TEXT | Catatan |
+
+### `org_positions`
+Jabatan dalam hierarki struktur organisasi (self-reference `parentId`).
+
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| `id` | INT | Primary key |
+| `periodId` | INT | FK ke `org_periods` (cascade) |
+| `parentId` | INT? | Self-reference atasan (restrict) |
+| `employeeId` | INT? | FK ke `employees` (set null saat karyawan dihapus) |
+| `name` | VARCHAR | Nama pejabat |
+| `position` | VARCHAR | Nama jabatan |
+| `unitUsaha` | VARCHAR | Unit usaha / divisi |
+| `photoUrl` | VARCHAR | Path foto jabatan |
+| `skNumber` | VARCHAR | Nomor SK |
+| `skDate` | DATE? | Tanggal SK |
+| `startDate` | DATE? | Masa jabatan mulai |
+| `endDate` | DATE? | Masa jabatan selesai |
+| `status` | ENUM | AKTIF/AKAN_BERAKHIR/EXPIRED/TIDAK_AKTIF |
+| `sortOrder` | INT | Urutan tampil antar saudara selevel |
+| `notes` | TEXT | Catatan |
+
+**Index:** `periodId`, `parentId`
+
 ## Tabel Dokumen Legal
 
 ### `vendor_contracts` (Kontrak Vendor/Customer)
@@ -135,10 +172,29 @@ Tabel yang dipakai bersama oleh modul Dok. Karyawan (PERSONAL) dan Sertifikasi &
 | `triggerDay` | INT | Berapa hari sebelum expired (-1 = catch-all) |
 | `deeplink` | VARCHAR | URL navigasi saat klik |
 | `isRead` | BOOL | Status baca |
-| `resolvedAt` | DATETIME | Waktu di-resolve (null = aktif) |
+| `resolvedAt` | DATETIME | Waktu di-resolve oleh sistem (null = aktif) |
+| `dismissedAt` | DATETIME | Waktu disingkirkan oleh pengguna (null = tampil) |
+| `pinnedAt` | DATETIME | Waktu disematkan pengguna (null = tidak disematkan) |
 | `expiryDate` | DATE | Tanggal expired sumber |
 
 **Unique constraint:** `(sourceType, sourceId, triggerDay)`
+
+### `notification_preferences`
+
+Preferensi notifikasi per pengguna (mute kategori, jam tenang, suara, notifikasi sistem).
+
+| Kolom | Tipe | Keterangan |
+|-------|------|-----------|
+| `id` | INT | Primary key |
+| `userId` | INT | ID pengguna |
+| `userType` | VARCHAR | master_admin / user_account |
+| `mutedCategories` | TEXT[] | Kategori yang tidak ingin diterima |
+| `quietHoursStart` | VARCHAR | Jam mulai tenang (mis. 21:00) |
+| `quietHoursEnd` | VARCHAR | Jam selesai tenang (mis. 07:00) |
+| `soundEnabled` | BOOL | Bunyikan nada saat notifikasi baru |
+| `osNotificationEnabled` | BOOL | Tampilkan notifikasi sistem operasi |
+
+**Unique constraint:** `(userId, userType)`
 
 ## Tabel Master Data
 

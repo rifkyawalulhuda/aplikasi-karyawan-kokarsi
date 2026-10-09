@@ -1,31 +1,29 @@
-
 export default eventHandler(async (event) => {
   const body = await readBody(event)
+  const remember = body?.remember !== false
+  const credentials = { employeeNo: body?.employeeNo, password: body?.password }
 
   try {
-    const res: any = await $fetch(`${BACKEND}/auth/login`, {
+    const res = await $fetch<BackendTokenResponse>(`${BACKEND}/auth/login`, {
       method: 'POST',
-      body,
+      body: credentials
     })
 
     if (res?.access_token) {
-      setCookie(event, 'auth_token', res.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 30,
-        path: '/',
-      })
+      // Access token pendek (15 menit) — diperbarui otomatis via refresh token.
+      // remember=false → cookie sesi (hilang saat browser ditutup).
+      setAccessCookie(event, res.access_token, remember)
+      if (res.refresh_token) setRefreshCookie(event, res.refresh_token, remember)
     }
 
+    // refresh_token TIDAK dikembalikan di body — hanya via cookie httpOnly.
     return { admin: res.admin }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const { statusCode, message } = extractBackendError(error, 'Login gagal')
     throw createError({
-      statusCode: error?.statusCode ?? error?.response?.status ?? 500,
-      statusMessage: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Login gagal',
-      data: {
-        message: error?.data?.message ?? error?.response?._data?.message ?? error?.message ?? 'Login gagal',
-      },
+      statusCode,
+      statusMessage: message,
+      data: { message }
     })
   }
 })

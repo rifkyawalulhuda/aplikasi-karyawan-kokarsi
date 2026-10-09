@@ -5,7 +5,6 @@ import type { Contract, Employee, EmploymentStatus } from '~/types'
 
 const UBadge = resolveComponent('UBadge')
 const UButton = resolveComponent('UButton')
-const UCheckbox = resolveComponent('UCheckbox')
 const UIcon = resolveComponent('UIcon')
 
 const toast = useToast()
@@ -13,7 +12,7 @@ const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 const table = useTemplateRef('table')
 const { exportExcel, exportPDF } = useExport()
-const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[]; total: number }>('/api/employees', { lazy: true, credentials: 'include', query: { limit: 10000 } })
+const { data: employeesRes, status, refresh } = await useFetch<{ data: Employee[], total: number }>('/api/employees', { lazy: true, credentials: 'include', query: { limit: 10000 } })
 
 const data = computed<Employee[]>(() => employeesRes.value?.data ?? [])
 
@@ -23,6 +22,19 @@ const statusFilter = ref<string[]>([])
 const locationFilter = ref<string[]>([])
 const departmentFilter = ref<string[]>([])
 const genderFilter = ref<string[]>([])
+
+// Drill-down dari dashboard: /karyawan?status=AKTIF&site=...&department=...&gender=...
+const route = useRoute()
+function applyQueryFilters() {
+  const { status: qStatus, site, department, gender, q } = route.query
+  statusFilter.value = qStatus ? [String(qStatus)] : []
+  locationFilter.value = site ? [String(site)] : []
+  departmentFilter.value = department ? [String(department)] : []
+  genderFilter.value = gender ? [String(gender)] : []
+  if (q) searchQuery.value = String(q)
+}
+applyQueryFilters()
+watch(() => route.query, applyQueryFilters)
 
 const locationOptions = computed(() =>
   [...new Set(data.value.map(e => e.workLocation?.name).filter(Boolean) as string[])]
@@ -42,7 +54,7 @@ const hasActiveFilters = computed(() =>
 
 const pagination = ref({ pageIndex: 0, pageSize: 15 })
 const pageSizeOptions = [15, 30, 50, 100]
-const sorting = ref<{ key: string; direction: 'asc' | 'desc' } | null>(null)
+const sorting = ref<{ key: string, direction: 'asc' | 'desc' } | null>(null)
 
 // Delete state
 const deleteLoading = ref(false)
@@ -58,9 +70,7 @@ const importModal = ref(false)
 
 // History state
 const historyModal = ref(false)
-const historyLoading = ref(false)
 const historyTarget = ref<Employee | null>(null)
-const historyContracts = ref<Contract[]>([])
 
 function openEdit(employee: Employee) {
   editTarget.value = employee
@@ -115,7 +125,7 @@ function formatFilterDate(dateValue?: string | null) {
   return date.toLocaleDateString('id-ID', {
     day: '2-digit',
     month: 'long',
-    year: 'numeric',
+    year: 'numeric'
   })
 }
 
@@ -150,7 +160,7 @@ function getSearchTokens(employee: Employee) {
     formatFilterDate(employee.birthDate),
     formatFilterDate(employee.joinDate),
     formatFilterDate(activeContract?.startDate),
-    formatFilterDate(activeContract?.endDate),
+    formatFilterDate(activeContract?.endDate)
   ]
     .flatMap(value => String(value ?? '').toLowerCase().split(/\s+/))
     .filter(Boolean)
@@ -168,31 +178,15 @@ function sortableHeader(label: string, key: string) {
     type: 'button',
     class: 'inline-flex items-center gap-1.5 text-left font-medium text-highlighted hover:text-primary transition-colors',
     onClick: () => toggleSort(key),
-    title: `Urutkan ${label}`,
+    title: `Urutkan ${label}`
   }, [
     h('span', label),
-    h(UIcon, { name: icon, class: 'size-3.5 text-muted' }),
+    h(UIcon, { name: icon, class: 'size-3.5 text-muted' })
   ])
-}
-
-function formatDate(dateValue: string) {
-  return new Date(dateValue).toLocaleDateString('id-ID', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
 }
 
 function resolveContractStatus(contract: Contract) {
   return contract.status
-}
-
-const contractStatusColorMap: Record<string, string> = {
-  AKTIF: 'success',
-  AKAN_HABIS: 'warning',
-  EXPIRED: 'error',
-  SELESAI: 'info',
-  DIBATALKAN: 'neutral',
 }
 
 const contractStatusLabelMap: Record<string, string> = {
@@ -200,42 +194,26 @@ const contractStatusLabelMap: Record<string, string> = {
   AKAN_HABIS: 'Akan Habis',
   EXPIRED: 'Expired',
   SELESAI: 'Selesai',
-  DIBATALKAN: 'Dibatalkan',
+  DIBATALKAN: 'Dibatalkan'
 }
 
-const employmentStatusColorMap: Record<EmploymentStatus, string> = {
+const employmentStatusColorMap: Record<EmploymentStatus, 'success' | 'warning' | 'neutral' | 'error'> = {
   AKTIF: 'success',
   KONTRAK_EXPIRED: 'warning',
   RESIGN: 'neutral',
-  PHK: 'error',
+  PHK: 'error'
 }
 
 const employmentStatusLabelMap: Record<EmploymentStatus, string> = {
   AKTIF: 'Aktif',
   KONTRAK_EXPIRED: 'Kontrak Expired',
   RESIGN: 'Resign',
-  PHK: 'PHK',
+  PHK: 'PHK'
 }
 
-async function openHistory(employee: Employee) {
+function openHistory(employee: Employee) {
   historyTarget.value = employee
   historyModal.value = true
-  historyLoading.value = true
-  try {
-    const detail = await $fetch<Employee & { contracts?: Contract[] }>(`/api/employees/${employee.id}`)
-    historyContracts.value = [...(detail.contracts ?? [])].sort(
-      (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime(),
-    )
-  } catch (e: any) {
-    toast.add({
-      title: 'Gagal memuat riwayat kontrak',
-      description: e?.data?.message ?? 'Terjadi kesalahan',
-      color: 'error',
-    })
-    historyContracts.value = []
-  } finally {
-    historyLoading.value = false
-  }
 }
 
 function confirmDelete(employee: Employee) {
@@ -243,7 +221,7 @@ function confirmDelete(employee: Employee) {
     title: 'Hapus data karyawan?',
     description: `Data ${employee.fullName} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
     confirmLabel: 'Hapus Karyawan',
-    onConfirm: () => doDelete(employee),
+    onConfirm: () => doDelete(employee)
   })
 }
 
@@ -253,8 +231,8 @@ async function doDelete(employee: Employee) {
     await $fetch(`/api/employees/${employee.id}`, { method: 'DELETE' })
     toast.add({ title: 'Karyawan dihapus', color: 'success' })
     refresh()
-  } catch (e: any) {
-    toast.add({ title: 'Gagal menghapus', description: e?.data?.message ?? 'Terjadi kesalahan', color: 'error' })
+  } catch (e) {
+    toast.add({ title: 'Gagal menghapus', description: apiErrorMessage(e), color: 'error' })
   } finally {
     deleteLoading.value = false
   }
@@ -337,7 +315,7 @@ const columns: TableColumn<Employee>[] = [
     filterFn: 'equals',
     cell: ({ row }) => {
       const status = row.original.employmentStatus
-      return h(UBadge, { variant: 'subtle', color: employmentStatusColorMap[status] as any }, () => employmentStatusLabelMap[status])
+      return h(UBadge, { variant: 'subtle', color: employmentStatusColorMap[status] }, () => employmentStatusLabelMap[status])
     }
   },
   {
@@ -439,7 +417,12 @@ watch(() => pagination.value.pageSize, async () => {
               ]
             ]"
           >
-            <UButton label="Export" icon="i-lucide-download" color="neutral" variant="subtle" />
+            <UButton
+              label="Export"
+              icon="i-lucide-download"
+              color="neutral"
+              variant="subtle"
+            />
           </UDropdownMenu>
           <KaryawanAddModal @added="refresh()" />
         </template>
@@ -567,91 +550,11 @@ watch(() => pagination.value.pageSize, async () => {
     @saved="refresh()"
   />
 
-  <UModal
+  <!-- Modal Riwayat Kontrak -->
+  <KaryawanContractHistoryModal
     v-model:open="historyModal"
-    title="Riwayat Kontrak Karyawan"
-    :ui="{ content: 'max-w-3xl' }"
-  >
-    <template #body>
-      <div v-if="historyTarget" class="space-y-4">
-        <div class="flex flex-wrap items-center gap-4 rounded-xl border border-default bg-elevated/40 p-4">
-          <div class="size-12 rounded-full bg-primary/10 ring ring-primary/20 flex items-center justify-center shrink-0 overflow-hidden">
-            <img
-              v-if="historyTarget.fotoKaryawan"
-              :src="historyTarget.fotoKaryawan"
-              :alt="historyTarget.fullName"
-              class="w-full h-full object-cover rounded-full"
-            />
-            <span v-else class="text-sm font-semibold text-primary">
-              {{ historyTarget.fullName.split(' ').map(n => n[0]).slice(0, 2).join('') }}
-            </span>
-          </div>
-          <div class="min-w-0 flex-1">
-            <p class="font-semibold text-highlighted">{{ historyTarget.fullName }}</p>
-            <p class="text-sm text-muted">{{ historyTarget.employeeNo }}</p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <UBadge variant="subtle" color="neutral">Total {{ historyContracts.length }} kontrak</UBadge>
-            <UBadge variant="subtle" color="success">
-              Aktif {{ historyContracts.filter(c => resolveContractStatus(c) === 'AKTIF').length }}
-            </UBadge>
-            <UBadge variant="subtle" color="warning">
-              Akan Habis {{ historyContracts.filter(c => resolveContractStatus(c) === 'AKAN_HABIS').length }}
-            </UBadge>
-            <UBadge variant="subtle" color="error">
-              Expired {{ historyContracts.filter(c => resolveContractStatus(c) === 'EXPIRED').length }}
-            </UBadge>
-            <UBadge variant="subtle" color="info">
-              Selesai {{ historyContracts.filter(c => resolveContractStatus(c) === 'SELESAI').length }}
-            </UBadge>
-          </div>
-        </div>
-
-        <div v-if="historyLoading" class="space-y-3">
-          <USkeleton class="h-24 w-full rounded-2xl" />
-          <USkeleton class="h-24 w-full rounded-2xl" />
-        </div>
-
-        <div v-else class="relative">
-          <div class="absolute left-5 top-2 bottom-2 w-px bg-border/70" />
-          <div class="space-y-3">
-            <div
-              v-for="(contract, index) in historyContracts"
-              :key="contract.id"
-              class="relative pl-14"
-            >
-              <div class="absolute left-0 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-default bg-background shadow-sm">
-                <div class="h-3 w-3 rounded-full" :class="index === 0 ? 'bg-primary' : 'bg-muted-foreground/40'" />
-              </div>
-
-              <div class="rounded-2xl border border-default bg-elevated/30 p-4">
-                <div class="flex flex-wrap items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <div class="mb-2 flex flex-wrap items-center gap-2">
-                      <p class="font-medium text-highlighted">{{ contract.contractNo }}</p>
-                      <UBadge variant="subtle" color="neutral" size="sm">
-                        #{{ historyContracts.length - index }}
-                      </UBadge>
-                    </div>
-                    <p class="text-sm text-muted">
-                      {{ contract.contractType?.name || '-' }}
-                      <span class="mx-1">&bull;</span>
-                      {{ formatDate(contract.startDate) }}
-                      -
-                      {{ formatDate(contract.endDate) }}
-                    </p>
-                  </div>
-                  <UBadge variant="subtle" :color="contractStatusColorMap[resolveContractStatus(contract)] as any">
-                    {{ contractStatusLabelMap[resolveContractStatus(contract)] }}
-                  </UBadge>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
-  </UModal>
+    :employee="historyTarget"
+  />
 
   <!-- Import Modal -->
   <KaryawanImportModal
@@ -673,7 +576,7 @@ watch(() => pagination.value.pageSize, async () => {
           :src="photoPreviewUrl"
           :alt="photoPreviewName"
           class="w-full rounded-xl object-contain max-h-[70vh]"
-        />
+        >
       </div>
     </template>
   </UModal>
@@ -733,7 +636,7 @@ watch(() => pagination.value.pageSize, async () => {
         </button>
 
         <!-- Divider -->
-        <hr v-if="auth.canDelete" class="border-default my-1" />
+        <hr v-if="auth.canDelete" class="border-default my-1">
 
         <!-- Hapus -->
         <button

@@ -29,6 +29,12 @@ export interface JobLevel {
   name: string
 }
 
+export interface Bank {
+  id: number
+  name: string
+  branch?: string | null
+}
+
 // --- Employee ---
 export type EmploymentStatus = 'AKTIF' | 'KONTRAK_EXPIRED' | 'RESIGN' | 'PHK'
 export type Gender = 'MALE' | 'FEMALE'
@@ -87,6 +93,9 @@ export interface Employee {
   phoneNumber?: string
   email: string
   fotoKaryawan?: string
+  bankId?: number | null
+  bank?: Bank | null
+  bankAccountNumber?: string | null
   contracts?: Contract[]
   offboarding?: EmployeeOffboarding | null
   statusHistory?: EmployeeStatusHistory[]
@@ -123,7 +132,7 @@ export interface Contract {
   generatedPdfUrl?: string | null
   generatedAt?: string | null
   parentContractId?: number | null
-  parentContract?: { id: number; contractNo: string; status: ContractStatus } | null
+  parentContract?: { id: number, contractNo: string, status: ContractStatus } | null
   createdAt: string
   updatedAt?: string
 }
@@ -134,7 +143,7 @@ export interface ContractSummaryRow {
   fullName: string
   contractId: number
   contractNo: string
-  contractType: { id: number; name: string } | null
+  contractType: { id: number, name: string } | null
   startDate: string
   endDate: string
   status: ContractStatus
@@ -144,11 +153,22 @@ export interface ContractSummaryRow {
 }
 
 export interface ContractHistoryResponse {
-  employee: { id: number; employeeNo: string; fullName: string; fotoKaryawan?: string | null }
+  employee: { id: number, employeeNo: string, fullName: string, fotoKaryawan?: string | null }
   contracts: Contract[]
 }
 
 export type ContractFamily = 'MITRA' | 'PKWT'
+
+/**
+ * Versi PUBLISHED efektif sebuah template, disertakan pada list/detail template
+ * oleh `ContractTemplatesService` (`include.versions` dengan `where.status`).
+ */
+export interface ContractTemplatePublishedVersion {
+  id: number
+  versionNumber: number
+  publishedAt: string | null
+  publishedByName?: string | null
+}
 
 export interface ContractTemplate {
   id: number
@@ -166,8 +186,42 @@ export interface ContractTemplate {
   isActive: boolean
   version: number
   notes?: string | null
+  /** Jumlah kontrak yang memakai template ini (dari `_count.contracts`). */
+  _count?: { contracts: number, versions?: number }
+  /** Versi PUBLISHED efektif; `undefined` bila belum pernah diterbitkan. */
+  versions?: ContractTemplatePublishedVersion[]
   createdAt?: string
   updatedAt?: string
+}
+
+export type ContractInputDataType = 'TEXT' | 'NUMBER' | 'DATE' | 'DROPDOWN'
+
+/**
+ * Field dinamis yang diisi petugas saat membuat kontrak, dibaca dari
+ * `fieldDefinitions` versi PUBLISHED template (`GET /api/contract-templates/:id/fields`).
+ *
+ * `key` TIDAK memakai prefix `custom.` — itulah key yang diharapkan
+ * `templateData` di backend (`template-value-resolver.helpers.ts`).
+ */
+export interface ContractInputField {
+  key: string
+  label: string
+  dataType: ContractInputDataType
+  required: boolean
+  sourceConfig?: unknown
+  options?: unknown
+}
+
+/**
+ * Response `GET /api/contract-templates/:id/fields`.
+ *
+ * `published: false` berarti template belum pernah punya versi PUBLISHED. Kontrak
+ * dari template seperti itu tidak akan punya snapshot, sehingga field dinamis tidak
+ * ikut tercetak ke PDF — modal kontrak memblokir submit-nya.
+ */
+export interface ContractInputFieldsResponse {
+  published: boolean
+  fields: ContractInputField[]
 }
 
 export interface ContractDocumentPreview {
@@ -282,19 +336,53 @@ export interface GeneralSettings {
   loginLeftTextColor?: string
   loginRightTextColor?: string
   agendaNotificationMorningHour?: string
+  loginTagline?: string
+  loginSubtitle?: string
+  loginFeatures?: string
+  loginGreetingEnabled?: string
+  loginRememberMeEnabled?: string
+  loginOrnamentsEnabled?: string
+  loginFooterShowVersion?: string
+  loginSupportTitle?: string
+  loginSupportContact?: string
+}
+
+export interface LoginFeatureItem {
+  icon: string
+  text: string
 }
 
 // --- Email Notification ---
 export interface EmailNotificationConfig {
   isEnabled: boolean
   triggerWindows: number[]
-  recipients: EmailNotificationUser[]
+  recipientUserIds: number[]
+  externalRecipients: ExternalEmailRecipient[]
 }
 
 export interface EmailNotificationUser {
   id: number
   name: string
   email: string
+}
+
+export interface ExternalEmailRecipient {
+  id: number
+  email: string
+  name: string
+}
+
+export interface EmailNotificationStatus {
+  mailerConfigured: boolean
+  fromEmail: string
+  fromName: string
+}
+
+export interface EmailNotificationHistory {
+  id: number
+  changedBy: string
+  description: string
+  createdAt: string
 }
 
 export type CalendarItemType = 'agenda' | 'employee_contract' | 'employee_document' | 'vendor_contract' | 'legal_koperasi'

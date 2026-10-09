@@ -95,16 +95,47 @@ const canManageMasterData = computed(() =>
 )
 ```
 
+## Session (Sliding Session dengan Refresh Token)
+
+Sistem menggunakan **dua token JWT** sejak implementasi sliding session:
+
+| Token | Cookie | Masa berlaku | Secret | Fungsi |
+|-------|--------|--------------|--------|--------|
+| Access token | `auth_token` (HttpOnly) | `JWT_ACCESS_EXPIRES_IN` (default **15 menit**) | `JWT_SECRET` | Otorisasi setiap request |
+| Refresh token | `refresh_token` (HttpOnly) | `JWT_REFRESH_EXPIRES_IN` (default **7 hari**) | `JWT_REFRESH_SECRET` (fallback `JWT_SECRET`) | Memperpanjang sesi saat aktif |
+
+### Alur sliding session
+
+```
+Login        → backend terbitkan access_token + refresh_token (type claim berbeda)
+Request API  → middleware Nitro (server/middleware/auth-refresh.ts) cek exp access token
+               ├─ masih valid  → lanjut seperti biasa
+               └─ hampir habis → POST {BACKEND}/auth/refresh (pakai refresh_token)
+                                 → backend validasi tipe + tokenVersion + isActive
+                                 → terbitkan pasangan token BARU (rotasi)
+                                 → cookie diperbarui, request dilanjutkan
+Client idle  → plugin client (app/plugins/auth-refresh.client.ts) POST /api/auth/refresh
+               tiap 10 menit + saat tab kembali aktif
+Logout/Ganti password → tokenVersion di-increment → SEMUA refresh token langsung dicabut
+```
+
+### Catatan keamanan
+
+- Refresh token **tidak pernah** dikembalikan di response body — hanya via cookie HttpOnly.
+- Claim `type: 'access' | 'refresh'` + secret terpisah: refresh token tidak bisa diputar ulang sebagai access token (divalidasi di `JwtStrategy` & `CookieJwtStrategy`).
+- Endpoint `POST /auth/refresh` dan `POST /auth/revoke` di-throttle (10 req/menit).
+- Keterbatasan: refresh token bersifat stateless (tidak disimpan di DB), jadi tidak ada *reuse detection* per-token — revocation dilakukan per-akun via `tokenVersion`.
+
 ## Ganti Password
 
 ```
 PUT /api/auth/change-password
 { oldPassword, newPassword }
 → Verify old password
-→ Hash new password (argon2)
-→ Update di database
+→ Hash new password
+→ Update di database + increment tokenVersion (cabut semua sesi)
 ```
 
-## Session
+## Session (lama — stateless)
 
-Tidak ada server-side session. Token JWT bersifat stateless — validasi dilakukan setiap request dengan memverifikasi signature JWT menggunakan `JWT_SECRET`.
+Tidak ada server-side session table. Validasi tetap stateless per-request: verifikasi signature JWT + cek `tokenVersion` & `isActive` akun di database via `validateSession()`.

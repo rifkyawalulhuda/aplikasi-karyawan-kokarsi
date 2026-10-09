@@ -1,7 +1,7 @@
 import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } from 'h3'
 
 
-const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types', 'departments', 'document-types']
+const ALLOWED = ['work-locations', 'job-roles', 'job-levels', 'tax-status', 'contract-types', 'departments', 'document-types', 'banks']
 
 export default defineEventHandler(async (event) => {
   const resource = getRouterParam(event, 'resource')

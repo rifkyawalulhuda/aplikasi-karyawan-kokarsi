@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import type { Employee } from '~/types'
+import type { EmployeeDocumentLike } from '~/utils/employee-metrics'
 
 const route = useRoute()
 const toast = useToast()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const employeeId = computed(() => Number(route.params.id))
 
 // Forward cookie dari SSR request ke Nitro API
@@ -12,21 +14,25 @@ const { data: employee, status, refresh, error } = await useFetch<Employee>(
   () => `/api/employees/${employeeId.value}`,
   {
     headers,
-    watch: [employeeId],
+    watch: [employeeId]
   }
 )
 
 // Fetch dokumen karyawan (sertifikasi & ijin only — CERTIFICATION category)
-const { data: docsRes } = await useFetch<{ data: any[]; total: number }>(
+const { data: docsRes } = await useFetch<{ data: EmployeeDocumentLike[], total: number }>(
   () => `/api/employee-documents?employeeId=${employeeId.value}&limit=999&documentTypeCategory=CERTIFICATION`,
   {
     credentials: 'include',
-    watch: [employeeId],
+    watch: [employeeId]
   }
 )
 const employeeDocs = computed(() => docsRes.value?.data ?? [])
 
-const fetchError = computed(() => error.value as any)
+const errorMessage = computed(() => apiErrorMessage(error.value, 'Karyawan tidak ditemukan.'))
+
+const isOffboarded = computed(() =>
+  employee.value?.employmentStatus === 'RESIGN' || employee.value?.employmentStatus === 'PHK'
+)
 
 // Edit modal
 const editModal = ref(false)
@@ -50,8 +56,26 @@ function onOffboarded() {
   toast.add({ title: 'Offboarding berhasil diproses', color: 'success' })
 }
 
+function onDelete() {
+  if (!employee.value) return
+  confirmDeleteToast({
+    title: 'Hapus data karyawan?',
+    description: `Data ${employee.value.fullName} akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.`,
+    confirmLabel: 'Hapus Karyawan',
+    onConfirm: async () => {
+      try {
+        await $fetch(`/api/employees/${employeeId.value}`, { method: 'DELETE' })
+        toast.add({ title: 'Karyawan dihapus', color: 'success' })
+        await navigateTo('/karyawan')
+      } catch (e) {
+        toast.add({ title: 'Gagal menghapus', description: apiErrorMessage(e), color: 'error' })
+      }
+    }
+  })
+}
+
 useHead({
-  title: computed(() => employee.value ? `${employee.value.fullName} - Detail Karyawan` : 'Detail Karyawan'),
+  title: computed(() => employee.value ? `${employee.value.fullName} - Detail Karyawan` : 'Detail Karyawan')
 })
 </script>
 
@@ -65,12 +89,17 @@ useHead({
             color="neutral"
             variant="ghost"
             to="/karyawan"
-            label="Kembali"
+            aria-label="Kembali ke daftar karyawan"
           />
         </template>
         <template #title>
-          <span v-if="employee">{{ employee.fullName }}</span>
-          <span v-else>Detail Karyawan</span>
+          <div class="flex min-w-0 items-center gap-2">
+            <NuxtLink to="/karyawan" class="hidden shrink-0 text-sm text-muted transition-colors hover:text-highlighted sm:inline">
+              Karyawan
+            </NuxtLink>
+            <UIcon v-if="employee" name="i-lucide-chevron-right" class="hidden size-3.5 shrink-0 text-muted sm:inline" />
+            <span class="truncate">{{ employee?.fullName ?? 'Detail Karyawan' }}</span>
+          </div>
         </template>
         <template #right>
           <UButton
@@ -86,64 +115,56 @@ useHead({
     </template>
 
     <template #body>
-      <!-- Loading -->
-      <div v-if="status === 'pending'" class="flex items-center justify-center py-20">
-        <UIcon name="i-lucide-loader-circle" class="w-8 h-8 text-muted animate-spin" />
+      <!-- Loading skeleton -->
+      <div v-if="status === 'pending'" class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        <USkeleton class="h-36 w-full rounded-2xl" />
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <USkeleton v-for="i in 4" :key="i" class="h-28 w-full rounded-xl" />
+        </div>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <USkeleton class="h-80 w-full rounded-2xl lg:col-span-2" />
+          <USkeleton class="h-80 w-full rounded-2xl" />
+        </div>
       </div>
 
       <!-- Error -->
-      <div v-else-if="status === 'error' || fetchError || !employee" class="text-center py-20">
-        <UIcon name="i-lucide-user-x" class="w-12 h-12 text-muted mx-auto mb-3" />
+      <div v-else-if="status === 'error' || error || !employee" class="py-20 text-center">
+        <UIcon name="i-lucide-user-x" class="mx-auto mb-3 size-12 text-muted" aria-hidden="true" />
         <p class="text-muted">
-          {{ fetchError?.data?.message ?? fetchError?.message ?? 'Karyawan tidak ditemukan.' }}
+          {{ errorMessage }}
         </p>
-        <UButton label="Kembali ke Daftar" icon="i-lucide-arrow-left" to="/karyawan" class="mt-4" />
+        <UButton
+          label="Kembali ke Daftar"
+          icon="i-lucide-arrow-left"
+          to="/karyawan"
+          class="mt-4"
+        />
       </div>
 
       <!-- Content -->
       <template v-else>
-        <div class="max-w-5xl mx-auto px-4 py-6 space-y-6">
-          <!-- A. Header Profil -->
-          <KaryawanDetailProfileHeader
+        <div class="mx-auto max-w-6xl space-y-6 px-4 py-6">
+          <!-- Hero profil -->
+          <KaryawanDetailDossierHero
             :employee="employee"
             @edit="editModal = true"
             @offboard="offboardingModal = true"
+            @delete="onDelete"
           />
 
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Left column -->
-            <div class="lg:col-span-2 space-y-6">
-              <!-- B. Ringkasan Utama -->
-              <KaryawanDetailSummaryCards :employee="employee" />
+          <!-- KPI ringkas -->
+          <KaryawanDetailKpiStrip :employee="employee" :documents="employeeDocs" />
 
-              <!-- C. Section Status Kerja -->
-              <KaryawanDetailEmploymentPanel :employee="employee" />
+          <!-- Panel offboarding (hanya untuk RESIGN/PHK) -->
+          <KaryawanDetailOffboardingPanel v-if="isOffboarded" :employee="employee" />
 
-              <!-- E. Section Audit Status -->
-              <KaryawanDetailStatusHistoryList
-                :history="employee.statusHistory ?? []"
-              />
+          <!-- Konten utama -->
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div class="lg:col-span-2">
+              <KaryawanDetailSummaryPanel :employee="employee" />
             </div>
-
-            <!-- Right column -->
-            <div class="lg:col-span-1 space-y-6">
-              <!-- D. Riwayat Kontrak -->
-              <KaryawanDetailContractTimeline
-                :contracts="employee.contracts ?? []"
-                :employee-name="employee?.fullName"
-              />
-
-              <!-- F. Riwayat Surat Peringatan -->
-              <KaryawanDetailWarningLetterList
-                :letters="employee.warningLetters ?? []"
-                :employee-name="employee?.fullName"
-              />
-
-              <!-- G. Sertifikasi & Ijin -->
-              <KaryawanDetailEmployeeDocumentList
-                :documents="employeeDocs"
-                :employee-name="employee?.fullName"
-              />
+            <div class="lg:col-span-1">
+              <KaryawanDetailCareerTimeline :employee="employee" :documents="employeeDocs" />
             </div>
           </div>
         </div>
@@ -174,5 +195,3 @@ useHead({
     :employee-docs="employeeDocs"
   />
 </template>
-
-

@@ -9,6 +9,7 @@ import { DashboardCacheService } from '../shared/dashboard-cache.service'
 import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
+import { TemplateSnapshotService } from '../contract-templates/template-snapshot.service'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -65,6 +66,7 @@ export class ContractsService {
     private dashboardCache: DashboardCacheService,
     private notificationsService: NotificationsService,
     private activityLog: ActivityLogService,
+    private templateSnapshot: TemplateSnapshotService,
   ) {}
 
   private include = {
@@ -106,6 +108,75 @@ export class ContractsService {
       select: { contractNo: true },
     })
     return buildDocumentNumber(existing.map(c => c.contractNo), 'KK', refDate)
+  }
+
+  /**
+   * Bangun snapshot template versi publish untuk kontrak baru.
+   * Return null jika templateId kosong atau belum ada versi publish (legacy).
+   */
+  private async buildContractSnapshot(params: {
+    templateId?: number | null
+    employeeId: number
+    contractNo: string
+    startDate: Date
+    endDate: Date
+    signedDate?: Date | null
+    baseCompensation?: number | null
+    templateData?: Record<string, any> | null
+  }) {
+    if (!params.templateId) return null
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: params.employeeId },
+      include: {
+        jobRole: { select: { id: true, name: true } },
+        workLocation: { select: { id: true, name: true } },
+        department: { select: { id: true, name: true } },
+        jobLevel: { select: { id: true, name: true } },
+        bank: { select: { id: true, name: true, branch: true } },
+      },
+    })
+    return this.templateSnapshot.buildSnapshot({
+      templateId: params.templateId,
+      employee: employee ?? undefined,
+      contract: {
+        contractNo: params.contractNo,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        signedDate: params.signedDate,
+        baseCompensation: params.baseCompensation,
+      },
+      templateData: params.templateData,
+    })
+  }
+
+  /**
+   * Template nonaktif tidak boleh dipakai untuk kontrak BARU.
+   *
+   * Pengecualian penting: kontrak yang memang SUDAH memakai template itu
+   * (`allowedTemplateId`) tetap boleh melanjutkannya — memperpanjang atau
+   * mengedit kontrak lama yang template-nya dinonaktifkan setelah kontrak
+   * dibuat. Tanpa pengecualian ini, perpanjangan kontrak lama bisa mustahil.
+   *
+   * Template yang tidak ditemukan tidak digagalkan di sini: jalur legacy
+   * (template tanpa versi terbit) tetap berjalan seperti sebelumnya.
+   */
+  private async assertTemplateUsable(
+    templateId: number | null | undefined,
+    options: { allowedTemplateId?: number | null; context: string },
+  ) {
+    if (!templateId) return
+    if (options.allowedTemplateId && templateId === options.allowedTemplateId) return
+
+    const template = await this.prisma.contractTemplate.findUnique({
+      where: { id: templateId },
+      select: { id: true, name: true, isActive: true },
+    })
+    if (template && !template.isActive) {
+      throw new BadRequestException(
+        `Template kontrak "${template.name}" sedang nonaktif dan tidak dapat dipakai untuk ${options.context}. `
+        + 'Aktifkan kembali template tersebut atau pilih template lain.',
+      )
+    }
   }
 
   private withComputedStatus<T extends { startDate: Date; endDate: Date; status: ContractStatus }>(contract: T) {
@@ -321,6 +392,7 @@ export class ContractsService {
   }
 
   async create(dto: CreateContractDto, actor: { name: string; role: string }) {
+    await this.assertTemplateUsable(dto.templateId, { context: 'kontrak baru' })
     await this.checkTerminationLockout(dto.employeeId)
     await this.checkSp3Lockout(dto.employeeId)
 
@@ -347,14 +419,32 @@ export class ContractsService {
 
     try {
       const contractNo = await this.generateContractNo(new Date(dto.startDate))
+      const startDate = new Date(dto.startDate)
+      const endDate = new Date(dto.endDate)
+      const signedDate = dto.signedDate ? new Date(dto.signedDate) : undefined
+
+      const snapshot = await this.buildContractSnapshot({
+        templateId: dto.templateId,
+        employeeId: dto.employeeId,
+        contractNo,
+        startDate,
+        endDate,
+        signedDate: signedDate ?? null,
+        baseCompensation: dto.baseCompensation ?? null,
+        templateData: dto.templateData ?? null,
+      })
+
       const contract = await this.prisma.contract.create({
         data: {
           ...dto,
           contractNo,
           parentContractId: autoParentId,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
-          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+          startDate,
+          endDate,
+          signedDate,
+          templateVersionId: snapshot?.templateVersionId,
+          templateSnapshot: snapshot?.templateSnapshot as any,
+          resolvedTemplateData: snapshot?.resolvedTemplateData as any,
         },
         include: this.include,
       })
@@ -378,6 +468,19 @@ export class ContractsService {
       include: this.include,
     })
     if (!parent) throw new NotFoundException('Kontrak induk tidak ditemukan')
+
+    // `templateId` dipakai untuk membangun snapshot versi terbit. UI selalu mengirimnya
+    // (field wajib di RenewContractModal), tapi API-nya bebas dikirim tanpa itu — dulu
+    // hasilnya kontrak perpanjangan lahir tanpa snapshot dan field dinamisnya hilang.
+    // Warisi template induk supaya hasilnya sama seperti perpanjangan dari UI.
+    const effectiveTemplateId = dto.templateId ?? parent.templateId ?? null
+
+    // Template induk boleh nonaktif (kontrak ini memang sudah memakainya);
+    // hanya template BERBEDA yang dipilih saat perpanjangan yang wajib aktif.
+    await this.assertTemplateUsable(effectiveTemplateId, {
+      allowedTemplateId: parent.templateId ?? null,
+      context: 'perpanjangan kontrak',
+    })
 
     const computedParent = this.withComputedStatus(parent)
     if (computedParent.status !== 'AKAN_HABIS' && computedParent.status !== 'EXPIRED') {
@@ -410,19 +513,47 @@ export class ContractsService {
 
     try {
       const contractNo = await this.generateContractNo(new Date(dto.startDate))
+      const startDate = new Date(dto.startDate)
+      const endDate = new Date(dto.endDate)
+      const signedDate = dto.signedDate ? new Date(dto.signedDate) : undefined
+
+      // Perpanjangan mewarisi field dinamis kontrak induk: nilainya tidak diminta
+      // ulang ke petugas karena RenewContractModal menampilkannya read-only
+      // (tanggal terbit KTP dsb. tidak berubah karena kontrak diperpanjang).
+      // Kalau `dto.templateData` tidak dikirim, warisan ini yang dipakai —
+      // tanpa itu kontrak perpanjangan kehilangan nilai field dinamis dan
+      // pembuatan kontrak bisa gagal karena field wajib dianggap kosong.
+      const inheritedTemplateData = dto.templateData
+        ?? (parent.templateData as Record<string, any> | null)
+        ?? null
+
+      const snapshot = await this.buildContractSnapshot({
+        templateId: effectiveTemplateId,
+        employeeId: parent.employeeId,
+        contractNo,
+        startDate,
+        endDate,
+        signedDate: signedDate ?? null,
+        baseCompensation: dto.baseCompensation,
+        templateData: inheritedTemplateData,
+      })
+
       const contract = await this.prisma.contract.create({
         data: {
           employeeId: parent.employeeId,
           contractNo,
-          startDate: new Date(dto.startDate),
-          endDate: new Date(dto.endDate),
+          startDate,
+          endDate,
           contractTypeId: dto.contractTypeId,
-          templateId: dto.templateId,
-          signedDate: dto.signedDate ? new Date(dto.signedDate) : undefined,
+          templateId: effectiveTemplateId,
+          signedDate,
           baseCompensation: dto.baseCompensation,
-          templateData: dto.templateData as any,
+          templateData: inheritedTemplateData as any,
           documentUrl: dto.documentUrl,
           parentContractId: parentId,
+          templateVersionId: snapshot?.templateVersionId,
+          templateSnapshot: snapshot?.templateSnapshot as any,
+          resolvedTemplateData: snapshot?.resolvedTemplateData as any,
         },
         include: this.include,
       })
@@ -440,6 +571,13 @@ export class ContractsService {
 
   async update(id: number, dto: UpdateContractDto, actor: { name: string; role: string }) {
     const existing = await this.findOne(id)
+
+    // Template yang sudah dipakai kontrak ini tetap boleh dipertahankan walau
+    // nonaktif; mengganti ke template nonaktif lain ditolak.
+    await this.assertTemplateUsable(dto.templateId ?? (existing as any).templateId ?? null, {
+      allowedTemplateId: (existing as any).templateId ?? null,
+      context: 'kontrak ini',
+    })
 
     if (existing.documentUrl) {
       const lockedFields = ['baseCompensation', 'startDate', 'endDate', 'employeeId'] as const
@@ -460,13 +598,49 @@ export class ContractsService {
       }
     }
 
+    // Field dinamis hanya ditimpa bila form mengirimkannya (modal edit selalu
+    // mengirim), sisanya nilai lama dipertahankan agar edit tanggal/kompensasi
+    // tidak menghapus data tambahan yang sudah diisi.
+    const templateData = dto.templateData
+      ?? ((existing as any).templateData as Record<string, any> | null)
+      ?? null
+
+    const startDate = new Date(dto.startDate)
+    const endDate = new Date(dto.endDate)
+    const signedDate = dto.signedDate ? new Date(dto.signedDate) : null
+
+    // Snapshot dibangun ulang supaya `resolvedTemplateData` (dipakai renderer PDF)
+    // ikut berubah saat tanggal/kompensasi/nilai field dinamis diedit. Snapshot
+    // lama akan mencetak nilai lama walau kolom kontraknya sudah diperbarui.
+    const snapshot = await this.buildContractSnapshot({
+      templateId: dto.templateId ?? (existing as any).templateId ?? null,
+      employeeId: dto.employeeId ?? existing.employeeId,
+      contractNo: existing.contractNo,
+      startDate,
+      endDate,
+      signedDate,
+      baseCompensation: dto.baseCompensation ?? (existing as any).baseCompensation ?? null,
+      templateData,
+    })
+
     const contract = await this.prisma.contract.update({
       where: { id },
       data: {
         ...dto,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        signedDate: dto.signedDate ? new Date(dto.signedDate) : null,
+        startDate,
+        endDate,
+        signedDate,
+        templateData: templateData as any,
+        // Template/binding tidak dikirim saat snapshot gagal dibangun (mis.
+        // template legacy tanpa versi terbit) — jangan timpa snapshot lama
+        // dengan null agar kontrak yang sudah punya dokumen tetap konsisten.
+        ...(snapshot
+          ? {
+              templateVersionId: snapshot.templateVersionId,
+              templateSnapshot: snapshot.templateSnapshot as any,
+              resolvedTemplateData: snapshot.resolvedTemplateData as any,
+            }
+          : {}),
       },
       include: this.include,
     })

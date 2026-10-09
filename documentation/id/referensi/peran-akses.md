@@ -14,6 +14,10 @@ Aplikasi memiliki dua peran pengguna internal: **Master Admin** dan **Pengelola 
 | Import bulk Excel | ✅ | ✅ |
 | Export data karyawan | ✅ | ✅ |
 | Offboarding | ✅ | ✅ |
+| **Struktur Organisasi** | | |
+| Lihat bagan & tabel | ✅ | ✅ |
+| Kelola periode & jabatan | ✅ | ❌ |
+| Cetak & export bagan | ✅ | ✅ |
 | **Kontrak** | | |
 | Lihat semua kontrak | ✅ | ✅ |
 | Tambah kontrak | ✅ | ✅ |

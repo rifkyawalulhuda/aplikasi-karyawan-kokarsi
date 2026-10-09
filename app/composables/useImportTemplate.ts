@@ -5,6 +5,12 @@ interface LookupItem {
   name: string
 }
 
+interface BankItem {
+  id: number
+  name: string
+  branch?: string | null
+}
+
 interface LookupsResponse {
   workLocations: LookupItem[]
   taxStatus: LookupItem[]
@@ -13,6 +19,12 @@ interface LookupsResponse {
   jobLevels: LookupItem[]
   educationLevels: string[]
   genders: { value: string; label: string }[]
+  banks?: BankItem[]
+}
+
+/** Label opsi Bank — HARUS sama dengan `bankOptions` di `generateImportTemplate()`. */
+export function bankOptionLabel(bank: BankItem): string {
+  return bank.branch ? `${bank.name} — ${bank.branch}` : bank.name
 }
 
 export interface EmployeeImportRow {
@@ -34,6 +46,8 @@ export interface EmployeeImportRow {
   jobLevelId: number
   departmentId: number
   taxStatusId: number
+  bankId?: number
+  bankAccountNumber?: string
 }
 
 export interface InvalidImportRow {
@@ -48,12 +62,38 @@ export interface ParseResult {
   totalRows: number
 }
 
+/**
+ * Satu baris update massal Data Bank. `bank` sudah berupa LABEL gabungan
+ * ("Nama — Cabang") yang cocok dengan Master Bank; dikirim apa adanya ke backend.
+ *
+ * Kolom Nama sengaja TIDAK ada: pencocokan murni memakai `employeeNo`.
+ */
+export interface BankUpdateRow {
+  rowNumber: number
+  employeeNo: string
+  bank?: string
+  bankAccountNumber?: string
+}
+
+export interface InvalidBankUpdateRow {
+  rowNumber: number
+  data: Record<string, string>
+  errors: string[]
+}
+
+export interface BankUpdateParseResult {
+  validRows: BankUpdateRow[]
+  invalidRows: InvalidBankUpdateRow[]
+  totalRows: number
+}
+
 interface LookupMaps {
   workLocations: Map<string, number>
   jobRoles: Map<string, number>
   jobLevels: Map<string, number>
   departments: Map<string, number>
   taxStatus: Map<string, number>
+  banks: Map<string, number>
 }
 
 const COLUMN_HEADERS = [
@@ -74,6 +114,8 @@ const COLUMN_HEADERS = [
   'Level Jabatan',
   'Departemen',
   'Status Pajak',
+  'Bank',
+  'No. Rekening',
 ]
 
 const GENDER_MAP: Record<string, 'MALE' | 'FEMALE'> = {
@@ -91,6 +133,7 @@ function buildLookupMaps(lookups: LookupsResponse): LookupMaps {
     jobLevels: new Map(lookups.jobLevels.map(l => [l.name, l.id])),
     departments: new Map(lookups.departments.map(l => [l.name, l.id])),
     taxStatus: new Map(lookups.taxStatus.map(l => [l.name, l.id])),
+    banks: new Map((lookups.banks ?? []).map(b => [bankOptionLabel(b), b.id])),
   }
 }
 
@@ -143,6 +186,27 @@ function getCellValue(val: unknown): string {
     return formatDateForExcel(val)
   }
   return String(val).trim()
+}
+
+/** Normalisasi judul kolom agar pencocokan header tahan spasi/huruf besar-kecil. */
+function normalizeHeaderKey(value: unknown): string {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/** Nilai sel untuk mode update: `-` (placeholder export) & kosong dianggap kosong. */
+function cleanBankCell(value: unknown): string {
+  const text = String(value ?? '').trim()
+  return text === '' || text === '-' ? '' : text
+}
+
+/** Pemetaan nama header (ternormalisasi) → indeks kolom pada baris pertama. */
+function buildHeaderIndex(headerRow: unknown[]): Map<string, number> {
+  const index = new Map<string, number>()
+  headerRow.forEach((cell, i) => {
+    const key = normalizeHeaderKey(cell)
+    if (key && !index.has(key)) index.set(key, i)
+  })
+  return index
 }
 
 export function useImportTemplate() {
@@ -214,6 +278,8 @@ export function useImportTemplate() {
         jobLevel: getCellValue(row[14]),
         department: getCellValue(row[15]),
         taxStatus: getCellValue(row[16]),
+        bank: getCellValue(row[17]),
+        bankAccountNumber: getCellValue(row[18]),
       }
 
       if (!raw.employeeNo) errors.push('No. Induk Karyawan wajib diisi')
@@ -253,6 +319,11 @@ export function useImportTemplate() {
 
       if (!raw.taxStatus) errors.push('Status Pajak wajib diisi')
       else if (!lookupMaps.taxStatus.has(raw.taxStatus)) errors.push(`Status Pajak "${raw.taxStatus}" tidak ditemukan di master data`)
+
+      // Bank & No. Rekening OPSIONAL. Bank dicocokkan dengan label master
+      // ("Nama — Cabang"); No. Rekening bebas (teks, leading zero aman).
+      if (raw.bank && !lookupMaps.banks.has(raw.bank)) errors.push(`Bank "${raw.bank}" tidak ditemukan di master data`)
+      if (raw.bankAccountNumber && raw.bankAccountNumber.length > 50) errors.push('No. Rekening maks. 50 karakter')
 
       if (raw.nik && raw.nik.length < 8) errors.push('NIK min. 8 karakter')
 
@@ -312,6 +383,8 @@ export function useImportTemplate() {
           jobLevelId: lookupMaps.jobLevels.get(raw.jobLevel)!,
           departmentId: lookupMaps.departments.get(raw.department)!,
           taxStatusId: lookupMaps.taxStatus.get(raw.taxStatus)!,
+          bankId: raw.bank ? lookupMaps.banks.get(raw.bank) : undefined,
+          bankAccountNumber: raw.bankAccountNumber || undefined,
         })
       }
     }
@@ -323,8 +396,114 @@ export function useImportTemplate() {
     }
   }
 
+  async function generateBankUpdateTemplate(): Promise<void> {
+    const blob = await $fetch<Blob>('/api/employees/bank-update-template', {
+      responseType: 'blob',
+      credentials: 'include',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'template-update-bank-karyawan.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
+  /**
+   * Parser mode "Update Data Bank".
+   *
+   * Membaca kolom **berdasarkan nama header** (bukan posisi), sehingga:
+   *  - file **Export Excel Data Karyawan** bisa langsung dipakai apa adanya —
+   *    kolom `Bank` + `Cabang` dipisah, kolom lain diabaikan; maupun
+   *  - template ringkas (kolom `Bank` sudah berisi label gabungan).
+   *
+   * Hanya `No. Induk Karyawan` yang wajib. Nilai `-` (placeholder export)
+   * diperlakukan sebagai kosong sehingga tidak menghapus data lama.
+   */
+  async function parseAndValidateBankUpdate(file: File): Promise<BankUpdateParseResult> {
+    const lookups = await $fetch<LookupsResponse>('/api/lookups')
+    const bankLabels = new Set((lookups.banks ?? []).map(bankOptionLabel))
+
+    const buffer = await file.arrayBuffer()
+    const workbook = XLSX.read(buffer, { type: 'array' })
+
+    const sheetName = workbook.SheetNames[0]
+    if (!sheetName) return { validRows: [], invalidRows: [], totalRows: 0 }
+
+    const sheet = workbook.Sheets[sheetName]!
+    const grid = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false })
+    if (grid.length < 2) return { validRows: [], invalidRows: [], totalRows: 0 }
+
+    const headerIndex = buildHeaderIndex(grid[0] ?? [])
+    const colEmployeeNo = headerIndex.get('no. induk karyawan')
+    const colBank = headerIndex.get('bank')
+    const colBranch = headerIndex.get('cabang')
+    const colAccount = headerIndex.get('no. rekening')
+
+    const dataRows = grid.slice(1).filter(row => Array.isArray(row) && row.some(cell => String(cell ?? '').trim() !== ''))
+
+    const validRows: BankUpdateRow[] = []
+    const invalidRows: InvalidBankUpdateRow[] = []
+    const seenEmployeeNos = new Map<string, number>()
+
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i]!
+      const rowNum = i + 2
+      const errors: string[] = []
+
+      const cell = (index: number | undefined) => (index === undefined ? '' : cleanBankCell(row[index]))
+      const employeeNo = cell(colEmployeeNo)
+      const bankName = cell(colBank)
+      const branch = cell(colBranch)
+      const accountNumber = cell(colAccount)
+
+      if (!employeeNo) {
+        errors.push('No. Induk Karyawan wajib diisi')
+      } else {
+        const key = employeeNo.toLowerCase()
+        if (seenEmployeeNos.has(key)) {
+          errors.push(`No. Induk Karyawan "${employeeNo}" duplikat dengan baris ${seenEmployeeNos.get(key)}`)
+        } else {
+          seenEmployeeNos.set(key, rowNum)
+        }
+      }
+
+      // Gabungkan Bank + Cabang bila keduanya kolom terpisah (format export).
+      // Bila sel Bank sudah memuat label gabungan ("Nama — Cabang"), pakai apa adanya.
+      const bankLabel = (bankName && branch && !bankName.includes('—'))
+        ? `${bankName} — ${branch}`
+        : bankName
+
+      if (bankLabel && !bankLabels.has(bankLabel)) {
+        errors.push(`Bank "${bankLabel}" tidak ditemukan di Master Bank`)
+      }
+
+      if (accountNumber.length > 50) {
+        errors.push('No. Rekening maks. 50 karakter')
+      }
+
+      const data = { employeeNo, bank: bankLabel, bankAccountNumber: accountNumber }
+      if (errors.length > 0) {
+        invalidRows.push({ rowNumber: rowNum, data, errors })
+      } else {
+        validRows.push({
+          rowNumber: rowNum,
+          employeeNo,
+          bank: bankLabel || undefined,
+          bankAccountNumber: accountNumber || undefined,
+        })
+      }
+    }
+
+    return { validRows, invalidRows, totalRows: dataRows.length }
+  }
+
   return {
     generateTemplate,
     parseAndValidate,
+    generateBankUpdateTemplate,
+    parseAndValidateBankUpdate,
   }
 }

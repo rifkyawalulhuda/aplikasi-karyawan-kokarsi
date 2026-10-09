@@ -5,13 +5,12 @@ definePageMeta({ layout: 'default' })
 
 const route = useRoute()
 const router = useRouter()
-const toast = useToast()
 const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
 
 const spaceId = computed(() => Number(route.params.id))
 const { data: space, refresh, pending, error } = await useFetch<Space>(() => `/api/spaces/${spaceId.value}`, {
-  credentials: 'include',
+  credentials: 'include'
 })
 
 // Redirect jika tidak ada akses
@@ -21,42 +20,59 @@ watchEffect(() => {
   }
 })
 
-// View mode: board | list | docs
-type ViewMode = 'board' | 'list' | 'docs'
-const viewMode = ref<ViewMode>('board')
+// ── View mode (tersinkron URL: ?view=board|list|docs) ────────────────────────
+const state = useSpaceViewState()
+
+// ── SSE: satu koneksi untuk seluruh subtree halaman ──────────────────────────
+const { events, connected } = useSpaceSSE(spaceId)
+provide(SPACE_SSE_KEY, { events, connected })
+
+// Member & pengumuman berubah lewat SSE → muat ulang space
+watch(events, (list) => {
+  const latest = list[list.length - 1]
+  if (!latest) return
+  if (latest.type.startsWith('MEMBER_') || latest.type.startsWith('ANNOUNCEMENT_')) refresh()
+}, { deep: true })
 
 // Member map untuk resolve assignee names
-const { data: usersRes } = useFetch<{ id: number; name: string }[]>('/api/users/pengurus', {
+const { data: usersRes } = useFetch<{ id: number, name: string }[]>('/api/users/pengurus', {
   credentials: 'include',
-  lazy: true,
+  lazy: true
 })
 const memberMap = computed<Record<number, string>>(() =>
   Object.fromEntries((usersRes.value ?? []).map(u => [u.id, u.name]))
 )
 
-// Card detail modal
-const selectedCard = ref<SpaceCard | null>(null)
-const cardDetailOpen = ref(false)
-const memberModalOpen = ref(false)
+// ── Card detail drawer ────────────────────────────────────────────────────────
+const selectedCardId = ref<number | null>(null)
+const drawerOpen = ref(false)
 
 function openCard(card: SpaceCard) {
-  selectedCard.value = card
-  cardDetailOpen.value = true
+  selectedCardId.value = card.id
+  drawerOpen.value = true
 }
 
-function openMemberModal() {
-  memberModalOpen.value = true
+function closeDrawer() {
+  drawerOpen.value = false
+  selectedCardId.value = null
 }
 
-// Only creator can delete the space
+// Member modal
+const memberModalOpen = ref(false)
+
+// Edit space modal
+const editModalOpen = ref(false)
+
+// Hanya pembuat dapat menghapus Space
 const isOwner = computed(() => space.value?.createdById === auth.admin?.id)
 
 // Dropdown menu items
 const menuItems = computed(() => [[
-  { label: 'Kelola Member', icon: 'i-lucide-users', onSelect: openMemberModal },
+  { label: 'Edit Space', icon: 'i-lucide-pencil', onSelect: () => { editModalOpen.value = true } },
+  { label: 'Kelola Member', icon: 'i-lucide-users', onSelect: () => { memberModalOpen.value = true } },
   ...(isOwner.value
     ? [{ label: 'Hapus Space', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: deleteSpace }]
-    : []),
+    : [])
 ]])
 
 // Delete space
@@ -68,7 +84,7 @@ function deleteSpace() {
     onConfirm: async () => {
       await $fetch(`/api/spaces/${spaceId.value}`, { method: 'DELETE', credentials: 'include' })
       router.push('/spaces')
-    },
+    }
   })
 }
 
@@ -76,8 +92,14 @@ const colorMap: Record<string, string> = {
   blue: 'bg-blue-500', sky: 'bg-sky-500', teal: 'bg-teal-500',
   green: 'bg-green-500', yellow: 'bg-amber-400', orange: 'bg-orange-500',
   red: 'bg-red-500', pink: 'bg-pink-500', purple: 'bg-purple-500',
-  indigo: 'bg-indigo-500', gray: 'bg-gray-400', slate: 'bg-slate-500',
+  indigo: 'bg-indigo-500', gray: 'bg-gray-400', slate: 'bg-slate-500'
 }
+
+const VIEWS = [
+  { key: 'board', icon: 'i-lucide-kanban', label: 'Board' },
+  { key: 'list', icon: 'i-lucide-list', label: 'List' },
+  { key: 'docs', icon: 'i-lucide-file-text', label: 'Docs' }
+] as const
 </script>
 
 <template>
@@ -87,36 +109,40 @@ const colorMap: Record<string, string> = {
         <template #leading>
           <div class="flex items-center gap-3">
             <UDashboardSidebarCollapse />
-            <NuxtLink to="/spaces" class="text-muted hover:text-highlighted">
+            <NuxtLink
+              to="/spaces"
+              class="rounded text-muted transition-colors hover:text-highlighted"
+              aria-label="Kembali ke daftar Space"
+            >
               <UIcon name="i-lucide-kanban" class="size-4" />
             </NuxtLink>
             <UIcon name="i-lucide-chevron-right" class="size-3 text-muted" />
-            <div v-if="space" class="flex items-center gap-2">
+            <div v-if="space" class="flex min-w-0 items-center gap-2">
               <div
-                class="flex size-7 items-center justify-center rounded-md text-base"
+                class="flex size-7 shrink-0 items-center justify-center rounded-md text-base"
                 :class="`${colorMap[space.color] ?? 'bg-primary'}/10`"
               >
                 {{ space.icon ?? '📋' }}
               </div>
-              <span class="font-semibold text-highlighted">{{ space.name }}</span>
+              <span class="truncate font-semibold text-highlighted">{{ space.name }}</span>
             </div>
           </div>
         </template>
         <template #right>
           <div class="flex items-center gap-2">
             <!-- View toggle -->
-            <div class="flex rounded-lg border border-default overflow-hidden text-xs">
+            <div class="flex overflow-hidden rounded-lg border border-default text-xs" role="tablist" aria-label="Mode tampilan">
               <button
-                v-for="v in [
-                  { key: 'board', icon: 'i-lucide-kanban', label: 'Board' },
-                  { key: 'list', icon: 'i-lucide-list', label: 'List' },
-                  { key: 'docs', icon: 'i-lucide-file-text', label: 'Docs' },
-                ]"
+                v-for="v in VIEWS"
                 :key="v.key"
                 type="button"
+                role="tab"
+                :aria-selected="state.view.value === v.key"
                 class="flex items-center gap-1.5 px-2.5 py-1.5 font-medium transition-colors"
-                :class="viewMode === v.key ? 'bg-primary text-inverted' : 'text-muted hover:text-highlighted hover:bg-elevated/60'"
-                @click="viewMode = v.key as ViewMode"
+                :class="state.view.value === v.key
+                  ? 'bg-primary text-inverted'
+                  : 'text-muted hover:bg-elevated/60 hover:text-highlighted'"
+                @click="state.setView(v.key)"
               >
                 <UIcon :name="v.icon" class="size-3.5" />
                 {{ v.label }}
@@ -129,10 +155,17 @@ const colorMap: Record<string, string> = {
               variant="ghost"
               size="sm"
               :loading="pending"
+              aria-label="Muat ulang"
               @click="refresh()"
             />
             <UDropdownMenu :items="menuItems">
-              <UButton icon="i-lucide-more-horizontal" color="neutral" variant="ghost" size="sm" />
+              <UButton
+                icon="i-lucide-more-horizontal"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                aria-label="Menu Space"
+              />
             </UDropdownMenu>
           </div>
         </template>
@@ -148,8 +181,15 @@ const colorMap: Record<string, string> = {
       <!-- Error -->
       <div v-else-if="error" class="flex h-full flex-col items-center justify-center gap-3 text-center">
         <UIcon name="i-lucide-alert-circle" class="size-10 text-error" />
-        <p class="font-medium text-highlighted">Space tidak ditemukan</p>
-        <UButton label="Kembali ke Daftar Space" color="neutral" variant="outline" to="/spaces" />
+        <p class="font-medium text-highlighted">
+          Space tidak ditemukan
+        </p>
+        <UButton
+          label="Kembali ke Daftar Space"
+          color="neutral"
+          variant="outline"
+          to="/spaces"
+        />
       </div>
 
       <!-- Content -->
@@ -158,16 +198,17 @@ const colorMap: Record<string, string> = {
         <SpacesSpaceAnnouncementBar :space="space" :space-id="spaceId" @updated="refresh()" />
 
         <!-- Board View -->
-        <div v-if="viewMode === 'board'" class="flex-1 overflow-hidden">
+        <div v-if="state.view.value === 'board'" class="flex-1 overflow-hidden">
           <SpacesKanbanBoard
             :space="space"
+            :member-map="memberMap"
             @refresh="refresh()"
             @card-click="openCard"
           />
         </div>
 
         <!-- List View -->
-        <div v-else-if="viewMode === 'list'" class="flex-1 overflow-hidden">
+        <div v-else-if="state.view.value === 'list'" class="flex-1 overflow-hidden">
           <SpacesListView
             :space="space"
             :member-map="memberMap"
@@ -176,27 +217,37 @@ const colorMap: Record<string, string> = {
         </div>
 
         <!-- Docs View -->
-        <div v-else-if="viewMode === 'docs'" class="flex-1 overflow-auto">
+        <div v-else-if="state.view.value === 'docs'" class="flex-1 overflow-auto">
           <SpacesSpaceDocsView :space-id="spaceId" />
         </div>
       </div>
     </template>
   </UDashboardPanel>
 
-  <!-- Card Detail Modal -->
-  <SpacesCardDetailModal
-    v-if="selectedCard"
-    v-model:open="cardDetailOpen"
-    :card="selectedCard"
+  <!-- Card Detail Drawer -->
+  <SpacesCardDetailDrawer
+    v-if="selectedCardId"
+    :open="drawerOpen"
+    :card-id="selectedCardId"
     :space-id="spaceId"
+    :member-map="memberMap"
+    @update:open="(v: boolean) => { if (!v) closeDrawer() }"
     @updated="refresh()"
-    @deleted="refresh(); cardDetailOpen = false"
+    @deleted="refresh(); closeDrawer()"
   />
 
   <!-- Member Modal -->
   <SpacesSpaceMemberModal
     v-if="space && memberModalOpen"
     v-model:open="memberModalOpen"
+    :space="space"
+    @updated="refresh()"
+  />
+
+  <!-- Edit Space Modal -->
+  <SpacesSpaceEditModal
+    v-if="space && editModalOpen"
+    v-model:open="editModalOpen"
     :space="space"
     @updated="refresh()"
   />

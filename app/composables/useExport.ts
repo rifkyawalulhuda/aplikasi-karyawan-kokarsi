@@ -1,7 +1,48 @@
 ﻿import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import type ExcelJS from 'exceljs'
 import type { Employee, WarningLetter } from '~/types'
+
+/**
+ * Gaya header Excel export karyawan — SENGAJA disamakan dengan template import
+ * (`backend/src/employees/employees.service.ts` → `generateImportTemplate`):
+ * fill biru `FF2563EB` + teks putih tebal, agar file export dan import konsisten.
+ */
+const EXPORT_HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }
+const EXPORT_HEADER_FONT = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
+
+/** Lebar kolom export karyawan, dipetakan per nama header agar tidak bergeser. */
+const EMPLOYEE_EXPORT_COLUMN_WIDTHS: Record<string, number> = {
+  'No': 5,
+  'No. Induk Karyawan': 18,
+  'No. Anggota': 18,
+  'Nama Lengkap': 30,
+  'NIK': 20,
+  'Status Kepegawaian': 18,
+  'Jenis Kelamin': 14,
+  'Tempat Lahir': 18,
+  'Tanggal Lahir': 14,
+  'Alamat': 36,
+  'Tanggal Bergabung': 16,
+  'Email': 30,
+  'No. HP': 16,
+  'Pendidikan': 14,
+  'Site': 16,
+  'Pekerjaan': 24,
+  'Level Jabatan': 16,
+  'Departement': 20,
+  'Status Pajak': 18,
+  'Bank': 22,
+  'Cabang': 22,
+  'No. Rekening': 22,
+  'No. Kontrak Aktif': 22,
+  'Tgl. Mulai Kontrak': 18,
+  'Tgl. Selesai Kontrak': 18,
+  'Status Kontrak': 16,
+  'Dibuat': 14,
+  'Diperbarui': 14
+}
 
 export function useExport() {
   function employmentStatusLabel(status: string) {
@@ -81,19 +122,22 @@ export function useExport() {
       'Site': e.workLocation?.name ?? '-',
       'Pekerjaan': e.jobRole?.name ?? '-',
       'Level Jabatan': e.jobLevel?.name ?? '-',
-      ...(includeDepartment ? { 'Departement': e.department?.name ?? '-' } : {}),
+      ...(includeDepartment ? { Departement: e.department?.name ?? '-' } : {}),
       'Status Pajak': e.taxStatus?.name ?? '-',
+      'Bank': e.bank?.name ?? '-',
+      'Cabang': e.bank?.branch ?? '-',
+      'No. Rekening': e.bankAccountNumber ?? '-',
       ...(() => {
         const c = resolveActiveContract(e)
         return {
           'No. Kontrak Aktif': c?.contractNo ?? '-',
           'Tgl. Mulai Kontrak': fmt(c?.startDate),
           'Tgl. Selesai Kontrak': fmt(c?.endDate),
-          'Status Kontrak': statusLabel(resolveContractStatus(c) ?? ''),
+          'Status Kontrak': statusLabel(resolveContractStatus(c) ?? '')
         }
       })(),
       'Dibuat': fmt(e.createdAt),
-      'Diperbarui': fmt(e.updatedAt),
+      'Diperbarui': fmt(e.updatedAt)
     }))
   }
 
@@ -117,57 +161,67 @@ export function useExport() {
         'Tgl Gabung': fmt(e.joinDate),
         'Tgl Kontrak': fmt(c?.startDate),
         'Sls Kontrak': fmt(c?.endDate),
-        'Status Kontrak': statusLabel(resolveContractStatus(c) ?? ''),
+        'Status Kontrak': statusLabel(resolveContractStatus(c) ?? '')
       }
     })
   }
 
   async function fetchAllEmployees(): Promise<Employee[]> {
-    const res = await $fetch<{ data: Employee[]; total: number }>('/api/employees/export')
+    const res = await $fetch<{ data: Employee[], total: number }>('/api/employees/export')
     return res?.data ?? []
   }
 
   async function exportExcel(filename = 'data-karyawan') {
     const employees = await fetchAllEmployees()
     const rows = toRows(employees, true)
-    const ws = XLSX.utils.json_to_sheet(rows)
 
-    // Manual column width (capped — mencegah kolom Alamat/Email terlalu lebar)
-    ws['!cols'] = [
-      { wch: 5 },  // No
-      { wch: 18 }, // No. Induk Karyawan
-      { wch: 30 }, // Nama Lengkap
-      { wch: 20 }, // NIK
-      { wch: 18 }, // Status Kepegawaian
-      { wch: 14 }, // Jenis Kelamin
-      { wch: 18 }, // Tempat Lahir
-      { wch: 14 }, // Tanggal Lahir
-      { wch: 36 }, // Alamat
-      { wch: 16 }, // Tanggal Bergabung
-      { wch: 30 }, // Email
-      { wch: 16 }, // No. HP
-      { wch: 14 }, // Pendidikan
-      { wch: 16 }, // Site
-      { wch: 24 }, // Pekerjaan
-      { wch: 16 }, // Level Jabatan
-      { wch: 20 }, // Departement
-      { wch: 18 }, // Status Pajak
-      { wch: 22 }, // No. Kontrak Aktif
-      { wch: 18 }, // Tgl. Mulai Kontrak
-      { wch: 18 }, // Tgl. Selesai Kontrak
-      { wch: 16 }, // Status Kontrak
-      { wch: 14 }, // Dibuat
-      { wch: 14 }, // Diperbarui
-    ]
+    const headers = Object.keys(rows[0] ?? {})
+    if (headers.length === 0) return
+
+    // ExcelJS dipakai (bukan SheetJS) karena hanya ExcelJS yang dapat menulis
+    // gaya sel (fill/font) — SheetJS Community mengabaikannya. Diimpor dinamis
+    // agar bundle-nya hanya dimuat saat export benar-benar dipakai.
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    const sheetName = `Karyawan ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+    const ws = wb.addWorksheet(sheetName)
+
+    // Header dengan fill & font yang sama seperti template import.
+    const headerRow = ws.addRow(headers)
+    headerRow.eachCell((cell) => {
+      cell.fill = EXPORT_HEADER_FILL as ExcelJS.Fill
+      cell.font = EXPORT_HEADER_FONT as Partial<ExcelJS.Font>
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      }
+    })
+    headerRow.height = 24
+
+    for (const row of rows) {
+      ws.addRow(headers.map(header => (row as Record<string, unknown>)[header]))
+    }
+
+    headers.forEach((header, index) => {
+      ws.getColumn(index + 1).width = EMPLOYEE_EXPORT_COLUMN_WIDTHS[header] ?? 16
+    })
 
     // Freeze header row
-    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    ws.views = [{ state: 'frozen', ySplit: 1 }]
 
-    const wb = XLSX.utils.book_new()
-    const sheetName = `Karyawan ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
-    XLSX.utils.book_append_sheet(wb, ws, sheetName)
-
-    XLSX.writeFile(wb, `${filename}.xlsx`)
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   async function exportPDF(filename = 'data-karyawan') {
@@ -187,7 +241,7 @@ export function useExport() {
     doc.text(
       `Total: ${employees.length} karyawan  |  Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}`,
       14,
-      21,
+      21
     )
 
     const headers = Object.keys(rows[0] ?? {})
@@ -204,7 +258,7 @@ export function useExport() {
         cellPadding: 1,
         overflow: 'ellipsize',
         lineColor: [210, 210, 210],
-        lineWidth: 0.1,
+        lineWidth: 0.1
       },
       headStyles: {
         fillColor: [37, 99, 235],
@@ -212,31 +266,31 @@ export function useExport() {
         fontStyle: 'bold',
         fontSize: 7,
         halign: 'center',
-        valign: 'middle',
+        valign: 'middle'
       },
       bodyStyles: {
-        valign: 'top',
+        valign: 'top'
       },
       alternateRowStyles: {
-        fillColor: [248, 250, 252],
+        fillColor: [248, 250, 252]
       },
       columnStyles: {
-        0: { cellWidth: 7 },   // No
-        1: { cellWidth: 16 },  // No. Induk
-        2: { cellWidth: 30 },  // Nama
-        3: { cellWidth: 13 },  // Status
-        4: { cellWidth: 11 },  // Gender
-        5: { cellWidth: 17 },  // Tgl Lahir
-        6: { cellWidth: 35 },  // Alamat
-        7: { cellWidth: 29 },  // Email
-        8: { cellWidth: 15 },  // No. HP
-        9: { cellWidth: 15 },  // Site
+        0: { cellWidth: 7 }, // No
+        1: { cellWidth: 16 }, // No. Induk
+        2: { cellWidth: 30 }, // Nama
+        3: { cellWidth: 13 }, // Status
+        4: { cellWidth: 11 }, // Gender
+        5: { cellWidth: 17 }, // Tgl Lahir
+        6: { cellWidth: 35 }, // Alamat
+        7: { cellWidth: 29 }, // Email
+        8: { cellWidth: 15 }, // No. HP
+        9: { cellWidth: 15 }, // Site
         10: { cellWidth: 15 }, // Dept
         11: { cellWidth: 17 }, // Pekerjaan
         12: { cellWidth: 16 }, // Tgl Gabung
         13: { cellWidth: 16 }, // Tgl Kontrak
         14: { cellWidth: 16 }, // Sls Kontrak
-        15: { cellWidth: 13 }, // Status Kontrak
+        15: { cellWidth: 13 } // Status Kontrak
       },
       margin: { left: 8, right: 8, bottom: 12 },
       didDrawPage: (data) => {
@@ -247,9 +301,9 @@ export function useExport() {
           `Halaman ${data.pageNumber} dari ${pageCount}`,
           doc.internal.pageSize.width / 2,
           doc.internal.pageSize.height - 5,
-          { align: 'center' },
+          { align: 'center' }
         )
-      },
+      }
     })
 
     doc.save(`${filename}.pdf`)
@@ -267,7 +321,7 @@ export function useExport() {
       'Tanggal Surat': fmt(l.letterDate),
       'Berlaku Sampai': fmt(l.validUntil),
       'Pengurus Koperasi': l.processedByName ?? '-',
-      'Dibuat': fmt(l.createdAt),
+      'Dibuat': fmt(l.createdAt)
     }))
   }
 
@@ -280,7 +334,7 @@ export function useExport() {
     const ws = XLSX.utils.json_to_sheet(rows)
     const colWidths = [
       { wch: 5 }, { wch: 24 }, { wch: 28 }, { wch: 18 }, { wch: 22 },
-      { wch: 8 }, { wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 16 },
+      { wch: 8 }, { wch: 40 }, { wch: 16 }, { wch: 16 }, { wch: 24 }, { wch: 16 }
     ]
     ws['!cols'] = colWidths
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
@@ -303,7 +357,7 @@ export function useExport() {
       'Tgl. Berlaku Sampai': fmt(d.expiryDate),
       'Status': d.status === 'AKTIF' ? 'Aktif' : d.status === 'AKAN_EXPIRED' ? 'Akan Expired' : 'Expired',
       'Catatan': d.notes ?? '-',
-      'Dibuat': fmt(d.createdAt),
+      'Dibuat': fmt(d.createdAt)
     }))
   }
 
@@ -313,7 +367,7 @@ export function useExport() {
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
       { wch: 5 }, { wch: 30 }, { wch: 14 }, { wch: 24 }, { wch: 22 },
-      { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 40 }, { wch: 16 },
+      { wch: 28 }, { wch: 16 }, { wch: 18 }, { wch: 14 }, { wch: 40 }, { wch: 16 }
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -331,7 +385,7 @@ export function useExport() {
       'Tanggal': fmt(d.tanggal),
       'No. SK': d.nomorSk ?? '-',
       'Tanggal SK': fmt(d.tanggalSk),
-      'Keterangan': d.keterangan ?? '-',
+      'Keterangan': d.keterangan ?? '-'
     }))
   }
 
@@ -341,7 +395,7 @@ export function useExport() {
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
       { wch: 5 }, { wch: 32 }, { wch: 20 }, { wch: 24 },
-      { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 40 },
+      { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 40 }
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -357,7 +411,7 @@ export function useExport() {
       KEBIJAKAN: 'Kebijakan',
       DOKUMEN_INTERNAL: 'Dok. Internal',
       DOKUMEN_B3: 'Dok. B3',
-      LAIN_LAIN: 'Lain-lain',
+      LAIN_LAIN: 'Lain-lain'
     }
     const statusLabel = (doc: any): string => {
       if (doc.renewedTo) return 'Sudah Diperpanjang'
@@ -381,7 +435,7 @@ export function useExport() {
       'Tanggal Berakhir': fmt(d.endDate),
       'Status': statusLabel(d),
       'Lokasi': d.location ?? '-',
-      'Catatan': d.notes ?? '-',
+      'Catatan': d.notes ?? '-'
     }))
   }
 
@@ -395,7 +449,7 @@ export function useExport() {
     ws['!cols'] = [
       { wch: 5 }, { wch: 16 }, { wch: 30 }, { wch: 20 },
       { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-      { wch: 18 }, { wch: 20 }, { wch: 36 },
+      { wch: 18 }, { wch: 20 }, { wch: 36 }
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -412,7 +466,7 @@ export function useExport() {
       SURAT_PENAWARAN: 'Penawaran',
       ADDENDUM: 'Addendum',
       AMENDMENT: 'Amendment',
-      SURAT: 'Surat',
+      SURAT: 'Surat'
     }
     const statusLabel = (doc: any): string => {
       if (doc.renewedTo) return 'Sudah Diperpanjang'
@@ -438,7 +492,7 @@ export function useExport() {
       'Status': statusLabel(c),
       'Lokasi': c.location ?? '-',
       'Catatan': c.notes ?? '-',
-      'Mother Agreement': c.motherAgreement?.documentName ?? '-',
+      'Mother Agreement': c.motherAgreement?.documentName ?? '-'
     }))
   }
 
@@ -452,7 +506,7 @@ export function useExport() {
     ws['!cols'] = [
       { wch: 5 }, { wch: 10 }, { wch: 24 }, { wch: 30 }, { wch: 20 },
       { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 16 }, { wch: 16 },
-      { wch: 18 }, { wch: 20 }, { wch: 36 }, { wch: 30 },
+      { wch: 18 }, { wch: 20 }, { wch: 36 }, { wch: 30 }
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -469,12 +523,12 @@ export function useExport() {
       'No': i + 1,
       'Tanggal': l.timestamp
         ? new Date(l.timestamp).toLocaleDateString('id-ID', {
-            day: '2-digit', month: 'short', year: 'numeric',
+            day: '2-digit', month: 'short', year: 'numeric'
           })
         : '-',
       'Jam': l.timestamp
         ? new Date(l.timestamp).toLocaleTimeString('id-ID', {
-            hour: '2-digit', minute: '2-digit',
+            hour: '2-digit', minute: '2-digit'
           })
         : '-',
       'Aksi': actionLabel(l.action ?? ''),
@@ -482,7 +536,7 @@ export function useExport() {
       'Data': l.targetLabel ?? '-',
       'Detail': l.detail ?? '-',
       'Dilakukan Oleh': l.performedBy ?? '-',
-      'Role': l.performedByRole ?? '-',
+      'Role': l.performedByRole ?? '-'
     }))
   }
 
@@ -491,15 +545,15 @@ export function useExport() {
     const rows = toActivityLogRows(logs)
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
-      { wch: 5 },  // No
+      { wch: 5 }, // No
       { wch: 16 }, // Tanggal
-      { wch: 8 },  // Jam
+      { wch: 8 }, // Jam
       { wch: 10 }, // Aksi
       { wch: 20 }, // Modul
       { wch: 44 }, // Data
       { wch: 36 }, // Detail
       { wch: 26 }, // Dilakukan Oleh
-      { wch: 22 }, // Role
+      { wch: 22 } // Role
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -509,17 +563,45 @@ export function useExport() {
     return true
   }
 
+  /**
+   * Export generik untuk Master Data (Site, Departement, Bank, dll).
+   * `rows` sudah berupa objek label→nilai, jadi lebar kolom diturunkan dari
+   * panjang header agar tetap rapi tanpa konfigurasi per kategori.
+   */
+  function exportMasterDataExcel(
+    rows: Record<string, string | number>[],
+    sheetName = 'Master Data',
+    filename = 'master-data'
+  ) {
+    const first = rows[0]
+    if (!first) return false
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const headers = Object.keys(first)
+    ws['!cols'] = headers.map((header) => {
+      const maxLen = Math.max(
+        header.length,
+        ...rows.map(row => String(row[header] ?? '').length)
+      )
+      return { wch: Math.min(Math.max(maxLen + 2, 8), 50) }
+    })
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 31))
+    XLSX.writeFile(wb, `${filename}.xlsx`)
+    return true
+  }
+
   function formatWib(val?: string | null) {
     if (!val) return '-'
     return new Intl.DateTimeFormat('id-ID', {
       timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', hour12: false,
+      hour: '2-digit', minute: '2-digit', hour12: false
     }).format(new Date(val)).replace(',', '')
   }
 
   function exportOperationalVehicleUsagesExcel(usages: any[], month?: number, year?: number, filename = 'pemakaian-kendaraan') {
     const filtered = month && year
-      ? usages.filter(item => {
+      ? usages.filter((item) => {
           const date = new Date(item.usedAt)
           return Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', month: 'numeric' }).format(date)) === month
             && Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Jakarta', year: 'numeric' }).format(date)) === year
@@ -537,12 +619,12 @@ export function useExport() {
       'Status': item.status === 'BATAL' ? 'Batal' : '-',
       'Waktu Pembatalan': formatWib(item.cancelledAt),
       'Dibatalkan Oleh': item.cancelledByName ?? '-',
-      'Role Pembatal': item.cancelledByRole ?? '-',
+      'Role Pembatal': item.cancelledByRole ?? '-'
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
       { wch: 5 }, { wch: 22 }, { wch: 24 }, { wch: 24 }, { wch: 28 },
-      { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 22 }, { wch: 26 }, { wch: 22 },
+      { wch: 24 }, { wch: 24 }, { wch: 14 }, { wch: 22 }, { wch: 26 }, { wch: 22 }
     ]
     ws['!freeze'] = { xSplit: 0, ySplit: 1 }
     const wb = XLSX.utils.book_new()
@@ -563,7 +645,7 @@ export function useExport() {
       'Tanggal Dibuat': fmt(doc.createdDate),
       'Tanggal Berakhir': fmt(doc.expiryDate),
       'Keterangan': doc.notes ?? '-',
-      'Status': doc.expiryDate && new Date(doc.expiryDate) < new Date() ? 'Expired' : 'Aktif',
+      'Status': doc.expiryDate && new Date(doc.expiryDate) < new Date() ? 'Expired' : 'Aktif'
     }))
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [{ wch: 5 }, { wch: 32 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 48 }, { wch: 14 }]
@@ -571,6 +653,41 @@ export function useExport() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Arsip Umum')
     XLSX.writeFile(wb, `${filename}${year ? `-${year}` : '-semua'}.xlsx`)
+    return true
+  }
+
+  function exportOrgStructureExcel(nodes: any[], periodName?: string, filename = 'struktur-organisasi') {
+    if (!nodes.length) return false
+    const statusLabel: Record<string, string> = {
+      AKTIF: 'Aktif',
+      AKAN_BERAKHIR: 'Akan Berakhir',
+      EXPIRED: 'Expired',
+      TIDAK_AKTIF: 'Tidak Aktif'
+    }
+    const nameById = new Map<number, any>(nodes.map(n => [n.id, n]))
+    const rows = nodes.map((n, i) => ({
+      'No': i + 1,
+      'Nama': n.name ?? '-',
+      'Jabatan': n.position ?? '-',
+      'Unit Usaha': n.unitUsaha ?? '-',
+      'Atasan': n.parentId && nameById.has(n.parentId) ? nameById.get(n.parentId).name : '-',
+      'No. SK': n.skNumber ?? '-',
+      'Tanggal SK': fmt(n.skDate),
+      'Masa Jabatan Mulai': fmt(n.startDate),
+      'Masa Jabatan Selesai': fmt(n.endDate),
+      'Status': statusLabel[n.status] ?? n.status ?? '-',
+      'Keterangan': n.notes ?? '-'
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 5 }, { wch: 28 }, { wch: 24 }, { wch: 20 }, { wch: 28 },
+      { wch: 20 }, { wch: 16 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 36 }
+    ]
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Struktur Organisasi')
+    const suffix = periodName ? `-${periodName.replace(/[^\w-]+/g, '_')}` : ''
+    XLSX.writeFile(wb, `${filename}${suffix}.xlsx`)
     return true
   }
 
@@ -585,5 +702,7 @@ export function useExport() {
     exportActivityLogsExcel,
     exportOperationalVehicleUsagesExcel,
     exportGeneralArchivesExcel,
+    exportMasterDataExcel,
+    exportOrgStructureExcel
   }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SpaceAnnouncement } from '~/types/space'
+import { errorMessage } from './board-meta'
 
 const props = defineProps<{
   announcement: SpaceAnnouncement
@@ -35,8 +36,8 @@ async function saveEdit() {
     )
     editing.value = false
     emit('updated', updated as SpaceAnnouncement)
-  } catch (e: any) {
-    toast.add({ title: 'Gagal memperbarui pengumuman', description: e?.data?.message ?? 'Error', color: 'error' })
+  } catch (err: unknown) {
+    toast.add({ title: 'Gagal memperbarui pengumuman', description: errorMessage(err), color: 'error' })
   } finally {
     saving.value = false
   }
@@ -49,7 +50,7 @@ async function togglePin() {
       { method: 'PUT', body: { isPinned: !props.announcement.isPinned } }
     )
     emit('updated', updated as SpaceAnnouncement)
-  } catch (e: any) {
+  } catch {
     toast.add({ title: 'Gagal mengubah pin', color: 'error' })
   }
 }
@@ -60,17 +61,17 @@ function deleteAnn() {
     description: 'Pengumuman ini akan dihapus permanen.',
     onConfirm: async () => {
       await requestFetch(`/api/spaces/${props.spaceId}/announcements/${props.announcement.id}`, {
-        method: 'DELETE',
+        method: 'DELETE'
       })
       emit('deleted', props.announcement.id)
-    },
+    }
   })
 }
 
 function formatTime(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('id-ID', {
     day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    hour: '2-digit', minute: '2-digit'
   })
 }
 </script>
@@ -85,7 +86,9 @@ function formatTime(dateStr: string) {
 
     <!-- Content or edit form -->
     <div v-if="!editing">
-      <p class="text-sm text-highlighted whitespace-pre-wrap leading-relaxed">{{ announcement.content }}</p>
+      <p class="text-sm text-highlighted whitespace-pre-wrap leading-relaxed">
+        {{ announcement.content }}
+      </p>
       <div class="mt-2 flex items-center gap-2 text-xs text-muted">
         <span class="font-medium">{{ announcement.createdByName }}</span>
         <span>·</span>
@@ -111,8 +114,20 @@ function formatTime(dateStr: string) {
         @keydown.escape="editing = false"
       />
       <div class="mt-2 flex gap-1.5">
-        <UButton label="Simpan" size="xs" color="primary" :loading="saving" @click="saveEdit" />
-        <UButton label="Batal" size="xs" color="neutral" variant="ghost" @click="editing = false" />
+        <UButton
+          label="Simpan"
+          size="xs"
+          color="primary"
+          :loading="saving"
+          @click="saveEdit"
+        />
+        <UButton
+          label="Batal"
+          size="xs"
+          color="neutral"
+          variant="ghost"
+          @click="editing = false"
+        />
       </div>
     </div>
 
@@ -122,10 +137,15 @@ function formatTime(dateStr: string) {
         :items="[[
           { label: announcement.isPinned ? 'Lepas Sematan' : 'Sematkan', icon: 'i-lucide-pin', onSelect: togglePin },
           { label: 'Edit', icon: 'i-lucide-pencil', onSelect: startEdit },
-          { label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error', onSelect: deleteAnn },
+          { label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error', onSelect: deleteAnn }
         ]]"
       >
-        <UButton icon="i-lucide-more-horizontal" variant="ghost" color="neutral" size="xs" />
+        <UButton
+          icon="i-lucide-more-horizontal"
+          variant="ghost"
+          color="neutral"
+          size="xs"
+        />
       </UDropdownMenu>
     </div>
   </div>

@@ -4,6 +4,7 @@ import type { FormSubmitEvent } from '@nuxt/ui'
 import { CalendarDate } from '@internationalized/date'
 
 interface LookupItem { id: number; name: string }
+interface BankItem { id: number; name: string; branch?: string | null }
 interface LookupsResponse {
   workLocations: LookupItem[]
   taxStatus: LookupItem[]
@@ -12,6 +13,7 @@ interface LookupsResponse {
   jobLevels: LookupItem[]
   educationLevels: string[]
   genders: { value: string; label: string }[]
+  banks?: BankItem[]
 }
 
 const emit = defineEmits<{ added: [] }>()
@@ -124,7 +126,9 @@ const schema = z.object({
   jobRoleId: z.number({ error: 'Wajib dipilih' }),
   jobLevelId: z.number({ error: 'Wajib dipilih' }),
   taxStatusId: z.number({ error: 'Wajib dipilih' }),
-  departmentId: z.number({ error: 'Wajib dipilih' })
+  departmentId: z.number({ error: 'Wajib dipilih' }),
+  bankId: z.number().optional(),
+  bankAccountNumber: z.string().optional().or(z.literal(''))
 })
 
 type Schema = z.output<typeof schema>
@@ -146,7 +150,9 @@ const state = reactive<Partial<Schema>>({
   jobRoleId: undefined,
   jobLevelId: undefined,
   taxStatusId: undefined,
-  departmentId: undefined
+  departmentId: undefined,
+  bankId: undefined,
+  bankAccountNumber: ''
 })
 
 const workLocationItems = computed(() =>
@@ -163,6 +169,12 @@ const jobLevelItems = computed(() =>
 )
 const taxStatusItems = computed(() =>
   (lookups.value?.taxStatus ?? []).map((l: { id: number; name: string }) => ({ label: l.name, value: l.id }))
+)
+const bankItems = computed(() =>
+  (lookups.value?.banks ?? []).map((b: BankItem) => ({
+    label: b.branch ? `${b.name} — ${b.branch}` : b.name,
+    value: b.id
+  }))
 )
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
@@ -385,6 +397,34 @@ function onClose() {
               class="w-full"
             />
           </UFormField>
+        </div>
+
+        <!-- Data Bank -->
+        <div class="rounded-xl border border-default p-3 space-y-3">
+          <div class="flex items-start gap-2">
+            <UIcon name="i-lucide-landmark" class="w-4 h-4 text-muted shrink-0 mt-0.5" />
+            <div>
+              <p class="text-sm font-medium text-highlighted">Data Bank</p>
+              <p class="text-xs text-muted">Dipakai untuk pencairan imbalan pada dokumen kontrak. Atas Nama mengikuti Nama Lengkap karyawan.</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <UFormField label="Bank" name="bankId" hint="Opsional">
+              <USelect
+                v-model="state.bankId"
+                :items="bankItems"
+                placeholder="Pilih bank"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField label="No. Rekening" name="bankAccountNumber" hint="Opsional">
+              <UInput
+                v-model="state.bankAccountNumber"
+                placeholder="mis. 1730011451375"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
         </div>
 
         <!-- Pendidikan -->

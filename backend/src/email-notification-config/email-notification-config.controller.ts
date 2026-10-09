@@ -1,7 +1,7 @@
-import { Controller, Get, Put, Body, Request, UseGuards } from '@nestjs/common'
+import { Controller, Get, Post, Put, Body, Request, UseGuards } from '@nestjs/common'
 import { AuthGuard } from '@nestjs/passport'
 import { EmailNotificationConfigService } from './email-notification-config.service'
-import { UpdateEmailConfigDto } from './dto/update-email-config.dto'
+import { TestEmailDto, UpdateEmailConfigDto } from './dto/update-email-config.dto'
 
 @Controller('email-notification-config')
 export class EmailNotificationConfigController {
@@ -17,7 +17,7 @@ export class EmailNotificationConfigController {
   @UseGuards(AuthGuard('jwt'))
   async updateConfig(@Body() dto: UpdateEmailConfigDto, @Request() req: any) {
     const role = req.user?.role
-    const username = req.user?.username ?? req.user?.name ?? 'unknown'
+    const username = req.user?.fullName ?? req.user?.employeeNo ?? req.user?.email ?? 'unknown'
     return this.service.updateConfig(dto, username, role)
   }
 
@@ -25,5 +25,23 @@ export class EmailNotificationConfigController {
   @UseGuards(AuthGuard('jwt'))
   async getUsers() {
     return this.service.getAllUsers()
+  }
+
+  @Get('status')
+  @UseGuards(AuthGuard('jwt'))
+  async getStatus() {
+    return this.service.getStatus()
+  }
+
+  @Get('history')
+  @UseGuards(AuthGuard('jwt'))
+  async getHistory() {
+    return this.service.getHistory()
+  }
+
+  @Post('test')
+  @UseGuards(AuthGuard('jwt'))
+  async sendTestEmail(@Body() dto: TestEmailDto, @Request() req: any) {
+    return this.service.sendTestEmail(dto, req.user?.role)
   }
 }
