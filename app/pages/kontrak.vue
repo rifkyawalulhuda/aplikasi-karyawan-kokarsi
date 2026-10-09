@@ -635,7 +635,6 @@ watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
     v-model:open="historyModal"
     :employee-id="lastHistoryEmployeeId"
     :selected-contract-id="selectedHistoryContractId"
-    :downloading-contract-id="downloadChecking"
     @edit="openEditFromHistory"
     @preview="openPreviewFromHistory"
     @renew="openRenew"

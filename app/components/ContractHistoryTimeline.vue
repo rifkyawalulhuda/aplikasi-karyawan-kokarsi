@@ -15,11 +15,23 @@ const props = withDefaults(defineProps<{
   selectedContractId?: number | null
   showCompensation?: boolean
   showDocLinks?: boolean
+  /**
+   * Aktifkan context menu klik-kanan pada kartu kontrak. Dimatikan secara
+   * default agar pemakai lama (modal Riwayat Kontrak halaman Data Karyawan)
+   * tidak ikut menekan menu klik-kanan native; modal Manajemen Kontrak
+   * menyalakannya dan merender menu sendiri di slot/luar komponen.
+   */
+  contextMenuEnabled?: boolean
 }>(), {
   selectedContractId: null,
   showCompensation: false,
-  showDocLinks: true
+  showDocLinks: true,
+  contextMenuEnabled: false
 })
+
+const emit = defineEmits<{
+  'contract-contextmenu': [payload: { contract: Contract, event: MouseEvent }]
+}>()
 
 const reducedMotion = usePreferredReducedMotion()
 
@@ -106,6 +118,13 @@ function parentOf(contract: Contract) {
 
 function isDimmed(status: string) {
   return !noFilter.value && !activeStatuses.value.has(status)
+}
+
+/** Klik kanan pada kartu kontrak → teruskan ke pemanggil untuk menampilkan menu. */
+function onCardContextMenu(contract: Contract, event: MouseEvent) {
+  if (!props.contextMenuEnabled) return
+  event.preventDefault()
+  emit('contract-contextmenu', { contract, event })
 }
 
 function scrollToContract(id: number) {
@@ -293,6 +312,7 @@ watch(() => props.selectedContractId, focusSelected)
         :style="{ animationDelay: `${Math.min(index, 8) * 30}ms` }"
         @mouseenter="hoveredId = contract.id"
         @mouseleave="hoveredId = null"
+        @contextmenu="onCardContextMenu(contract, $event)"
       >
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div class="min-w-0">
