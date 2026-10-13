@@ -3,6 +3,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type ExcelJS from 'exceljs'
 import type { Employee, WarningLetter } from '~/types'
+import { CONTRACT_STATUS_LABEL, formatCurrency, formatSpan } from '~/utils/contract-timeline'
 
 /**
  * Gaya header Excel export karyawan — SENGAJA disamakan dengan template import
@@ -44,6 +45,79 @@ const EMPLOYEE_EXPORT_COLUMN_WIDTHS: Record<string, number> = {
   'Diperbarui': 14
 }
 
+/**
+ * Kolom export "Riwayat Kontrak" (halaman Manajemen Kontrak): satu baris per
+ * kontrak, dikelompokkan per karyawan. Identitas karyawan di-merge vertikal
+ * agar blok tiap karyawan mudah di-trace.
+ */
+const CONTRACT_HISTORY_COLUMNS = [
+  'No',
+  'No. Induk',
+  'Nama Karyawan',
+  'Departemen',
+  'Site',
+  'Pekerjaan',
+  'No. Kontrak',
+  'Tipe Kontrak',
+  'Template',
+  'Tgl. Mulai',
+  'Tgl. Selesai',
+  'Durasi',
+  'Tgl. TTD',
+  'Kompensasi',
+  'Status',
+  'Kontrak Berjalan',
+  'Diperpanjang Dari',
+  'Keterangan'
+]
+
+const CONTRACT_HISTORY_COLUMN_WIDTHS: Record<string, number> = {
+  'No': 5,
+  'No. Induk': 16,
+  'Nama Karyawan': 28,
+  'Departemen': 20,
+  'Site': 16,
+  'Pekerjaan': 24,
+  'No. Kontrak': 22,
+  'Tipe Kontrak': 18,
+  'Template': 24,
+  'Tgl. Mulai': 13,
+  'Tgl. Selesai': 13,
+  'Durasi': 15,
+  'Tgl. TTD': 13,
+  'Kompensasi': 16,
+  'Status': 15,
+  'Kontrak Berjalan': 15,
+  'Diperpanjang Dari': 22,
+  'Keterangan': 40
+}
+
+/** Kolom identitas karyawan yang di-merge vertikal per blok karyawan. */
+const CONTRACT_HISTORY_IDENTITY_COLUMNS = 6
+
+export interface ContractHistoryExportEmployee {
+  employeeId: number
+  employeeNo?: string | null
+  fullName: string
+  department?: string | null
+  workLocation?: string | null
+  jobRole?: string | null
+}
+
+export interface ContractHistoryExportContract {
+  employeeId: number
+  contractNo?: string | null
+  startDate?: string | null
+  endDate?: string | null
+  signedDate?: string | null
+  status?: string | null
+  baseCompensation?: number | null
+  keterangan?: string | null
+  contractType?: { name?: string | null } | null
+  template?: { name?: string | null } | null
+  parentContract?: { contractNo?: string | null } | null
+}
+
 export function useExport() {
   function employmentStatusLabel(status: string) {
     return status === 'AKTIF'
@@ -57,7 +131,7 @@ export function useExport() {
             : status
   }
 
-  function fmt(val: string | undefined) {
+  function fmt(val?: string | null) {
     if (!val) return '-'
     return new Date(val).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
   }
@@ -691,6 +765,158 @@ export function useExport() {
     return true
   }
 
+  /**
+   * Export riwayat kontrak karyawan untuk halaman Manajemen Kontrak:
+   * satu baris per kontrak, dikelompokkan per karyawan (identitas di-merge
+   * vertikal + garis pemisah antar karyawan), karyawan urut nama A→Z, kontrak
+   * urut kronologis lama→baru, dilengkapi blok judul.
+   *
+   * `employees` menentukan karyawan mana yang diexport (hasil filter halaman);
+   * `contracts` boleh berisi kontrak semua karyawan — yang di luar daftar
+   * `employees` diabaikan.
+   */
+  async function exportContractHistoryExcel(
+    employees: ContractHistoryExportEmployee[],
+    contracts: ContractHistoryExportContract[],
+    filename = 'riwayat-kontrak-karyawan'
+  ) {
+    const byEmployee = new Map<number, ContractHistoryExportContract[]>()
+    for (const contract of contracts ?? []) {
+      const list = byEmployee.get(contract.employeeId) ?? []
+      list.push(contract)
+      byEmployee.set(contract.employeeId, list)
+    }
+
+    const ordered = [...employees].sort((a, b) =>
+      String(a.fullName ?? '').localeCompare(String(b.fullName ?? ''), 'id', { sensitivity: 'base' })
+    )
+
+    for (const list of byEmployee.values()) {
+      list.sort((a, b) => new Date(a.startDate ?? 0).getTime() - new Date(b.startDate ?? 0).getTime())
+    }
+
+    const { default: ExcelJS } = await import('exceljs')
+    const wb = new ExcelJS.Workbook()
+    const ws = wb.addWorksheet('Riwayat Kontrak')
+
+    const lastCol = CONTRACT_HISTORY_COLUMNS.length
+    const thinSide = { style: 'thin' as const, color: { argb: 'FFE2E8F0' } }
+    const cellBorder = { top: thinSide, left: thinSide, bottom: thinSide, right: thinSide }
+    const separatorBorder = { ...cellBorder, top: { style: 'medium' as const, color: { argb: 'FF94A3B8' } } }
+
+    // ── Blok judul ──
+    const titleRow = ws.addRow(['Data Karyawan — Riwayat Kontrak'])
+    ws.mergeCells(titleRow.number, 1, titleRow.number, lastCol)
+    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: 'FF1E293B' } }
+    titleRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+    titleRow.height = 22
+
+    const totalContracts = ordered.reduce((sum, e) => sum + (byEmployee.get(e.employeeId)?.length ?? 0), 0)
+    const subtitleRow = ws.addRow([
+      `Total: ${ordered.length} karyawan · ${totalContracts} kontrak  |  Dicetak: ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}`
+    ])
+    ws.mergeCells(subtitleRow.number, 1, subtitleRow.number, lastCol)
+    subtitleRow.getCell(1).font = { size: 10, color: { argb: 'FF64748B' } }
+    subtitleRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+
+    ws.addRow([]) // baris kosong pemisah
+
+    // ── Header ──
+    const headerRow = ws.addRow(CONTRACT_HISTORY_COLUMNS)
+    headerRow.eachCell((cell) => {
+      cell.fill = EXPORT_HEADER_FILL as ExcelJS.Fill
+      cell.font = EXPORT_HEADER_FONT as Partial<ExcelJS.Font>
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+      cell.border = cellBorder
+    })
+    headerRow.height = 26
+
+    // ── Baris data (satu baris per kontrak, dikelompokkan per karyawan) ──
+    let blockNo = 0
+    ordered.forEach((emp, empIndex) => {
+      blockNo += 1
+      const list = byEmployee.get(emp.employeeId) ?? []
+      const contractsForEmployee: (ContractHistoryExportContract | null)[] = list.length ? list : [null]
+      const firstRow = ws.rowCount + 1
+
+      for (const contract of contractsForEmployee) {
+        const isLive = contract?.status === 'AKTIF' || contract?.status === 'AKAN_HABIS'
+        const startDate = contract?.startDate ?? null
+        const endDate = contract?.endDate ?? null
+        const duration = startDate && endDate
+          ? formatSpan(new Date(startDate), new Date(endDate))
+          : '-'
+
+        const row = ws.addRow([
+          blockNo,
+          emp.employeeNo ?? '-',
+          emp.fullName ?? '-',
+          emp.department ?? '-',
+          emp.workLocation ?? '-',
+          emp.jobRole ?? '-',
+          contract?.contractNo ?? '-',
+          contract?.contractType?.name ?? '-',
+          contract?.template?.name ?? '-',
+          contract ? fmt(contract.startDate) : '-',
+          contract ? fmt(contract.endDate) : '-',
+          duration,
+          fmt(contract?.signedDate),
+          formatCurrency(contract?.baseCompensation ?? null),
+          contract ? (CONTRACT_STATUS_LABEL[contract.status ?? ''] ?? contract.status ?? '-') : '-',
+          isLive ? 'Ya' : '',
+          contract?.parentContract?.contractNo ?? '-',
+          contract?.keterangan ?? '-'
+        ])
+
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          const isIdentity = colNumber <= CONTRACT_HISTORY_IDENTITY_COLUMNS
+          const wrap = (colNumber >= 3 && colNumber <= 6) || colNumber === 9 || colNumber === 17 || colNumber === 18
+          cell.border = cellBorder
+          cell.alignment = {
+            vertical: isIdentity ? 'middle' : 'top',
+            horizontal: isIdentity ? 'left' : (colNumber === 1 ? 'center' : 'left'),
+            wrapText: wrap
+          }
+        })
+      }
+
+      const lastRow = ws.rowCount
+
+      // Identitas karyawan: merge vertikal sepanjang blok kontraknya.
+      if (lastRow > firstRow) {
+        for (let col = 1; col <= CONTRACT_HISTORY_IDENTITY_COLUMNS; col++) {
+          ws.mergeCells(firstRow, col, lastRow, col)
+          ws.getCell(firstRow, col).alignment = { vertical: 'middle', horizontal: col === 1 ? 'center' : 'left', wrapText: col >= 3 }
+        }
+      }
+
+      // Garis pemisah antar karyawan (kecuali blok pertama).
+      if (empIndex > 0) {
+        for (let col = 1; col <= lastCol; col++) {
+          ws.getCell(firstRow, col).border = separatorBorder
+        }
+      }
+    })
+
+    CONTRACT_HISTORY_COLUMNS.forEach((header, index) => {
+      ws.getColumn(index + 1).width = CONTRACT_HISTORY_COLUMN_WIDTHS[header] ?? 16
+    })
+
+    ws.views = [{ state: 'frozen', ySplit: headerRow.number }]
+
+    const buffer = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.xlsx`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    return true
+  }
+
   return {
     exportExcel,
     exportPDF,
@@ -703,6 +929,7 @@ export function useExport() {
     exportOperationalVehicleUsagesExcel,
     exportGeneralArchivesExcel,
     exportMasterDataExcel,
-    exportOrgStructureExcel
+    exportOrgStructureExcel,
+    exportContractHistoryExcel
   }
 }

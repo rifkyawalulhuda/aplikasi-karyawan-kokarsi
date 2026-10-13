@@ -10,6 +10,7 @@ const UIcon = resolveComponent('UIcon')
 const toast = useToast()
 const auth = useAuthStore()
 const { confirmDeleteToast } = useConfirmDeleteToast()
+const { exportContractHistoryExcel } = useExport()
 const table = useTemplateRef('table')
 
 const { data: summaryRes, status, refresh } = await useFetch<ContractSummaryRow[]>('/api/contracts/summary', {
@@ -167,6 +168,69 @@ function openRenew(contract: Contract) {
 
 function handleRenewSaved() {
   refresh()
+}
+
+// ── Export Excel: riwayat kontrak per karyawan ────────────────────────────────
+// Karyawan yang diexport = hasil filter halaman; isi tiap karyawan = seluruh
+// riwayat kontraknya (bukan hanya kontrak perwakilan di tabel) agar mudah
+// di-trace. Identitas karyawan diambil dari master karyawan karena kontrak
+// tidak menyertakan relasi departemen/site/pekerjaan.
+const exporting = ref(false)
+
+interface EmployeeIdentity {
+  id: number
+  employeeNo?: string | null
+  fullName: string
+  department?: { name?: string | null } | null
+  workLocation?: { name?: string | null } | null
+  jobRole?: { name?: string | null } | null
+}
+
+async function handleExportExcel() {
+  const targets = filteredData.value
+  if (!targets.length) {
+    toast.add({ title: 'Tidak ada data untuk diexport', color: 'warning' })
+    return
+  }
+
+  exporting.value = true
+  try {
+    const [contractsRes, employeesRes] = await Promise.all([
+      $fetch<{ data: Contract[] }>('/api/contracts', { query: { limit: 10000 }, credentials: 'include' }),
+      $fetch<{ data: EmployeeIdentity[] }>('/api/employees', { query: { limit: 10000 }, credentials: 'include' })
+    ])
+
+    const identityById = new Map<number, EmployeeIdentity>()
+    for (const employee of employeesRes.data ?? []) identityById.set(employee.id, employee)
+
+    const employeeRows = targets.map((target) => {
+      const employee = identityById.get(target.employeeId)
+      return {
+        employeeId: target.employeeId,
+        employeeNo: employee?.employeeNo ?? target.employeeNo,
+        fullName: employee?.fullName ?? target.fullName,
+        department: employee?.department?.name ?? null,
+        workLocation: employee?.workLocation?.name ?? null,
+        jobRole: employee?.jobRole?.name ?? null
+      }
+    })
+
+    await exportContractHistoryExcel(employeeRows, contractsRes.data ?? [])
+    toast.add({
+      title: 'Export Excel berhasil',
+      description: `${targets.length} karyawan`,
+      color: 'success'
+    })
+  } catch (error) {
+    const message = (error as { data?: { message?: string } })?.data?.message ?? 'Terjadi kesalahan'
+    toast.add({
+      title: 'Gagal export Excel',
+      description: message,
+      color: 'error'
+    })
+  } finally {
+    exporting.value = false
+  }
 }
 
 async function openPreview(contractId: number, contractObj?: Contract) {
@@ -495,6 +559,15 @@ watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UButton
+            label="Export Excel"
+            icon="i-lucide-file-spreadsheet"
+            color="neutral"
+            variant="subtle"
+            :loading="exporting"
+            :disabled="!filteredData.length"
+            @click="handleExportExcel"
+          />
           <UButton
             label="Tambah Kontrak"
             icon="i-lucide-plus"
