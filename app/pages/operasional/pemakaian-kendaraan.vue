@@ -163,7 +163,29 @@ const sortedUsages = computed(() => {
   })
 })
 
-const stats = computed(() => usageStats(filteredUsages.value))
+// ── KPI: ringkasan bulan berjalan ────────────────────────────────────────────
+// Card header sengaja TIDAK mengikuti filter periode di toolbar. Nilainya
+// selalu diambil dari bulan berjalan (WIB) supaya mencerminkan aktivitas bulan
+// ini, bukan total keseluruhan. Filter pencarian & status tetap dihormati.
+const currentMonthKey = jakartaDateKey(new Date()).slice(0, 7)
+
+const currentMonthLabel = new Intl.DateTimeFormat('id-ID', {
+  timeZone: 'Asia/Jakarta', month: 'long', year: 'numeric'
+}).format(new Date())
+
+const currentMonthUsages = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase('id-ID')
+  return usages.value.filter((item) => {
+    const matchesSearch = !query || [item.vehicleNumber, item.driver, item.destination, item.user, item.requester]
+      .some(value => value.toLocaleLowerCase('id-ID').includes(query))
+    const matchesStatus = statusFilter.value === 'all'
+      || (statusFilter.value === 'cancelled' ? item.status === 'BATAL' : item.status === null)
+    const matchesMonth = jakartaDateKey(item.usedAt).startsWith(currentMonthKey)
+    return matchesSearch && matchesStatus && matchesMonth
+  })
+})
+
+const stats = computed(() => usageStats(currentMonthUsages.value))
 
 const pagedUsages = computed(() => {
   const { pageIndex, pageSize } = pagination.value
@@ -352,7 +374,10 @@ const GRID_CLASS = 'lg:grid lg:grid-cols-[5.5rem_minmax(8rem,1fr)_minmax(11rem,1
     </template>
 
     <template #body>
-      <!-- KPI -->
+      <!-- KPI: ringkasan bulan berjalan (bukan total keseluruhan) -->
+      <p class="mb-2 text-xs font-medium uppercase tracking-wide text-muted">
+        Ringkasan Bulan Berjalan — {{ currentMonthLabel }}
+      </p>
       <div class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div class="rounded-xl border border-default bg-default p-4">
           <div class="flex items-center justify-between">
@@ -363,7 +388,7 @@ const GRID_CLASS = 'lg:grid lg:grid-cols-[5.5rem_minmax(8rem,1fr)_minmax(11rem,1
             <DashboardCountUp :value="stats.total" />
           </p>
           <p class="mt-1 text-xs text-muted">
-            Catatan sesuai filter
+            Catatan bulan ini
           </p>
         </div>
         <div class="rounded-xl border border-default bg-default p-4">
@@ -375,7 +400,7 @@ const GRID_CLASS = 'lg:grid lg:grid-cols-[5.5rem_minmax(8rem,1fr)_minmax(11rem,1
             <DashboardCountUp :value="stats.scheduled" />
           </p>
           <p class="mt-1 text-xs text-muted">
-            Pemakaian berlaku
+            Pemakaian bulan ini
           </p>
         </div>
         <div class="rounded-xl border border-default bg-default p-4">
@@ -392,7 +417,7 @@ const GRID_CLASS = 'lg:grid lg:grid-cols-[5.5rem_minmax(8rem,1fr)_minmax(11rem,1
             <DashboardCountUp :value="stats.cancelled" />
           </p>
           <p class="mt-1 text-xs text-muted">
-            Dibatalkan
+            Dibatalkan bulan ini
           </p>
         </div>
         <div class="rounded-xl border border-default bg-default p-4">
@@ -404,7 +429,7 @@ const GRID_CLASS = 'lg:grid lg:grid-cols-[5.5rem_minmax(8rem,1fr)_minmax(11rem,1
             <DashboardCountUp :value="stats.vehicles" />
           </p>
           <p class="mt-1 text-xs text-muted">
-            Unit terpakai
+            Unit terpakai bulan ini
           </p>
         </div>
       </div>
