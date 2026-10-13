@@ -178,6 +178,7 @@ const schema = z.object({
   templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
   signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
+  keterangan: z.string().max(2000, 'Keterangan maksimal 2000 karakter').optional(),
 })
 
 type Schema = z.output<typeof schema>
@@ -190,6 +191,7 @@ const state = reactive<Partial<Schema> & { contractNo?: string; documentUrl?: st
   templateId: undefined,
   signedDate: '',
   baseCompensation: undefined,
+  keterangan: '',
   documentUrl: '',
 })
 
@@ -202,6 +204,7 @@ function fillState(c: Contract | null) {
   state.templateId = c.templateId ?? undefined
   state.signedDate = c.signedDate ? c.signedDate.slice(0, 10) : c.startDate ? c.startDate.slice(0, 10) : ''
   state.baseCompensation = c.baseCompensation ?? undefined
+  state.keterangan = c.keterangan ?? ''
   state.documentUrl = c.documentUrl ?? ''
   // Sync CalendarDate refs
   startDateCal.value  = toCalDate(state.startDate)
@@ -257,7 +260,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   try {
     const employeeId = fullContract.value?.employeeId ?? contract.employeeId
-    const { startDate, endDate, contractTypeId, templateId, signedDate, baseCompensation } = event.data
+    const { startDate, endDate, contractTypeId, templateId, signedDate, baseCompensation, keterangan } = event.data
     await $fetch(`/api/contracts/${contract.id}`, {
       method: 'PUT',
       body: {
@@ -268,6 +271,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         templateId,
         signedDate,
         baseCompensation,
+        keterangan,
         templateData: dynamicFieldValues(),
       },
     })
@@ -393,6 +397,15 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
               <span class="truncate">{{ state.documentUrl.split('/').pop() }}</span>
             </div>
           </div>
+        </UFormField>
+
+        <UFormField label="Keterangan" name="keterangan">
+          <UTextarea
+            v-model="state.keterangan"
+            :rows="3"
+            class="w-full"
+            placeholder="Keterangan tambahan (opsional)"
+          />
         </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">

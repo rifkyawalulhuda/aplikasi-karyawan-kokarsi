@@ -185,6 +185,7 @@ model Contract {
   status               ContractStatus @default(AKTIF)
   signedDate           DateTime?      @db.Date
   baseCompensation     Int?
+  keterangan           String?        @db.Text
   templateData         Json?
   templateVersionId    Int?
   templateSnapshot     Json?

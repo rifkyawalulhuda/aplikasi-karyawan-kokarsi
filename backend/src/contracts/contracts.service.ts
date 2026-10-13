@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, ForbiddenException, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
-import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber } from 'class-validator'
+import { IsString, IsInt, IsDateString, IsOptional, IsEnum, IsNumber, MaxLength } from 'class-validator'
 import { ContractStatus, Prisma } from '@prisma/client'
 import { resolveContractStatus, resolveEmploymentStatus } from '../employees/employment-status'
 import { DAY_MS, startOfDay } from '../shared/date-utils'
@@ -26,6 +26,7 @@ export class CreateContractDto {
   @IsOptional() @IsEnum(ContractStatus) status?: ContractStatus
   @IsOptional() @IsDateString() signedDate?: string
   @IsOptional() @IsNumber() baseCompensation?: number
+  @IsOptional() @IsString() @MaxLength(2000) keterangan?: string
   @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
   @IsOptional() @IsInt() parentContractId?: number
@@ -40,6 +41,7 @@ export class RenewContractDto {
   @IsOptional() @IsInt() templateId?: number
   @IsOptional() @IsDateString() signedDate?: string
   @IsOptional() @IsNumber() baseCompensation?: number
+  @IsOptional() @IsString() @MaxLength(2000) keterangan?: string
   @IsOptional() templateData?: Record<string, any>
   @IsOptional() @IsString() documentUrl?: string
 }
@@ -548,6 +550,7 @@ export class ContractsService {
           templateId: effectiveTemplateId,
           signedDate,
           baseCompensation: dto.baseCompensation,
+          keterangan: dto.keterangan,
           templateData: inheritedTemplateData as any,
           documentUrl: dto.documentUrl,
           parentContractId: parentId,

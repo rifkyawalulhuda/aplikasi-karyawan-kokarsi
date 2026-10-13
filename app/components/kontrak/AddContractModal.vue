@@ -150,6 +150,7 @@ const schema = z.object({
   templateId: z.number({ error: 'Template kontrak wajib dipilih' }),
   signedDate: z.string().min(1, 'Tanggal tanda tangan wajib diisi'),
   baseCompensation: z.coerce.number({ error: 'Nominal wajib diisi' }).min(1, 'Nominal wajib diisi'),
+  keterangan: z.string().max(2000, 'Keterangan maksimal 2000 karakter').optional(),
 })
 
 type Schema = z.output<typeof schema>
@@ -162,6 +163,7 @@ const state = reactive<Partial<Schema>>({
   templateId: undefined,
   signedDate: '',
   baseCompensation: undefined,
+  keterangan: '',
 })
 
 // Template berganti → field dinamis & nilainya ikut berganti.
@@ -295,6 +297,7 @@ function resetForm() {
   state.templateId = undefined
   state.signedDate = ''
   state.baseCompensation = undefined
+  state.keterangan = ''
   employeeContractStatus.value = null
   employeeLatestContract.value = null
   employeeEmploymentStatus.value = null
@@ -488,6 +491,15 @@ watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
             <UInput v-model="state.baseCompensation" type="number" min="0" placeholder="5941759" class="w-full" />
           </UFormField>
         </div>
+
+        <UFormField label="Keterangan" name="keterangan">
+          <UTextarea
+            v-model="state.keterangan"
+            :rows="3"
+            class="w-full"
+            placeholder="Keterangan tambahan (opsional)"
+          />
+        </UFormField>
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />

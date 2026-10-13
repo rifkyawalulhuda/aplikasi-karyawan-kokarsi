@@ -127,6 +127,7 @@ export interface Contract {
   positionLabel?: string | null
   workLocationLabel?: string | null
   baseCompensation?: number | null
+  keterangan?: string | null
   templateData?: Record<string, any> | null
   documentUrl?: string
   generatedPdfUrl?: string | null

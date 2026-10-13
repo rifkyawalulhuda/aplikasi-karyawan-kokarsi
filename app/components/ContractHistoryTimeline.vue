@@ -419,6 +419,16 @@ watch(() => props.selectedContractId, focusSelected)
           </div>
         </dl>
 
+        <!-- Keterangan: catatan internal, bisa panjang → blok penuh di luar grid -->
+        <div v-if="contract.keterangan" class="mt-3 border-l-2 border-default pl-3">
+          <p class="text-xs font-medium uppercase tracking-wide text-muted">
+            Keterangan
+          </p>
+          <p class="mt-0.5 whitespace-pre-wrap text-xs text-toned">
+            {{ contract.keterangan }}
+          </p>
+        </div>
+
         <!-- Tautan dokumen + aksi khusus modal -->
         <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div v-if="showDocLinks" class="flex flex-wrap gap-3">
