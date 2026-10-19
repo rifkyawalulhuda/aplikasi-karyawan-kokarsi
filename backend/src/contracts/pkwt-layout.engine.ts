@@ -380,6 +380,16 @@ export interface PkwtRow {
   idLabel?: string
   enLabel?: string
   /**
+   * Indentasi gantung untuk item daftar (pt), PER-KOLOM.
+   *
+   * Baris PERTAMA item digambar mulai `x` (label + teks), sedangkan baris
+   * LANJUTAN item yang sama digeser sejauh ini agar sejajar dengan huruf
+   * pertama teks, bukan di bawah penandanya. `undefined`/0 = baris teks biasa
+   * (tanpa indentasi) — template lama tidak berubah.
+   */
+  idIndent?: number
+  enIndent?: number
+  /**
    * Rata kanan-kiri (justified), meniru master.
    *
    * Master (semua 4 varian PKWT) memang justified: 69% baris berakhir pada tepi
@@ -637,6 +647,12 @@ export interface PkwtParagraph {
    * sehingga template lama tidak berubah perilakunya.
    */
   align?: PkwtAlign
+  /**
+   * Penanda item daftar ("•", "1.", "a."). Hanya diisi untuk blok `list`; teks
+   * paragrafnya tetap bersih dari penanda supaya indentasi gantung dapat
+   * dihitung dari lebar label sebenarnya.
+   */
+  label?: string
   /** Id blok sumber (`opening`, `recitals`, `section-3`, …); untuk debug saja. */
   blockId: string
   /** Nomor urut blok (0-based) di antara blok yang menghasilkan paragraf. */
@@ -692,15 +708,46 @@ export function buildPkwtRowsFromStructuredParagraphs(
     lastOfPara: boolean
     /** Perataan dari `block.align`; `undefined` = rumus lama. */
     align?: PkwtAlign
+    /**
+     * Penanda item daftar. HANYA di baris pertama tiap item, supaya engine
+     * menggambar "1." sekali di kiri dan tidak mengulanginya di baris lanjutan.
+     */
+    label?: string
+    /**
+     * Indentasi gantung kolom ini (pt). 0/undefined = baris teks biasa.
+     *
+     * Baris pertama item digambar mulai `x` (label lalu teks), baris lanjutan
+     * digeser sejauh `indent` agar sejajar dengan huruf pertama teks.
+     */
+    indent: number
   }
 
-  const toLines = (paras: PkwtParagraph[]): BlockLine[] => {
+  /**
+   * Hitung indentasi gantung satu kolom dari label-label daftarnya.
+   *
+   * SATU nilai untuk seluruh blok, diambil dari label TERLEBAR (mis. `10.`
+   * lebih lebar daripada `9.`), supaya semua item dalam daftar yang sama
+   * rata. Nilai minimum `PKWT_GEOMETRY.listHangingIndent` menjaga bullet
+   * (yang glyph-nya sempit) tetap punya jarak yang terbaca.
+   */
+  const blockIndent = (paras: PkwtParagraph[]): number => {
+    const labels = paras.map(p => p.label).filter((l): l is string => typeof l === 'string' && l.length > 0)
+    if (labels.length === 0) return 0
+    doc.font(font).fontSize(opts.size)
+    const widest = Math.max(...labels.map(l => doc.widthOfString(`${l} `)))
+    return Math.max(PKWT_GEOMETRY.listHangingIndent, widest)
+  }
+
+  const toLines = (paras: PkwtParagraph[], indent: number): BlockLine[] => {
     const out: BlockLine[] = []
+    // Teks dibungkus pada lebar yang SUDAH dikurangi indentasi, sehingga baris
+    // lanjutan tidak pernah melewati tepi kanan kolom setelah digeser.
+    const width = Math.max(opts.width - indent, 1)
     for (const p of paras) {
       // Jalur run HANYA dipakai bila paragrafnya benar-benar bermark. Teks polos
       // tetap lewat `wrapCellLines`, sehingga template lama tidak berubah.
       if (p.runs && p.runs.length > 0) {
-        const runLines = wrapRunsToLines(doc, p.runs, opts.width, PKWT_RUN_FONTS, opts.size)
+        const runLines = wrapRunsToLines(doc, p.runs, width, PKWT_RUN_FONTS, opts.size)
         runLines.forEach((lineRuns, i) => {
           out.push({
             text: lineRuns.map(run => run.text).join(''),
@@ -708,13 +755,23 @@ export function buildPkwtRowsFromStructuredParagraphs(
             bold: p.bold,
             lastOfPara: i === runLines.length - 1,
             align: p.align,
+            // Label hanya di baris pertama; baris lanjutan cukup indent.
+            label: i === 0 ? p.label : undefined,
+            indent,
           })
         })
         continue
       }
-      const lines = wrapCellLines(doc, p.text, opts.width, font, opts.size)
+      const lines = wrapCellLines(doc, p.text, width, font, opts.size)
       lines.forEach((text, i) => {
-        out.push({ text, bold: p.bold, lastOfPara: i === lines.length - 1, align: p.align })
+        out.push({
+          text,
+          bold: p.bold,
+          lastOfPara: i === lines.length - 1,
+          align: p.align,
+          label: i === 0 ? p.label : undefined,
+          indent,
+        })
       })
     }
     return out
@@ -746,8 +803,12 @@ export function buildPkwtRowsFromStructuredParagraphs(
       rows.push({ id: '', en: '', kind: 'table', idTable, enTable })
       return
     }
-    const a = toLines(idParas)
-    const b = toLines(enParas)
+    // Indentasi gantung dihitung PER KOLOM: blok daftar ID dan EN boleh punya
+    // label berbeda (mis. "1." vs "a.") sehingga lebar labelnya pun berbeda.
+    const idIndent = blockIndent(idParas)
+    const enIndent = blockIndent(enParas)
+    const a = toLines(idParas, idIndent)
+    const b = toLines(enParas, enIndent)
     const m = Math.max(a.length, b.length)
     for (let j = 0; j < m; j++) {
       const left = a[j]
@@ -755,6 +816,11 @@ export function buildPkwtRowsFromStructuredParagraphs(
       const idBold = left?.bold === true
       const enBold = right?.bold === true
       const isHeading = idBold || enBold
+      // Item daftar selalu rata KIRI (bukan justified): label dan teks harus
+      // duduk pada kolom yang tetap, dan perataan justify akan merenggangkan
+      // baris item yang pendek.
+      const idIsList = (left?.indent ?? 0) > 0
+      const enIsList = (right?.indent ?? 0) > 0
       rows.push({
         id: left?.text ?? '',
         en: right?.text ?? '',
@@ -764,11 +830,16 @@ export function buildPkwtRowsFromStructuredParagraphs(
         // Run & perataan hanya ikut bila ada; `undefined` = jalur lama.
         idRuns: left?.runs,
         enRuns: right?.runs,
-        idAlign: left?.align,
-        enAlign: right?.align,
+        idAlign: idIsList ? 'left' : left?.align,
+        enAlign: enIsList ? 'left' : right?.align,
+        // Label & indentasi gantung item daftar (undefined = baris teks biasa).
+        idLabel: left?.label,
+        enLabel: right?.label,
+        idIndent: idIsList ? left?.indent : undefined,
+        enIndent: enIsList ? right?.indent : undefined,
         // Baris judul tidak pernah direntangkan (lihat `renderPkwtLayout`).
-        idJustify: !idBold && left !== undefined && !left.lastOfPara,
-        enJustify: !enBold && right !== undefined && !right.lastOfPara
+        idJustify: !idBold && !idIsList && left !== undefined && !left.lastOfPara,
+        enJustify: !enBold && !enIsList && right !== undefined && !right.lastOfPara
       })
     }
   }
@@ -1263,10 +1334,16 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     // Ukur tiap kolom dengan font yang BENAR-BENAR dipakai kolom itu; lebar
     // glyph Lucida Bold sedikit berbeda dari regular, jadi tinggi baris bisa
     // berbeda bila salah satu kolom bold.
+    //
+    // Item daftar: lebar teks dikurangi indentasi gantung, sebab teksnya
+    // digambar mulai `x + indent`. Label menempati ruang indent itu sendiri,
+    // jadi total lebar tetap selebar kolom.
+    const idW = Math.max(innerW0 - (row.idIndent ?? 0), 1)
+    const enW = Math.max(innerW1 - (row.enIndent ?? 0), 1)
     doc.font(row.idBold === true ? F.bold : F.regular).fontSize(G.font.body)
-    const hId = doc.heightOfString(row.id || 'Xg', { width: innerW0, lineGap: G.lineGap })
+    const hId = doc.heightOfString(row.id || 'Xg', { width: idW, lineGap: G.lineGap })
     doc.font(row.enBold === true ? F.bold : F.regular).fontSize(G.font.body)
-    const hEn = doc.heightOfString(row.en || 'Xg', { width: innerW1, lineGap: G.lineGap })
+    const hEn = doc.heightOfString(row.en || 'Xg', { width: enW, lineGap: G.lineGap })
     return Math.max(hId, hEn)
   }
 
@@ -1306,22 +1383,37 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     w: number,
     bold: boolean,
     align: PkwtAlign,
+    label?: string,
+    indent = 0,
   ) => {
+    const font = bold ? F.bold : F.regular
+    // Penanda item daftar ("•", "1.", "a.") digambar di ruang indentasi; teks
+    // item dimulai SETELAH penanda. Baris lanjutan item yang sama tidak
+    // membawa label, tetapi tetap memakai `indent` yang sama sehingga sejajar
+    // dengan huruf pertama teks (hanging indent).
+    if (label) {
+      doc.font(font).fontSize(G.font.body).fillColor('#000000')
+      // Spasi ikut digambar bersama label: tanpa itu teks hasil ekstraksi PDF
+      // terbaca "1.Melaksanakan" walau secara visual ada jarak. `indent`
+      // dihitung dari `${label} ` sehingga lebarnya persis.
+      doc.text(`${label} `, x, y, { width: Math.max(indent, 1), lineBreak: false, align: 'left' })
+    }
+    const textX = x + indent
+    const textW = Math.max(w - indent, 1)
     // Jalur run hanya aktif bila teksnya benar-benar bermark.
     if (runs && runs.length > 0) {
-      drawRunsLine(doc, runs, x, y, w, PKWT_RUN_FONTS, G.font.body, align)
+      drawRunsLine(doc, runs, textX, y, textW, PKWT_RUN_FONTS, G.font.body, align)
       return
     }
-    const font = bold ? F.bold : F.regular
     doc.font(font).fontSize(G.font.body).fillColor('#000000')
     if (align === 'justify') {
       // `drawJustifiedLine` otomatis jatuh kembali ke rata-kiri bila baris hanya
       // punya <= 1 kata atau ruangnya sudah negatif (tidak ada celah untuk
       // direntangkan), sehingga tidak pernah menumpuk kata.
-      drawJustifiedLine(doc, cell, x, y, w, { font, size: G.font.body })
+      drawJustifiedLine(doc, cell, textX, y, textW, { font, size: G.font.body })
       return
     }
-    doc.text(cell, x, y, { width: w, lineGap: G.lineGap, align })
+    doc.text(cell, textX, y, { width: textW, lineGap: G.lineGap, align })
   }
 
   /**
@@ -1488,8 +1580,30 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     const enBold = row.enBold === true
     const idAlign = resolveCellAlign(row.idAlign, idBold, row.idJustify ?? (row.justify === true))
     const enAlign = resolveCellAlign(row.enAlign, enBold, row.enJustify ?? (row.justify === true))
-    if (row.id) drawCell(row.id, row.idRuns, G.left.x0 + G.textPaddingLeft, innerW0, idBold, idAlign)
-    if (row.en) drawCell(row.en, row.enRuns, G.right.x0 + G.textPaddingLeft, innerW1, enBold, enAlign)
+    if (row.id || row.idLabel) {
+      drawCell(
+        row.id,
+        row.idRuns,
+        G.left.x0 + G.textPaddingLeft,
+        innerW0,
+        idBold,
+        idAlign,
+        row.idLabel,
+        row.idIndent ?? 0,
+      )
+    }
+    if (row.en || row.enLabel) {
+      drawCell(
+        row.en,
+        row.enRuns,
+        G.right.x0 + G.textPaddingLeft,
+        innerW1,
+        enBold,
+        enAlign,
+        row.enLabel,
+        row.enIndent ?? 0,
+      )
+    }
     y += h + (row.kind === 'heading' ? G.headingGapAfter : 0)
     contentBottoms[pageIndex] = y
   }

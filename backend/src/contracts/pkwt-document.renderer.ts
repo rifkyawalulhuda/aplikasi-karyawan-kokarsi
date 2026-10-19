@@ -12,7 +12,7 @@
  * `contract-templates` dapat memakainya tanpa ketergantungan sirkular.
  */
 import PDFDocument from 'pdfkit'
-import { interpolate } from './contract-block-renderer'
+import { interpolate, listPrefix } from './contract-block-renderer'
 import { formatCell } from './table-layout.helpers'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
 import { blockSpaceAfterPts } from './block-spacing'
@@ -164,7 +164,7 @@ export function blocksToPkwtParagraphs(
   for (const block of blocks ?? []) {
     // Identitas blok untuk penelusuran; blok tanpa id tetap diberi label unik.
     const blockId = String(block?.id ?? `__anon-${anon++}`)
-    const local: { text: string, bold: boolean, runs?: InlineRun[], align?: PkwtAlign, table?: PkwtTable }[] = []
+    const local: { text: string, bold: boolean, runs?: InlineRun[], align?: PkwtAlign, table?: PkwtTable, label?: string }[] = []
     // Perataan hanya diambil untuk blok yang MEMANG mendukungnya (`paragraph`
     // dan `article`). `list`/`table` punya perataan sendiri; validator menolak
     // `align` di sana, dan di sini dijaga agar tidak ikut terbawa.
@@ -196,12 +196,23 @@ export function blocksToPkwtParagraphs(
         break
       }
 
-      case 'list':
-        for (const item of block.items ?? []) {
+      case 'list': {
+        // Penanda item ("•", "1.", "a.") dibawa TERPISAH dari teksnya. Engine
+        // memakainya untuk menggambar label di kolom kiri item dan menghitung
+        // hanging indent, sehingga baris lanjutan sejajar dengan huruf pertama
+        // teks — bukan di bawah penandanya. Tanpa ini pratinjau PDF PKWT hanya
+        // mencetak teks item (bug "Gaya Penomoran tidak muncul").
+        const style = String(block?.style ?? 'bullet')
+        ;(block.items ?? []).forEach((item: any, i: number) => {
           const raw = typeof item === 'object' && item !== null ? (item.text ?? '') : item
-          local.push({ text: interpolate(String(raw), values), bold: false })
-        }
+          local.push({
+            text: interpolate(String(raw), values),
+            bold: false,
+            label: listPrefix(style, i),
+          })
+        })
         break
+      }
 
       case 'table': {
         // Tabel dirender sebagai SATU paragraf ber-`table`: engine menggambar
@@ -246,6 +257,7 @@ export function blocksToPkwtParagraphs(
         // `localAlign` blok bila paragrafnya tidak membawa align sendiri.
         align: p.align ?? localAlign,
         table: p.table,
+        label: p.label,
         blockId,
         blockIndex: ordinal,
         spaceAfter: blockSpaceAfter,

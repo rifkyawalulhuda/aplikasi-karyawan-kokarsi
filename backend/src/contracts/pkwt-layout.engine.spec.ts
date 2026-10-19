@@ -1268,3 +1268,81 @@ describe('buildPkwtRowsFromStructuredParagraphs — runs & align', () => {
     expect(rows[0].enAlign).toBe('right')
   })
 })
+
+describe('buildPkwtRowsFromStructuredParagraphs - label & hanging indent daftar', () => {
+  const stubDoc = {
+    font() { return this },
+    fontSize() { return this },
+    widthOfString(s: string) { return String(s).length * 5 },
+  }
+  const opts = { width: 1000, size: 9 }
+
+  const item = (blockIndex: number, text: string, label: string) =>
+    ({ blockId: `l${blockIndex}`, blockIndex, text, bold: false, label })
+
+  it('label hanya dibawa baris PERTAMA tiap item', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [item(0, 'satu', '1.'), item(0, 'dua', '2.')],
+      [item(0, 'one', '1.'), item(0, 'two', '2.')],
+      opts
+    )
+    expect(rows.map(r => r.idLabel)).toEqual(['1.', '2.'])
+    expect(rows.map(r => r.enLabel)).toEqual(['1.', '2.'])
+  })
+
+  it('baris lanjutan item memakai indent yang sama tetapi tanpa label', () => {
+    // Lebar 50 / 5 = 10 karakter per baris SETELAH indent dikurangi.
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [item(0, 'satu dua tiga empat lima', '1.')],
+      [],
+      { width: 50, size: 9 }
+    )
+    expect(rows.length).toBeGreaterThan(1)
+    // Hanya baris pertama yang punya label; sisanya hanya indent.
+    expect(rows[0].idLabel).toBe('1.')
+    expect(rows.slice(1).every(r => r.idLabel === undefined)).toBe(true)
+    // Semua baris item membawa indent yang SAMA (hanging indent).
+    const indents = rows.map(r => r.idIndent)
+    expect(indents.every(i => i === indents[0])).toBe(true)
+    expect(indents[0]).toBeGreaterThan(0)
+  })
+
+  it('indent seragam per blok, mengikuti label TERLEBAR', () => {
+    // "10. " (4 karakter) lebih lebar dari "9. " (3 karakter).
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [item(0, 'sembilan', '9.'), item(0, 'sepuluh', '10.')],
+      [],
+      opts
+    )
+    expect(rows[0].idIndent).toBe(rows[1].idIndent)
+    // widthOfString("10. ") = 4 * 5 = 20 > minimum 13.5.
+    expect(rows[0].idIndent).toBe(20)
+  })
+
+  it('item daftar selalu rata kiri, tidak dijustifikasi', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [item(0, 'satu dua tiga empat lima enam tujuh delapan sembilan sepuluh', '1.')],
+      [],
+      { width: 60, size: 9 }
+    )
+    expect(rows.every(r => r.idAlign === 'left')).toBe(true)
+    expect(rows.every(r => r.idJustify === false)).toBe(true)
+  })
+
+  it('paragraf biasa TIDAK mendapat label/indent (nol regresi)', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [{ blockId: 'p', blockIndex: 0, text: 'teks biasa', bold: false }],
+      [{ blockId: 'p', blockIndex: 0, text: 'plain text', bold: false }],
+      opts
+    )
+    expect(rows[0].idLabel).toBeUndefined()
+    expect(rows[0].enLabel).toBeUndefined()
+    expect(rows[0].idIndent).toBeUndefined()
+    expect(rows[0].enIndent).toBeUndefined()
+  })
+})

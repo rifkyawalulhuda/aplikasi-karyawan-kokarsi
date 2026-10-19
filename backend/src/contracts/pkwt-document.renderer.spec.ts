@@ -235,6 +235,33 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
     expect(paras.map(p => p.align)).toEqual([undefined, undefined])
   })
 
+  it('list membawa label sesuai gaya penomoran (bug: PDF hanya mencetak teks)', () => {
+    const items = ['satu', 'dua', 'tiga']
+    const label = (style: string | undefined) => blocksToPkwtParagraphs(
+      [{ id: 'l1', type: 'list', ...(style === undefined ? {} : { style }), items }],
+      values
+    ).map(p => p.label)
+
+    expect(label('numbered')).toEqual(['1.', '2.', '3.'])
+    expect(label('alphabetic')).toEqual(['a.', 'b.', 'c.'])
+    expect(label('bullet')).toEqual(['•', '•', '•'])
+    // Tanpa `style` (data lama) → bullet, bukan tanpa penanda.
+    expect(label(undefined)).toEqual(['•', '•', '•'])
+    // Gaya tak dikenal diperlakukan seperti bullet, sama dengan editor.
+    expect(label('weird')).toEqual(['•', '•', '•'])
+  })
+
+  it('teks item list tetap bersih dari penanda dan terinterpolasi', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{ id: 'l1', type: 'list', style: 'numbered', items: ['{{employee.fullName}}', 'dua'] }],
+      values
+    )
+    // Label dipisah supaya engine dapat menghitung hanging indent; menggabung
+    // label ke teks akan membuat indentasi ikut terukur pada label.
+    expect(paras.map(p => p.text)).toEqual(['Budi', 'dua'])
+    expect(paras.map(p => p.label)).toEqual(['1.', '2.'])
+  })
+
   it('align bernilai tidak dikenal diabaikan (perilaku lama)', () => {
     const paras = blocksToPkwtParagraphs(
       [{ id: 'p1', type: 'paragraph', text: 'isi', align: 'middle' }],
