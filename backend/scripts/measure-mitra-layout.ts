@@ -439,6 +439,35 @@ async function main() {
     console.log(`  Y terakhir kolom KANAN : ${fmt(lastY.right)}`)
     console.log(`  selisih K-R            : ${fmt(lastY.left - lastY.right)}` +
       (Math.abs(lastY.left - lastY.right) > 20 ? '  <-- TIMPANG' : '  (seimbang)'))
+    /**
+     * Angka di atas berasal dari intersep `doc.text` sehingga ikut menghitung
+     * tabel tanda tangan (sel kiri berada di dalam rentang kolom kiri).
+     * Angka RESMI tinggi akhir tiap kolom dibaca dari engine: `streamEnd`.
+     */
+    const end = (metaBeforeSig as any)?.streamEnd as
+      | Array<{ page: number; y: number }>
+      | undefined
+    if (end) {
+      const toGlobal = (p: number, y: number) => {
+        let total = 0
+        for (let i = 0; i < p; i++) {
+          total += i === 0
+            ? G.firstPageBoxBottom - G.firstPageBoxTop
+            : G.contPageBoxBottom - G.contPageBoxTop
+        }
+        return total + (y - (p === 0 ? G.firstPageBoxTop : G.contPageBoxTop))
+      }
+      const gl = toGlobal(end[0].page, end[0].y)
+      const gr = toGlobal(end[1].page, end[1].y)
+      console.log(
+        `  AKHIR KOLOM (engine)   : KIRI hal ${end[0].page} y=${fmt(end[0].y)} | ` +
+          `KANAN hal ${end[1].page} y=${fmt(end[1].y)}`,
+      )
+      console.log(
+        `  selisih tinggi kolom   : ${fmt(gl - gr)}` +
+          (Math.abs(gl - gr) <= 0.5 ? '  (SEJAJAR)' : '  <-- TIMPANG'),
+      )
+    }
     console.log('')
     if (firstPageBoxes.length) {
       console.log(`  halaman 1 kotak : ${firstPageBoxes.length} (kiri+kanan) → halaman ber-konten`)

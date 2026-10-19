@@ -17,7 +17,7 @@
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
 import { blockSpaceAfterPts } from './block-spacing'
-import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
+import { hasInlineMarks, parseInlineRuns, runsToText, type InlineRun } from './inline-marks'
 import {
   drawRunsLine,
   wrapRunsToLines,
@@ -99,6 +99,11 @@ export const MITRA_GEOMETRY = {
   listHangingIndent: 13.5,
   /** Tambahan leading agar tepat mendekati master (15.8pt utk 12pt). */
   lineGap: 2.0,
+  /**
+   * TIDAK DIPAKAI lagi oleh engine. Seluruh jarak vertikal diturunkan dari grid
+   * baseline (`PITCH`) di `renderMitraPass` supaya baseline kolom KIRI dan
+   * KANAN selalu sejajar. Dipertahankan sebagai dokumentasi nilai lama.
+   */
   paragraphGap: 4,
   headingGapAfter: 4,
   /**
@@ -424,6 +429,78 @@ export function listPrefix(style: string, index: number): string {
 }
 
 /**
+ * Paragraf yang diawali nomor/huruf ("1. ", "a. ") dirender dengan hanging
+ * indent. SATU pola untuk renderer dan pengukur agar tinggi barisnya sama.
+ */
+const NUMBERED_ITEM_RE = /^(?:\d{1,2}|[a-z])\.\s/
+
+/**
+ * Jarak baris grid MITRA (pt) untuk satu dokumen.
+ *
+ * SATU sumber angka untuk renderer DAN pengukur (`planMitraLayout`), supaya
+ * titik potong kolom dihitung dengan tinggi yang sama dengan hasil gambar.
+ */
+function mitraPitch(doc: any): number {
+  const G = MITRA_GEOMETRY
+  doc.font(MITRA_FONT_NAMES.regular).fontSize(G.font.body)
+  return doc.heightOfString('Xg', { lineGap: G.lineGap })
+}
+
+/**
+ * Bungkus kata menjadi baris dengan lebar baris-pertama berbeda (hanging
+ * indent). Dipakai renderer DAN pengukur agar jumlah baris tidak menyimpang.
+ */
+function wrapWordsToLines(
+  doc: any,
+  text: string,
+  o: { font: string; size: number; firstWidth: number; restWidth: number },
+): string[] {
+  doc.font(o.font).fontSize(o.size)
+  const spaceW = doc.widthOfString(' ')
+  const widthOfWords = (ws: string[]) =>
+    ws.reduce((a, w) => a + doc.widthOfString(w), 0) + Math.max(0, ws.length - 1) * spaceW
+
+  const lines: string[] = []
+  const words = text.split(/\s+/).filter(Boolean)
+  let cur: string[] = []
+  let curWidth = o.firstWidth
+  for (const w of words) {
+    const test = [...cur, w]
+    if (widthOfWords(test) <= curWidth || cur.length === 0) {
+      cur = test
+    } else {
+      lines.push(cur.join(' '))
+      cur = [w]
+      curWidth = o.restWidth
+    }
+  }
+  if (cur.length) lines.push(cur.join(' '))
+  return lines
+}
+
+/**
+ * Posisi vertikal GLOBAL (pt) dari pasangan (halaman, y).
+ *
+ * Kolom mengalir lintas halaman, jadi tinggi satu blok tidak bisa dihitung
+ * hanya dari selisih `y` — harus dijumlahkan dengan kapasitas halaman yang
+ * dilewati. Origin global = puncak kotak halaman 0.
+ */
+function mitraPageCapacity(pageIdx: number): number {
+  const G = MITRA_GEOMETRY
+  return pageIdx === 0
+    ? G.firstPageBoxBottom - G.firstPageBoxTop
+    : G.contPageBoxBottom - G.contPageBoxTop
+}
+
+function mitraGlobalY(pageIdx: number, y: number): number {
+  const G = MITRA_GEOMETRY
+  const top = pageIdx === 0 ? G.firstPageBoxTop : G.contPageBoxTop
+  let total = 0
+  for (let p = 0; p < pageIdx; p++) total += mitraPageCapacity(p)
+  return total + (y - top)
+}
+
+/**
  * Gambar SATU baris rata kanan-kiri dengan mendistribusikan sisa ruang ke
  * spasi antar-kata. Dipakai pada mode hanging indent karena PDFKit tidak
  * menerapkan justify ketika `lineBreak: false`.
@@ -523,6 +600,43 @@ function renderMitraPass(
   doc.registerFont(F.boldItalic, opts.fonts.boldItalic ?? opts.fonts.bold)
 
   /**
+   * GRID BASELINE (pt) — jarak antar-baris body.
+   *
+   * Kolom KIRI dan KANAN mengalir sebagai dua stream INDEPENDEN, jadi tanpa
+   * grid keduanya akan "berenang" dan baseline-nya tidak pernah sejajar.
+   * Aturannya: SETIAP baris dan SETIAP jarak antar-blok harus kelipatan PITCH.
+   * Dengan begitu baris ke-n kolom kiri selalu selevel dengan baris ke-n kolom
+   * kanan, berapa pun isi masing-masing kolom.
+   *
+   * Nilainya diturunkan dari metrik font yang SAMA dengan `writeText`, bukan
+   * konstanta, supaya tidak menyimpang bila font/ukuran body diubah.
+   */
+  doc.font(F.regular).fontSize(G.font.body)
+  const PITCH = mitraPitch(doc)
+  const BODY_ASCENT = ((doc as any)._font.ascender / 1000) * G.font.body
+
+  /**
+   * Metrik satu ukuran font agar barisnya tetap duduk di grid.
+   *
+   * `lineGap` dipilih supaya tinggi baris = PITCH. `baselineOffset` menggeser
+   * titik gambar ke bawah/atas agar BASELINE (bukan atas kotak baris) jatuh
+   * tepat di grid — penting untuk ukuran selain body (mis. subtitle 10pt),
+   * yang ascent-nya lebih pendek.
+   */
+  const gridMetrics = (font: string, size: number) => {
+    doc.font(font).fontSize(size)
+    const natural = doc.heightOfString('Xg', { lineGap: 0 })
+    const ascent = ((doc as any)._font.ascender / 1000) * size
+    return {
+      lineGap: Math.max(0, PITCH - natural),
+      baselineOffset: BODY_ASCENT - ascent,
+    }
+  }
+
+  /** Jarak sebelum judul pasal: dua baris penuh (tetap kelipatan grid). */
+  const HEADING_GAP = PITCH * 2
+
+  /**
    * Blok `title` PERTAMA = judul dokumen yang sudah digambar di KOP (header
    * halaman 1). Blok itu DILEWATI saat body dirender agar judul tidak tampil
    * dua kali — sehingga template MITRA lama (satu blok `title` di index 0)
@@ -577,6 +691,22 @@ function renderMitraPass(
   const noteDeepest = () => {
     const p = streamPage[currentStream]
     deepestByPage[p] = Math.max(deepestByPage[p] ?? 0, y)
+  }
+
+  /** Titik awal grid (top kotak + 2pt) pada halaman stream aktif. */
+  const gridOrigin = () => boxTop(streamPage[currentStream]) + 2
+
+  /**
+   * Bulatkan `y` KE ATAS ke garis grid berikutnya.
+   *
+   * Dipakai setelah elemen yang tingginya tidak mengikuti grid (tabel) dan
+   * setelah `spaceAfter` manual, supaya baris berikutnya kembali sejajar dengan
+   * kolom satunya.
+   */
+  const snapToGrid = () => {
+    const origin = gridOrigin()
+    const steps = Math.ceil((y - origin) / PITCH - 1e-6)
+    y = origin + Math.max(0, steps) * PITCH
   }
 
   /**
@@ -687,13 +817,17 @@ function renderMitraPass(
     const hang = o.hangingIndent ?? 0
     const s = currentStream
 
-    doc.font(font).fontSize(size)
-    // Tinggi baris HARUS sama dengan jarak antar-baris PDFKit pada jalur normal
-    // (heightOfString 1 baris dgn lineGap), supaya leading konsisten 15.8pt.
-    const lineHeight = doc.heightOfString('Xg', { lineGap: G.lineGap })
+    const metrics = gridMetrics(font, size)
+    // Tinggi baris SELALU PITCH supaya baseline tidak pernah keluar grid,
+    // termasuk untuk ukuran selain body (subtitle).
+    const lineHeight = PITCH
     const fullWidth = colInnerWidth(s)
 
     if (o.gapBefore) {
+      // Jarak sebelum heading SELALU diterapkan (juga di puncak kolom). Kalau
+      // dilewati secara kondisional, tinggi satu blok bergantung pada posisi
+      // halaman — dan penyeimbangan kolom jadi tidak mungkin dihitung tepat.
+      // Nilainya kelipatan PITCH, jadi baseline tetap di grid.
       ensureSpace(o.gapBefore)
       y += o.gapBefore
     }
@@ -704,7 +838,7 @@ function renderMitraPass(
       const headingH = doc.heightOfString(text, {
         width: fullWidth - indent,
         align,
-        lineGap: G.lineGap,
+        lineGap: metrics.lineGap,
       })
       const needed = Math.max(headingH, lineHeight * o.keepWithNextLines)
       if (y + needed > boxBottom(streamPage[s])) {
@@ -717,28 +851,9 @@ function renderMitraPass(
 
     if (hang > 0) {
       // --- Hanging indent: bungkus manual per baris (lebar baris 1 ≠ lanjutan). ---
-      doc.font(font).fontSize(size)
-      const spaceW = doc.widthOfString(' ')
-      const widthOfWords = (ws: string[]) =>
-        ws.reduce((a, w) => a + doc.widthOfString(w), 0) + Math.max(0, ws.length - 1) * spaceW
-
       const firstWidth = fullWidth - indent
       const restWidth = fullWidth - indent - hang
-      const lines: string[] = []
-      const words = text.split(/\s+/).filter(Boolean)
-      let cur: string[] = []
-      let curWidth = firstWidth
-      for (const w of words) {
-        const test = [...cur, w]
-        if (widthOfWords(test) <= curWidth || cur.length === 0) {
-          cur = test
-        } else {
-          lines.push(cur.join(' '))
-          cur = [w]
-          curWidth = restWidth
-        }
-      }
-      if (cur.length) lines.push(cur.join(' '))
+      const lines = wrapWordsToLines(doc, text, { font, size, firstWidth, restWidth })
 
       for (let li = 0; li < lines.length; li++) {
         if (y + lineHeight > boxBottom(streamPage[s])) nextPageForStream(s)
@@ -748,27 +863,29 @@ function renderMitraPass(
         const lineWidth = isFirst ? firstWidth : restWidth
         const lineX = colX(s) + lineIndent
         doc.font(font).fontSize(size).fillColor('#000000')
+        // `baselineOffset` menempatkan BASELINE di grid, bukan atas kotak baris.
+        const lineY = y + metrics.baselineOffset
 
         if (align === 'justify' && !isLast && lines[li].includes(' ')) {
-          drawJustifiedLine(doc, lines[li], lineX, y, lineWidth, font, size)
+          drawJustifiedLine(doc, lines[li], lineX, lineY, lineWidth, font, size)
         } else {
-          doc.text(lines[li], lineX, y, {
+          doc.text(lines[li], lineX, lineY, {
             width: lineWidth,
             align: align === 'justify' ? 'left' : align,
-            lineGap: G.lineGap,
+            lineGap: metrics.lineGap,
             lineBreak: false,
           })
         }
         y += lineHeight
       }
-      y += o.gapAfter ?? G.paragraphGap
+      y += o.gapAfter ?? 0
       noteDeepest()
       return
     }
 
     // --- Modus normal: alur paragraf lintas halaman. ---
     const measure = (t: string) =>
-      doc.heightOfString(t, { width: fullWidth - indent, align, lineGap: G.lineGap })
+      doc.heightOfString(t, { width: fullWidth - indent, align, lineGap: metrics.lineGap })
 
     let remaining = text
     while (remaining) {
@@ -776,10 +893,10 @@ function renderMitraPass(
       const fullH = measure(remaining)
       if (fullH <= avail) {
         doc.font(font).fontSize(size).fillColor('#000000')
-        doc.text(remaining, colX(s) + indent, y, {
+        doc.text(remaining, colX(s) + indent, y + metrics.baselineOffset, {
           width: fullWidth - indent,
           align,
-          lineGap: G.lineGap,
+          lineGap: metrics.lineGap,
         })
         y += fullH
         break
@@ -808,17 +925,17 @@ function renderMitraPass(
       const chunk = words.slice(0, best).join(' ')
       const chunkH = measure(chunk)
       doc.font(font).fontSize(size).fillColor('#000000')
-      doc.text(chunk, colX(s) + indent, y, {
+      doc.text(chunk, colX(s) + indent, y + metrics.baselineOffset, {
         width: fullWidth - indent,
         align,
-        lineGap: G.lineGap,
+        lineGap: metrics.lineGap,
       })
       y += chunkH
       remaining = words.slice(best).join(' ')
       if (remaining) nextPageForStream(s)
     }
 
-    y += o.gapAfter ?? G.paragraphGap
+    y += o.gapAfter ?? 0
     noteDeepest()
   }
 
@@ -866,11 +983,11 @@ function renderMitraPass(
     const hang = o.hangingIndent ?? 0
     const s = currentStream
 
-    doc.font(font).fontSize(size)
+    const metrics = gridMetrics(font, size)
     // Tinggi baris SAMA dengan jalur lama: bersumber dari font acuan, BUKAN dari
     // mark. Inilah yang membuat baris bermark setinggi baris tanpa mark sehingga
     // paginasi tidak bergeser (dibuktikan uji jumlah halaman).
-    const lineHeight = doc.heightOfString('Xg', { lineGap: G.lineGap })
+    const lineHeight = PITCH
     const fullWidth = colInnerWidth(s)
 
     const firstWidth = fullWidth - indent
@@ -881,6 +998,8 @@ function renderMitraPass(
       : wrapRunsToLines(doc, runs, firstWidth, MITRA_RUN_FONTS, size)
 
     if (o.gapBefore) {
+      // Sama dengan `writeText`: jarak heading selalu diterapkan (kelipatan
+      // PITCH) supaya tinggi blok tidak bergantung posisi halaman.
       ensureSpace(o.gapBefore)
       y += o.gapBefore
     }
@@ -899,19 +1018,27 @@ function renderMitraPass(
       // Baris terakhir paragraf tidak direntangkan — sama seperti Word/LaTeX dan
       // sama dengan `writeText`.
       const lineAlign: MitraAlign = align === 'justify' && isLast ? 'left' : align
-      drawRunsLine(doc, lines[li], lineX, y, lineWidth, MITRA_RUN_FONTS, size, lineAlign)
+      drawRunsLine(
+        doc,
+        lines[li],
+        lineX,
+        y + metrics.baselineOffset,
+        lineWidth,
+        MITRA_RUN_FONTS,
+        size,
+        lineAlign,
+      )
       y += lineHeight
     }
 
-    y += o.gapAfter ?? G.paragraphGap
+    y += o.gapAfter ?? 0
     noteDeepest()
   }
 
-  const NUMBERED_ITEM = /^(?:\d{1,2}|[a-z])\.\s/
   const paragraphOpts = (text: string, align?: MitraAlign) => {
-    const base = NUMBERED_ITEM.test(mitraInterpolate(text, opts.values))
-      ? { gapAfter: G.paragraphGap, hangingIndent: G.listHangingIndent }
-      : { gapAfter: G.paragraphGap }
+    const base = NUMBERED_ITEM_RE.test(mitraInterpolate(text, opts.values))
+      ? { gapAfter: 0, hangingIndent: G.listHangingIndent }
+      : { gapAfter: 0 }
     // `align` sengaja TIDAK ditulis bila tidak ada, supaya `writeText`/`writeRuns`
     // memakai default `'justify'` — perilaku lama yang tidak boleh berubah.
     return align ? { ...base, align } : base
@@ -933,8 +1060,8 @@ function renderMitraPass(
           font: F.bold,
           size: G.font.body,
           align: 'center',
-          gapBefore: 2,
-          gapAfter: G.headingGapAfter,
+          gapBefore: HEADING_GAP,
+          gapAfter: 0,
         })
         break
 
@@ -943,8 +1070,8 @@ function renderMitraPass(
           font: F.bold,
           size: G.font.body - 2,
           align: 'center',
-          gapBefore: 2,
-          gapAfter: G.headingGapAfter,
+          gapBefore: 0,
+          gapAfter: 0,
         })
         break
 
@@ -965,8 +1092,8 @@ function renderMitraPass(
             size: G.font.body,
             // Tanpa keduanya, judul tetap center seperti sebelumnya.
             align: headingAlign ?? align ?? 'center',
-            gapBefore: 2,
-            gapAfter: G.headingGapAfter,
+            gapBefore: HEADING_GAP,
+            gapAfter: 0,
             keepWithNextLines: 3,
           })
         }
@@ -978,18 +1105,22 @@ function renderMitraPass(
 
       case 'list': {
         const items = block.items ?? []
+        /**
+         * `startIndex` dipakai saat daftar DIPECAH di batas kolom: bagian
+         * lanjutan harus meneruskan penomoran, bukan mengulang dari "1.".
+         */
+        const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
         items.forEach((item: any, i: number) => {
           const raw = typeof item === 'string' ? item : (item?.text ?? '')
           const level = typeof item === 'object' ? (item?.level ?? 0) : 0
-          const prefix = listPrefix(block.style ?? 'bullet', i)
+          const prefix = listPrefix(block.style ?? 'bullet', base + i)
           writeText(`${prefix} ${raw}`, {
             indent: level * G.listHangingIndent,
             hangingIndent: G.listHangingIndent,
-            gapAfter: 2,
+            gapAfter: 0,
             align: 'left',
           })
         })
-        y += 2
         break
       }
 
@@ -1078,7 +1209,9 @@ function renderMitraPass(
             false,
           )
         }
-        y += 4
+        // Tabel punya tinggi baris sendiri (di luar grid). Setelah tabel,
+        // baris berikutnya dikembalikan ke grid agar kedua kolom sejajar lagi.
+        snapToGrid()
         break
       }
 
@@ -1113,8 +1246,17 @@ function renderMitraPass(
   }
 
   ;(doc as any).__mitraSplit = { ...plan }
-  const blocksFirst = blocks.slice(0, splitIndex)
-  const blocksSecond = blocks.slice(splitIndex)
+  /**
+   * Blok dipecah di batas kolom (`splitHead`/`splitTail`): bagian awal menutup
+   * kolom KIRI, sisanya membuka kolom KANAN. Tanpa pemecahan, batas hanya boleh
+   * jatuh antar-blok (`splitIndex` = blok pertama stream kanan).
+   */
+  const blocksFirst = plan.splitHead
+    ? [...blocks.slice(0, splitIndex), plan.splitHead]
+    : blocks.slice(0, splitIndex)
+  const blocksSecond = plan.splitTail
+    ? [plan.splitTail, ...blocks.slice(splitIndex + 1)]
+    : blocks.slice(splitIndex)
 
   /**
    * Render satu stream (kiri/kanan) sambil menerapkan `spaceAfter` antar blok.
@@ -1126,6 +1268,9 @@ function renderMitraPass(
    * menyisipkan ruang kosong di atas tanpa isi. Jarak juga dilewati bila blok
    * berikutnya bukan blok konten (`signature`/`pageBreak`) atau blok `title`
    * pertama yang dikonsumsi sebagai judul kop.
+   *
+   * Nilai `spaceAfter` dibulatkan KE ATAS ke garis grid berikutnya: jarak
+   * manual tidak boleh menggeser baseline kolom ini dari kolom satunya.
    */
   const willRenderContent = (b: any) => {
     if (!b || b === headerTitleBlock) return false
@@ -1133,7 +1278,16 @@ function renderMitraPass(
     // dihitung saat membagi blok ke dua stream.
     return b.type !== 'signature' && b.type !== 'pageBreak' && b.type !== 'closing'
   }
+  /**
+   * Rekam (halaman, y) awal & akhir tiap blok per stream.
+   *
+   * Dipakai `planMitraLayout` untuk menghitung tinggi NYATA setiap blok pada
+   * satu pass, lalu menentukan titik potong yang membuat kedua kolom berakhir
+   * di ketinggian yang sama.
+   */
+  const blockSpans: Array<Array<{ start: { page: number; y: number }; end: { page: number; y: number } }>> = [[], []]
   const renderSequence = (list: MitraBlock[]) => {
+    const stream = currentStream
     let prevSpace = 0
     for (let i = 0; i < list.length; i++) {
       if (i > 0 && prevSpace > 0 && willRenderContent(list[i])) {
@@ -1142,10 +1296,15 @@ function renderMitraPass(
         if (y > pageTop + 0.01) {
           const pageBefore = streamPage[s]
           ensureSpace(prevSpace)
-          if (streamPage[s] === pageBefore) y += prevSpace
+          if (streamPage[s] === pageBefore) {
+            y += prevSpace
+            snapToGrid()
+          }
         }
       }
+      const start = { page: streamPage[stream], y }
       renderBlock(list[i])
+      blockSpans[stream].push({ start, end: { page: streamPage[stream], y } })
       prevSpace = mitraBlockSpaceAfter((list[i] as any)?.spaceAfter)
     }
   }
@@ -1153,10 +1312,12 @@ function renderMitraPass(
   // === Stream 0 → kolom KIRI semua halaman ===
   gotoStreamPage(0, 0)
   renderSequence(blocksFirst)
+  const streamEndY = [y, y]
 
   // === Stream 1 → kolom KANAN semua halaman ===
   gotoStreamPage(1, 0)
   renderSequence(blocksSecond)
+  streamEndY[1] = y
 
   // === Pass akhir: gambar kotak kolom DINAMIS untuk SEMUA halaman ===
   // Kotak berhenti di teks terakhir + bantalan (bukan setinggi halaman).
@@ -1214,13 +1375,27 @@ function renderMitraPass(
     lastPageStream: [streamPage[0], streamPage[1]] as [number, number],
     /** Halaman yang benar-benar dipendekkan pada render ini (audit). */
     reservedPages: [...reservedBottomByPage.keys()],
+    /** (halaman, y) akhir tiap stream — dasar penyeimbangan kolom. */
+    streamEnd: [
+      { page: streamPage[0], y: streamEndY[0] },
+      { page: streamPage[1], y: streamEndY[1] },
+    ] as Array<{ page: number; y: number }>,
+    /** Rentang vertikal tiap blok per stream (untuk mengukur tinggi nyata). */
+    blockSpans,
   }
 }
 
 /** Rencana tata letak hasil pengukuran. */
 export interface MitraLayoutPlan {
-  /** Indeks pemisahan stream. */
+  /**
+   * Batas stream. Tanpa `splitHead`: blok pertama kolom KANAN. Dengan
+   * `splitHead`: indeks blok yang DIPECAH di batas kolom.
+   */
   splitIndex: number
+  /** Bagian awal blok `splitIndex` yang menutup kolom KIRI. */
+  splitHead?: MitraBlock
+  /** Sisa blok `splitIndex` yang membuka kolom KANAN. */
+  splitTail?: MitraBlock
   /** Halaman yang kotaknya dipendekkan untuk tanda tangan (-1 = tidak ada). */
   reservedPage: number
   /** Jumlah halaman akhir menurut pengukuran. */
@@ -1231,6 +1406,378 @@ export interface MitraLayoutPlan {
    * supaya ruang kosong yang tertinggal di dalam kotak sekecil mungkin.
    */
   reserveShrink?: number
+}
+
+/**
+ * Pilih rencana tata letak dengan MENGUKUR ENGINE ASLI.
+ *
+ * Alih-alih menaksir tinggi blok dengan rumus (yang meleset besar untuk
+ * `article` panjang — terukur satu pasal ditaksir 1515pt sementara kolom penuh
+ * hanya ±725pt), engine dijalankan utuh pada dokumen SCRATCH lalu
+ * `__mitraFinalPage` dibaca. Ini satu-satunya cara yang benar-benar akurat.
+ */
+
+/** Baris kosong grid (pt) untuk satu ukuran font. */
+function mitraLineGap(doc: any, font: string, size: number): number {
+  const pitch = mitraPitch(doc)
+  doc.font(font).fontSize(size)
+  const natural = doc.heightOfString('Xg', { lineGap: 0 })
+  return Math.max(0, pitch - natural)
+}
+
+/** Tinggi satu paragraf persis seperti yang digambar `writeText`. */
+function measureMitraTextHeight(
+  doc: any,
+  text: string,
+  o: { font: string; size: number; align: MitraAlign; width: number; indent?: number; hang?: number },
+): number {
+  const indent = o.indent ?? 0
+  const hang = o.hang ?? 0
+  const firstWidth = o.width - indent
+  const restWidth = o.width - indent - hang
+  if (hang > 0) {
+    const lines = wrapWordsToLines(doc, text, { font: o.font, size: o.size, firstWidth, restWidth })
+    return lines.length * mitraPitch(doc)
+  }
+  const lineGap = mitraLineGap(doc, o.font, o.size)
+  doc.font(o.font).fontSize(o.size)
+  return doc.heightOfString(text, { width: firstWidth, align: o.align, lineGap })
+}
+
+/** Teks dengan placeholder sudah diinterpolasi + token mentah dibersihkan. */
+function resolveMitraText(raw: string, values: Record<string, string>): string {
+  return scrubRawTokens(mitraInterpolate(raw, values))
+}
+
+/**
+ * Mark (`**`, `*`, `__`) harus tetap seimbang setelah teks dipecah.
+ *
+ * `runsToText(parseInlineRuns(x)) !== x` berarti ada pembatas mark yang
+ * terpotong — bagian itu tidak boleh dipakai sebagai titik potong.
+ */
+function marksStayBalanced(text: string): boolean {
+  return runsToText(parseInlineRuns(text)) === text
+}
+
+/**
+ * Cari jumlah kata terbesar yang tingginya masih ≤ `target`, lalu pecah teks.
+ *
+ * @returns `null` bila seluruh teks muat (tidak perlu pecah), tidak ada satu
+ *          kata pun yang muat, atau titik potong merusak mark.
+ */
+function splitTextAtHeight(
+  text: string,
+  target: number,
+  measure: (candidate: string) => number,
+): { head: string; tail: string } | null {
+  if (target <= 0) return null
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length < 2) return null
+  if (measure(text) <= target) return null
+
+  let lo = 1
+  let hi = words.length - 1
+  let best = 0
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (measure(words.slice(0, mid).join(' ')) <= target) {
+      best = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  if (best <= 0) return null
+
+  // Mundur bila titik potong jatuh di dalam pasangan mark.
+  for (let take = best; take > 0 && take > best - 12; take--) {
+    const head = words.slice(0, take).join(' ')
+    const tail = words.slice(take).join(' ')
+    if (!tail) return null
+    if (marksStayBalanced(head) && marksStayBalanced(tail)) return { head, tail }
+  }
+  return null
+}
+
+/** Blok yang bisa dipecah di batas kolom. */
+const SPLITTABLE_TYPES = new Set(['paragraph', 'article', 'list', 'table'])
+
+/**
+ * Pecah satu blok pada ketinggian `target` (pt, diukur dari awal blok).
+ *
+ * Blok dipecah sedekat mungkin dengan `target` supaya kedua kolom berakhir di
+ * ketinggian yang sama. `null` = blok ini tidak bisa dipecah (judul, ganti
+ * halaman, atau tidak ada satu kata pun yang muat) — pemanggil memakai batas
+ * antar-blok.
+ */
+function splitBlockAtHeight(
+  doc: any,
+  block: MitraBlock,
+  target: number,
+  width: number,
+  values: Record<string, string>,
+): { head: MitraBlock; tail: MitraBlock } | null {
+  const G = MITRA_GEOMETRY
+  const F = MITRA_FONT_NAMES
+  if (!SPLITTABLE_TYPES.has(String(block?.type))) return null
+
+  if (block.type === 'paragraph') {
+    const text = resolveMitraText(String(block.text ?? ''), values)
+    if (!text.trim()) return null
+    const align = mitraBlockAlign(block?.align) ?? 'justify'
+    const hang = NUMBERED_ITEM_RE.test(text) ? G.listHangingIndent : 0
+    const size = G.font.body
+    const parts = splitTextAtHeight(text, target, (candidate) =>
+      measureMitraTextHeight(doc, candidate, { font: F.regular, size, align, width, hang }),
+    )
+    if (!parts) return null
+    return { head: { ...block, text: parts.head }, tail: { ...block, text: parts.tail } }
+  }
+
+  if (block.type === 'article') {
+    const heading = resolveMitraText(String(block.heading ?? ''), values)
+    const paragraphs = (block.paragraphs ?? []).map((p: unknown) =>
+      resolveMitraText(String(p), values),
+    )
+    const align = mitraBlockAlign(block?.align)
+    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? align ?? 'center'
+    const size = G.font.body
+
+    let acc = 0
+    if (heading) {
+      // Renderer SELALU memberi jarak sebelum judul pasal (2 baris grid).
+      acc += mitraPitch(doc) * 2
+      acc += measureMitraTextHeight(doc, heading, {
+        font: F.bold,
+        size,
+        align: headingAlign,
+        width,
+      })
+      if (acc > target) return null
+    }
+
+    for (let i = 0; i < paragraphs.length; i++) {
+      const p = paragraphs[i]
+      const h = measureMitraTextHeight(doc, p, {
+        font: F.regular,
+        size,
+        align: align ?? 'justify',
+        width,
+        hang: NUMBERED_ITEM_RE.test(p) ? G.listHangingIndent : 0,
+      })
+      if (acc + h <= target) {
+        acc += h
+        continue
+      }
+      const remaining = target - acc
+      if (remaining <= 0 || i === 0) return null
+      const parts = splitTextAtHeight(p, remaining, (candidate) =>
+        measureMitraTextHeight(doc, candidate, {
+          font: F.regular,
+          size,
+          align: align ?? 'justify',
+          width,
+          hang: NUMBERED_ITEM_RE.test(p) ? G.listHangingIndent : 0,
+        }),
+      )
+      if (!parts) {
+        // Paragraf tidak bisa dipecah: potong tepat SEBELUM paragraf ini.
+        return {
+          head: { ...block, paragraphs: paragraphs.slice(0, i) },
+          tail: { ...block, heading: '', paragraphs: paragraphs.slice(i) },
+        }
+      }
+      return {
+        head: { ...block, paragraphs: [...paragraphs.slice(0, i), parts.head] },
+        tail: { ...block, heading: '', paragraphs: [parts.tail, ...paragraphs.slice(i + 1)] },
+      }
+    }
+    return null
+  }
+
+  if (block.type === 'list') {
+    const items = (block.items ?? []).map((item: any) =>
+      typeof item === 'string' ? item : String(item?.text ?? ''),
+    )
+    const levels = (block.items ?? []).map((item: any) =>
+      typeof item === 'object' ? (item?.level ?? 0) : 0,
+    )
+    const style = block.style ?? 'bullet'
+    const size = G.font.body
+    let acc = 0
+    for (let i = 0; i < items.length; i++) {
+      const hang = G.listHangingIndent
+      const h = measureMitraTextHeight(doc, `${listPrefix(style, i)} ${items[i]}`, {
+        font: F.regular,
+        size,
+        align: 'left',
+        width,
+        indent: levels[i] * hang,
+        hang,
+      })
+      if (acc + h <= target) {
+        acc += h
+        continue
+      }
+      if (i === 0) return null
+      const headItems = items.slice(0, i).map((text: string, idx: number) => ({
+        text,
+        level: levels[idx],
+      }))
+      const tailItems = items.slice(i).map((text: string, idx: number) => ({
+        text,
+        level: levels[i + idx],
+      }))
+      return {
+        head: { ...block, items: headItems },
+        tail: { ...block, items: tailItems, startIndex: i },
+      }
+    }
+    return null
+  }
+
+  // table: pecah antar-baris (header tetap diulang pada lanjutan).
+  const columns = block.columns ?? []
+  const rows = block.rows ?? []
+  if (columns.length === 0 || rows.length === 0) return null
+  const size = G.font.body - 1
+  const widths = computeColumnWidths(columns, width)
+  let acc = 0
+  if (block.header !== false) {
+    acc += computeRowHeight(
+      doc,
+      columns.map((c: any) => String(c.label ?? '')),
+      widths,
+      size,
+      8,
+      6,
+    )
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const cells = columns.map((c: any) => String(rows[i]?.[c.key] ?? ''))
+    const h = computeRowHeight(doc, cells, widths, size, 8, 6)
+    if (acc + h <= target) {
+      acc += h
+      continue
+    }
+    if (i === 0) return null
+    return {
+      head: { ...block, rows: rows.slice(0, i) },
+      tail: { ...block, rows: rows.slice(i) },
+    }
+  }
+  return null
+}
+
+/**
+ * Tinggi satu blok (pt) pada lebar kolom tertentu — TANPA menggambar.
+ *
+ * Dipakai untuk menilai titik potong secara analitis: tinggi bagian-awal
+ * diukur pada lebar kolom KIRI, bagian-lanjutan pada lebar kolom KANAN
+ * (kedua kolom tidak sama lebar).
+ *
+ * @param headingGap jarak sebelum judul pasal yang benar-benar dipakai renderer
+ *        (0 bila blok dimulai di puncak kolom).
+ */
+function measureBlockHeight(
+  doc: any,
+  block: MitraBlock,
+  width: number,
+  values: Record<string, string>,
+  headingGap = 0,
+): number {
+  const G = MITRA_GEOMETRY
+  const F = MITRA_FONT_NAMES
+  const size = G.font.body
+
+  if (block?.type === 'paragraph') {
+    const text = resolveMitraText(String(block.text ?? ''), values)
+    if (!text.trim()) return 0
+    return measureMitraTextHeight(doc, text, {
+      font: F.regular,
+      size,
+      align: mitraBlockAlign(block?.align) ?? 'justify',
+      width,
+      hang: NUMBERED_ITEM_RE.test(text) ? G.listHangingIndent : 0,
+    })
+  }
+
+  if (block?.type === 'article') {
+    const heading = resolveMitraText(String(block.heading ?? ''), values)
+    const paragraphs = (block.paragraphs ?? []).map((p: unknown) =>
+      resolveMitraText(String(p), values),
+    )
+    const align = mitraBlockAlign(block?.align)
+    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? align ?? 'center'
+    let total = 0
+    if (heading) {
+      total +=
+        headingGap +
+        measureMitraTextHeight(doc, heading, { font: F.bold, size, align: headingAlign, width })
+    }
+    for (const p of paragraphs) {
+      total += measureMitraTextHeight(doc, p, {
+        font: F.regular,
+        size,
+        align: align ?? 'justify',
+        width,
+        hang: NUMBERED_ITEM_RE.test(p) ? G.listHangingIndent : 0,
+      })
+    }
+    return total
+  }
+
+  if (block?.type === 'list') {
+    const items = block.items ?? []
+    const style = block.style ?? 'bullet'
+    const startIndex = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
+    let total = 0
+    items.forEach((item: any, i: number) => {
+      const raw = typeof item === 'string' ? item : String(item?.text ?? '')
+      const level = typeof item === 'object' ? (item?.level ?? 0) : 0
+      total += measureMitraTextHeight(doc, `${listPrefix(style, startIndex + i)} ${raw}`, {
+        font: F.regular,
+        size,
+        align: 'left',
+        width,
+        indent: level * G.listHangingIndent,
+        hang: G.listHangingIndent,
+      })
+    })
+    return total
+  }
+
+  if (block?.type === 'table') {
+    const columns = block.columns ?? []
+    const rows = block.rows ?? []
+    if (columns.length === 0) return 0
+    const tableSize = G.font.body - 1
+    const widths = computeColumnWidths(columns, width)
+    let total = 0
+    if (block.header !== false) {
+      total += computeRowHeight(
+        doc,
+        columns.map((c: any) => String(c.label ?? '')),
+        widths,
+        tableSize,
+        8,
+        6,
+      )
+    }
+    for (const row of rows) {
+      total += computeRowHeight(
+        doc,
+        columns.map((c: any) => String(row?.[c.key] ?? '')),
+        widths,
+        tableSize,
+        8,
+        6,
+      )
+    }
+    return total
+  }
+
+  return 0
 }
 
 /**
@@ -1254,16 +1801,35 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
       autoFirstPage: true,
     })
 
+  /** Dokumen ukur dengan font MITRA terdaftar (untuk `splitBlockAtHeight`). */
+  const measureDoc = makeDoc()
+  measureDoc.registerFont(MITRA_FONT_NAMES.regular, opts.fonts.regular)
+  measureDoc.registerFont(MITRA_FONT_NAMES.bold, opts.fonts.bold)
+  measureDoc.registerFont(MITRA_FONT_NAMES.italic, opts.fonts.italic)
+  measureDoc.registerFont(
+    MITRA_FONT_NAMES.boldItalic,
+    opts.fonts.boldItalic ?? opts.fonts.bold,
+  )
+
   /**
-   * Ukur satu kandidat split dengan render sungguhan.
+   * Ukur satu kandidat rencana dengan render sungguhan.
    *
    * `shrink` = berapa pt kotak halaman `reservedPage` dipendekkan. Nilai ini
    * diteruskan ke `renderMitraPass` supaya pengukuran dan render akhir memakai
    * geometri yang sama persis.
    */
-  const measure = (splitIndex: number, reservedPage = -1, shrink = 0) => {
+  const measure = (
+    plan: Pick<MitraLayoutPlan, 'splitIndex' | 'splitHead' | 'splitTail'>,
+    reservedPage = -1,
+    shrink = 0,
+  ) => {
     const doc = makeDoc()
-    renderMitraPass(doc, blocks, opts, { splitIndex, reservedPage, pageCount: 1, reserveShrink: shrink })
+    renderMitraPass(doc, blocks, opts, {
+      ...plan,
+      reservedPage,
+      pageCount: 1,
+      reserveShrink: shrink,
+    })
     const meta = (doc as any).__mitraFinalPage as
       | {
         pageCount: number
@@ -1271,52 +1837,188 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
         lastPageBoxBottom: number
         signatureGapNeeded: number
         signatureFits: boolean
+        streamEnd: Array<{ page: number; y: number }>
+        blockSpans: Array<Array<{ start: { page: number; y: number }; end: { page: number; y: number } }>>
       }
       | undefined
+    const end = meta?.streamEnd ?? [{ page: 0, y: 0 }, { page: 0, y: 0 }]
     return {
       pageCount: meta?.pageCount ?? 1,
       leftPages: (meta?.lastPageStream?.[0] ?? 0) + 1,
       rightPages: (meta?.lastPageStream?.[1] ?? 0) + 1,
+      /** Tinggi global (pt) tempat tiap kolom berakhir. */
+      endGlobal: [
+        mitraGlobalY(end[0].page, end[0].y),
+        mitraGlobalY(end[1].page, end[1].y),
+      ] as [number, number],
+      blockSpans: meta?.blockSpans ?? [[], []],
       lastPageBoxBottom: meta?.lastPageBoxBottom ?? 0,
       signatureGapNeeded: meta?.signatureGapNeeded ?? 0,
       signatureFits: meta?.signatureFits ?? false,
     }
   }
+  /**
+   * --- 1. Bagi konten jadi dua stream SETINGGI MUNGKIN SAMA ---
+   *
+   * Layout booklet: kolom KIRI memuat paruh awal dokumen, kolom KANAN paruh
+   * akhir. Kalau batas hanya boleh jatuh antar-blok, dokumen yang blok-bloknya
+   * besar (pasal panjang) menghasilkan kolom yang jauh berbeda tinggi — bahkan
+   * satu kolom kosong sehalaman penuh.
+   *
+   * Dua hal membuat perhitungan ini tidak boleh memakai satu pengukuran saja:
+   *  1. KEDUA KOLOM LEBARNYA BERBEDA (kiri ±260pt, kanan ±248pt), sehingga
+   *     paragraf yang sama memakan baris lebih banyak di kolom kanan.
+   *  2. Titik potong boleh jatuh DI TENGAH blok.
+   * Karena itu tinggi setiap blok diukur pada lebar kolom masing-masing, lalu
+   * porsi blok yang dipecah dihitung agar kedua kolom berakhir di y yang sama.
+   */
+  const fullLeft = measure({ splitIndex: n })
+  const fullRight = measure({ splitIndex: 0 })
+  const spansL = fullLeft.blockSpans[0]
+  const spansR = fullRight.blockSpans[1]
+  const startL = (i: number) => mitraGlobalY(spansL[i].start.page, spansL[i].start.y)
+  const endL = (i: number) => mitraGlobalY(spansL[i].end.page, spansL[i].end.y)
+  const startR = (i: number) => mitraGlobalY(spansR[i].start.page, spansR[i].start.y)
+  const endR = (i: number) => mitraGlobalY(spansR[i].end.page, spansR[i].end.y)
+  /** Tinggi seluruh dokumen bila dicetak di kolom KANAN (yang lebih sempit). */
+  const totalRight = spansR.length > 0 ? endR(spansR.length - 1) : 0
 
-  // --- 1. Cari split dengan jumlah halaman paling sedikit ---
-  // Syarat penting: KEDUA stream harus terisi. Split yang menaruh semua blok di
-  // satu stream menghasilkan satu kolom kosong dan halaman lebih sedikit, tetapi
-  // itu bukan layout booklet — jadi kandidat semacam itu dibuang.
-  const isBalanced = (m: { leftPages: number; rightPages: number }) =>
-    m.leftPages > 0 && m.rightPages > 0
+  /**
+   * Cari titik potong dengan MENILAI tinggi secara analitis.
+   *
+   * Untuk setiap kandidat, tinggi bagian-awal diukur pada lebar kolom KIRI dan
+   * bagian-lanjutan pada lebar kolom KANAN — keduanya berbeda, dan itu sebabnya
+   * pendekatan "bagi dua blok" saja tidak pernah sejajar.
+   */
+  const widthL = columnInnerWidth(0)
+  const widthR = columnInnerWidth(1)
 
-  let lo = 1
-  let hi = n - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    const m = measure(mid)
-    if (!isBalanced(m) || m.leftPages >= m.rightPages) hi = mid
-    else lo = mid + 1
-  }
-  const candidates = new Set<number>([lo - 1, lo, lo + 1].filter(k => k >= 1 && k <= n - 1))
-  let bestSplit = lo
-  let bestScore = Number.POSITIVE_INFINITY
-  for (const k of candidates) {
-    const m = measure(k)
-    if (!isBalanced(m)) continue
-    const score = m.pageCount * 1000 + Math.abs(m.leftPages - m.rightPages)
-    if (score < bestScore) {
-      bestScore = score
-      bestSplit = k
+  const evaluate = (k: number, headTarget: number) => {
+    const parts = splitBlockAtHeight(measureDoc, blocks[k], headTarget, widthL, opts.values)
+    if (!parts) return null
+    const headH = measureBlockHeight(
+      measureDoc,
+      parts.head,
+      widthL,
+      opts.values,
+      mitraPitch(measureDoc) * 2,
+    )
+    const tailH = measureBlockHeight(measureDoc, parts.tail, widthR, opts.values, 0)
+    return {
+      parts,
+      diff: startL(k) + headH - ((totalRight - endR(k)) + tailH),
     }
   }
-  // Bila tidak ada kandidat yang seimbang (dokumen sangat pendek / blok raksasa),
-  // pakai titik tengah sebagai jaring pengaman.
-  if (bestScore === Number.POSITIVE_INFINITY) bestSplit = Math.max(1, Math.round(n / 2))
+
+  let splitIndex = n
+  let splitHead: MitraBlock | undefined
+  let splitTail: MitraBlock | undefined
+
+  /**
+   * Cari tinggi bagian-awal terbaik untuk satu blok batas (model analitis).
+   *
+   * Mengembalikan juga `target` supaya pemanggil bisa mempersempit pencarian
+   * berbasis render di sekitar tebakan ini.
+   */
+  const searchSplit = (k: number, hL: number) => {
+    let lo = 0
+    let hi = hL
+    let best: { parts: { head: MitraBlock; tail: MitraBlock }; diff: number; target: number } | null = null
+    let bestScore = Number.POSITIVE_INFINITY
+    for (let i = 0; i < 18; i++) {
+      const mid = (lo + hi) / 2
+      const ev = evaluate(k, mid)
+      if (!ev) {
+        lo = mid
+        continue
+      }
+      if (Math.abs(ev.diff) < bestScore) {
+        bestScore = Math.abs(ev.diff)
+        best = { ...ev, target: mid }
+      }
+      if (Math.abs(ev.diff) <= 0.5) break
+      if (ev.diff > 0) hi = mid
+      else lo = mid
+    }
+    return best
+  }
+
+  for (let k = 0; k < spansL.length; k++) {
+    const hL = endL(k) - startL(k)
+    const hR = endR(k) - startR(k)
+    if (hL <= 0 && hR <= 0) continue // blok tanpa isi (mis. signature)
+
+    // Perkiraan awal: porsi blok yang harus masuk kolom KIRI.
+    const f = (totalRight - endR(k) - startL(k) + hR) / (hL + hR)
+    if (f > 1) continue
+    splitIndex = k
+    if (f <= 0) break // titik seimbang jatuh di celah antar-blok
+    if (f >= 1) {
+      splitIndex = k + 1
+      break
+    }
+
+    const ev = searchSplit(k, hL)
+    if (ev) {
+      splitHead = ev.parts.head
+      splitTail = ev.parts.tail
+    }
+    break
+  }
+
+  let plan: Pick<MitraLayoutPlan, 'splitIndex' | 'splitHead' | 'splitTail'> = {
+    splitIndex,
+    splitHead,
+    splitTail,
+  }
+
+  /**
+   * Penyeimbangan AKHIR memakai render SUNGGUHAN.
+   *
+   * Model analitis mengabaikan satu hal yang hanya terlihat saat mengalir:
+   * paragraf yang terpotong batas halaman memakai satu baris tambahan, jadi
+   * tinggi total bergeser dalam kelipatan baris. Pencarian di bawah mengukur
+   * selisih NYATA pada beberapa titik di sekitar tebakan analitis (rentang
+   * ±4 baris) dan memakai rencana dengan selisih terkecil.
+   */
+  if (splitHead && splitTail) {
+    const PITCH = mitraPitch(measureDoc)
+    const hL = endL(splitIndex) - startL(splitIndex)
+    const ev = searchSplit(splitIndex, hL)
+    let lo = Math.max(0, (ev?.target ?? 0) - PITCH * 4)
+    let hi = Math.min(hL, (ev?.target ?? hL) + PITCH * 4)
+    let bestPlan = plan
+    let bestAbs = Number.POSITIVE_INFINITY
+    for (let iter = 0; iter < 6; iter++) {
+      const mid = (lo + hi) / 2
+      const parts = splitBlockAtHeight(measureDoc, blocks[splitIndex], mid, widthL, opts.values)
+      if (!parts) {
+        lo = mid
+        continue
+      }
+      const candidate = { splitIndex, splitHead: parts.head, splitTail: parts.tail }
+      const m = measure(candidate)
+      const d = m.endGlobal[0] - m.endGlobal[1]
+      if (Math.abs(d) < bestAbs) {
+        bestAbs = Math.abs(d)
+        bestPlan = candidate
+      }
+      if (Math.abs(d) <= 0.5) break
+      if (d > 0) hi = mid
+      else lo = mid
+    }
+    plan = bestPlan
+  }
+  const isBalanced = (m: { leftPages: number; rightPages: number }) =>
+    m.leftPages > 0 && m.rightPages > 0
+  if (!isBalanced(measure(plan))) {
+    // Jaring pengaman: dokumen sangat pendek / blok raksasa.
+    plan = { splitIndex: Math.max(1, Math.round(n / 2)) }
+  }
 
   // --- 2. Tentukan halaman yang perlu disisihkan untuk tanda tangan ---
   if (opts.reserveSignatureZone !== true) {
-    return { splitIndex: bestSplit, reservedPage: -1, pageCount: measure(bestSplit).pageCount }
+    return { ...plan, reservedPage: -1, pageCount: measure(plan).pageCount }
   }
   /**
    * Reservasi bersifat KONDISIONAL dan sehemat mungkin.
@@ -1333,9 +2035,9 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
    * apa pun. Inilah kondisi normal (master acuan: 8 halaman, tanda tangan di
    * halaman terakhir tepat di bawah kotak).
    */
-  const base = measure(bestSplit, -1)
+  const base = measure(plan, -1)
   if (base.signatureFits) {
-    return { splitIndex: bestSplit, reservedPage: -1, pageCount: base.pageCount }
+    return { ...plan, reservedPage: -1, pageCount: base.pageCount }
   }
 
   /**
@@ -1352,13 +2054,13 @@ export function planMitraLayout(blocks: MitraBlock[], opts: MitraLayoutOptions):
   let shrinkHi = fullShrink
   while (shrinkLo < shrinkHi) {
     const mid = (shrinkLo + shrinkHi) >> 1
-    if (measure(bestSplit, reservedPage, mid).signatureFits) shrinkHi = mid
+    if (measure(plan, reservedPage, mid).signatureFits) shrinkHi = mid
     else shrinkLo = mid + 1
   }
   return {
-    splitIndex: bestSplit,
+    ...plan,
     reservedPage,
-    pageCount: measure(bestSplit, reservedPage, shrinkLo).pageCount,
+    pageCount: measure(plan, reservedPage, shrinkLo).pageCount,
     reserveShrink: shrinkLo,
   }
 }

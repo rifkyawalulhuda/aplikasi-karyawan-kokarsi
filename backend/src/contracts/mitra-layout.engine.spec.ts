@@ -177,6 +177,19 @@ function fonts() {
   }
 }
 
+/**
+ * Jarak baris grid MITRA (pt) — diturunkan dari metrik font yang SAMA dengan
+ * engine (`lineGap` body). Dipakai tes untuk membuktikan baseline sejajar.
+ */
+function gridPitch(): number {
+  const probe = new PDFDocument({
+    size: [MITRA_GEOMETRY.pageWidth, MITRA_GEOMETRY.pageHeight],
+  })
+  probe.registerFont(MITRA_FONT_NAMES.regular, fonts().regular)
+  probe.font(MITRA_FONT_NAMES.regular).fontSize(MITRA_GEOMETRY.font.body)
+  return probe.heightOfString('Xg', { lineGap: MITRA_GEOMETRY.lineGap })
+}
+
 describe('MITRA layout — rendering', () => {
   it('item bernomor: kata tidak pernah saling menempel', async () => {
     const { doc, buffers } = makeDoc()
@@ -273,6 +286,120 @@ describe('MITRA layout — rendering', () => {
     const pages = (buf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length
     expect(pages).toBeGreaterThan(0)
   }, 30000)
+
+  /**
+   * Inti perbaikan "tinggi teks blok kiri & kanan": kedua kolom mengalir
+   * independen, jadi satu-satunya cara baseline-nya sejajar adalah GRID.
+   * Setiap baris body harus jatuh tepat di `origin + k * PITCH`, dan baris
+   * pertama kedua kolom di halaman 1 harus selevel.
+   */
+  it('baseline kolom KIRI dan KANAN sejajar (grid)', async () => {
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>(res => doc.on('end', () => res()))
+
+    const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+    for (let i = 1; i <= 10; i++) {
+      blocks.push({ type: 'paragraph', text: `PARA-${i} ` + 'kata '.repeat(40) })
+    }
+    blocks.push({ type: 'signature' })
+
+    const PITCH = gridPitch()
+    const pageIndexOf = (d: any): number => {
+      const buf: any[] = d._pageBuffer ?? []
+      const start: number = d._pageBufferStart ?? 0
+      const at = buf.indexOf(d.page)
+      return at >= 0 ? start + at : start + buf.length - 1
+    }
+    const records: Array<{ x: number; y: number; page: number }> = []
+    const realText = doc.text.bind(doc)
+    ;(doc as any).text = (text: any, x?: any, y?: any, ...rest: any[]) => {
+      if (typeof text === 'string' && typeof x === 'number' && typeof y === 'number') {
+        records.push({ x, y, page: pageIndexOf(doc) })
+      }
+      return realText(text, x, y, ...rest)
+    }
+
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fonts(),
+    })
+    doc.end()
+    await done
+    expect(Buffer.concat(buffers).subarray(0, 5).toString()).toBe('%PDF-')
+
+    const isLeft = (x: number) => x >= MITRA_GEOMETRY.left.x0 && x < MITRA_GEOMETRY.left.x1
+    const isRight = (x: number) => x >= MITRA_GEOMETRY.right.x0 && x < MITRA_GEOMETRY.right.x1
+    const body = records.filter(r => isLeft(r.x) || isRight(r.x))
+    expect(body.length).toBeGreaterThan(5)
+
+    // 1. Setiap baris body jatuh TEPAT di grid halaman tempat ia digambar.
+    for (const r of body) {
+      const origin =
+        (r.page === 0 ? MITRA_GEOMETRY.firstPageBoxTop : MITRA_GEOMETRY.contPageBoxTop) + 2
+      const mod = (((r.y - origin) % PITCH) + PITCH) % PITCH
+      expect(Math.min(mod, PITCH - mod)).toBeLessThan(0.01)
+    }
+
+    // 2. Baris PERTAMA kedua kolom di halaman 1 selevel.
+    const page0 = body.filter(r => r.page === 0)
+    const firstLeft = Math.min(...page0.filter(r => isLeft(r.x)).map(r => r.y))
+    const firstRight = Math.min(...page0.filter(r => isRight(r.x)).map(r => r.y))
+    expect(firstLeft).toBeCloseTo(firstRight, 3)
+  }, 30000)
+
+  /**
+   * INTI "tinggi teks kiri dan kanan sama": kedua kolom harus berakhir di
+   * ketinggian yang SAMA, berapa pun panjang isinya. Kalau tidak, salah satu
+   * kolom menyisakan ruang kosong besar — bahkan satu kolom kosong sehalaman
+   * penuh (kasus template Kasir Komart sebelum perbaikan: selisih 539pt).
+   */
+  it('kedua kolom berakhir di ketinggian yang sama (definisi produksi)', async () => {
+    const keys = Object.keys(CONTRACT_DOCUMENT_DEFINITIONS).filter(k => k.startsWith('MITRA_'))
+    expect(keys.length).toBeGreaterThanOrEqual(4)
+
+    const G = MITRA_GEOMETRY
+    const toGlobal = (page: number, y: number) => {
+      let total = 0
+      for (let p = 0; p < page; p++) {
+        total += p === 0 ? G.firstPageBoxBottom - G.firstPageBoxTop : G.contPageBoxBottom - G.contPageBoxTop
+      }
+      return total + (y - (page === 0 ? G.firstPageBoxTop : G.contPageBoxTop))
+    }
+
+    for (const key of keys) {
+      const content: SeedContentDefinition = definitionToContentDefinition(
+        getContractDocumentDefinition(key),
+      )
+      const { doc, buffers } = makeDoc()
+      const done = new Promise<void>((res) => doc.on('end', () => res()))
+
+      renderMitraLayout(doc, (content?.languages?.id ?? []) as any, {
+        values: { ...MITRA_PREVIEW_VALUES },
+        title: 'PERJANJIAN KEMITRAAN',
+        numberLabel: 'Nomor: 1/X/2026',
+        dateLabel: 'Tanggal 1 Januari 2026',
+        fonts: fonts(),
+        reserveSignatureZone: true,
+      })
+      doc.end()
+      await done
+      expect(Buffer.concat(buffers).subarray(0, 5).toString()).toBe('%PDF-')
+
+      const meta = (doc as any).__mitraFinalPage
+      const end = meta.streamEnd as Array<{ page: number; y: number }>
+      const left = toGlobal(end[0].page, end[0].y)
+      const right = toGlobal(end[1].page, end[1].y)
+      // Toleransi maksimum 3 baris. Batas pemecahan paragraf bisa membuat
+      // selisih lebih kecil tidak selalu tercapai: paragraf yang terpotong
+      // batas halaman memakai satu baris tambahan, sehingga tinggi total
+      // bergeser dalam kelipatan baris. Yang dilarang adalah selisih BESAR
+      // (sebelum perbaikan: 539pt / satu kolom kosong sehalaman).
+      expect({ key, ok: Math.abs(left - right) <= gridPitch() * 3 }).toEqual({ key, ok: true })
+    }
+  }, 120_000)
 
   it('tanda tangan DI LUAR kotak dan tidak menambah halaman', async () => {
     const { doc, buffers } = makeDoc()
@@ -417,8 +544,14 @@ describe('MITRA layout — rendering', () => {
     // 2. Kotak halaman terakhir mengikuti ISI — bukan dipotong ke konstanta
     //    `contPageBoxBottom - 210`. Kalau dipendekkan, tingginya akan jatuh jauh
     //    di bawah titik terdalam isi halaman itu.
-    const lastBoxBottom = columnBoxes[columnBoxes.length - 1].bottom
-    const expected = Math.min(finalPage.pageDeepest + G.boxPaddingBottom, G.contPageBoxBottom)
+    const lastBox = columnBoxes[columnBoxes.length - 1]
+    const lastBoxBottom = lastBox.bottom
+    // Sama persis dengan `strokeBoxesForPage`: tinggi mengikuti isi, tetapi
+    // tidak pernah lebih pendek dari `minBoxHeight`.
+    const expected = Math.min(
+      Math.max(lastBox.top + G.minBoxHeight, finalPage.pageDeepest + G.boxPaddingBottom),
+      G.contPageBoxBottom,
+    )
     expect(lastBoxBottom).toBeCloseTo(expected, 1)
   }, 30000)
 
@@ -843,29 +976,35 @@ describe('MITRA — mark di PDF NYATA', () => {
   })
 
   /**
-   * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok. Diukur
-   * lewat POSISI Y blok berikutnya — selisihnya harus PERSIS sebesar nilai yang
-   * diset, karena jarak diterapkan tepat sebelum blok berikutnya.
+   * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok. Nilai
+   * manual dibulatkan KE ATAS ke garis grid berikutnya supaya baseline kolom
+   * kiri/kanan tetap sejajar. 24pt → 2 baris grid (≈31.6pt).
+   *
+   * Dokumen dibuat panjang agar blok yang diukur tetap berada di kolom KIRI
+   * pada kedua render — pemisahan stream bersifat menyeimbangkan tinggi.
    */
-  it('spaceAfter menggeser blok berikutnya tepat sebesar nilainya', async () => {
-    const build = (spaceAfter?: number) => [
-      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
-      { type: 'paragraph', text: 'PARAGRAF_A', spaceAfter },
-      { type: 'paragraph', text: 'PARAGRAF_B' },
-      { type: 'signature' },
-    ]
+  it('spaceAfter dibulatkan ke atas ke garis grid berikutnya', async () => {
+    const build = (spaceAfter?: number) => {
+      const blocks: any[] = [{ type: 'title', text: 'PERJANJIAN KEMITRAAN' }]
+      for (let i = 1; i <= 30; i++) {
+        blocks.push({ type: 'paragraph', text: `PARAGRAF_${i} ` + 'kata '.repeat(25) })
+      }
+      blocks[1].spaceAfter = spaceAfter
+      blocks.push({ type: 'signature' })
+      return blocks
+    }
     const yOf = (r: Awaited<ReturnType<typeof draw>>, needle: string) =>
       r.texts.find(t => t.text.includes(needle))?.y ?? -1
 
     const base = await draw(build() as any)
     const spaced = await draw(build(24) as any)
 
-    const baseY = yOf(base, 'PARAGRAF_B')
-    const spacedY = yOf(spaced, 'PARAGRAF_B')
+    const baseY = yOf(base, 'PARAGRAF_2 ')
+    const spacedY = yOf(spaced, 'PARAGRAF_2 ')
     expect(baseY).toBeGreaterThan(0)
-    expect(spacedY - baseY).toBeCloseTo(24, 1)
+    expect(spacedY - baseY).toBeCloseTo(gridPitch() * 2, 1)
     // Blok sebelumnya sendiri tidak bergeser.
-    expect(yOf(spaced, 'PARAGRAF_A')).toBeCloseTo(yOf(base, 'PARAGRAF_A'), 1)
+    expect(yOf(spaced, 'PARAGRAF_1 ')).toBeCloseTo(yOf(base, 'PARAGRAF_1 '), 1)
   })
 
   it('tanpa spaceAfter, output identik dengan perilaku lama (tidak ada jarak)', async () => {
