@@ -1,6 +1,6 @@
 ﻿import { validateContentDefinition, extractPlaceholders, findBrokenPlaceholders, collectAllPlaceholders, normalizeCustomPlaceholders, normalizeArticleHeadings } from './template-schema.validator'
 
-const VALID_FIELD_KEYS = ['employee.fullName', 'contract.contractNo', 'contract.termRange', 'contract.duration', 'custom.ktp_issued_date']
+const VALID_FIELD_KEYS = ['employee.fullName', 'contract.contractNo', 'contract.termRange', 'contract.duration', 'custom.ktp_issued_date', 'doc.docDate']
 
 function baseContent(extra: (b: any[]) => any[] = b => b) {
   return {
@@ -285,6 +285,59 @@ describe('validateContentDefinition', () => {
   it('menerima tepat satu blok signature', () => {
     const content = baseContent()
     expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
+  })
+
+  it('menerima blok closing dengan teks & placeholder tanggal', () => {
+    const content = baseContent(b => [
+      ...b,
+      {
+        id: 'place',
+        type: 'closing',
+        text: 'Bekasi, {{doc.docDate}}\nKOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL\nUNIT KANTOR PUSAT',
+      },
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.blockCount).toBe(3)
+    expect(result.placeholderCount).toBe(1)
+  })
+
+  it('menolak blok closing tanpa teks', () => {
+    const content = baseContent(b => [
+      ...b,
+      { id: 'place', type: 'closing', text: '   ' },
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA'))
+      .toThrow(/penutup memerlukan teks/i)
+  })
+
+  it('menerima satu blok penutup di SETIAP bahasa (salinan editor)', () => {
+    // Editor menyalin blok penutup ke kedua bahasa dengan id & teks yang sama,
+    // supaya terlihat di tab ID maupun EN. Dua blok (satu per bahasa) SAH.
+    const content = {
+      languages: {
+        id: [
+          { id: 'title', type: 'title', text: 'KESEPAKATAN KERJA' },
+          { id: 'place', type: 'closing', text: 'Bekasi, 1 September 2026' },
+          { id: 'sig', type: 'signature' },
+        ],
+        en: [
+          { id: 'title', type: 'title', text: 'STATED PERIODS LABOUR AGREEMENT' },
+          { id: 'place', type: 'closing', text: 'Bekasi, 1 September 2026' },
+          { id: 'sig-en', type: 'signature' },
+        ],
+      },
+    }
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'PKWT')).not.toThrow()
+  })
+
+  it('menolak dua blok penutup dalam SATU bahasa', () => {
+    const content = baseContent(b => [
+      ...b,
+      { id: 'place', type: 'closing', text: 'Bekasi, 1 September 2026' },
+      { id: 'place-2', type: 'closing', text: 'Bekasi, 2 September 2026' },
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA'))
+      .toThrow(/Hanya satu blok penutup/i)
   })
 
   it('menolak MITRA tanpa konten', () => {

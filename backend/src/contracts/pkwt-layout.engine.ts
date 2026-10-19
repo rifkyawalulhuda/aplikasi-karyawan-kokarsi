@@ -260,7 +260,32 @@ export const PKWT_GEOMETRY = {
    * samping dari penambahan satu blok.
    */
   blockGap: 8,
-  headingGapAfter: 4
+  headingGapAfter: 4,
+
+  /**
+   * Teks penutup (tempat/tanggal + organisasi) yang dicetak DI LUAR kotak,
+   * tepat di atas tabel tanda tangan.
+   *
+   * Terukur dari master `1. kontrak pkwt Cs 2026.pdf` halaman terakhir:
+   *  - kotak berakhir di y = 556.00
+   *  - glyph-top baris 1 = 570.10  → jarak dari kotak 14.10 pt
+   *  - pitch antar-baris = 11.40 pt (570.10 → 581.50 → 593.50)
+   *  - tabel tanda tangan mulai y = 603.42
+   *  - ukuran font = 10.2 pt, Lucida Sans Typewriter REGULAR
+   *  - dipusatkan pada x ≈ 302.5 (bukan 297.75 pusat geometris halaman)
+   */
+  closing: {
+    centerX: 302.5,
+    gapFromBox: 14.1,
+    lineAdvance: 11.4,
+    fontSize: 10.2,
+    /**
+     * Lebar maksimum satu baris. Baris master terpanjang ~314 pt, jadi 500 pt
+     * masih lapang; batas ini hanya mencegah teks yang sangat panjang melewati
+     * tepi halaman.
+     */
+    maxWidth: 500
+  }
 } as const
 
 /** Nama font logis → dipetakan oleh pemanggil ke file TTF yang terdaftar. */
@@ -1133,6 +1158,61 @@ export function pkwtSignatureHeight(): number {
 }
 
 /**
+ * Bungkus baris penutup selebar `PKWT_GEOMETRY.closing.maxWidth`.
+ *
+ * Dibungkus manual (bukan `doc.text` multiline) supaya pitch antar-baris tetap
+ * seragam `lineAdvance` seperti master, berapa pun panjang barisnya.
+ */
+function wrapPkwtClosingLines(doc: any, lines: string[]): string[] {
+  const G = PKWT_GEOMETRY
+  if (lines.length === 0) return []
+  doc.font(PKWT_FONT_NAMES.regular).fontSize(G.closing.fontSize)
+  return lines.flatMap(line =>
+    wrapCellLines(doc, line, G.closing.maxWidth, PKWT_FONT_NAMES.regular, G.closing.fontSize)
+  )
+}
+
+/**
+ * Tinggi blok penutup (pt) untuk baris yang SUDAH dibungkus.
+ *
+ * `n` baris menempati `(n - 1) * lineAdvance + fontSize`, bukan `n * advance`:
+ * baris terakhir hanya setinggi glyph-nya, sehingga tabel tanda tangan dapat
+ * langsung menempel di bawahnya seperti master (selisih < 1 pt).
+ */
+export function pkwtClosingHeight(wrappedLines: string[]): number {
+  if (wrappedLines.length === 0) return 0
+  const G = PKWT_GEOMETRY
+  return (wrappedLines.length - 1) * G.closing.lineAdvance + G.closing.fontSize
+}
+
+/**
+ * Gambar teks penutup DI LUAR kotak kolom, dipusatkan pada `closing.centerX`.
+ *
+ * `top` adalah glyph-top baris pertama (koordinat master), bukan y kotak baris
+ * PDFKit — koreksi baseline dilakukan per baris lewat `pkwtTextTop`.
+ */
+export function renderPkwtClosing(
+  doc: any,
+  wrappedLines: string[],
+  top: number,
+  pageIndex: number,
+): void {
+  if (wrappedLines.length === 0) return
+  const G = PKWT_GEOMETRY
+  doc.switchToPage(pageIndex)
+  doc.font(PKWT_FONT_NAMES.regular).fontSize(G.closing.fontSize).fillColor('#000000')
+  const x = G.closing.centerX - G.closing.maxWidth / 2
+  wrappedLines.forEach((line, i) => {
+    const y = pkwtTextTop(top + i * G.closing.lineAdvance, G.closing.fontSize, PKWT_LUCIDA_BASELINE)
+    doc.text(line, x, y, {
+      width: G.closing.maxWidth,
+      align: 'center',
+      lineBreak: false
+    })
+  })
+}
+
+/**
  * Ubah `top` GLYPH master menjadi `y` yang harus diberikan ke PDFKit.
  *
  * Master diukur dari puncak glyph; PDFKit menghitung dari puncak kotak baris.
@@ -1249,6 +1329,14 @@ export interface PkwtRenderOptions {
   fonts: PkwtFontPaths
   signature: PkwtSignatureOptions
   /**
+   * Baris teks penutup (tempat/tanggal + organisasi) yang dicetak DI LUAR
+   * kotak, tepat di atas tabel tanda tangan. Satu teks untuk kedua kolom.
+   *
+   * Kosong/`undefined` = perilaku lama: tabel tanda tangan langsung
+   * `signatureTable.gapFromBox` di bawah kotak.
+   */
+  closingLines?: string[]
+  /**
    * `true` (default) → kotak halaman terakhir dipendekkan seperlunya agar
    * sub-tabel tanda tangan muat di bawahnya, seperti master.
    */
@@ -1275,6 +1363,11 @@ export interface PkwtLayoutMeta {
   contentBottoms: number[]
   signaturePage: number
   signatureTop: number
+  /** Halaman & posisi teks penutup (0 baris = tidak ada blok penutup). */
+  closingPage?: number
+  closingTop?: number
+  closingBottom?: number
+  closingLineCount?: number
 }
 
 /**
@@ -1619,15 +1712,27 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
   // --- Tanda tangan di halaman terakhir (atau halaman baru bila tak muat) ---
   const sigH = pkwtSignatureHeight()
   const sigGap = G.signatureTable.gapFromBox
+  const closingWrapped = wrapPkwtClosingLines(doc, opts.closingLines ?? [])
+  const closingH = pkwtClosingHeight(closingWrapped)
   let sigPage = pageIndex
-  let sigTop = boxBottoms[sigPage] + sigGap
+  /**
+   * Blok penutup mengisi jarak antara kotak dan tabel tanda tangan:
+   * `closingTop` = `gapFromBox` di bawah kotak, lalu tabel langsung menempel
+   * di bawah teks penutup. Tanpa blok penutup, perilaku lama dipertahankan
+   * (`gapFromBox` saja).
+   */
+  let closingTop = boxBottoms[sigPage] + (closingWrapped.length > 0 ? G.closing.gapFromBox : 0)
+  let sigTop = closingWrapped.length > 0
+    ? closingTop + closingH
+    : boxBottoms[sigPage] + sigGap
 
   if (opts.reserveSignatureZone !== false && sigTop + sigH > G.pageHeight - 40) {
     doc.addPage()
     sigPage += 1
     boxBottoms[sigPage] = G.contPageBoxTop
     contentBottoms[sigPage] = G.contPageBoxTop
-    sigTop = G.contPageBoxTop + 40
+    closingTop = G.contPageBoxTop + 40
+    sigTop = closingWrapped.length > 0 ? closingTop + closingH : G.contPageBoxTop + 40
   }
 
   // Gambar kotak SETELAH semua halaman diketahui (butuh `switchToPage`).
@@ -1636,6 +1741,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     renderPkwtColumnBox(doc, pi, boxBottoms[pi])
   }
 
+  renderPkwtClosing(doc, closingWrapped, closingTop, sigPage)
   renderPkwtSignature(doc, opts.signature, sigTop, sigPage)
 
   ;(doc as any).__pkwtLayout = {
@@ -1643,6 +1749,10 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     boxBottoms,
     contentBottoms,
     signaturePage: sigPage,
-    signatureTop: sigTop
+    signatureTop: sigTop,
+    closingPage: sigPage,
+    closingTop,
+    closingBottom: closingWrapped.length > 0 ? closingTop + closingH : closingTop,
+    closingLineCount: closingWrapped.length
   } satisfies PkwtLayoutMeta
 }

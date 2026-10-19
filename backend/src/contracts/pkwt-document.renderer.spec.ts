@@ -16,7 +16,8 @@ import {
   resolvePkwtLogoPath,
   createPkwtPdfBuffer,
   blocksToPkwtParagraphs,
-  resolvePkwtHeaderTitles
+  resolvePkwtHeaderTitles,
+  resolveClosingLines,
 } from './pkwt-document.renderer'
 import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
 import { PKWT_PREVIEW_VALUES, PKWT_PREVIEW_VALUES_EN } from './pkwt-preview-sample'
@@ -345,6 +346,47 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
     )
     expect(paras[0].table!.header).toBe(false)
     expect(paras[0].table!.cells).toEqual([['satu']])
+  })
+
+  it('blok closing TIDAK menjadi paragraf kolom (dirender di luar kotak)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{ id: 'c1', type: 'closing', text: 'Bekasi, 1 September 2026' }],
+      {}
+    )
+    expect(paras).toHaveLength(0)
+  })
+})
+
+describe('resolveClosingLines — teks penutup di luar kotak', () => {
+  const values = { 'doc.docDate': '01 September 2026' }
+
+  it('mengambil blok closing kolom ID, bukan EN (satu teks untuk kedua kolom)', () => {
+    const id = [{ id: 'c1', type: 'closing', text: 'Bekasi, {{doc.docDate}}' }]
+    const en = [{ id: 'c1', type: 'closing', text: 'Bekasi, {{doc.docDate}} (EN)' }]
+    expect(resolveClosingLines(id, en, values)).toEqual(['Bekasi, 01 September 2026'])
+  })
+
+  it('jatuh ke kolom EN bila ID tidak punya blok closing', () => {
+    const en = [{ id: 'c1', type: 'closing', text: 'Bekasi, {{doc.docDate}}' }]
+    expect(resolveClosingLines([], en, values)).toEqual(['Bekasi, 01 September 2026'])
+  })
+
+  it('menormalkan CRLF, spasi ujung, dan membuang baris kosong', () => {
+    const blocks = [{
+      id: 'c1',
+      type: 'closing',
+      text: 'Bekasi, {{doc.docDate}}   \r\n\r\nKOPERASI KARYAWAN   \r\nUNIT KANTOR PUSAT',
+    }]
+    expect(resolveClosingLines(blocks, undefined, values)).toEqual([
+      'Bekasi, 01 September 2026',
+      'KOPERASI KARYAWAN',
+      'UNIT KANTOR PUSAT',
+    ])
+  })
+
+  it('tanpa blok closing menghasilkan array kosong (perilaku lama)', () => {
+    expect(resolveClosingLines([], [], values)).toEqual([])
+    expect(resolveClosingLines(undefined, undefined, values)).toEqual([])
   })
 })
 

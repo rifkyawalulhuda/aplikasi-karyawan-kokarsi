@@ -69,6 +69,18 @@ export const MITRA_GEOMETRY = {
 
   logo: { x: 27.4, y: 18.2, width: 85.6, height: 85.95 },
 
+  /**
+   * Teks penutup (tempat/tanggal + organisasi) DI LUAR kotak, tepat di atas
+   * tabel tanda tangan. Dipakai bersama PKWT; ukuran mengikuti tipografi MITRA
+   * (Times New Roman, 9.75 pt) dan dipusatkan pada lebar halaman.
+   */
+  closing: {
+    gapFromBox: 14,
+    lineAdvance: 12,
+    fontSize: 9.75,
+    maxWidth: 500
+  },
+
   font: {
     headerOrg: 14.27,
     headerAddress: 12,
@@ -205,6 +217,11 @@ export interface MitraSignatureOptions {
   /** Jabatan (teks statis). Default dari chrome. */
   leftRole: string
   rightRole: string
+  /**
+   * Baris teks penutup (tempat/tanggal + organisasi) yang dicetak DI LUAR
+   * kotak, tepat di atas tabel tanda tangan. Kosong/`undefined` = perilaku lama.
+   */
+  closingLines?: string[]
 }
 
 /** Padding teks di dalam sel tabel tanda tangan (agar tidak menempel garis). */
@@ -254,6 +271,59 @@ export function mitraSignatureRows(doc: any, o?: MitraSignatureOptions) {
 /** Tinggi total tabel tanda tangan (jumlah tinggi semua baris). */
 export function mitraSignatureTableHeight(doc: any, o?: MitraSignatureOptions): number {
   return mitraSignatureRows(doc, o).heights.reduce((a, b) => a + b, 0)
+}
+
+/** Bungkus baris penutup selebar `closing.maxWidth` (pitch baris tetap seragam). */
+function wrapMitraClosingLines(doc: any, lines: string[]): string[] {
+  const G = MITRA_GEOMETRY
+  if (lines.length === 0) return []
+  doc.font(MITRA_FONT_NAMES.regular).fontSize(G.closing.fontSize)
+  return lines.flatMap(line =>
+    wrapCellLines(doc, line, G.closing.maxWidth, MITRA_FONT_NAMES.regular, G.closing.fontSize)
+  )
+}
+
+/** Tinggi blok penutup (pt) untuk baris yang sudah dibungkus. */
+export function mitraClosingHeight(wrappedLines: string[]): number {
+  if (wrappedLines.length === 0) return 0
+  const G = MITRA_GEOMETRY
+  return (wrappedLines.length - 1) * G.closing.lineAdvance + G.closing.fontSize
+}
+
+/**
+ * Tinggi total zona tanda tangan: jarak dari kotak + (opsional) teks penutup +
+ * tabel. Dipakai `planMitraLayout` supaya reservasi memperhitungkan teks
+ * penutup, bukan hanya tabel.
+ */
+export function mitraSignatureZoneHeight(doc: any, o?: MitraSignatureOptions): number {
+  const G = MITRA_GEOMETRY
+  const table = mitraSignatureTableHeight(doc, o)
+  const wrapped = wrapMitraClosingLines(doc, o?.closingLines ?? [])
+  if (wrapped.length === 0) return G.signatureTable.gapFromBox + table
+  return G.closing.gapFromBox + mitraClosingHeight(wrapped) + table
+}
+
+/**
+ * Gambar teks penutup DI LUAR kotak, dipusatkan pada lebar halaman.
+ * `top` = glyph-top baris pertama.
+ */
+export function renderMitraClosing(
+  doc: any,
+  wrappedLines: string[],
+  top: number,
+  pageIndex: number,
+): void {
+  if (wrappedLines.length === 0) return
+  const G = MITRA_GEOMETRY
+  doc.switchToPage(pageIndex)
+  doc.font(MITRA_FONT_NAMES.regular).fontSize(G.closing.fontSize).fillColor('#000000')
+  wrappedLines.forEach((line, i) => {
+    doc.text(line, 0, top + i * G.closing.lineAdvance, {
+      width: G.pageWidth,
+      align: 'center',
+      lineBreak: false
+    })
+  })
 }
 
 export interface MitraBlock {
@@ -1059,7 +1129,9 @@ function renderMitraPass(
    */
   const willRenderContent = (b: any) => {
     if (!b || b === headerTitleBlock) return false
-    return b.type !== 'signature' && b.type !== 'pageBreak'
+    // `closing` dicetak DI LUAR kotak (bukan isi kolom), jadi tidak boleh ikut
+    // dihitung saat membagi blok ke dua stream.
+    return b.type !== 'signature' && b.type !== 'pageBreak' && b.type !== 'closing'
   }
   const renderSequence = (list: MitraBlock[]) => {
     let prevSpace = 0
@@ -1114,8 +1186,7 @@ function renderMitraPass(
    * reservasi perlu, dan seberapa banyak yang harus dipotong. Memakai helper
    * yang SAMA dengan penggambaran agar keputusan tidak menyimpang.
    */
-  const signatureGapNeeded = G.signatureTable.gapFromBox
-    + mitraSignatureTableHeight(doc, opts.signature)
+  const signatureGapNeeded = mitraSignatureZoneHeight(doc, opts.signature)
   /**
    * Apakah tanda tangan muat TANPA memendekkan kotak?
    *
@@ -1345,22 +1416,30 @@ export function renderMitraSignature(
     (lastPage === 0 ? G.firstPageBoxBottom : G.contPageBoxBottom)
 
   /**
-   * Tempatkan tabel tanda tangan.
+   * Tempatkan teks penutup + tabel tanda tangan.
    *
-   * ATURAN KERAS: tanda tangan harus berada DI BAWAH kotak kolom, tidak boleh
-   * menembusnya. Jadi `tableTop` = tepat `gapFromBox` di bawah batas bawah kotak
-   * yang benar-benar digambar, dan tidak boleh melewati batas halaman.
+   * ATURAN KERAS: keduanya harus berada DI BAWAH kotak kolom, tidak boleh
+   * menembusnya. Bila blok penutup ada, ia mengisi jarak antara kotak dan
+   * tabel (`closing.gapFromBox` lalu tinggi teks), sehingga tabel tidak
+   * melompat jauh seperti saat `gapFromBox` 50 dipakai sendirian.
    */
-  let tableTop = boxBottomOnLast + T.gapFromBox
+  const closingWrapped = wrapMitraClosingLines(doc, o.closingLines ?? [])
+  const closingH = mitraClosingHeight(closingWrapped)
+  let closingTop = boxBottomOnLast + (closingWrapped.length > 0 ? G.closing.gapFromBox : 0)
+  let tableTop = closingWrapped.length > 0
+    ? closingTop + closingH
+    : boxBottomOnLast + T.gapFromBox
 
   if (tableTop + tableHeight > G.pageHeight - 40) {
     // Tidak muat di bawah kotak pada halaman ini: halaman baru ber-border.
     doc.addPage()
     lastPage += 1
-    tableTop = G.contPageBoxTop + 40
+    closingTop = G.contPageBoxTop + 40
+    tableTop = closingWrapped.length > 0 ? closingTop + closingH : G.contPageBoxTop + 40
   }
 
   doc.switchToPage(lastPage)
+  renderMitraClosing(doc, closingWrapped, closingTop, lastPage)
 
   /**
    * Rekam posisi tabel yang BENAR-BENAR digambar (audit + verifikasi).
@@ -1373,6 +1452,10 @@ export function renderMitraSignature(
     height: tableHeight,
     /** Kotak kolom yang jadi acuan: tanda tangan harus di bawah nilai ini. */
     boxBottomOnLast,
+    /** Posisi teks penutup (0 baris = tidak ada blok penutup). */
+    closingTop,
+    closingBottom: closingTop + closingH,
+    closingLineCount: closingWrapped.length,
   }
 
   // Garis tabel

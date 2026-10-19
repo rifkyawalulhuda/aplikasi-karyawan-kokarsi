@@ -952,6 +952,60 @@ print(json.dumps(out))
     expect(measured.text).toContain('Sel-baris-1')
     expect(measured.text).toContain('Sel-baris-120')
   })
+
+  it('teks penutup tercetak di LUAR kotak, antara kotak dan tabel tanda tangan', async () => {
+    const file = path.join(tmpDir, 'pkwt-closing.pdf')
+    fs.writeFileSync(file, await createPkwtPdfBuffer({
+      values: { 'doc.docDate': '01 September 2026' },
+      titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+      titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+      numberLabel: 'No. : 1/KUKP-SII/I/2026',
+      orgLines: ['KOPERASI KARYAWAN'],
+      addressLines: ['Jl. Contoh No. 1'],
+      contactLine: 'TELP. 021 - 0',
+      signature: { leftTitle: 'PIHAK PERTAMA', rightTitle: 'PIHAK KEDUA' },
+      blocks: [
+        { id: 'p', type: 'paragraph', text: 'Demikian kesepakatan ini dibuat.' },
+        {
+          id: 'place',
+          type: 'closing',
+          text: 'Bekasi, {{doc.docDate}}\nKOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL\nUNIT KANTOR PUSAT',
+        },
+        { id: 'sig', type: 'signature' },
+      ],
+    }))
+
+    const measured = measure(file)
+    const page = measured.pages[measured.pages.length - 1]
+    const chars = page.chars
+
+    /** `top` glyph dari baris yang diawali `needle`. */
+    const lineTop = (needle: string): number | null => {
+      const idx = chars.findIndex((_c, i) =>
+        chars.slice(i, i + needle.length).map(c => c.text).join('') === needle
+      )
+      return idx >= 0 ? chars[idx].top : null
+    }
+
+    // Batas bawah kotak = ujung bawah batang vertikal kiri (x ≈ 26.4–27.0).
+    const boxBottom = Math.max(...page.rects.filter(r => r.x0 < 30).map(r => r.bottom))
+    // Tepi atas tabel tanda tangan (border luar mulai x ≈ 125.4).
+    const sigTop = Math.min(...page.rects.filter(r => r.x0 > 120 && r.x0 < 130).map(r => r.top))
+
+    const dateTop = lineTop('Bekasi')
+    const orgTop = lineTop('KOPERASI KARYAWAN PT SANKYU')
+    const unitTop = lineTop('UNIT KANTOR PUSAT')
+
+    expect(dateTop).not.toBeNull()
+    expect(orgTop).not.toBeNull()
+    expect(unitTop).not.toBeNull()
+
+    // Urutan vertikal: kotak → tanggal → organisasi → unit → tabel tanda tangan.
+    expect(dateTop!).toBeGreaterThan(boxBottom)
+    expect(orgTop!).toBeGreaterThan(dateTop!)
+    expect(unitTop!).toBeGreaterThan(orgTop!)
+    expect(sigTop).toBeGreaterThan(unitTop!)
+  })
 })
 
 /**

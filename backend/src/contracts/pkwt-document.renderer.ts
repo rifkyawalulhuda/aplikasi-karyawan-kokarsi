@@ -306,6 +306,43 @@ export function resolvePkwtHeaderTitles(input: {
 }
 
 /**
+ * Ambil baris teks penutup dari blok `closing`.
+ *
+ * Blok ini SENGAJA satu untuk kedua bahasa: di master teksnya melintang penuh
+ * halaman (di luar kotak kolom), jadi tidak mungkin dipecah per kolom. Karena
+ * itu kolom ID diprioritaskan; kolom EN hanya dipakai bila ID tidak punya blok
+ * penutup (mis. template lama yang hanya mengisinya di tab English).
+ *
+ * Normalisasi baris mengikuti `normalizeArticleHeading`: CRLF → LF, spasi di
+ * ujung dibuang, dan baris kosong dihilangkan. Baris kosong hanya menambah
+ * tinggi tanpa isi — master pun tidak punya jeda kosong di antara ketiga
+ * barisnya.
+ *
+ * Diekspor murni (tanpa `doc`) supaya prioritas & normalisasi dapat diuji.
+ */
+export function resolveClosingLines(
+  blocks: any[] | undefined,
+  blocksEn: any[] | undefined,
+  values: Record<string, string>,
+  valuesEn?: Record<string, string>,
+): string[] {
+  const fromBlocks = (list: any[] | undefined, map: Record<string, string>) => {
+    const block = (list ?? []).find((b: any) => b?.type === 'closing')
+    if (!block || typeof block.text !== 'string') return [] as string[]
+    return block.text
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map(line => line.replace(/[^\S\n]+$/g, ''))
+      .filter(line => line.trim() !== '')
+      .map(line => interpolate(line, map))
+  }
+
+  const id = fromBlocks(blocks, values)
+  if (id.length > 0) return id
+  return fromBlocks(blocksEn, valuesEn ?? values)
+}
+
+/**
  * Alirkan dokumen PKWT ke `doc` yang sudah dibuat.
  *
  * Kolom kiri = stream ID, kolom kanan = stream EN, dikunci per baris oleh
@@ -352,6 +389,10 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
   const sig = opts.signature ?? {}
   renderPkwtLayout(doc, {
     rows,
+    // Teks penutup (tempat/tanggal + organisasi) DI LUAR kotak, tepat di atas
+    // tanda tangan. Satu teks untuk kedua kolom: diambil dari blok `closing`
+    // kolom ID, dengan fallback ke kolom EN bila hanya di sana yang ada.
+    closingLines: resolveClosingLines(opts.blocks, opts.blocksEn, values, opts.valuesEn),
     header: {
       orgLines: opts.orgLines ?? [],
       addressLines: opts.addressLines ?? [],

@@ -13,6 +13,12 @@ export const BLOCK_TYPES = [
   'table',
   'pageBreak',
   'signature',
+  /**
+   * Teks penutup (tempat/tanggal + nama organisasi) yang dicetak DI LUAR kotak
+   * kolom, tepat di atas tabel tanda tangan. Satu teks untuk kedua bahasa,
+   * karena di master ia melintang penuh halaman — bukan isi kolom ID/EN.
+   */
+  'closing',
 ] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
@@ -284,6 +290,12 @@ export function validateContentDefinition(
   }
 
   const langs: string[] = family === 'PKWT' ? ['id', 'en'] : ['id']
+  /**
+   * Blok `closing` DISALIN ke setiap bahasa oleh editor (satu teks, id sama),
+   * jadi batasnya PER BAHASA — bukan lintas bahasa seperti sebelumnya. Yang
+   * harus dicegah adalah dua blok penutup dalam satu bahasa, karena renderer
+   * hanya memakai yang pertama dan sisanya tidak akan pernah tercetak.
+   */
   for (const lang of langs) {
     const blocks = content.languages?.[lang]
     if (!Array.isArray(blocks) || blocks.length === 0) {
@@ -295,6 +307,8 @@ export function validateContentDefinition(
     let hasContent = false
     /** Hitung blok signature: hanya SATU yang diizinkan per bahasa. */
     let signatureCount = 0
+    /** Hitung blok penutup: hanya SATU yang diizinkan per bahasa. */
+    let closingCount = 0
 
     blocks.forEach((block: any, idx: number) => {
       const id = String(block?.id ?? `index-${idx}`)
@@ -357,6 +371,16 @@ export function validateContentDefinition(
         }
       }
       if (blockHasInlineMarks) markedBlockCount += 1
+
+      if (block.type === 'closing') {
+        closingCount += 1
+        if (closingCount > 1) {
+          issues.push({
+            blockId: id,
+            message: `Hanya satu blok penutup yang diizinkan per bahasa ("${lang}"). Hapus blok penutup duplikat.`,
+          })
+        }
+      }
 
       if (block.type === 'signature') {
         hasSignature = true
@@ -450,6 +474,16 @@ export function validateContentDefinition(
 
         case 'pageBreak':
           break
+
+        case 'closing': {
+          const text = typeof block.text === 'string' ? block.text.trim() : ''
+          if (!text) {
+            issues.push({ blockId: id, message: 'Blok penutup memerlukan teks (tempat, tanggal, dan/atau organisasi)' })
+            break
+          }
+          hasContent = true
+          break
+        }
 
         default:
           break

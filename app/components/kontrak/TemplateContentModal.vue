@@ -7,6 +7,11 @@ import {
   uniqueBlockLabels
 } from '~/utils/field-usage'
 import { stripInlineMarks } from '~/utils/inline-marks'
+import {
+  findClosingBlock,
+  removeClosingBlockEverywhere,
+  syncClosingBlockLanguages,
+} from '~/utils/closing-block'
 
 type InlineMarkWarning = { blockId: string; fieldPath: string; message: string }
 type TemplateValidationPreview = {
@@ -79,6 +84,26 @@ const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null
 const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
 const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
 const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
+
+/**
+ * Blok penutup pada tab yang sedang aktif.
+ *
+ * Satu blok dipakai bersama kedua bahasa (lihat `syncClosingBlockLanguages`),
+ * jadi mengedit teksnya di tab mana pun harus langsung tercermin di tab lain.
+ * Watcher di bawah menjaga salinan itu tetap identik tanpa perlu menunggu
+ * tombol Simpan.
+ */
+const activeClosingBlock = computed(() => findClosingBlock(blocks.value))
+watch(
+  () => {
+    const block = activeClosingBlock.value
+    return block ? `${String(block.id ?? '')}\u0000${String(block.text ?? '')}` : ''
+  },
+  () => {
+    if (!draft.value || !activeClosingBlock.value) return
+    syncClosingBlockLanguages(draft.value?.contentDefinition?.languages, lang.value)
+  }
+)
 const fieldItems = computed(() => {
   // Gabungkan katalog field dengan status binding template. Field
   // `CONTRACT_INPUT` yang BELUM di-bind ke template ini ditandai `bound:false`
@@ -116,7 +141,18 @@ function fieldPlaceholderKey(field: { key?: unknown, sourceType?: unknown } | nu
 const cloneVersion = (value: Version): Version => JSON.parse(JSON.stringify(value))
 watch(() => props.open, (v) => { if (v && props.template)load() }); watch(() => props.template?.id, (v) => { if (v && props.open)load() })
 async function load() { if (!props.template) return; loading.value = true; error.value = ''; try { const [vs, fs, bs] = await Promise.all([$fetch<Version[]>(`/api/contract-templates/${props.template.id}/versions`), $fetch<any[]>('/api/template-fields'), $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', { query: { templateId: props.template.id } })]); versions.value = vs ?? []; fields.value = fs ?? []; bindings.value = bs.fields ?? []; await select(versions.value.find(v => v.status === 'DRAFT') ?? versions.value.find(v => v.status === 'PUBLISHED') ?? versions.value[0]) } catch (e: any) { error.value = apiErrorMessage(e, 'Gagal memuat versi') } finally { loading.value = false } }
-async function select(v?: Version) { if (!v) return; selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`); draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null; setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null); snapshotDraft() }
+async function select(v?: Version) {
+  if (!v) return
+  selected.value = await $fetch<Version>(`/api/contract-template-versions/${v.id}`)
+  // Blok penutup harus TERLIHAT di kedua tab bahasa. Versi lama mungkin hanya
+  // menyimpannya di satu bahasa, jadi salin lebih dulu — SEBELUM draft dikloning
+  // dan sebelum baseline diambil, supaya penyalinan tidak dianggap "belum
+  // disimpan" dan id hasil normalisasi ikut terbawa ke draft.
+  syncClosingBlockLanguages(selected.value?.contentDefinition?.languages, 'id')
+  draft.value = selected.value.status === 'DRAFT' ? cloneVersion(selected.value) : null
+  setFocus(draft.value?.contentDefinition?.languages?.[lang.value]?.[0]?.id ?? null)
+  snapshotDraft()
+}
 async function createDraft() { if (!props.template || draft.value) return; busy.value = true; try { const v = await $fetch<Version>(`/api/contract-templates/${props.template.id}/versions`, { method: 'POST', body: { changeSummary: 'Draft baru dari editor' } }); versions.value = [v, ...versions.value]; await select(v) } catch (e: any) { toast.add({ title: 'Draft gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { busy.value = false } }
 
 /**
@@ -257,11 +293,46 @@ async function openPreview(v: Version) {
  */
 const hasSignatureBlock = computed(() => (blocks.value ?? []).some((b: { type?: string }) => b?.type === 'signature'))
 
+/**
+ * Blok penutup juga hanya SATU untuk seluruh dokumen — bukan satu per bahasa.
+ * Karena teksnya melintang penuh halaman (di luar kotak), renderer memakai
+ * kolom ID lebih dulu dan baru jatuh ke EN bila ID tidak punya. Menghitungnya
+ * lintas bahasa mencegah admin menambah dua blok yang salah satunya akan
+ * diabaikan saat render.
+ */
+const hasClosingBlock = computed(() => {
+  const languages = draft.value?.contentDefinition?.languages ?? selected.value?.contentDefinition?.languages ?? {}
+  return ['id', 'en'].some(code => (languages?.[code] ?? []).some((b: { type?: string }) => b?.type === 'closing'))
+})
+
+/** Blok yang sudah ada dan tidak boleh ditambahkan lagi (maksimal satu). */
+function blockPickerDisabled(type: string): boolean {
+  if (type === 'signature') return hasSignatureBlock.value
+  if (type === 'closing') return hasClosingBlock.value
+  return false
+}
+
+/** Keterangan pada kartu picker: alasan dinonaktifkan, atau deskripsi biasa. */
+function blockPickerDescription(type: string, fallback: string): string {
+  if (type === 'signature' && hasSignatureBlock.value) return 'Sudah ada di versi ini (maksimal satu)'
+  if (type === 'closing' && hasClosingBlock.value) return 'Sudah ada (satu teks untuk kedua bahasa)'
+  return fallback
+}
+
 function add(type: string) {
   if (type === 'signature' && hasSignatureBlock.value) {
     toast.add({
       title: 'Blok tanda tangan sudah ada',
       description: 'Hapus blok tanda tangan yang lama dulu bila ingin menambah yang baru.',
+      color: 'warning'
+    })
+    blockPickerOpen.value = false
+    return
+  }
+  if (type === 'closing' && hasClosingBlock.value) {
+    toast.add({
+      title: 'Blok penutup sudah ada',
+      description: 'Blok penutup hanya satu untuk kedua bahasa. Hapus yang lama dulu bila ingin menambah yang baru.',
       color: 'warning'
     })
     blockPickerOpen.value = false
@@ -282,7 +353,12 @@ function add(type: string) {
     list: { id, type, style: 'bullet', items: [''] },
     table: { id, type, columns: [{ key: 'value', label: 'Nilai', width: 100, format: 'text' }], rows: [{ value: '' }] },
     pageBreak: { id, type },
-    signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' }
+    signature: { id, type, leftRole: 'PIHAK PERTAMA', rightRole: 'PIHAK KEDUA', leftHeader: 'KOPERASI PT. SANKYU INT\'L', rightHeader: 'MITRA', leftParty: '(Ketua Koperasi)', rightParty: '(Mitra)' },
+    closing: {
+      id,
+      type,
+      text: 'Bekasi, {{doc.docDate}}\nKOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL\nUNIT KANTOR PUSAT'
+    }
   }
   const block = d[type]
   // Jaring pengaman: bila suatu saat picker menambah tipe tanpa mengisi map ini,
@@ -297,6 +373,12 @@ function add(type: string) {
     return
   }
   blocks.value.push(block as any)
+  // Blok penutup WAJIB muncul di kedua tab bahasa. Salin ke bahasa lain dengan
+  // id & teks yang sama supaya admin melihat (dan dapat mengedit) blok yang
+  // sama dari tab mana pun.
+  if (type === 'closing' && draft.value) {
+    syncClosingBlockLanguages(draft.value?.contentDefinition?.languages, lang.value)
+  }
   setFocus(id)
   collapsedBlocks.value[id] = false
   blockPickerOpen.value = false
@@ -504,6 +586,7 @@ const BLOCK_PICKER = [
   { type: 'list', label: 'Daftar', icon: 'i-lucide-list', desc: 'Poin bernomor, huruf, atau bullet' },
   { type: 'table', label: 'Tabel', icon: 'i-lucide-table', desc: 'Baris dan kolom, mis. rincian upah' },
   { type: 'signature', label: 'Tanda Tangan', icon: 'i-lucide-pen-line', desc: 'Blok tanda tangan dua pihak' },
+  { type: 'closing', label: 'Penutup', icon: 'i-lucide-map-pin', desc: 'Tempat, tanggal, dan organisasi di atas tanda tangan' },
   { type: 'title', label: 'Judul Dokumen', icon: 'i-lucide-heading-1', desc: 'Judul utama di tengah halaman' },
   { type: 'subtitle', label: 'Subjudul', icon: 'i-lucide-heading-2', desc: 'Baris kecil di bawah judul' },
   { type: 'pageBreak', label: 'Ganti Halaman', icon: 'i-lucide-scissors', desc: 'Paksa halaman baru di PDF' }
@@ -770,7 +853,8 @@ const BLOCK_LABELS: Record<string, string> = {
   list: 'Daftar',
   table: 'Tabel',
   pageBreak: 'Ganti Halaman',
-  signature: 'Tanda Tangan'
+  signature: 'Tanda Tangan',
+  closing: 'Penutup'
 }
 const BLOCK_ICONS: Record<string, string> = {
   title: 'i-lucide-heading-1',
@@ -780,7 +864,8 @@ const BLOCK_ICONS: Record<string, string> = {
   list: 'i-lucide-list',
   table: 'i-lucide-table',
   pageBreak: 'i-lucide-scissors',
-  signature: 'i-lucide-pen-line'
+  signature: 'i-lucide-pen-line',
+  closing: 'i-lucide-map-pin'
 }
 
 /** Judul ringkas sebuah blok untuk daftar isi. */
@@ -791,6 +876,7 @@ function outlineTitle(block: any): string {
     case 'list': return `${(block.items ?? []).length} poin`
     case 'table': return `${(block.rows ?? []).length} baris × ${(block.columns ?? []).length} kolom`
     case 'signature': return 'Tanda tangan'
+    case 'closing': return clean(block.text) || 'Teks penutup'
     case 'pageBreak': return 'Ganti halaman'
     default: return clean(stripInlineMarks(block?.text)) || 'Belum ada teks'
   }
@@ -834,6 +920,8 @@ function blockIsEmpty(b: any): boolean {
       return (b.items ?? []).some((i: any) => blank(i))
     case 'table':
       return (b.rows ?? []).some((r: any) => (b.columns ?? []).some((c: any) => blank(r?.[c.key])))
+    case 'closing':
+      return blank(b.text)
     default:
       return false
   }
@@ -864,6 +952,18 @@ function duplicateBlock(i: number) {
   const list = blocks.value ?? []
   const src = list[i]
   if (!src) return
+  // Blok tunggal (tanda tangan & penutup) tidak boleh diduplikat: PDF hanya
+  // akan memakai satu, dan validator menolak versi dengan dua blok sejenis.
+  if (src.type === 'signature' || src.type === 'closing') {
+    toast.add({
+      title: 'Blok ini hanya boleh satu',
+      description: src.type === 'signature'
+        ? 'Tanda tangan hanya satu per versi. Ubah blok yang sudah ada.'
+        : 'Penutup hanya satu untuk kedua bahasa. Ubah blok yang sudah ada.',
+      color: 'warning'
+    })
+    return
+  }
   const copy = JSON.parse(JSON.stringify(src))
   copy.id = `${src.type}-${Date.now()}`
   list.splice(i + 1, 0, copy)
@@ -877,6 +977,14 @@ function confirmDeleteBlock() {
   const list = blocks.value ?? []
   if (idx < 0 || idx >= list.length) {
     confirmDeleteIndex.value = null
+    return
+  }
+  // Blok penutup ada di kedua bahasa; menghapus hanya tab aktif akan membuat
+  // salinannya "muncul kembali" saat admin pindah tab.
+  if (list[idx]?.type === 'closing' && draft.value) {
+    removeClosingBlockEverywhere(draft.value?.contentDefinition?.languages)
+    confirmDeleteIndex.value = null
+    toast.add({ title: 'Blok dihapus', description: 'Blok penutup dihapus dari kedua bahasa.', color: 'success' })
     return
   }
   list.splice(idx, 1)
@@ -1613,7 +1721,7 @@ function removeInvalidBlock(index: number) {
           v-for="opt in blockPickerOptions"
           :key="opt.type"
           type="button"
-          :disabled="opt.type === 'signature' && hasSignatureBlock"
+          :disabled="blockPickerDisabled(opt.type)"
           class="flex items-start gap-3 rounded-lg border border-default p-3 text-left transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-default disabled:hover:bg-transparent"
           @click="add(opt.type)"
         >
@@ -1623,7 +1731,7 @@ function removeInvalidBlock(index: number) {
               {{ opt.label }}
             </p>
             <p class="text-xs text-muted">
-              {{ opt.type === 'signature' && hasSignatureBlock ? 'Sudah ada di versi ini (maksimal satu)' : opt.desc }}
+              {{ blockPickerDescription(opt.type, opt.desc) }}
             </p>
           </div>
         </button>

@@ -1,6 +1,8 @@
 import { existsSync } from 'fs'
+import PDFDocument from 'pdfkit'
 import {
   createMitraPdfBuffer,
+  renderMitraDocumentInto,
   resolveMitraFontDir,
   resolveMitraFonts,
 } from './mitra-document.renderer'
@@ -155,6 +157,70 @@ describe('MITRA document renderer — mark & perataan di PDF NYATA', () => {
       ],
     })
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+  })
+})
+
+describe('MITRA — blok penutup (tempat/tanggal + organisasi)', () => {
+  const maybeRender = fontsAvailable() ? it : it.skip
+
+  maybeRender('dicetak DI LUAR kotak, sebelum tabel tanda tangan', () => {
+    const doc = new PDFDocument({
+      size: [595.5, 842.25],
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      bufferPages: true,
+    })
+    // Konsumsi stream supaya PDFKit tidak menahan buffer.
+    doc.on('data', () => {})
+
+    renderMitraDocumentInto(doc, {
+      blocks: [
+        { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+        { id: 'p', type: 'paragraph', text: 'Dibuat pada {{doc.hariTanggal}}.' },
+        {
+          id: 'place',
+          type: 'closing',
+          text: 'Bekasi, {{doc.docDate}}\nKOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL\nUNIT KANTOR PUSAT',
+        },
+        { id: 'sig', type: 'signature' },
+      ],
+      values: { 'doc.docDate': '01 September 2026', 'doc.hariTanggal': 'Selasa, 1 September 2026' },
+      fallbackTitle: 'PERJANJIAN KEMITRAAN',
+      fonts: resolveMitraFonts(),
+    })
+
+    const box = (doc as any).__mitraSignatureBox
+    expect(box.closingLineCount).toBe(3)
+    expect(box.closingTop).toBeGreaterThan(box.boxBottomOnLast)
+    expect(box.closingBottom).toBeGreaterThan(box.closingTop)
+    // Tabel tanda tangan berada SETELAH teks penutup.
+    expect(box.top).toBeGreaterThanOrEqual(box.closingBottom)
+    doc.end()
+  })
+
+  maybeRender('tanpa blok penutup, tabel tanda tangan tetap seperti sebelumnya', () => {
+    const doc = new PDFDocument({
+      size: [595.5, 842.25],
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      bufferPages: true,
+    })
+    doc.on('data', () => {})
+
+    renderMitraDocumentInto(doc, {
+      blocks: [
+        { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+        { id: 'p', type: 'paragraph', text: 'Isi.' },
+        { id: 'sig', type: 'signature' },
+      ],
+      values: {},
+      fallbackTitle: 'PERJANJIAN KEMITRAAN',
+      fonts: resolveMitraFonts(),
+    })
+
+    const box = (doc as any).__mitraSignatureBox
+    expect(box.closingLineCount).toBe(0)
+    // Perilaku lama: `gapFromBox` (50) dari kotak, tanpa teks penutup.
+    expect(box.top - box.boxBottomOnLast).toBeCloseTo(50, 0)
+    doc.end()
   })
 })
 

@@ -119,6 +119,22 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
   const text = (v: unknown): string | undefined =>
     typeof v === 'string' && v.trim() ? v.trim() : undefined
 
+  /**
+   * Teks penutup (tempat/tanggal + organisasi) di luar kotak, di atas tabel
+   * tanda tangan. MITRA hanya punya satu bahasa, jadi cukup blok `closing`
+   * pertama. Normalisasi baris sama dengan PKWT: CRLF → LF, spasi ujung
+   * dibuang, baris kosong dihilangkan.
+   */
+  const closingBlock = blocks.find((b: any) => b?.type === 'closing')
+  const closingLines = typeof closingBlock?.text === 'string'
+    ? closingBlock.text
+        .replace(/\r\n?/g, '\n')
+        .split('\n')
+        .map((line: string) => line.replace(/[^\S\n]+$/g, ''))
+        .filter((line: string) => line.trim() !== '')
+        .map((line: string) => interpolate(line, values))
+    : []
+
   const chairman = opts.signature?.chairmanName ?? values['settings.cooperativeChairmanName'] ?? ''
   const employeeName = opts.signature?.employeeName ?? values['employee.fullName'] ?? ''
   const jobRole = opts.signature?.jobRole ?? values['employee.jobRole'] ?? ''
@@ -143,6 +159,7 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     leftRole: text(sig?.leftParty) ?? MITRA_HEADER_CHROME.signature.leftRoleLabel,
     rightRole: text(sig?.rightParty)
       ?? (jobRole ? `( ${jobRole} )` : MITRA_HEADER_CHROME.signature.rightRoleFallback),
+    closingLines,
   }
 
   renderMitraLayout(doc, blocks, {

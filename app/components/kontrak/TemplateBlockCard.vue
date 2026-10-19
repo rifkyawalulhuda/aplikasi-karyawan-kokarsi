@@ -156,7 +156,8 @@ const BLOCK_META: Record<string, { label: string, icon: string, hint: string }> 
   list: { label: 'Daftar', icon: 'i-lucide-list', hint: 'Poin-poin bernomor / bullet' },
   table: { label: 'Tabel', icon: 'i-lucide-table', hint: 'Data baris dan kolom' },
   pageBreak: { label: 'Ganti Halaman', icon: 'i-lucide-scissors', hint: 'Paksa halaman baru di PDF' },
-  signature: { label: 'Tanda Tangan', icon: 'i-lucide-pen-line', hint: 'Blok tanda tangan dua pihak' }
+  signature: { label: 'Tanda Tangan', icon: 'i-lucide-pen-line', hint: 'Blok tanda tangan dua pihak' },
+  closing: { label: 'Penutup', icon: 'i-lucide-map-pin', hint: 'Tempat, tanggal, dan organisasi di atas tanda tangan' }
 }
 
 const meta = computed(() => BLOCK_META[props.block?.type] ?? {
@@ -183,6 +184,8 @@ const summary = computed(() => {
       return 'Halaman baru dimulai setelah blok ini'
     case 'signature':
       return `${clean(b.leftRole) || 'Pihak Pertama'} & ${clean(b.rightRole) || 'Pihak Kedua'}`
+    case 'closing':
+      return clean(b.text) || 'Belum ada teks penutup'
     default:
       return meta.value.hint
   }
@@ -203,6 +206,8 @@ const emptyWarnings = computed(() => {
     if ((b.rows ?? []).some((r: any) => (b.columns ?? []).some((c: any) => blank(r?.[c.key])))) warns.push('Ada sel kosong')
   } else if (['title', 'subtitle', 'paragraph'].includes(b.type)) {
     if (blank(b.text)) warns.push('Teks masih kosong')
+  } else if (b.type === 'closing') {
+    if (blank(b.text)) warns.push('Teks penutup masih kosong')
   }
   return warns
 })
@@ -653,6 +658,27 @@ function addColumn() {
             <UInput v-model="block.rightParty" :disabled="!editable" placeholder="(Mitra)" />
           </UFormField>
         </div>
+      </template>
+
+      <template v-else-if="block.type === 'closing'">
+        <p class="text-xs text-muted">
+          Dicetak <b>di luar kotak</b>, tepat di atas tanda tangan. Blok ini otomatis muncul
+          di tab Indonesia <b>dan</b> English dengan teks yang sama — cukup diisi sekali.
+          Gunakan <code v-pre>{{doc.docDate}}</code> agar tanggal mengikuti data kontrak.
+        </p>
+        <UFormField label="Teks penutup">
+          <UTextarea
+            v-model="block.text"
+            :disabled="!editable"
+            :rows="3"
+            autoresize
+            class="w-full"
+            placeholder="Bekasi, {{doc.docDate}}&#10;KOPERASI KARYAWAN PT SANKYU INDONESIA INTERNATIONAL&#10;UNIT KANTOR PUSAT"
+          />
+          <p v-if="editable && isBlank(block.text)" class="mt-1 text-xs text-warning" aria-live="polite">
+            Teks penutup masih kosong.
+          </p>
+        </UFormField>
       </template>
 
       <div v-else-if="block.type === 'pageBreak'" class="rounded-md bg-elevated p-3 text-sm text-muted">
