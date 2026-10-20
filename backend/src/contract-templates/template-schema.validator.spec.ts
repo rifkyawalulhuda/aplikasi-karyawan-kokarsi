@@ -13,6 +13,38 @@ function baseContent(extra: (b: any[]) => any[] = b => b) {
   }
 }
 
+/**
+ * Blok minimal per tipe, dipakai menguji `fieldSpacing` lintas tipe & keluarga.
+ * `suffix` membuat id unik untuk kolom EN (validator menolak id duplikat).
+ */
+function fieldSpacingBlock(type: string, fieldSpacing: unknown, suffix = ''): any {
+  const id = (base: string) => `${base}${suffix ? `-${suffix}` : ''}`
+  switch (type) {
+    case 'article':
+      return { id: id('a'), type, heading: 'PASAL 1', paragraphs: ['Body', 'Body 2'], fieldSpacing }
+    case 'list':
+      return { id: id('l'), type, style: 'numbered', items: ['satu', 'dua'], fieldSpacing }
+    case 'table':
+      return {
+        id: id('t'),
+        type,
+        columns: [{ key: 'k', label: 'Kolom' }],
+        rows: [{ k: 'x' }, { k: 'y' }],
+        fieldSpacing,
+      }
+    case 'closing':
+      return { id: id('c'), type, text: 'Baris satu\nBaris dua', fieldSpacing }
+    case 'paragraph':
+      return { id: id('p'), type, text: 'Body', fieldSpacing }
+    case 'title':
+      return { id: id('title'), type, text: 'JUDUL', fieldSpacing }
+    case 'signature':
+      return { id: id('sig-under-test'), type, fieldSpacing }
+    default:
+      return { id: id('x'), type, text: 'Body', fieldSpacing }
+  }
+}
+
 describe('extractPlaceholders', () => {
   it('mengekstrak placeholder valid', () => {
     expect(extractPlaceholders('Nama {{employee.fullName}} no {{contract.contractNo}}')).toEqual([
@@ -289,6 +321,80 @@ describe('validateContentDefinition', () => {
     expect(result.inlineMarkWarnings).toEqual([
       expect.objectContaining({ blockId: 'p', fieldPath: 'languages.id[0].text', message: expect.stringMatching(/tidak memiliki pasangan/) }),
     ])
+  })
+
+  /**
+   * `fieldSpacing` — jarak ANTAR field di dalam satu blok. Himpunan tipe blok
+   * SAMA untuk kedua keluarga: hanya blok yang merender beberapa sub-elemen
+   * bertumpuk (`article`, `list`, `table`, `closing`).
+   */
+  it.each([
+    ['MITRA', 'article'],
+    ['MITRA', 'list'],
+    ['MITRA', 'table'],
+    ['MITRA', 'closing'],
+    ['PKWT', 'article'],
+    ['PKWT', 'list'],
+    ['PKWT', 'table'],
+    ['PKWT', 'closing'],
+  ] as const)('menerima fieldSpacing pada blok %p (%s)', (family, type) => {
+    const block = fieldSpacingBlock(type, 6)
+    const content = family === 'PKWT'
+      ? {
+          languages: {
+            id: [block, { id: 'sig', type: 'signature' }],
+            en: [fieldSpacingBlock(type, 6, 'en'), { id: 'sig-en', type: 'signature' }],
+          },
+        }
+      : baseContent(blocks => [block, ...blocks.filter(b => b.type === 'signature')])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, family)
+    expect(result.fieldSpacedBlockCount).toBe(family === 'PKWT' ? 2 : 1)
+  })
+
+  it.each([
+    ['MITRA', 'paragraph'],
+    ['MITRA', 'title'],
+    ['MITRA', 'signature'],
+    ['PKWT', 'paragraph'],
+    ['PKWT', 'title'],
+    ['PKWT', 'signature'],
+  ] as const)('menolak fieldSpacing pada blok %p (%s)', (family, type) => {
+    const block = fieldSpacingBlock(type, 6)
+    const content = family === 'PKWT'
+      ? {
+          languages: {
+            id: [block, { id: 'sig', type: 'signature' }],
+            en: [fieldSpacingBlock(type, 6, 'en'), { id: 'sig-en', type: 'signature' }],
+          },
+        }
+      : baseContent(blocks => [block, ...blocks.filter(b => b.type === 'signature')])
+    try {
+      validateContentDefinition(content, VALID_FIELD_KEYS, family)
+      throw new Error(`Expected validator to reject fieldSpacing on ${type}`)
+    } catch (error: any) {
+      expect(error.issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'languages.id[0].fieldSpacing',
+          message: expect.stringMatching(/fieldSpacing tidak didukung/),
+        }),
+      ]))
+    }
+  })
+
+  it.each([-1, 41, 12.5, '12', null])('menolak fieldSpacing tidak valid %p', value => {
+    const content = baseContent(blocks => [
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], fieldSpacing: value },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).toThrow(/fieldSpacing/)
+  })
+
+  it('tanpa fieldSpacing, tidak ada blok yang dihitung (perilaku lama)', () => {
+    const content = baseContent(blocks => [
+      { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body', 'Body 2'] },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA').fieldSpacedBlockCount).toBe(0)
   })
 
   it('menolak tanpa signature', () => {

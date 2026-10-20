@@ -7,9 +7,10 @@
  * (`resolveClosingLines` di `pkwt-document.renderer.ts`): ia memakai blok kolom
  * ID lebih dulu, lalu jatuh ke EN.
  *
- * Karena itu salinan di kedua bahasa harus SELALU identik (id + teks). Modul ini
- * murni (tanpa Vue/DOM) supaya mudah diuji dan dipakai baik saat memuat versi,
- * menambah blok, mengedit teks, maupun menghapusnya.
+ * Karena itu salinan di kedua bahasa harus SELALU identik (id, teks, dan
+ * `fieldSpacing`). Modul ini murni (tanpa Vue/DOM) supaya mudah diuji dan
+ * dipakai baik saat memuat versi, menambah blok, mengedit teks, maupun
+ * menghapusnya.
  */
 
 export const CLOSING_BLOCK_TYPE = 'closing'
@@ -43,6 +44,9 @@ export function findClosingBlock(blocks: unknown[] | undefined): ClosingBlockLik
  *  - Salinan memakai `id` dan `text` yang SAMA. `id` yang sama penting: daftar
  *    blok memakai `id` sebagai key Vue, dan menyamakannya membuat blok terasa
  *    sebagai satu entitas di kedua tab.
+ *  - `fieldSpacing` ikut disalin: hanya SATU blok penutup yang dicetak, jadi
+ *    jarak yang diatur di tab mana pun harus terasa di PDF. Tanpa ini, mengatur
+ *    jarak di tab English tidak berpengaruh karena renderer memakai blok ID.
  *  - Salinan baru disisipkan TEPAT SEBELUM blok `signature` (kalau ada) agar
  *    urutannya tetap masuk akal di daftar; tanpa signature, ditambahkan di akhir.
  *  - Blok penutup duplikat dalam satu bahasa dibuang, menyisakan yang pertama.
@@ -73,6 +77,8 @@ export function syncClosingBlockLanguages(languages: Languages | undefined, sour
   // sini, bukan dibiarkan tersembunyi.
   if (source.id !== id) source.id = id
   const text = typeof source.text === 'string' ? source.text : ''
+  // `undefined` = perilaku bawaan; dibedakan dari `0` (rapat eksplisit).
+  const fieldSpacing = source.fieldSpacing
 
   let changed = 0
   for (const code of codes) {
@@ -111,9 +117,12 @@ export function syncClosingBlockLanguages(languages: Languages | undefined, sour
 
     const idChanged = kept.id !== id
     const textChanged = kept.text !== text
-    if (idChanged || textChanged) {
+    const spacingChanged = kept.fieldSpacing !== fieldSpacing
+    if (idChanged || textChanged || spacingChanged) {
       kept.id = id
       kept.text = text
+      if (fieldSpacing === undefined) delete kept.fieldSpacing
+      else kept.fieldSpacing = fieldSpacing
       changed += 1
     }
   }

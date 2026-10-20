@@ -18,6 +18,7 @@ import {
   PKWT_HEADER_CHROME,
   buildPkwtRows,
   buildPkwtRowsFromStructuredParagraphs,
+  pkwtClosingHeight,
   pkwtColumnInnerWidth,
   pkwtSignatureHeight,
   renderPkwtLayout,
@@ -505,6 +506,99 @@ describe('PKWT layout engine — spaceAfter per blok (aditif di atas blockGap)',
   })
 })
 
+/**
+ * `fieldSpacing` — jarak ANTAR field di dalam satu blok (PKWT).
+ *
+ * Berbeda dari `spaceAfter` (antar-blok), jarak ini dipasang pada baris pembuka
+ * field ke-2 dan seterusnya, sehingga blok pertama dokumen pun tetap mendapat
+ * jarak antar isinya.
+ */
+describe('PKWT layout engine — fieldSpacing (jarak antar isi satu blok)', () => {
+  const stubDoc = {
+    font() { return this },
+    fontSize() { return this },
+    widthOfString(s: string) { return String(s).length * 5 }
+  }
+  const opts = { width: 1000, size: 9 }
+  const para = (blockIndex: number, text: string, fieldSpacing?: number, bold = false) =>
+    ({ blockId: `b${blockIndex}`, blockIndex, text, bold, fieldSpacing })
+
+  /** Artikel: judul + 2 uraian dalam SATU blok, lalu blok kedua. */
+  const articleRows = (idSpacing?: number, enSpacing?: number) =>
+    buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [
+        para(0, 'PASAL 1', idSpacing, true),
+        para(0, 'uraian satu', idSpacing),
+        para(0, 'uraian dua', idSpacing),
+        para(1, 'blok dua'),
+      ],
+      [
+        para(0, 'ARTICLE 1', enSpacing, true),
+        para(0, 'first body', enSpacing),
+        para(0, 'second body', enSpacing),
+        para(1, 'second block'),
+      ],
+      opts
+    )
+
+  it('tanpa fieldSpacing, TIDAK ada jarak tambahan (perilaku lama)', () => {
+    const rows = articleRows()
+    for (const row of rows) expect(row.fieldGap).toBeUndefined()
+    // Jarak antar-blok tetap persis blockGap.
+    expect(rows[3].gapBefore).toBe(PKWT_GEOMETRY.blockGap)
+  })
+
+  it('jarak hanya pada field ke-2 dan seterusnya (bukan baris pertama blok)', () => {
+    const rows = articleRows(10)
+    expect(rows[0].fieldGap).toBeUndefined() // judul = field pertama
+    expect(rows[1].fieldGap).toBe(10) // uraian pertama
+    expect(rows[2].fieldGap).toBe(10) // uraian kedua
+    expect(rows[3].fieldGap).toBeUndefined() // blok berikutnya, field pertama
+  })
+
+  it('kolom ID & EN terkunci: jarak = nilai TERBESAR kedua kolom', () => {
+    const rows = articleRows(6, 14)
+    expect(rows[1].fieldGap).toBe(14)
+    expect(rows[2].fieldGap).toBe(14)
+  })
+
+  it('fieldSpacing di satu kolom saja tetap berlaku', () => {
+    const rows = articleRows(9, undefined)
+    expect(rows[1].fieldGap).toBe(9)
+  })
+
+  it('daftar: jarak antar poin, poin pertama tanpa jarak', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [
+        { blockId: 'l', blockIndex: 0, text: 'poin satu', bold: false, label: '1.', fieldSpacing: 8 },
+        { blockId: 'l', blockIndex: 0, text: 'poin dua', bold: false, label: '2.', fieldSpacing: 8 },
+      ],
+      [
+        { blockId: 'l', blockIndex: 0, text: 'item one', bold: false, label: '1.', fieldSpacing: 8 },
+        { blockId: 'l', blockIndex: 0, text: 'item two', bold: false, label: '2.', fieldSpacing: 8 },
+      ],
+      opts
+    )
+    expect(rows[0].fieldGap).toBeUndefined()
+    expect(rows[1].fieldGap).toBe(8)
+  })
+
+  it('penutup: jarak hanya antar baris LOGIS (rumus lama dipertahankan)', () => {
+    const flat = pkwtClosingHeight([['A'], ['B'], ['C']], 0)
+    // Tanpa jarak → rumus lama: (n - 1) * lineAdvance + fontSize.
+    expect(flat).toBeCloseTo(
+      2 * PKWT_GEOMETRY.closing.lineAdvance + PKWT_GEOMETRY.closing.fontSize,
+      6,
+    )
+    // 3 baris logis → 2 jarak.
+    expect(pkwtClosingHeight([['A'], ['B'], ['C']], 10)).toBeCloseTo(flat + 20, 6)
+    // Baris lipatan di dalam satu baris logis TIDAK menambah jarak.
+    expect(pkwtClosingHeight([['A', 'A2'], ['B']], 10)).toBeCloseTo(flat + 10, 6)
+  })
+})
+
 /** Apakah pdfplumber tersedia untuk uji geometris? */
 function hasPdfplumber(): boolean {
   try {
@@ -889,6 +983,60 @@ print(json.dumps(out))
     // Baris kedua pada dokumen DUA-BLOK turun tepat sebesar `blockGap`.
     expect(a[1] - b[1]).toBeCloseTo(G.blockGap, 1)
     expect(a[1] - a[0]).toBeGreaterThan(b[1] - b[0])
+  })
+
+  it('fieldSpacing benar-benar tercetak antar uraian dalam SATU blok', async () => {
+    const G = PKWT_GEOMETRY
+    const base = {
+      values: {} as Record<string, string>,
+      titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+      titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+      numberLabel: 'No. : 1/KUKP-SII/I/2026',
+      orgLines: ['KOPERASI KARYAWAN'],
+      addressLines: ['Jl. Contoh No. 1'],
+      contactLine: 'TELP. 021 - 0',
+      signature: { leftTitle: 'PIHAK PERTAMA', rightTitle: 'PIHAK KEDUA' }
+    }
+    const render = async (name: string, fieldSpacing?: number) => {
+      const file = path.join(tmpDir, name)
+      fs.writeFileSync(file, await createPkwtPdfBuffer({
+        ...base,
+        blocks: [{
+          type: 'article',
+          heading: 'PASAL-UJI',
+          paragraphs: ['URAI-SATU', 'URAI-DUA'],
+          fieldSpacing,
+        }],
+      }))
+      return file
+    }
+    /** Top baris kolom KIRI yang memuat penanda uraian uji. */
+    const tops = (file: string) => {
+      const p0 = measure(file).pages[0]
+      const midX = (G.left.x1 + G.right.x0) / 2
+      const uniq: number[] = []
+      for (const c of p0.chars) {
+        if (c.x0 > midX) continue
+        if (!uniq.some(t => Math.abs(t - c.top) < 2)) uniq.push(c.top)
+      }
+      return uniq
+        .map(top => ({
+          top,
+          text: p0.chars.filter(c => c.x0 <= midX && Math.abs(c.top - top) < 2).map(c => c.text).join(''),
+        }))
+        .filter(r => r.text.includes('URAI'))
+        .sort((a, b) => a.top - b.top)
+        .map(r => r.top)
+    }
+
+    const plain = tops(await render('fs-plain.pdf'))
+    const spaced = tops(await render('fs-spaced.pdf', 10))
+    expect(plain).toHaveLength(2)
+    expect(spaced).toHaveLength(2)
+    // Field pertama pasal = JUDUL, jadi uraian pertama sudah field ke-2 (+10)
+    // dan uraian kedua field ke-3 (+20). Judul sendiri tidak bergeser.
+    expect(spaced[0] - plain[0]).toBeCloseTo(10, 1)
+    expect(spaced[1] - plain[1]).toBeCloseTo(20, 1)
   })
 
   it('blok tabel benar-benar tercetak di PDF (teks sel muncul, bukan dilewati)', async () => {

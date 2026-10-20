@@ -1,7 +1,13 @@
 import { BadRequestException } from '@nestjs/common'
 import { hasInlineMarks, validateInlineMarks } from '../contracts/inline-marks'
 import { INLINE_RUN_ALIGN_VALUES, type InlineRunAlign } from '../contracts/inline-run-layout'
-import { MAX_BLOCK_SPACE_AFTER, normalizeBlockSpaceAfter } from '../contracts/block-spacing'
+import {
+  MAX_BLOCK_SPACE_AFTER,
+  MAX_FIELD_SPACING,
+  FIELD_SPACING_CAPABLE_BLOCKS,
+  normalizeBlockSpaceAfter,
+  normalizeFieldSpacing,
+} from '../contracts/block-spacing'
 
 /** Tipe blok yang didukung renderer V1 */
 export const BLOCK_TYPES = [
@@ -94,6 +100,16 @@ export function spaceCapableBlocks(family: 'MITRA' | 'PKWT'): readonly string[] 
  * supaya validator dan engine tata letak memakai SATU sumber kebenaran.
  */
 export { MAX_BLOCK_SPACE_AFTER, normalizeBlockSpaceAfter as blockSpaceAfter } from '../contracts/block-spacing'
+
+/**
+ * Normalisasi `block.fieldSpacing` — jarak ANTAR field di dalam satu blok.
+ * Dialias ke modul bersama yang sama (`contracts/block-spacing.ts`).
+ */
+export {
+  MAX_FIELD_SPACING,
+  FIELD_SPACING_CAPABLE_BLOCKS,
+  normalizeFieldSpacing,
+} from '../contracts/block-spacing'
 export interface BlockValidationIssue {
   blockId: string
   message: string
@@ -211,6 +227,7 @@ export function validateContentDefinition(
   markedBlockCount: number
   alignedBlockCount: number
   spacedBlockCount: number
+  fieldSpacedBlockCount: number
   inlineMarkWarnings: InlineMarkWarning[]
 } {
   const issues: BlockValidationIssue[] = []
@@ -221,6 +238,7 @@ export function validateContentDefinition(
   let markedBlockCount = 0
   let alignedBlockCount = 0
   let spacedBlockCount = 0
+  let fieldSpacedBlockCount = 0
 
   const validateText = (blockId: string, text: string, fieldPath: string, allowMarks: boolean): boolean => {
     const result = validateInlineMarks(text, { allowMarks, location: fieldPath })
@@ -295,6 +313,38 @@ export function validateContentDefinition(
     spacedBlockCount += 1
   }
 
+  /**
+   * `fieldSpacing`: jarak vertikal TAMBAHAN **antar field di dalam satu blok**
+   * (judul↔uraian, uraian↔uraian, poin↔poin, baris↔baris, baris penutup↔baris
+   * penutup). Aditif di atas jarak bawaan, jadi `0`/tidak ada = perilaku lama.
+   *
+   * Himpunan tipe blok SAMA untuk MITRA dan PKWT
+   * (`FIELD_SPACING_CAPABLE_BLOCKS`): hanya blok yang benar-benar merender
+   * beberapa sub-elemen bertumpuk. Blok berisi satu field (`title`,
+   * `subtitle`, `paragraph`) dan tabel dua kolom sejajar (`signature`) ditolak
+   * supaya admin tidak menyetel jarak yang tidak akan pernah tercetak.
+   */
+  const validateFieldSpacing = (block: any, id: string, fieldPath: string) => {
+    if (block.fieldSpacing === undefined) return
+    if (normalizeFieldSpacing(block.fieldSpacing) === undefined) {
+      issues.push({
+        blockId: id,
+        fieldPath,
+        message: `Nilai fieldSpacing "${String(block.fieldSpacing)}" tidak valid. Gunakan bilangan bulat 0–${MAX_FIELD_SPACING} (pt).`,
+      })
+      return
+    }
+    if (!(FIELD_SPACING_CAPABLE_BLOCKS as readonly string[]).includes(block.type)) {
+      issues.push({
+        blockId: id,
+        fieldPath,
+        message: `Properti fieldSpacing tidak didukung pada blok ${block.type}. Hanya berlaku untuk blok yang punya beberapa isi: ${FIELD_SPACING_CAPABLE_BLOCKS.join(', ')}.`,
+      })
+      return
+    }
+    fieldSpacedBlockCount += 1
+  }
+
   if (!content || typeof content !== 'object' || !content.languages) {
     throw new BadRequestException('contentDefinition harus memiliki struktur { languages: { id: [], en: [] } }')
   }
@@ -336,6 +386,7 @@ export function validateContentDefinition(
       validateAlign(block, id, `${blockPath}.align`)
       validateHeadingAlign(block, id, `${blockPath}.headingAlign`)
       validateSpaceAfter(block, id, `${blockPath}.spaceAfter`)
+      validateFieldSpacing(block, id, `${blockPath}.fieldSpacing`)
       let blockHasInlineMarks = false
 
       if (block.type === 'signature' || block.type === 'pageBreak') {
@@ -554,7 +605,15 @@ export function validateContentDefinition(
     throw error
   }
 
-  return { placeholderCount, blockCount, markedBlockCount, alignedBlockCount, spacedBlockCount, inlineMarkWarnings }
+  return {
+    placeholderCount,
+    blockCount,
+    markedBlockCount,
+    alignedBlockCount,
+    spacedBlockCount,
+    fieldSpacedBlockCount,
+    inlineMarkWarnings,
+  }
 }
 
 /** Ambil semua placeholder dari contentDefinition (untuk matching dengan fieldDefinitions). */
@@ -645,3 +704,5 @@ export function normalizeCustomPlaceholders(content: any, customKeys: Iterable<s
   }
   return fixed
 }
+
+

@@ -97,7 +97,9 @@ const activeClosingBlock = computed(() => findClosingBlock(blocks.value))
 watch(
   () => {
     const block = activeClosingBlock.value
-    return block ? `${String(block.id ?? '')}\u0000${String(block.text ?? '')}` : ''
+    return block
+      ? `${String(block.id ?? '')}\u0000${String(block.text ?? '')}\u0000${String(block.fieldSpacing ?? '')}`
+      : ''
   },
   () => {
     if (!draft.value || !activeClosingBlock.value) return
@@ -1468,6 +1470,7 @@ function removeInvalidBlock(index: number) {
                 :total="blocksCount"
                 :editable="!!draft"
                 :heading-align-default="isPkwt ? 'left' : 'center'"
+                :family="isPkwt ? 'PKWT' : 'MITRA'"
                 :space-types="isPkwt ? PKWT_SPACE_TYPES : MITRA_SPACE_TYPES"
                 :collapsed="collapsedBlocks[entry.block.id] ?? true"
                 :selected="focusedBlockId === entry.block.id"

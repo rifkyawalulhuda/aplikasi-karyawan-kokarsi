@@ -28,7 +28,7 @@ import {
   wrapCellLines
 } from './table-layout.helpers'
 import type { InlineRun } from './inline-marks'
-import { blockSpaceAfterPts } from './block-spacing'
+import { blockSpaceAfterPts, fieldSpacingPts } from './block-spacing'
 import {
   drawRunsLine,
   wrapRunsToLines,
@@ -354,6 +354,11 @@ export interface PkwtTable {
   columns: PkwtTableColumn[]
   cells: string[][]
   header: boolean
+  /**
+   * Jarak antar baris tabel (`block.fieldSpacing`, pt) — menambah tinggi SETIAP
+   * baris, dibagi rata atas/bawah. `undefined`/0 = tinggi baris lama persis.
+   */
+  fieldSpacing?: number
 }
 
 /** Satu baris paralel: teks ID (kiri) dan EN (kanan) yang harus sealign. */
@@ -443,6 +448,15 @@ export interface PkwtRow {
    * gunanya dan hanya mendorong teks turun dari `boxTop`).
    */
   gapBefore?: number
+  /**
+   * Jarak vertikal TAMBAHAN sebelum baris ini karena ia adalah FIELD KEDUA atau
+   * seterusnya di dalam satu blok (`block.fieldSpacing`, pt).
+   *
+   * Berbeda dari `gapBefore` (antar-blok): jarak ini hanya berlaku DI DALAM satu
+   * blok, sehingga blok pertama dokumen pun tetap mendapat jarak antar isinya.
+   * Nilainya dibuang di puncak halaman — sama seperti `gapBefore`.
+   */
+  fieldGap?: number
   /**
    * Bila terisi, baris ini adalah BLOK TABEL (bukan baris teks). `id`/`en`
    * dibiarkan kosong; engine menggambar tabel ber-border per kolom dan
@@ -692,6 +706,12 @@ export interface PkwtParagraph {
    */
   spaceAfter?: number
   /**
+   * Jarak vertikal TAMBAHAN antar field di dalam blok ini (`block.fieldSpacing`,
+   * pt). Diterapkan pada baris pembuka field ke-2 dan seterusnya, bukan pada
+   * baris pertama blok. `undefined`/0 = perilaku lama.
+   */
+  fieldSpacing?: number
+  /**
    * Bila terisi, paragraf ini sebenarnya membawa BLOK TABEL. Engine mengabaikan
    * `text`/`runs` untuk paragraf seperti ini dan menggambar tabel ber-border.
    */
@@ -745,6 +765,13 @@ export function buildPkwtRowsFromStructuredParagraphs(
      * digeser sejauh `indent` agar sejajar dengan huruf pertama teks.
      */
     indent: number
+    /**
+     * `true` pada baris PERTAMA sebuah paragraf (field) di dalam blok.
+     *
+     * Dipakai `fieldSpacing`: jarak hanya disisipkan sebelum field ke-2 dan
+     * seterusnya, bukan sebelum baris lanjutan hasil pelipatan.
+     */
+    firstOfPara: boolean
   }
 
   /**
@@ -783,6 +810,7 @@ export function buildPkwtRowsFromStructuredParagraphs(
             // Label hanya di baris pertama; baris lanjutan cukup indent.
             label: i === 0 ? p.label : undefined,
             indent,
+            firstOfPara: i === 0,
           })
         })
         continue
@@ -796,6 +824,7 @@ export function buildPkwtRowsFromStructuredParagraphs(
           align: p.align,
           label: i === 0 ? p.label : undefined,
           indent,
+          firstOfPara: i === 0,
         })
       })
     }
@@ -814,6 +843,22 @@ export function buildPkwtRowsFromStructuredParagraphs(
 
   const idGroup = group(idParas)
   const enGroup = group(enParas)
+
+  /**
+   * Jarak antar field satu blok (`block.fieldSpacing`).
+   *
+   * Kolom ID dan EN terkunci per baris, jadi jaraknya SATU nilai untuk baris
+   * gabungan: dipakai nilai TERBESAR dari kedua bahasa — sama seperti
+   * `blockSpaceAfterOf`, supaya menyetel hanya di satu tab tetap terasa.
+   */
+  const blockFieldSpacingOf = (paras: PkwtParagraph[] | undefined): number => {
+    let max = 0
+    for (const p of paras ?? []) {
+      const v = fieldSpacingPts(p.fieldSpacing)
+      if (v > max) max = v
+    }
+    return max
+  }
 
   const rows: PkwtRow[] = []
   const emitBlock = (blockIndex: number) => {
@@ -835,6 +880,9 @@ export function buildPkwtRowsFromStructuredParagraphs(
     const a = toLines(idParas, idIndent)
     const b = toLines(enParas, enIndent)
     const m = Math.max(a.length, b.length)
+    // Jarak antar field blok ini (maks kedua bahasa). Hanya dipasang pada baris
+    // pembuka field ke-2 dan seterusnya — bukan pada baris lanjutan lipatan.
+    const fieldSpacing = Math.max(blockFieldSpacingOf(idParas), blockFieldSpacingOf(enParas))
     for (let j = 0; j < m; j++) {
       const left = a[j]
       const right = b[j]
@@ -881,7 +929,16 @@ export function buildPkwtRowsFromStructuredParagraphs(
         enIndent: enIsList ? right?.indent : undefined,
         // Baris judul tidak pernah direntangkan (lihat `renderPkwtLayout`).
         idJustify: !idBold && !idIsList && left !== undefined && !left.lastOfPara,
-        enJustify: !enBold && !enIsList && right !== undefined && !right.lastOfPara
+        enJustify: !enBold && !enIsList && right !== undefined && !right.lastOfPara,
+        /**
+         * Jarak antar field: hanya pada baris PEMBUKA field ke-2 dan seterusnya.
+         * `j > 0` menjaga field pertama blok tetap menempel pada `gapBefore`
+         * antar-blok, sehingga jarak tidak terhitung dua kali. Nilai `0` TIDAK
+         * ditulis supaya baris tanpa jarak tetap `undefined` (jalur lama).
+         */
+        fieldGap: fieldSpacing > 0 && j > 0 && (left?.firstOfPara === true || right?.firstOfPara === true)
+          ? fieldSpacing
+          : undefined,
       })
     }
   }
@@ -1175,18 +1232,25 @@ export function pkwtSignatureHeight(): number {
 }
 
 /**
- * Bungkus baris penutup selebar `PKWT_GEOMETRY.closing.maxWidth`.
+ * Bungkus baris penutup selebar `PKWT_GEOMETRY.closing.maxWidth`,
+ * DIKELOMPOKKAN per baris logis.
  *
- * Dibungkus manual (bukan `doc.text` multiline) supaya pitch antar-baris tetap
- * seragam `lineAdvance` seperti master, berapa pun panjang barisnya.
+ * Struktur bersarang (`string[][]`) dipakai `fieldSpacing`: jarak hanya
+ * disisipkan ANTAR baris logis (yang dipisahkan Enter), bukan antar baris hasil
+ * lipatan. Baris lipatan tetap rapat.
  */
-function wrapPkwtClosingLines(doc: any, lines: string[]): string[] {
+function wrapPkwtClosingLines(doc: any, lines: string[]): string[][] {
   const G = PKWT_GEOMETRY
   if (lines.length === 0) return []
   doc.font(PKWT_FONT_NAMES.regular).fontSize(G.closing.fontSize)
-  return lines.flatMap(line =>
+  return lines.map(line =>
     wrapCellLines(doc, line, G.closing.maxWidth, PKWT_FONT_NAMES.regular, G.closing.fontSize)
   )
+}
+
+/** Jumlah baris tercetak (setelah pelipatan) dari baris penutup berkelompok. */
+export function pkwtClosingLineCount(groups: string[][]): number {
+  return groups.reduce((n, g) => n + g.length, 0)
 }
 
 /**
@@ -1195,11 +1259,21 @@ function wrapPkwtClosingLines(doc: any, lines: string[]): string[] {
  * `n` baris menempati `(n - 1) * lineAdvance + fontSize`, bukan `n * advance`:
  * baris terakhir hanya setinggi glyph-nya, sehingga tabel tanda tangan dapat
  * langsung menempel di bawahnya seperti master (selisih < 1 pt).
+ *
+ * @param fieldSpacing jarak tambahan ANTAR baris logis (pt). Baris lipatan tidak
+ *        diberi jarak. `0`/tidak diisi = tinggi lama persis.
  */
-export function pkwtClosingHeight(wrappedLines: string[]): number {
-  if (wrappedLines.length === 0) return 0
+export function pkwtClosingHeight(groups: string[][], fieldSpacing = 0): number {
+  if (groups.length === 0) return 0
   const G = PKWT_GEOMETRY
-  return (wrappedLines.length - 1) * G.closing.lineAdvance + G.closing.fontSize
+  // Rumus LAMA dipertahankan persis untuk seluruh baris tercetak, lalu jarak
+  // antar baris logis ditambahkan terpisah — `fieldSpacing: 0` identik.
+  const lineCount = pkwtClosingLineCount(groups)
+  return (
+    (lineCount - 1) * G.closing.lineAdvance
+    + G.closing.fontSize
+    + Math.max(0, groups.length - 1) * fieldSpacing
+  )
 }
 
 /**
@@ -1207,24 +1281,33 @@ export function pkwtClosingHeight(wrappedLines: string[]): number {
  *
  * `top` adalah glyph-top baris pertama (koordinat master), bukan y kotak baris
  * PDFKit — koreksi baseline dilakukan per baris lewat `pkwtTextTop`.
+ *
+ * @param fieldSpacing jarak tambahan antar BARIS LOGIS (pt). Baris lipatan tetap
+ *        rapat. `0`/tidak diisi = hasil lama persis.
  */
 export function renderPkwtClosing(
   doc: any,
-  wrappedLines: string[],
+  groups: string[][],
   top: number,
   pageIndex: number,
+  fieldSpacing = 0,
 ): void {
-  if (wrappedLines.length === 0) return
+  if (groups.length === 0) return
   const G = PKWT_GEOMETRY
   doc.switchToPage(pageIndex)
   doc.font(PKWT_FONT_NAMES.regular).fontSize(G.closing.fontSize).fillColor('#000000')
   const x = G.closing.centerX - G.closing.maxWidth / 2
-  wrappedLines.forEach((line, i) => {
-    const y = pkwtTextTop(top + i * G.closing.lineAdvance, G.closing.fontSize, PKWT_LUCIDA_BASELINE)
-    doc.text(line, x, y, {
-      width: G.closing.maxWidth,
-      align: 'center',
-      lineBreak: false
+  let cursor = top
+  groups.forEach((group, gi) => {
+    if (gi > 0) cursor += fieldSpacing
+    group.forEach((line) => {
+      const y = pkwtTextTop(cursor, G.closing.fontSize, PKWT_LUCIDA_BASELINE)
+      doc.text(line, x, y, {
+        width: G.closing.maxWidth,
+        align: 'center',
+        lineBreak: false
+      })
+      cursor += G.closing.lineAdvance
     })
   })
 }
@@ -1353,6 +1436,11 @@ export interface PkwtRenderOptions {
    * `signatureTable.gapFromBox` di bawah kotak.
    */
   closingLines?: string[]
+  /**
+   * Jarak tambahan ANTAR baris logis teks penutup (`closing.fieldSpacing`, pt).
+   * Hanya antar baris yang dipisahkan Enter; baris lipatan tetap rapat.
+   */
+  closingFieldSpacing?: number
   /**
    * `true` (default) → kotak halaman terakhir dipendekkan seperlunya agar
    * sub-tabel tanda tangan muat di bawahnya, seperti master.
@@ -1544,6 +1632,15 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     const idWidths = idTable ? computeColumnWidths(idTable.columns, innerW0) : []
     const enWidths = enTable ? computeColumnWidths(enTable.columns, innerW1) : []
     const rowCount = Math.max(idTable?.cells.length ?? 0, enTable?.cells.length ?? 0)
+    /**
+     * Jarak antar baris tabel (`block.fieldSpacing`, pt), dibagi rata atas/bawah.
+     * Kolom ID/EN terkunci per baris, jadi dipakai nilai TERBESAR dari kedua
+     * bahasa — sama seperti jarak antar-blok.
+     */
+    const rowPad = Math.max(
+      fieldSpacingPts(idTable?.fieldSpacing),
+      fieldSpacingPts(enTable?.fieldSpacing),
+    )
 
     // Jarak blok sebelum tabel — dibuang bila tabel jatuh di puncak halaman,
     // sama seperti baris teks biasa.
@@ -1568,7 +1665,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
           .font(font)
           .fontSize(size)
           .fillColor('#000000')
-          .text(cells[ci] ?? '', x + 4, top + 3, {
+          .text(cells[ci] ?? '', x + 4, top + 3 + rowPad / 2, {
             width: Math.max(widths[ci] - 8, 1),
             align: c.align ?? 'left',
             ...(lineGap === undefined ? {} : { lineGap }),
@@ -1597,7 +1694,8 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
       const idH = idCells ? computeRowHeight(doc, idCells, idWidths, size, 8, 6) : 0
       doc.font(enBold ? F.bold : F.regular).fontSize(size)
       const enH = enCells ? computeRowHeight(doc, enCells, enWidths, size, 8, 6) : 0
-      const h = Math.max(idH, enH, size + 6)
+      // `rowPad` = jarak antar baris tabel (`fieldSpacing`), aditif per baris.
+      const h = Math.max(idH, enH, size + 6) + rowPad
 
       // Baris NORMAL (muat dalam satu kotak halaman): gambar utuh.
       if (h <= boxBottomFor(pageIndex) - boxTopFor(pageIndex) - PAD_TOP) {
@@ -1639,7 +1737,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
         const avail = boxBottomFor(pageIndex) - y
         const fit = Math.max(1, Math.floor((avail - 6) / lineH))
         const take = Math.min(fit, maxLines - consumed)
-        const segHeight = take * lineH + 6
+        const segHeight = take * lineH + 6 + rowPad
         if (idTable && idCells) {
           drawCells(
             idCellLines.map(lines => lines.slice(consumed, consumed + take).join('\n')),
@@ -1671,7 +1769,9 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     const h = measureRow(row)
     // Jarak antar-blok diukur SEBELUM uji luber: kalau tidak, baris terakhir
     // sebuah blok bisa lolos uji (muat), lalu jaraknya "tumpah" ke luar kotak.
-    const gap = row.gapBefore ?? 0
+    // `fieldGap` (jarak antar field DALAM satu blok) diperlakukan sama: keduanya
+    // dibuang bila baris pindah halaman.
+    const gap = (row.gapBefore ?? 0) + (row.fieldGap ?? 0)
     // Hormati batas bawah kotak halaman berjalan.
     if (y + gap + h > boxBottomFor(pageIndex) - PAD_TOP) {
       doc.addPage()
@@ -1730,7 +1830,8 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
   const sigH = pkwtSignatureHeight()
   const sigGap = G.signatureTable.gapFromBox
   const closingWrapped = wrapPkwtClosingLines(doc, opts.closingLines ?? [])
-  const closingH = pkwtClosingHeight(closingWrapped)
+  const closingGap = fieldSpacingPts(opts.closingFieldSpacing)
+  const closingH = pkwtClosingHeight(closingWrapped, closingGap)
   let sigPage = pageIndex
   /**
    * Blok penutup mengisi jarak antara kotak dan tabel tanda tangan:
@@ -1758,7 +1859,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     renderPkwtColumnBox(doc, pi, boxBottoms[pi])
   }
 
-  renderPkwtClosing(doc, closingWrapped, closingTop, sigPage)
+  renderPkwtClosing(doc, closingWrapped, closingTop, sigPage, closingGap)
   renderPkwtSignature(doc, opts.signature, sigTop, sigPage)
 
   ;(doc as any).__pkwtLayout = {
@@ -1770,6 +1871,6 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     closingPage: sigPage,
     closingTop,
     closingBottom: closingWrapped.length > 0 ? closingTop + closingH : closingTop,
-    closingLineCount: closingWrapped.length
+    closingLineCount: pkwtClosingLineCount(closingWrapped)
   } satisfies PkwtLayoutMeta
 }

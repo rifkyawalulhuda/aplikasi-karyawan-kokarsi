@@ -22,7 +22,7 @@ Pratinjau pada editor dan tombol Generate Kontrak memanggil **fungsi render yang
 
 ## Model Konten (`contentDefinition`)
 
-Teks disimpan sebagai **`string`** biasa, ditambah properti blok opsional (`align`, `headingAlign`, `spaceAfter`). Tidak ada model data baru dan tidak ada migrasi untuk versi lama.
+Teks disimpan sebagai **`string`** biasa, ditambah properti blok opsional (`align`, `headingAlign`, `spaceAfter`, `fieldSpacing`). Tidak ada model data baru dan tidak ada migrasi untuk versi lama.
 
 ```ts
 contentDefinition = {
@@ -40,11 +40,12 @@ contentDefinition = {
 | `title` | `text`, `spaceAfter?` | Judul utama (rata tengah, chrome kop) |
 | `subtitle` | `text`, `spaceAfter?` | Subjudul di bawah judul |
 | `paragraph` | `text`, `align?`, `spaceAfter?` | Satu blok teks |
-| `article` | `heading`, `paragraphs[]`, `align?`, `headingAlign?`, `spaceAfter?` | Judul pasal + uraian |
-| `list` | `style`, `items[]`, `spaceAfter?` | `style`: `bullet` \| `numbered` \| `alphabetic` |
-| `table` | `columns[]`, `rows[]`, `spaceAfter?` | Kolom: `{ key, label, format? }`, `format`: `text` \| `number` \| `currency` \| `date` |
+| `article` | `heading`, `paragraphs[]`, `align?`, `headingAlign?`, `spaceAfter?`, `fieldSpacing?` | Judul pasal + uraian |
+| `list` | `style`, `items[]`, `spaceAfter?`, `fieldSpacing?` | `style`: `bullet` \| `numbered` \| `alphabetic` |
+| `table` | `columns[]`, `rows[]`, `spaceAfter?`, `fieldSpacing?` | Kolom: `{ key, label, format? }`, `format`: `text` \| `number` \| `currency` \| `date` |
 | `pageBreak` | — | Memaksa halaman baru |
 | `signature` | `leftRole`, `rightRole`, … | Blok tanda tangan (tepat satu per bahasa) |
+| `closing` | `text`, `spaceAfter?`, `fieldSpacing?` | Teks penutup (tempat/tanggal + organisasi) di luar kotak, tepat di atas tanda tangan |
 
 Setiap blok memiliki `id` unik (tidak boleh duplikat dalam satu bahasa).
 
@@ -155,6 +156,49 @@ Template tanpa mark **dan** tanpa `align` mengeksekusi kode yang sama seperti se
 | Normalisasi bersama | `contracts/block-spacing.ts` (`normalizeBlockSpaceAfter`, `blockSpaceAfterPts`) |
 | Batas maksimum | `MAX_BLOCK_SPACE_AFTER` (`block-spacing.ts`) |
 
+## Spasi Antar Isi dalam Satu Blok (`fieldSpacing`)
+
+`fieldSpacing` adalah **properti tingkat blok** berupa bilangan bulat **0–40 pt** — jarak vertikal **tambahan ANTAR field di dalam satu blok**, di atas jarak bawaan. Berlaku untuk **kedua keluarga** dengan himpunan tipe blok yang **sama**.
+
+- **Satu nilai per blok.** Berlaku seragam untuk semua jarak internal blok itu (tidak ada kontrol terpisah per jenis jarak).
+- **Aditif, bukan menimpa.** `fieldSpacing: 6` = "tambah 6 pt". `undefined`/`0` → tidak ada jarak tambahan (perilaku lama persis).
+- **Hanya di antara field, bukan setelah field terakhir.** Jarak bawah blok tetap milik `spaceAfter`, sehingga tidak ada penjumlahan ganda.
+- **Dibuang di puncak halaman/kolom.** Bila blok terpotong ke halaman/kolom berikutnya, jarak tidak dicetak di puncak halaman baru (sama seperti `spaceAfter` antar-blok).
+- **Himpunan tipe** (`FIELD_SPACING_CAPABLE_BLOCKS` di `contracts/block-spacing.ts`): `article`, `list`, `table`, `closing`. `title`/`subtitle`/`paragraph` hanya punya satu field, dan `signature` adalah tabel dua kolom sejajar — keduanya ditolak validator.
+
+### Arti per Tipe Blok
+
+| Tipe | Field | Penerapan |
+|---|---|---|
+| `article` | judul, uraian 1..n | jarak sebelum uraian ke-1 dan seterusnya (`gapBefore` baris/field), bukan sebelum judul |
+| `list` | poin 1..n | jarak sebelum poin ke-2 dan seterusnya |
+| `table` | baris data | menambah **tinggi baris** sebesar N pt (N/2 atas + N/2 bawah) — bukan pita kosong di antara garis |
+| `closing` | baris logis (Enter) | jarak hanya antar baris yang dipisahkan Enter; baris hasil lipatan tetap rapat |
+
+### MITRA: pembulatan ke grid
+
+MITRA memakai baseline grid (`mitraPitch()` ≈ 15.8 pt) agar baseline kolom kiri/kanan sejajar. Karena itu `fieldSpacing` **dibulatkan KE ATAS** ke kelipatan grid:
+
+```
+fieldSpacing: 6   → 1 baris grid (≈15.8 pt)
+fieldSpacing: 16  → 2 baris grid (≈31.6 pt)
+```
+
+Editor menampilkan hasil efektifnya ("1 baris · 15.8 pt") supaya tidak ada nilai yang "diam-diam" berubah. Pengecualian: **tabel** dan **penutup** berada di luar grid, jadi nilainya dipakai apa adanya dalam pt.
+
+### PKWT: baris ID/EN terkunci
+
+Kolom ID dan EN terkunci per baris, jadi `fieldSpacing` adalah **satu nilai untuk baris gabungan** = **max** kedua bahasa. Menyetel hanya di tab Indonesia tetap terasa, dan kesejajaran baris tidak pernah pecah.
+
+| Aspek | Nilai |
+|---|---|
+| Properti | `block.fieldSpacing` (integer pt) |
+| Rentang sah | `0`–`40` |
+| Preset editor | Rapat `0`, Normal `undefined`, Renggang `12`, Ekstra `20`, Kustom `0–40` (sama dengan `spaceAfter`) |
+| Normalisasi bersama | `contracts/block-spacing.ts` (`normalizeFieldSpacing`, `fieldSpacingPts`) |
+| Batas maksimum | `MAX_FIELD_SPACING` (`block-spacing.ts`) |
+| Kontrol editor | `BlockSpaceControl.vue` mode `field`, hanya tampil bila blok punya ≥2 field |
+
 ## Blok Tabel (PKWT & MITRA)
 
 Blok `table` dirender oleh kedua keluarga, dengan model yang berbeda:
@@ -191,6 +235,7 @@ Aturan utama:
 - `id` blok tidak boleh duplikat; `type` harus salah satu dari `BLOCK_TYPES`.
 - `align`/`headingAlign` harus bernilai sah dan pada tipe blok yang mendukungnya.
 - `spaceAfter` harus bilangan bulat 0–40, hanya pada blok yang mengalir ke dokumen (`spaceCapableBlocks(family)`), untuk keluarga MITRA maupun PKWT.
+- `fieldSpacing` harus bilangan bulat 0–40, hanya pada `article`/`list`/`table`/`closing` (`FIELD_SPACING_CAPABLE_BLOCKS`) — sama untuk MITRA dan PKWT.
 - Mark hanya boleh pada `paragraph.text` dan `article.paragraphs[]`.
 - Placeholder harus terdaftar di katalog field; sintaks `&#123;&#123;...&#125;&#125;` yang rusak ditolak.
 - Judul pasal dinormalisasi maksimal 2 baris (`normalizeArticleHeadings`) — menutup celah paste dari Word.

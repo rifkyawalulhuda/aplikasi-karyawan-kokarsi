@@ -12,6 +12,8 @@ import {
   formatMitraCell,
   renderMitraLayout,
   renderMitraSignature,
+  mitraClosingHeight,
+  mitraClosingLineCount,
 } from './mitra-layout.engine'
 import { createMitraPdfBuffer, resolveMitraFonts } from './mitra-document.renderer'
 import { parseInlineRuns, runsToText } from './inline-marks'
@@ -1257,4 +1259,186 @@ describe('MITRA — mark di PDF NYATA', () => {
     expect(drawn.some(t => t.includes('\n'))).toBe(true)
   })
 })
+
+/**
+ * `fieldSpacing` — jarak ANTAR field di dalam satu blok (MITRA).
+ *
+ * Semua jarak di MITRA adalah kelipatan `PITCH` supaya baseline kedua kolom
+ * tetap sejajar; karena itu nilai pt dibulatkan KE ATAS ke grid. Tanpa properti,
+ * geometri harus IDENTIK dengan sebelum fitur ini ada.
+ */
+describe('MITRA — fieldSpacing (jarak antar isi dalam satu blok)', () => {
+  const fontsDir = fonts()
+  async function draw(
+    blocks: any[],
+  ): Promise<{ buf: Buffer; texts: Array<{ text: string; x: number; y: number }> }> {
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>((res) => doc.on('end', () => res()))
+    const texts: Array<{ text: string; x: number; y: number }> = []
+    const realText = doc.text.bind(doc)
+    ;(doc as any).text = (text: any, x?: any, ...rest: any[]) => {
+      if (typeof text === 'string' && typeof x === 'number') {
+        texts.push({ text, x, y: typeof rest[0] === 'number' ? rest[0] : -1 })
+      }
+      return realText(text, x, ...rest)
+    }
+    renderMitraLayout(doc, blocks, {
+      values: {},
+      title: 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fontsDir,
+    })
+    doc.end()
+    await done
+    return { buf: Buffer.concat(buffers), texts }
+  }
+
+  const yOf = (r: { texts: Array<{ text: string; y: number }> }, needle: string) =>
+    r.texts.find(t => t.text.includes(needle))?.y ?? -1
+
+  /** Pengisi: memastikan blok yang diuji tetap berada di kolom KIRI. */
+  const fillers = (n = 26) =>
+    Array.from({ length: n }, (_, i) => ({
+      type: 'paragraph',
+      text: `FILL_${i + 1} ` + 'kata '.repeat(20),
+    }))
+
+  /** Artikel 2 uraian: jarak judul↔uraian dan uraian↔uraian. */
+  const articleBlocks = (fieldSpacing?: number) => [
+    { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+    {
+      type: 'article',
+      heading: 'PASAL 1',
+      paragraphs: ['URAIAN_A', 'URAIAN_B'],
+      fieldSpacing,
+    },
+    ...fillers(),
+    { type: 'signature' },
+  ]
+
+  it('tanpa fieldSpacing, geometri IDENTIK (nol regresi)', async () => {
+    const a = await draw(articleBlocks() as any)
+    const b = await draw(articleBlocks(undefined) as any)
+    for (const needle of ['PASAL 1', 'URAIAN_A', 'URAIAN_B']) {
+      expect(yOf(a, needle)).toBeCloseTo(yOf(b, needle), 6)
+    }
+  })
+
+  it('article: judul↔uraian dan uraian↔uraian masing-masing +1 baris grid', async () => {
+    const base = await draw(articleBlocks() as any)
+    // 6pt < PITCH (15.8pt) → dibulatkan ke atas menjadi 1 baris grid.
+    const spaced = await draw(articleBlocks(6) as any)
+    const pitch = gridPitch()
+
+    // Judul tidak bergeser: jarak hanya DI ANTARA field.
+    expect(yOf(spaced, 'PASAL 1')).toBeCloseTo(yOf(base, 'PASAL 1'), 1)
+    // Uraian pertama turun 1 baris dari judul ...
+    expect(yOf(spaced, 'URAIAN_A') - yOf(base, 'URAIAN_A')).toBeCloseTo(pitch, 1)
+    // ... dan uraian kedua turun 2 baris total (2 jarak).
+    expect(yOf(spaced, 'URAIAN_B') - yOf(base, 'URAIAN_B')).toBeCloseTo(pitch * 2, 1)
+  })
+
+  it('list: jarak hanya ANTAR poin, bukan sebelum poin pertama', async () => {
+    const build = (fieldSpacing?: number) => [
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      { type: 'list', style: 'numbered', items: ['POIN_1', 'POIN_2', 'POIN_3'], fieldSpacing },
+      ...fillers(),
+      { type: 'signature' },
+    ]
+    const base = await draw(build() as any)
+    const spaced = await draw(build(8) as any)
+    const pitch = gridPitch()
+
+    expect(yOf(spaced, 'POIN_1')).toBeCloseTo(yOf(base, 'POIN_1'), 1)
+    expect(yOf(spaced, 'POIN_2') - yOf(base, 'POIN_2')).toBeCloseTo(pitch, 1)
+    expect(yOf(spaced, 'POIN_3') - yOf(base, 'POIN_3')).toBeCloseTo(pitch * 2, 1)
+  })
+
+  it('table: fieldSpacing menambah TINGGI baris (bukan pita kosong)', async () => {
+    const build = (fieldSpacing?: number) => [
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      {
+        type: 'table',
+        columns: [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }],
+        rows: [{ a: 'BARIS_1', b: 'x' }, { a: 'BARIS_2', b: 'y' }],
+        fieldSpacing,
+      },
+      ...fillers(),
+      { type: 'signature' },
+    ]
+    const base = await draw(build() as any)
+    const spaced = await draw(build(6) as any)
+    // Baris pertama tidak bergeser (padding dibagi atas/bawah), tetapi baris
+    // DATA pertama ikut terdorong oleh header yang juga meninggi.
+    const d1 = yOf(spaced, 'BARIS_1') - yOf(base, 'BARIS_1')
+    const d2 = yOf(spaced, 'BARIS_2') - yOf(base, 'BARIS_2')
+    expect(d1).toBeCloseTo(6 + 3, 1) // tinggi header (+6) + padding atas baris 1 (+3)
+    expect(d2).toBeCloseTo(12 + 3, 1) // header + baris 1 (+12) + padding atas (+3)
+  })
+
+  it('penutup: jarak hanya ANTAR baris logis, bukan baris lipatan', () => {
+    // Diuji pada fungsi murni: baris penutup dirender DI LUAR kotak oleh
+    // `renderMitraSignature`, bukan oleh `renderMitraLayout`.
+    // [['A'], ['B'], ['C']] = 3 baris logis → 2 jarak.
+    expect(mitraClosingHeight([['A'], ['B'], ['C']], 10)).toBeCloseTo(
+      mitraClosingHeight([['A'], ['B'], ['C']], 0) + 20,
+      6,
+    )
+    // Satu baris logis yang TERLIPAT menjadi 2 baris tetap dihitung SATU jarak:
+    // jarak hanya antar baris logis, bukan antar baris lipatan.
+    expect(mitraClosingHeight([['A', 'A2'], ['B']], 10)).toBeCloseTo(
+      mitraClosingHeight([['A', 'A2'], ['B']], 0) + 10,
+      6,
+    )
+    // Tanpa jarak, tinggi identik dengan rumus lama:
+    // (n - 1) * lineAdvance + fontSize untuk n baris tercetak.
+    expect(mitraClosingHeight([['A'], ['B'], ['C']], 0)).toBeCloseTo(
+      2 * MITRA_GEOMETRY.closing.lineAdvance + MITRA_GEOMETRY.closing.fontSize,
+      6,
+    )
+  })
+
+  it('keseimbangan kolom TETAP terjaga saat fieldSpacing dipakai (definisi produksi)', async () => {
+    // Keseimbangan kolom dihitung ulang oleh `planMitraLayout`. Jarak antar isi
+    // yang ditambahkan admin tidak boleh membuat kolom kanan jauh lebih pendek.
+    const G = MITRA_GEOMETRY
+    const toGlobal = (page: number, y: number) => {
+      let total = 0
+      for (let p = 0; p < page; p++) {
+        total += p === 0
+          ? G.firstPageBoxBottom - G.firstPageBoxTop
+          : G.contPageBoxBottom - G.contPageBoxTop
+      }
+      return total + (y - (page === 0 ? G.firstPageBoxTop : G.contPageBoxTop))
+    }
+    const content: SeedContentDefinition = definitionToContentDefinition(
+      getContractDocumentDefinition('MITRA_DRIVER'),
+    )
+    const blocks = ((content?.languages?.id ?? []) as any[]).map((b: any) =>
+      b?.type === 'article' || b?.type === 'list' ? { ...b, fieldSpacing: 8 } : b
+    )
+    expect(blocks.some((b: any) => b?.fieldSpacing === 8)).toBe(true)
+
+    const { doc, buffers } = makeDoc()
+    const done = new Promise<void>((res) => doc.on('end', () => res()))
+    renderMitraLayout(doc, blocks, {
+      values: { ...MITRA_PREVIEW_VALUES },
+      title: 'PERJANJIAN KEMITRAAN',
+      numberLabel: 'Nomor: 1/X/2026',
+      dateLabel: 'Tanggal 1 Januari 2026',
+      fonts: fontsDir,
+      reserveSignatureZone: true,
+    })
+    doc.end()
+    await done
+    expect(Buffer.concat(buffers).subarray(0, 5).toString()).toBe('%PDF-')
+
+    const end = (doc as any).__mitraFinalPage.streamEnd as Array<{ page: number, y: number }>
+    const left = toGlobal(end[0].page, end[0].y)
+    const right = toGlobal(end[1].page, end[1].y)
+    expect(Math.abs(left - right)).toBeLessThanOrEqual(gridPitch() * 3)
+  }, 120_000)
+})
+
 

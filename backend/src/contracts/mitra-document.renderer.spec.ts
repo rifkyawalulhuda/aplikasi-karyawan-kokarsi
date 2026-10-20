@@ -222,6 +222,55 @@ describe('MITRA — blok penutup (tempat/tanggal + organisasi)', () => {
     expect(box.top - box.boxBottomOnLast).toBeCloseTo(50, 0)
     doc.end()
   })
+
+  /**
+   * `fieldSpacing` blok penutup: jarak hanya antar BARIS LOGIS. Karena tinggi
+   * zona tanda tangan dipakai untuk memutuskan pemendekan kotak, nilai ini
+   * harus benar-benar menambah `closingBottom` — kalau tidak, tanda tangan bisa
+   * menimpa teks penutup.
+   */
+  maybeRender('fieldSpacing menambah jarak antar baris logis penutup', () => {
+    const render = (fieldSpacing?: number) => {
+      const doc = new PDFDocument({
+        size: [595.5, 842.25],
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        bufferPages: true,
+      })
+      doc.on('data', () => {})
+      renderMitraDocumentInto(doc, {
+        blocks: [
+          { id: 'title', type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+          { id: 'p', type: 'paragraph', text: 'Isi.' },
+          {
+            id: 'place',
+            type: 'closing',
+            text: 'BARIS_SATU\nBARIS_DUA\nBARIS_TIGA',
+            fieldSpacing,
+          },
+          { id: 'sig', type: 'signature' },
+        ],
+        values: {},
+        fallbackTitle: 'PERJANJIAN KEMITRAAN',
+        fonts: resolveMitraFonts(),
+      })
+      const box = (doc as any).__mitraSignatureBox
+      doc.end()
+      return box
+    }
+
+    const base = render()
+    const spaced = render(10)
+    // Jumlah baris tercetak TIDAK berubah (3 baris logis, tanpa lipatan).
+    expect(base.closingLineCount).toBe(3)
+    expect(spaced.closingLineCount).toBe(3)
+    // 3 baris logis → 2 jarak → +20pt.
+    expect(spaced.closingBottom - spaced.closingTop).toBeCloseTo(
+      base.closingBottom - base.closingTop + 20,
+      3,
+    )
+    // Tabel tanda tangan tetap menempel di bawah teks penutup.
+    expect(spaced.top).toBeGreaterThanOrEqual(spaced.closingBottom)
+  })
 })
 
 describe('MITRA_PREVIEW_VALUES', () => {

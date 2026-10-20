@@ -8,6 +8,7 @@
  * bagian "Detail teknis" yang tertutup.
  */
 import { stripInlineMarks } from '~/utils/inline-marks'
+import { fieldSpacingFieldCount, fieldSpacingGridPitch } from '~/utils/field-spacing'
 
 interface Props {
   block: any
@@ -31,12 +32,18 @@ interface Props {
    * mengalir ke dokumen).
    */
   spaceTypes?: string[]
+  /**
+   * Keluarga template. Dipakai hanya untuk MENAMPILKAN hasil efektif jarak
+   * antar isi: MITRA memakai baseline grid, PKWT tidak.
+   */
+  family?: 'MITRA' | 'PKWT'
 }
 const props = withDefaults(defineProps<Props>(), {
   headingAlignDefault: 'center',
   dragging: false,
   dropIndicator: 'none',
-  spaceTypes: () => []
+  spaceTypes: () => [],
+  family: 'MITRA'
 })
 const emit = defineEmits<{
   'move': [direction: number]
@@ -73,6 +80,26 @@ const rowList = computed<Record<string, string>[]>(() => props.block?.rows ?? []
  * `spaceCapableBlocks()` di `backend/.../template-schema.validator.ts`.
  */
 const showSpacing = computed(() => (props.spaceTypes ?? []).includes(props.block?.type))
+
+/**
+ * Tipe blok yang mendukung `fieldSpacing` (jarak ANTAR isi di dalam blok).
+ * Himpunannya SAMA untuk MITRA dan PKWT — lihat
+ * `FIELD_SPACING_CAPABLE_BLOCKS` di `backend/src/contracts/block-spacing.ts`.
+ */
+const FIELD_SPACING_TYPES = ['article', 'list', 'table', 'closing']
+
+/**
+ * Kontrol "Spasi antar isi" hanya muncul bila blok benar-benar punya ≥2 isi.
+ * Pada blok berisi satu field jaraknya tidak akan pernah tercetak, dan kontrol
+ * yang tidak berefek hanya membingungkan.
+ */
+const showFieldSpacing = computed(() =>
+  FIELD_SPACING_TYPES.includes(props.block?.type)
+  && fieldSpacingFieldCount(props.block) >= 2
+)
+
+/** Pitch grid untuk menampilkan hasil efektif (MITRA: artikel & daftar saja). */
+const fieldSpacingPitch = computed(() => fieldSpacingGridPitch(props.block, props.family))
 
 /** Label ringkas jarak aktif untuk badge kepala kartu. */
 const spaceBadge = computed<string | null>(() => {
@@ -749,9 +776,23 @@ function addColumn() {
       />
 
       <UFormField
+        v-if="showFieldSpacing"
+        label="Spasi antar isi"
+        hint="Jarak tambahan di antara isi blok ini (judul↔uraian, poin↔poin, baris↔baris)"
+      >
+        <KontrakBlockSpaceControl
+          mode="field"
+          :space-after="block.fieldSpacing"
+          :grid-pitch="fieldSpacingPitch"
+          :disabled="!editable"
+          @update:space-after="block.fieldSpacing = $event"
+        />
+      </UFormField>
+
+      <UFormField
         v-if="showSpacing"
         label="Spasi antar blok"
-        hint="Jarak tambahan di bawah blok ini (khusus MITRA)"
+        hint="Jarak tambahan di bawah blok ini, sebelum blok berikutnya"
       >
         <KontrakBlockSpaceControl
           :space-after="block.spaceAfter"

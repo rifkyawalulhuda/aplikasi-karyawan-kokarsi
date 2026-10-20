@@ -16,7 +16,7 @@
  * atau menulis ulang konten legal.
  */
 import { computeColumnWidths, computeRowHeight, wrapCellLines } from './table-layout.helpers'
-import { blockSpaceAfterPts } from './block-spacing'
+import { blockSpaceAfterPts, fieldSpacingPts } from './block-spacing'
 import { hasInlineMarks, parseInlineRuns, runsToText, type InlineRun } from './inline-marks'
 import {
   drawRunsLine,
@@ -227,6 +227,11 @@ export interface MitraSignatureOptions {
    * kotak, tepat di atas tabel tanda tangan. Kosong/`undefined` = perilaku lama.
    */
   closingLines?: string[]
+  /**
+   * Jarak tambahan ANTAR baris logis teks penutup (`closing.fieldSpacing`, pt).
+   * Hanya antar baris yang dipisahkan Enter; baris lipatan tetap rapat.
+   */
+  closingFieldSpacing?: number
 }
 
 /** Padding teks di dalam sel tabel tanda tangan (agar tidak menempel garis). */
@@ -278,21 +283,46 @@ export function mitraSignatureTableHeight(doc: any, o?: MitraSignatureOptions): 
   return mitraSignatureRows(doc, o).heights.reduce((a, b) => a + b, 0)
 }
 
-/** Bungkus baris penutup selebar `closing.maxWidth` (pitch baris tetap seragam). */
-function wrapMitraClosingLines(doc: any, lines: string[]): string[] {
+/**
+ * Bungkus baris penutup selebar `closing.maxWidth`, DIKELOMPOKKAN per baris
+ * logis.
+ *
+ * Struktur bersarang (`string[][]`) diperlukan oleh `fieldSpacing`: jarak hanya
+ * boleh disisipkan ANTAR baris logis (yang dipisahkan Enter), bukan antar baris
+ * hasil lipatan. Baris lipatan tetap rapat seperti paragraf biasa.
+ */
+function wrapMitraClosingLines(doc: any, lines: string[]): string[][] {
   const G = MITRA_GEOMETRY
   if (lines.length === 0) return []
   doc.font(MITRA_FONT_NAMES.regular).fontSize(G.closing.fontSize)
-  return lines.flatMap(line =>
+  return lines.map(line =>
     wrapCellLines(doc, line, G.closing.maxWidth, MITRA_FONT_NAMES.regular, G.closing.fontSize)
   )
 }
 
-/** Tinggi blok penutup (pt) untuk baris yang sudah dibungkus. */
-export function mitraClosingHeight(wrappedLines: string[]): number {
-  if (wrappedLines.length === 0) return 0
+/** Jumlah baris tercetak (setelah pelipatan) dari baris penutup berkelompok. */
+export function mitraClosingLineCount(groups: string[][]): number {
+  return groups.reduce((n, g) => n + g.length, 0)
+}
+
+/**
+ * Tinggi blok penutup (pt) untuk baris yang sudah dibungkus.
+ *
+ * @param fieldSpacing jarak tambahan ANTAR baris logis (pt). Baris lipatan tidak
+ *        diberi jarak. `0`/tidak diisi = tinggi lama persis.
+ */
+export function mitraClosingHeight(groups: string[][], fieldSpacing = 0): number {
+  if (groups.length === 0) return 0
   const G = MITRA_GEOMETRY
-  return (wrappedLines.length - 1) * G.closing.lineAdvance + G.closing.fontSize
+  // Rumus LAMA dipertahankan persis untuk seluruh baris tercetak: baris
+  // terakhir hanya setinggi glyph-nya. Jarak antar field ditambahkan TERPISAH
+  // sebanyak (jumlah baris logis - 1), sehingga `fieldSpacing: 0` identik.
+  const lineCount = mitraClosingLineCount(groups)
+  return (
+    (lineCount - 1) * G.closing.lineAdvance
+    + G.closing.fontSize
+    + Math.max(0, groups.length - 1) * fieldSpacing
+  )
 }
 
 /**
@@ -305,28 +335,42 @@ export function mitraSignatureZoneHeight(doc: any, o?: MitraSignatureOptions): n
   const table = mitraSignatureTableHeight(doc, o)
   const wrapped = wrapMitraClosingLines(doc, o?.closingLines ?? [])
   if (wrapped.length === 0) return G.signatureTable.gapFromBox + table
-  return G.closing.gapFromBox + mitraClosingHeight(wrapped) + table
+  return G.closing.gapFromBox + mitraClosingHeight(wrapped, closingFieldSpacing(o)) + table
+}
+
+/** Jarak antar baris penutup (`closing.fieldSpacing`), dinormalisasi. */
+function closingFieldSpacing(o?: MitraSignatureOptions): number {
+  return fieldSpacingPts(o?.closingFieldSpacing)
 }
 
 /**
  * Gambar teks penutup DI LUAR kotak, dipusatkan pada lebar halaman.
  * `top` = glyph-top baris pertama.
+ *
+ * @param fieldSpacing jarak tambahan antar BARIS LOGIS (pt). Baris lipatan
+ *        tetap rapat. `0`/tidak diisi = hasil lama persis.
  */
 export function renderMitraClosing(
   doc: any,
-  wrappedLines: string[],
+  groups: string[][],
   top: number,
   pageIndex: number,
+  fieldSpacing = 0,
 ): void {
-  if (wrappedLines.length === 0) return
+  if (groups.length === 0) return
   const G = MITRA_GEOMETRY
   doc.switchToPage(pageIndex)
   doc.font(MITRA_FONT_NAMES.regular).fontSize(G.closing.fontSize).fillColor('#000000')
-  wrappedLines.forEach((line, i) => {
-    doc.text(line, 0, top + i * G.closing.lineAdvance, {
-      width: G.pageWidth,
-      align: 'center',
-      lineBreak: false
+  let cursor = top
+  groups.forEach((group, gi) => {
+    if (gi > 0) cursor += fieldSpacing
+    group.forEach((line) => {
+      doc.text(line, 0, cursor, {
+        width: G.pageWidth,
+        align: 'center',
+        lineBreak: false
+      })
+      cursor += G.closing.lineAdvance
     })
   })
 }
@@ -1064,6 +1108,39 @@ function renderMitraPass(
     return align ? { ...base, align } : base
   }
 
+  /**
+   * Jarak ANTAR field di dalam satu blok (`block.fieldSpacing`), dibulatkan KE
+   * ATAS ke garis grid.
+   *
+   * Pembulatan wajib: jarak yang bukan kelipatan `PITCH` akan menggeser baseline
+   * kolom ini dan memutus kesejajaran kiri/kanan. Karena nilainya selalu
+   * bilangan bulat baris, jarak ini juga aman dipakai sebagai tambahan
+   * `keepWithNextLines` pada judul pasal.
+   */
+  const fieldGapOf = (block: any): number => {
+    const pts = fieldSpacingPts(block?.fieldSpacing)
+    if (pts <= 0) return 0
+    return Math.ceil(pts / PITCH - 1e-6) * PITCH
+  }
+
+  /**
+   * Terapkan jarak sebelum field ke-`index` (index 0 = field pertama, tanpa
+   * jarak).
+   *
+   * Jarak DIBUANG di puncak kolom/halaman — sama seperti `spaceAfter` antar
+   * blok. Menyisipkan ruang kosong di atas kolom baru hanya mendorong teks turun
+   * dari `boxTop` tanpa ada yang dipisahkan.
+   */
+  const fieldGapBefore = (gap: number, index: number) => {
+    if (index <= 0 || gap <= 0) return
+    const s = currentStream
+    const columnTop = boxTop(streamPage[s]) + 2
+    if (y <= columnTop + 0.01) return
+    const pageBefore = streamPage[s]
+    ensureSpace(gap)
+    if (streamPage[s] === pageBefore) y += gap
+  }
+
   const renderBlock = (block: any) => {
     switch (block?.type) {
       case 'title':
@@ -1107,6 +1184,8 @@ function renderMitraPass(
         // diam-diam menggeser judul (bug editor: tombol judul menampilkan
         // "Rata Tengah" tetapi PDF mencetak rata kiri).
         const headingAlign = mitraBlockAlign(block?.headingAlign)
+        // Jarak antar isi pasal: judul↔uraian dan uraian↔uraian.
+        const gap = fieldGapOf(block)
         if (block.heading) {
           writeText(block.heading, {
             font: F.bold,
@@ -1115,12 +1194,17 @@ function renderMitraPass(
             align: headingAlign ?? 'center',
             gapBefore: HEADING_GAP,
             gapAfter: 0,
-            keepWithNextLines: 3,
+            // Jarak antar isi ikut dihitung supaya judul tidak pernah
+            // terpisah dari uraian pertamanya hanya karena ada jarak tambahan.
+            keepWithNextLines: 3 + Math.round(gap / PITCH),
           })
         }
-        for (const p of block.paragraphs ?? []) {
+        ;(block.paragraphs ?? []).forEach((p: unknown, i: number) => {
+          // index 0 = field pertama blok (judul) → tanpa jarak; uraian pertama
+          // dan seterusnya mendapat jarak bila disetel.
+          fieldGapBefore(gap, i + (block.heading ? 1 : 0))
           writeRuns(String(p), paragraphOpts(String(p), align))
-        }
+        })
         break
       }
 
@@ -1136,6 +1220,8 @@ function renderMitraPass(
         const align = mitraBlockAlign(block?.align) ?? 'left'
         // Ruang penanda mengikuti label TERLEBAR di blok ini ("10. " > "1. ").
         const textIndent = mitraListTextIndent(doc, items, style, base)
+        // Jarak antar poin (`fieldSpacing`), dibulatkan ke atas ke grid.
+        const gap = fieldGapOf(block)
 
         items.forEach((item: any, i: number) => {
           const raw = typeof item === 'string' ? item : (item?.text ?? '')
@@ -1144,6 +1230,9 @@ function renderMitraPass(
           const level = typeof item === 'object' ? (item?.level ?? 0) : 0
           const prefix = listPrefix(style, base + i)
           const markerIndent = level * G.listHangingIndent
+          // Poin lanjutan (termasuk poin pertama bagian ekor saat daftar dipecah
+          // antar-kolom) mendapat jarak; poin pertama blok tidak.
+          fieldGapBefore(gap, i + (base > 0 ? 1 : 0))
           const s = currentStream
 
           // Pastikan baris PERTAMA muat sebelum penanda digambar. Tanpa ini,
@@ -1183,6 +1272,17 @@ function renderMitraPass(
         // Lebar kolom dinormalisasi (bobot relatif) supaya totalnya SELALU
         // selebar kolom — memperbaiki tabel yang dulu meluber keluar halaman.
         const widths = computeColumnWidths(columns, colInnerWidth(currentStream))
+        /**
+         * Jarak antar baris tabel (`fieldSpacing`), TIDAK dibulatkan ke grid.
+         *
+         * Tabel memang berada di luar baseline grid (setelahnya `y` di-snap
+         * kembali), jadi menambah tinggi baris tidak menggeser baseline teks
+         * berikutnya. Nilainya dibagi rata atas/bawah: `fieldSpacing: 6` =
+         * +6pt total per baris (3pt di atas, 3pt di bawah).
+         */
+        const rowPad = fieldSpacingPts(block?.fieldSpacing)
+        const rowTextTop = 3 + rowPad / 2
+
 
         /**
          * Gambar satu baris. Bila tinggi baris MELEBIHI tinggi halaman penuh,
@@ -1193,7 +1293,7 @@ function renderMitraPass(
           const font = bold ? F.bold : F.regular
           doc.font(font).fontSize(size)
           const lineHeight = doc.heightOfString('Xg', { lineGap: 0 })
-          const rowHeight = computeRowHeight(doc, cells, widths, size, 8, 6)
+          const rowHeight = computeRowHeight(doc, cells, widths, size, 8, 6) + rowPad
           const s = currentStream
           const maxBody = boxBottom(streamPage[s]) - boxTop(streamPage[s]) - 4
 
@@ -1206,7 +1306,7 @@ function renderMitraPass(
               doc
                 .font(font)
                 .fontSize(size)
-                .text(cells[ci] ?? '', x + 4, y + 3, {
+                .text(cells[ci] ?? '', x + 4, y + rowTextTop, {
                   width: Math.max(widths[ci] - 8, 1),
                   align: (c.align ?? 'left') as any,
                 })
@@ -1226,7 +1326,7 @@ function renderMitraPass(
             const avail = boxBottom(streamPage[s]) - y
             const fit = Math.max(1, Math.floor((avail - 6) / lineHeight))
             const take = Math.min(fit, maxLines - consumed)
-            const segHeight = take * lineHeight + 6
+            const segHeight = take * lineHeight + 6 + rowPad
             const x0 = colX(currentStream)
             let x = x0
             columns.forEach((c: any, ci: number) => {
@@ -1235,7 +1335,7 @@ function renderMitraPass(
               doc
                 .font(font)
                 .fontSize(size)
-                .text(chunk, x + 4, y + 3, {
+                .text(chunk, x + 4, y + rowTextTop, {
                   width: Math.max(widths[ci] - 8, 1),
                   align: (c.align ?? 'left') as any,
                   lineGap: 0,
@@ -1594,6 +1694,12 @@ function splitBlockAtHeight(
     // Sama dengan renderer: judul TIDAK mewarisi `align` uraian.
     const headingAlign = mitraBlockAlign(block?.headingAlign) ?? 'center'
     const size = G.font.body
+    // Jarak antar isi ikut dihitung saat memilih titik potong — kalau tidak,
+    // bagian-awal bisa meluber karena renderer menambahkan jarak yang tidak
+    // diperhitungkan di sini.
+    const gapPts = fieldSpacingPts(block?.fieldSpacing)
+    const pitch = mitraPitch(doc)
+    const gap = gapPts <= 0 ? 0 : Math.ceil(gapPts / pitch - 1e-6) * pitch
 
     let acc = 0
     if (heading) {
@@ -1610,6 +1716,8 @@ function splitBlockAtHeight(
 
     for (let i = 0; i < paragraphs.length; i++) {
       const p = paragraphs[i]
+      // Field pertama blok (judul) tidak diberi jarak; uraian pertama dst. diberi.
+      if (i + (heading ? 1 : 0) > 0) acc += gap
       const h = measureMitraTextHeight(doc, p, {
         font: F.regular,
         size,
@@ -1657,8 +1765,14 @@ function splitBlockAtHeight(
     const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
     const textIndent = mitraListTextIndent(doc, block.items ?? [], block.style ?? 'bullet', base)
     const size = G.font.body
+    // Jarak antar poin ikut dihitung (lihat catatan pada blok `article`).
+    const gapPts = fieldSpacingPts(block?.fieldSpacing)
+    const pitch = mitraPitch(doc)
+    const gap = gapPts <= 0 ? 0 : Math.ceil(gapPts / pitch - 1e-6) * pitch
     let acc = 0
     for (let i = 0; i < items.length; i++) {
+      // Poin pertama blok tidak diberi jarak; poin lanjutan diberi.
+      if (i > 0 || base > 0) acc += gap
       // Sama dengan renderer & `measureBlockHeight`: teks saja (penanda
       // digambar terpisah) dengan indent konstan.
       const text = resolveMitraText(items[i], values)
@@ -1698,6 +1812,8 @@ function splitBlockAtHeight(
   if (columns.length === 0 || rows.length === 0) return null
   const size = G.font.body - 1
   const widths = computeColumnWidths(columns, width)
+  // Tinggi baris ikut `fieldSpacing`, sama dengan renderer (`rowPad`).
+  const rowPad = fieldSpacingPts(block?.fieldSpacing)
   let acc = 0
   if (block.header !== false) {
     acc += computeRowHeight(
@@ -1707,11 +1823,11 @@ function splitBlockAtHeight(
       size,
       8,
       6,
-    )
+    ) + rowPad
   }
   for (let i = 0; i < rows.length; i++) {
     const cells = columns.map((c: any) => String(rows[i]?.[c.key] ?? ''))
-    const h = computeRowHeight(doc, cells, widths, size, 8, 6)
+    const h = computeRowHeight(doc, cells, widths, size, 8, 6) + rowPad
     if (acc + h <= target) {
       acc += h
       continue
@@ -1766,13 +1882,19 @@ function measureBlockHeight(
     const align = mitraBlockAlign(block?.align)
     // Sama dengan renderer: judul TIDAK mewarisi `align` uraian.
     const headingAlign = mitraBlockAlign(block?.headingAlign) ?? 'center'
+    // Jarak antar isi (`fieldSpacing`) — dibulatkan ke atas ke grid, sama
+    // dengan `fieldGapOf` di renderer.
+    const gapPts = fieldSpacingPts(block?.fieldSpacing)
+    const gap = gapPts <= 0 ? 0 : Math.ceil(gapPts / mitraPitch(doc) - 1e-6) * mitraPitch(doc)
     let total = 0
     if (heading) {
       total +=
         headingGap +
         measureMitraTextHeight(doc, heading, { font: F.bold, size, align: headingAlign, width })
     }
-    for (const p of paragraphs) {
+    paragraphs.forEach((p, i) => {
+      // Field pertama blok (judul) tidak diberi jarak.
+      if (i + (heading ? 1 : 0) > 0) total += gap
       total += measureMitraTextHeight(doc, p, {
         font: F.regular,
         size,
@@ -1780,7 +1902,7 @@ function measureBlockHeight(
         width,
         hang: NUMBERED_ITEM_RE.test(p) ? G.listHangingIndent : 0,
       })
-    }
+    })
     return total
   }
 
@@ -1788,12 +1910,17 @@ function measureBlockHeight(
     const items = block.items ?? []
     const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
     const textIndent = mitraListTextIndent(doc, items, block.style ?? 'bullet', base)
+    const gapPts = fieldSpacingPts(block?.fieldSpacing)
+    const gap = gapPts <= 0 ? 0 : Math.ceil(gapPts / mitraPitch(doc) - 1e-6) * mitraPitch(doc)
     let total = 0
+    let seen = 0
     items.forEach((item: any) => {
       const raw = typeof item === 'string' ? item : String(item?.text ?? '')
       const text = resolveMitraText(raw, values)
       if (!text) return
       const level = typeof item === 'object' ? (item?.level ?? 0) : 0
+      if (seen > 0 || base > 0) total += gap
+      seen += 1
       // Sama dengan renderer: teks dimulai setelah penanda, indent KONSTAN.
       total += measureMitraTextHeight(doc, text, {
         font: F.regular,
@@ -1812,6 +1939,9 @@ function measureBlockHeight(
     if (columns.length === 0) return 0
     const tableSize = G.font.body - 1
     const widths = computeColumnWidths(columns, width)
+    // `fieldSpacing` menambah tinggi SETIAP baris (termasuk baris header),
+    // sama dengan `rowPad` di renderer.
+    const rowPad = fieldSpacingPts(block?.fieldSpacing)
     let total = 0
     if (block.header !== false) {
       total += computeRowHeight(
@@ -1821,7 +1951,7 @@ function measureBlockHeight(
         tableSize,
         8,
         6,
-      )
+      ) + rowPad
     }
     for (const row of rows) {
       total += computeRowHeight(
@@ -1831,7 +1961,7 @@ function measureBlockHeight(
         tableSize,
         8,
         6,
-      )
+      ) + rowPad
     }
     return total
   }
@@ -2185,7 +2315,8 @@ export function renderMitraSignature(
    * melompat jauh seperti saat `gapFromBox` 50 dipakai sendirian.
    */
   const closingWrapped = wrapMitraClosingLines(doc, o.closingLines ?? [])
-  const closingH = mitraClosingHeight(closingWrapped)
+  const closingGap = closingFieldSpacing(o)
+  const closingH = mitraClosingHeight(closingWrapped, closingGap)
   let closingTop = boxBottomOnLast + (closingWrapped.length > 0 ? G.closing.gapFromBox : 0)
   let tableTop = closingWrapped.length > 0
     ? closingTop + closingH
@@ -2200,7 +2331,7 @@ export function renderMitraSignature(
   }
 
   doc.switchToPage(lastPage)
-  renderMitraClosing(doc, closingWrapped, closingTop, lastPage)
+  renderMitraClosing(doc, closingWrapped, closingTop, lastPage, closingGap)
 
   /**
    * Rekam posisi tabel yang BENAR-BENAR digambar (audit + verifikasi).
@@ -2216,7 +2347,7 @@ export function renderMitraSignature(
     /** Posisi teks penutup (0 baris = tidak ada blok penutup). */
     closingTop,
     closingBottom: closingTop + closingH,
-    closingLineCount: closingWrapped.length,
+    closingLineCount: mitraClosingLineCount(closingWrapped),
   }
 
   // Garis tabel
@@ -2249,3 +2380,4 @@ export function renderMitraSignature(
     rowTop += h
   })
 }
+

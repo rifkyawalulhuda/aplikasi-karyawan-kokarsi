@@ -331,6 +331,51 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
     expect(paras.map(p => p.spaceAfter)).toEqual([0, 0])
   })
 
+  it('fieldSpacing dibawa tiap paragraf blok (0 bila tidak diset)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [
+        {
+          id: 'a1',
+          type: 'article',
+          heading: 'PASAL 1',
+          paragraphs: ['satu', 'dua'],
+          fieldSpacing: 8,
+        },
+        { id: 'p2', type: 'paragraph', text: 'tiga' },
+      ],
+      values
+    )
+    // Ketiga paragraf blok artikel membawa nilai yang sama; engine yang
+    // memutuskan baris mana yang mendapat jarak.
+    expect(paras.map(p => p.fieldSpacing)).toEqual([8, 8, 8, 0])
+  })
+
+  it('fieldSpacing tabel dibawa ke objek tabel (padding baris)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{
+        id: 't1',
+        type: 'table',
+        columns: [{ key: 'label', label: 'Komponen' }],
+        rows: [{ label: 'Isi' }],
+        fieldSpacing: 6,
+      }],
+      values
+    )
+    expect(paras).toHaveLength(1)
+    expect(paras[0].table?.fieldSpacing).toBe(6)
+  })
+
+  it('fieldSpacing diabaikan bila nilainya tidak sah (perilaku lama)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [
+        { id: 'a1', type: 'article', heading: 'PASAL 1', paragraphs: ['satu'], fieldSpacing: 999 },
+        { id: 'l1', type: 'list', items: ['x'], fieldSpacing: -3 },
+      ],
+      values
+    )
+    expect(paras.map(p => p.fieldSpacing)).toEqual([0, 0, 0])
+  })
+
   it('blok table menghasilkan paragraf ber-`table` dengan sel terinterpolasi & terformat', () => {
     const paras = blocksToPkwtParagraphs(
       [{

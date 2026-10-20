@@ -15,6 +15,7 @@
  */
 import PDFDocument from 'pdfkit'
 import { interpolate } from './contract-block-renderer'
+import { fieldSpacingPts } from './block-spacing'
 import {
   MITRA_HEADER_CHROME,
   renderMitraLayout,
@@ -126,6 +127,7 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
    * dibuang, baris kosong dihilangkan.
    */
   const closingBlock = blocks.find((b: any) => b?.type === 'closing')
+  const closingFieldSpacingPts = fieldSpacingPts(closingBlock?.fieldSpacing)
   const closingLines = typeof closingBlock?.text === 'string'
     ? closingBlock.text
         .replace(/\r\n?/g, '\n')
@@ -160,6 +162,8 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     rightRole: text(sig?.rightParty)
       ?? (jobRole ? `( ${jobRole} )` : MITRA_HEADER_CHROME.signature.rightRoleFallback),
     closingLines,
+    // Jarak antar baris logis penutup (`fieldSpacing` blok `closing`).
+    closingFieldSpacing: closingFieldSpacingPts,
   }
 
   renderMitraLayout(doc, blocks, {

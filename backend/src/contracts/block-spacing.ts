@@ -37,3 +37,47 @@ export function blockSpaceAfterPts(value: unknown): number {
   const n = normalizeBlockSpaceAfter(value)
   return n === undefined ? 0 : n
 }
+
+/**
+ * Batas atas `fieldSpacing` (pt). Sama dengan `spaceAfter` supaya kedua kontrol
+ * spasi di editor punya rentang yang identik.
+ */
+export const MAX_FIELD_SPACING = MAX_BLOCK_SPACE_AFTER
+
+/**
+ * Blok yang boleh membawa `fieldSpacing` (jarak ANTAR field di dalam satu blok).
+ *
+ * Hanya blok yang benar-benar merender beberapa sub-elemen bertumpuk:
+ *  - `article` → judul ↔ uraian, dan uraian ↔ uraian
+ *  - `list`    → poin ↔ poin
+ *  - `table`   → baris ↔ baris (menambah tinggi baris)
+ *  - `closing` → baris logis ↔ baris logis
+ *
+ * `title`/`subtitle`/`paragraph` hanya punya SATU field, dan `signature` adalah
+ * tabel dua kolom sejajar (bukan tumpukan field), jadi keduanya tidak didukung.
+ * Sama untuk MITRA maupun PKWT — himpunannya sengaja seragam.
+ */
+export const FIELD_SPACING_CAPABLE_BLOCKS = ['article', 'list', 'table', 'closing'] as const
+
+/**
+ * Normalisasi nilai `fieldSpacing` mentah.
+ *
+ * Aturan sama dengan `spaceAfter`: hanya bilangan bulat `0..MAX_FIELD_SPACING`.
+ * Selain itu → `undefined` (perilaku lama: tanpa jarak tambahan).
+ */
+export function normalizeFieldSpacing(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return undefined
+  if (value < 0 || value > MAX_FIELD_SPACING) return undefined
+  return value
+}
+
+/**
+ * Jarak efektif antar field untuk renderer: nilai sah `> 0`, selain itu `0`.
+ *
+ * Template tanpa `fieldSpacing` mengeksekusi jalur lama apa adanya, sehingga
+ * output PDF-nya identik dengan sebelum fitur ini ada.
+ */
+export function fieldSpacingPts(value: unknown): number {
+  const n = normalizeFieldSpacing(value)
+  return n === undefined ? 0 : n
+}

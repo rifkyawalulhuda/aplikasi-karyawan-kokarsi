@@ -15,7 +15,7 @@ import PDFDocument from 'pdfkit'
 import { interpolate, listPrefix } from './contract-block-renderer'
 import { formatCell } from './table-layout.helpers'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
-import { blockSpaceAfterPts } from './block-spacing'
+import { blockSpaceAfterPts, fieldSpacingPts } from './block-spacing'
 import {
   PKWT_FONT_NAMES,
   PKWT_GEOMETRY,
@@ -169,6 +169,9 @@ export function blocksToPkwtParagraphs(
     // dan `article`). `list`/`table` punya perataan sendiri; validator menolak
     // `align` di sana, dan di sini dijaga agar tidak ikut terbawa.
     let localAlign: PkwtAlign | undefined
+    // Jarak antar field DI DALAM blok (`block.fieldSpacing`). Dipakai untuk
+    // paragraf (gap antar field) DAN tabel (padding baris).
+    const blockFieldSpacing = fieldSpacingPts(block?.fieldSpacing)
 
     switch (block?.type) {
       case 'paragraph': {
@@ -238,7 +241,7 @@ export function blocksToPkwtParagraphs(
           cells.push((block.columns ?? []).map((c: any) =>
             formatCell(interpolate(String(row?.[c?.key] ?? ''), values), c?.format)))
         }
-        local.push({ text: '', bold: false, table: { columns, cells, header } })
+        local.push({ text: '', bold: false, table: { columns, cells, header, fieldSpacing: blockFieldSpacing } })
         break
       }
 
@@ -255,6 +258,8 @@ export function blocksToPkwtParagraphs(
     // Jarak blok (`block.spaceAfter`) dibawa tiap paragraf; engine memakainya
     // untuk menambah `gapBefore` baris pembuka blok berikutnya.
     const blockSpaceAfter = blockSpaceAfterPts(block?.spaceAfter)
+    // Jarak antar field DI DALAM blok (`block.fieldSpacing`) juga dibawa tiap
+    // paragraf; engine hanya memakainya untuk field ke-2 dan seterusnya.
     for (const p of local) {
       out.push({
         text: p.text,
@@ -268,6 +273,7 @@ export function blocksToPkwtParagraphs(
         blockId,
         blockIndex: ordinal,
         spaceAfter: blockSpaceAfter,
+        fieldSpacing: blockFieldSpacing,
       })
     }
     ordinal += 1
@@ -350,6 +356,26 @@ export function resolveClosingLines(
 }
 
 /**
+ * `fieldSpacing` blok `closing` yang BENAR-BENAR dipakai `resolveClosingLines`.
+ *
+ * Urutannya harus sama: blok penutup kolom ID yang punya teks menang; bila tidak
+ * ada, blok penutup kolom EN. Blok yang tidak terpakai tidak boleh menyumbang
+ * jarak — kalau tidak, teks yang dicetak memakai jarak dari blok lain.
+ */
+export function resolveClosingFieldSpacing(
+  blocks: any[] | undefined,
+  blocksEn: any[] | undefined,
+): number {
+  const pick = (list: any[] | undefined) => {
+    const block = (list ?? []).find((b: any) => b?.type === 'closing')
+    const hasText = typeof block?.text === 'string'
+      && block.text.replace(/\r\n?/g, '\n').split('\n').some((l: string) => l.trim() !== '')
+    return hasText ? block : undefined
+  }
+  return fieldSpacingPts((pick(blocks) ?? pick(blocksEn))?.fieldSpacing)
+}
+
+/**
  * Alirkan dokumen PKWT ke `doc` yang sudah dibuat.
  *
  * Kolom kiri = stream ID, kolom kanan = stream EN, dikunci per baris oleh
@@ -400,6 +426,8 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
     // tanda tangan. Satu teks untuk kedua kolom: diambil dari blok `closing`
     // kolom ID, dengan fallback ke kolom EN bila hanya di sana yang ada.
     closingLines: resolveClosingLines(opts.blocks, opts.blocksEn, values, opts.valuesEn),
+    // Jarak antar baris logis penutup (`fieldSpacing` blok `closing`).
+    closingFieldSpacing: resolveClosingFieldSpacing(opts.blocks, opts.blocksEn),
     header: {
       orgLines: opts.orgLines ?? [],
       addressLines: opts.addressLines ?? [],

@@ -1,28 +1,48 @@
 <script setup lang="ts">
+import { effectiveGridLines } from '~/utils/field-spacing'
+
 /**
- * Kontrol "Spasi antar blok" (khusus template MITRA).
+ * Kontrol spasi untuk satu blok. Dua mode, satu komponen:
  *
- * Mengatur `block.spaceAfter` — jarak vertikal TAMBAHAN di bawah blok, di atas
- * jarak bawaan renderer. Perilakunya mirip radio dengan satu nilai default:
- * - `spaceAfter` kosong → tombol "Normal" tampak aktif (perilaku bawaan).
- * - Memilih "Normal" → HAPUS properti (`emit('update:spaceAfter', undefined)`)
- *   supaya payload draft bersih dan PDF identik dengan kondisi tanpa properti.
- * - Preset lain menulis angka; "Kustom…" membuka input angka 0–`max`.
+ * - `mode="block"` (default) → `block.spaceAfter`: jarak TAMBAHAN di bawah blok,
+ *   di atas jarak bawaan renderer. Dipakai semua blok konten.
+ * - `mode="field"` → `block.fieldSpacing`: jarak TAMBAHAN ANTAR field di dalam
+ *   satu blok (judul↔uraian, uraian↔uraian, poin↔poin, baris↔baris, baris
+ *   penutup↔baris penutup).
+ *
+ * Keduanya ADITIF dan memakai preset yang sama supaya kosakatanya konsisten:
+ * - nilai kosong → tombol "Normal" tampak aktif (perilaku bawaan);
+ * - memilih "Normal" → HAPUS properti (`emit('update:spaceAfter', undefined)`)
+ *   supaya payload draft bersih dan PDF identik dengan kondisi tanpa properti;
+ * - preset lain menulis angka; "Kustom…" membuka input angka 0–`max`.
  *
  * Satuan pt, nilai sah bilangan bulat 0–`max` (batas sama dengan validator
- * backend `MAX_BLOCK_SPACE_AFTER`).
+ * backend `MAX_BLOCK_SPACE_AFTER` / `MAX_FIELD_SPACING`).
+ *
+ * `gridPitch` (opsional) membuat kontrol menampilkan HASIL EFEKTIF di MITRA:
+ * jarak dibulatkan KE ATAS ke kelipatan grid, sehingga 6 pt benar-benar tercetak
+ * 15.8 pt (1 baris). Tanpa keterangan itu admin mengira nilainya diabaikan.
  */
 interface Props {
   spaceAfter?: number
   disabled?: boolean
   /** Batas atas nilai kustom (pt) — harus sama dengan batas validator backend. */
   max?: number
+  mode?: 'block' | 'field'
+  /**
+   * Pitch baris grid MITRA (pt). Bila diisi, nilai ditampilkan sebagai hasil
+   * efektif ("1 baris · 15.8 pt"). Kosongkan untuk blok yang TIDAK di-grid
+   * (tabel, penutup).
+   */
+  gridPitch?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
   spaceAfter: undefined,
   disabled: false,
-  max: 40
+  max: 40,
+  mode: 'block',
+  gridPitch: undefined
 })
 
 const emit = defineEmits<{
@@ -44,6 +64,17 @@ const current = computed<number | undefined>(() => props.spaceAfter ?? undefined
 const isCustom = computed(() =>
   current.value !== undefined && !PRESETS.some(p => p.value === current.value)
 )
+
+/**
+ * Hasil efektif untuk MITRA: jarak dibulatkan KE ATAS ke kelipatan `gridPitch`.
+ * `null` = tidak ada pembulatan yang perlu ditampilkan (mode blok tanpa grid,
+ * nilai kosong, atau nilai 0).
+ */
+const effective = computed<{ lines: number, pt: number } | null>(() => {
+  const lines = effectiveGridLines(current.value, props.gridPitch)
+  if (lines === null) return null
+  return { lines, pt: lines * (props.gridPitch as number) }
+})
 
 const customOpen = ref(false)
 const customInput = ref<number>(12)
@@ -75,7 +106,11 @@ function applyCustom() {
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-1">
+  <div
+    class="flex flex-wrap items-center gap-1"
+    role="group"
+    :aria-label="mode === 'field' ? 'Spasi antar isi' : 'Spasi antar blok'"
+  >
     <UButton
       v-for="preset in PRESETS"
       :key="preset.label"
@@ -113,5 +148,12 @@ function applyCustom() {
       @change="applyCustom"
     />
     <span v-if="customOpen" class="text-xs text-muted">pt</span>
+    <span
+      v-if="effective"
+      class="text-xs text-muted"
+      :title="`Jarak ${current} pt dibulatkan ke atas ke grid ${gridPitch} pt`"
+    >
+      · {{ effective.lines }} baris ({{ effective.pt.toFixed(1) }} pt)
+    </span>
   </div>
 </template>
