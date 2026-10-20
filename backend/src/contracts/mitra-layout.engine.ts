@@ -435,6 +435,26 @@ export function listPrefix(style: string, index: number): string {
 const NUMBERED_ITEM_RE = /^(?:\d{1,2}|[a-z])\.\s/
 
 /**
+ * Lebar ruang penanda daftar (pt) untuk SATU blok.
+ *
+ * Penanda digambar terpisah di ruang ini, jadi lebarnya harus cukup untuk
+ * penanda TERLEBAR di blok itu — "10. " jauh lebih lebar dari "1. ". Memakai
+ * `listHangingIndent` saja membuat teks poin ke-10 menabrak penandanya.
+ *
+ * Semua item memakai lebar yang SAMA agar kolom teksnya rata.
+ */
+function mitraListTextIndent(doc: any, items: any[], style: string, base = 0): number {
+  const G = MITRA_GEOMETRY
+  doc.font(MITRA_FONT_NAMES.regular).fontSize(G.font.body)
+  let widest = G.listHangingIndent
+  items.forEach((_: unknown, i: number) => {
+    const w = doc.widthOfString(`${listPrefix(style, base + i)} `)
+    if (w > widest) widest = w
+  })
+  return widest
+}
+
+/**
  * Jarak baris grid MITRA (pt) untuk satu dokumen.
  *
  * SATU sumber angka untuk renderer DAN pengukur (`planMitraLayout`), supaya
@@ -1110,15 +1130,45 @@ function renderMitraPass(
          * lanjutan harus meneruskan penomoran, bukan mengulang dari "1.".
          */
         const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
+        const style = block.style ?? 'bullet'
+        // Tanpa `align` → 'left' (perilaku lama, PDF template lama identik).
+        const align = mitraBlockAlign(block?.align) ?? 'left'
+        // Ruang penanda mengikuti label TERLEBAR di blok ini ("10. " > "1. ").
+        const textIndent = mitraListTextIndent(doc, items, style, base)
+
         items.forEach((item: any, i: number) => {
           const raw = typeof item === 'string' ? item : (item?.text ?? '')
+          const text = scrubRawTokens(mitraInterpolate(String(raw), opts.values))
+          if (!text) return
           const level = typeof item === 'object' ? (item?.level ?? 0) : 0
-          const prefix = listPrefix(block.style ?? 'bullet', base + i)
-          writeText(`${prefix} ${raw}`, {
-            indent: level * G.listHangingIndent,
-            hangingIndent: G.listHangingIndent,
-            gapAfter: 0,
+          const prefix = listPrefix(style, base + i)
+          const markerIndent = level * G.listHangingIndent
+          const s = currentStream
+
+          // Pastikan baris PERTAMA muat sebelum penanda digambar. Tanpa ini,
+          // penanda bisa tertinggal di halaman sebelumnya saat `writeRuns`
+          // memutuskan pindah halaman.
+          if (y + PITCH > boxBottom(streamPage[s])) nextPageForStream(s)
+
+          doc.font(F.regular).fontSize(G.font.body).fillColor('#000000')
+          // Spasi ikut digambar bersama penanda: tanpa itu teks hasil ekstraksi
+          // PDF terbaca "10.Poin" walau secara visual ada jarak (sama seperti
+          // `drawCell` di engine PKWT). `textIndent` dihitung dari `${prefix} `
+          // sehingga lebarnya persis.
+          doc.text(`${prefix} `, colX(s) + markerIndent, y, {
+            width: textIndent,
             align: 'left',
+            lineBreak: false,
+          })
+
+          // Teks poin dimulai SETELAH penanda dengan indent KONSTAN (bukan
+          // hanging), sehingga baris lanjutan — termasuk baris baru dari
+          // Shift+Enter — tetap sejajar dengan huruf pertama. Penanda tidak
+          // ikut bergeser walau teksnya di-center/kanan/justify.
+          writeRuns(text, {
+            indent: markerIndent + textIndent,
+            gapAfter: 0,
+            align,
           })
         })
         break
@@ -1602,19 +1652,23 @@ function splitBlockAtHeight(
     const levels = (block.items ?? []).map((item: any) =>
       typeof item === 'object' ? (item?.level ?? 0) : 0,
     )
-    const style = block.style ?? 'bullet'
+    const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
+    const textIndent = mitraListTextIndent(doc, block.items ?? [], block.style ?? 'bullet', base)
     const size = G.font.body
     let acc = 0
     for (let i = 0; i < items.length; i++) {
-      const hang = G.listHangingIndent
-      const h = measureMitraTextHeight(doc, `${listPrefix(style, i)} ${items[i]}`, {
-        font: F.regular,
-        size,
-        align: 'left',
-        width,
-        indent: levels[i] * hang,
-        hang,
-      })
+      // Sama dengan renderer & `measureBlockHeight`: teks saja (penanda
+      // digambar terpisah) dengan indent konstan.
+      const text = resolveMitraText(items[i], values)
+      const h = text
+        ? measureMitraTextHeight(doc, text, {
+            font: F.regular,
+            size,
+            align: 'left',
+            width,
+            indent: levels[i] * G.listHangingIndent + textIndent,
+          })
+        : 0
       if (acc + h <= target) {
         acc += h
         continue
@@ -1729,19 +1783,21 @@ function measureBlockHeight(
 
   if (block?.type === 'list') {
     const items = block.items ?? []
-    const style = block.style ?? 'bullet'
-    const startIndex = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
+    const base = Number.isInteger(block.startIndex) ? Number(block.startIndex) : 0
+    const textIndent = mitraListTextIndent(doc, items, block.style ?? 'bullet', base)
     let total = 0
-    items.forEach((item: any, i: number) => {
+    items.forEach((item: any) => {
       const raw = typeof item === 'string' ? item : String(item?.text ?? '')
+      const text = resolveMitraText(raw, values)
+      if (!text) return
       const level = typeof item === 'object' ? (item?.level ?? 0) : 0
-      total += measureMitraTextHeight(doc, `${listPrefix(style, startIndex + i)} ${raw}`, {
+      // Sama dengan renderer: teks dimulai setelah penanda, indent KONSTAN.
+      total += measureMitraTextHeight(doc, text, {
         font: F.regular,
         size,
         align: 'left',
         width,
-        indent: level * G.listHangingIndent,
-        hang: G.listHangingIndent,
+        indent: level * G.listHangingIndent + textIndent,
       })
     })
     return total

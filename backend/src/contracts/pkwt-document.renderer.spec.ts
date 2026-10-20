@@ -228,12 +228,33 @@ describe('blocksToPkwtParagraphs — runs & align', () => {
     expect(paras.map(p => p.align)).toEqual(['center', 'center'])
   })
 
-  it('align TIDAK diambil dari blok list (di luar lingkup)', () => {
+  it('align diambil dari blok list dan diteruskan ke setiap item', () => {
     const paras = blocksToPkwtParagraphs(
       [{ id: 'l1', type: 'list', style: 'bullet', items: ['a', 'b'], align: 'center' }],
       values
     )
+    expect(paras.map(p => p.align)).toEqual(['center', 'center'])
+  })
+
+  it('list tanpa align → undefined (perilaku lama: rata kiri)', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{ id: 'l1', type: 'list', style: 'bullet', items: ['a', 'b'] }],
+      values
+    )
     expect(paras.map(p => p.align)).toEqual([undefined, undefined])
+  })
+
+  it('list memproses mark B/I/U menjadi runs', () => {
+    const paras = blocksToPkwtParagraphs(
+      [{ id: 'l1', type: 'list', style: 'bullet', items: ['**tebal** dan *miring*'] }],
+      values
+    )
+    expect(paras[0].runs).toBeDefined()
+    expect(paras[0].runs?.some(r => r.bold)).toBe(true)
+    expect(paras[0].runs?.some(r => r.italic)).toBe(true)
+    // `text` tetap menyimpan mark mentah (sama seperti blok `paragraph`);
+    // engine memakai `runs` sehingga penandanya tidak pernah tercetak.
+    expect(paras[0].runs?.map(r => r.text).join('')).not.toContain('**')
   })
 
   it('list membawa label sesuai gaya penomoran (bug: PDF hanya mencetak teks)', () => {

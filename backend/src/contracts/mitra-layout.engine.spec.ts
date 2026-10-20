@@ -1152,5 +1152,85 @@ describe('MITRA — mark di PDF NYATA', () => {
     expect(lines.length).toBe(legacy.length)
     expect(lines.map(l => runsToText(l).replace(/\s+/g, ' ').trim())).toEqual(legacy)
   })
+
+  /**
+   * Blok Daftar: perataan blok, mark B/I/U, dan baris baru (Shift+Enter).
+   *
+   * Penanda ("1.", "•") digambar TERPISAH di ruang indentasinya, sehingga ia
+   * tetap di kiri walau teks poin di-center/kanan/justify.
+   */
+  const listBlocks = (block: Record<string, any>) => [
+    { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+    { type: 'list', style: 'numbered', items: ['satu', 'dua'], ...block },
+    { type: 'signature' },
+  ]
+  const colStart = MITRA_GEOMETRY.left.x0 + MITRA_GEOMETRY.textPaddingLeft
+
+  it('perataan blok daftar diteruskan ke teks poin', async () => {
+    for (const align of ['center', 'right', 'justify'] as const) {
+      const { texts } = await draw(listBlocks({ align }) as any)
+      const items = texts.filter(t => t.text === 'satu' || t.text === 'dua')
+      expect({ align, got: items.map(t => t.align) }).toEqual({
+        align,
+        got: [align, align],
+      })
+    }
+  })
+
+  it('tanpa align → rata kiri (perilaku lama, PDF lama identik)', async () => {
+    const { texts } = await draw(listBlocks({}) as any)
+    const items = texts.filter(t => t.text === 'satu' || t.text === 'dua')
+    expect(items.map(t => t.align)).toEqual(['left', 'left'])
+  })
+
+  it('penanda tetap di kiri; teks poin menjorok selebar hanging indent', async () => {
+    const { texts } = await draw(listBlocks({ align: 'center' }) as any)
+    const marker = texts.find(t => t.text.trim() === '1.')
+    const item = texts.find(t => t.text === 'satu')
+    expect(marker?.x).toBeCloseTo(colStart, 1)
+    expect(item?.x).toBeCloseTo(colStart + MITRA_GEOMETRY.listHangingIndent, 1)
+  })
+
+  it('ruang penanda mengikuti label TERLEBAR ("10. " lebih lebar dari "1. ")', async () => {
+    // Tanpa ini, poin ke-10 menabrak penandanya sendiri. Blok daftar boleh
+    // dipecah antar-kolom, jadi konsistensi diperiksa PER KOLOM.
+    const items = Array.from({ length: 12 }, (_, i) => `poin ${i + 1}`)
+    const { texts } = await draw(listBlocks({ items }) as any)
+    const body = texts.filter(t => /^poin \d+$/.test(t.text))
+    expect(body).toHaveLength(12)
+
+    const mid = MITRA_GEOMETRY.pageWidth / 2
+    const colOf = (x: number) => (x < mid ? 'left' : 'right')
+    const ten = body.find(t => t.text === 'poin 10')
+    expect(ten).toBeDefined()
+
+    for (const col of ['left', 'right']) {
+      const xs = body
+        .filter(t => colOf(t.x) === col)
+        .map(t => Math.round(t.x * 100) / 100)
+      // Semua teks poin dalam satu kolom rata pada kolom yang SAMA.
+      expect(new Set(xs).size).toBeLessThanOrEqual(1)
+    }
+
+    // Kolom yang memuat penanda 2 digit memakai ruang penanda lebih lebar.
+    const tenX = ten!.x
+    expect(tenX).toBeGreaterThan(
+      MITRA_GEOMETRY.left.x0 + MITRA_GEOMETRY.textPaddingLeft + MITRA_GEOMETRY.listHangingIndent,
+    )
+  })
+
+  it('mark B/I/U pada poin memakai font tebal/miring', async () => {
+    const { fontsUsed } = await draw(
+      listBlocks({ items: ['**tebal** dan *miring*'] }) as any,
+    )
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.bold)
+    expect(fontsUsed).toContain(MITRA_FONT_NAMES.italic)
+  })
+
+  it('baris baru di dalam satu poin dipertahankan (tidak digabung jadi spasi)', async () => {
+    const { drawn } = await draw(listBlocks({ items: ['baris satu\nbaris dua'] }) as any)
+    // PDFKit menerima `\n` apa adanya → dua baris terpisah di PDF.
+    expect(drawn.some(t => t.includes('\n'))).toBe(true)
+  })
 })
 

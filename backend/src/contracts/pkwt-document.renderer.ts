@@ -202,12 +202,19 @@ export function blocksToPkwtParagraphs(
         // hanging indent, sehingga baris lanjutan sejajar dengan huruf pertama
         // teks — bukan di bawah penandanya. Tanpa ini pratinjau PDF PKWT hanya
         // mencetak teks item (bug "Gaya Penomoran tidak muncul").
+        //
+        // `align` dan `runs` (mark B/I/U) ikut dikirim: engine PKWT sudah
+        // mendukung keduanya bersama label + hanging indent (`drawCell`).
         const style = String(block?.style ?? 'bullet')
+        localAlign = pkwtBlockAlign(block?.align)
         ;(block.items ?? []).forEach((item: any, i: number) => {
           const raw = typeof item === 'object' && item !== null ? (item.text ?? '') : item
+          const text = interpolate(String(raw), values)
           local.push({
-            text: interpolate(String(raw), values),
+            text,
             bold: false,
+            runs: markedRuns(text),
+            align: localAlign,
             label: listPrefix(style, i),
           })
         })

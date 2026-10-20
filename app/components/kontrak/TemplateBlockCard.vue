@@ -232,6 +232,35 @@ function removeListItem(i: number) {
 }
 
 /**
+ * Referensi field tiap poin, dipakai untuk memindahkan fokus setelah Enter
+ * memecah satu poin menjadi dua.
+ */
+type ItemFieldInstance = { focusEnd?: () => void } | null
+const itemFields = ref<ItemFieldInstance[]>([])
+function setItemField(index: number, el: unknown) {
+  itemFields.value[index] = (el as ItemFieldInstance) ?? null
+}
+
+/**
+ * Enter pada field poin = poin BARU.
+ *
+ * Teks dipecah tepat di posisi kursor: bagian sebelum kursor tetap di poin ini,
+ * sisanya menjadi poin berikutnya (persis seperti menekan Enter di editor teks).
+ * Shift+Enter tidak sampai ke sini — ia tetap menyisipkan baris baru di dalam
+ * poin yang sama, dan dirender sebagai baris baru di PDF.
+ */
+function onItemSubmit(index: number, payload: { text: string; caret: number }) {
+  if (!props.editable) return
+  const arr = props.block.items ?? []
+  const caret = Math.max(0, Math.min(payload.caret, payload.text.length))
+  const before = payload.text.slice(0, caret)
+  const after = payload.text.slice(caret)
+  arr[index] = before
+  arr.splice(index + 1, 0, after)
+  nextTick(() => itemFields.value[index + 1]?.focusEnd?.())
+}
+
+/**
  * Prefix tampilan tiap poin daftar, mencerminkan hasil di PDF
  * (`listPrefix` di `mitra-layout.engine.ts`): `\u2022` / `1.` / `a.`.
  *
@@ -505,18 +534,30 @@ function addColumn() {
       </template>
 
       <template v-else-if="block.type === 'list'">
-        <UFormField label="Gaya penomoran">
-          <USelect
-            v-model="block.style"
-            :disabled="!editable"
-            :items="[
-              { label: 'Bullet (\u2022)', value: 'bullet' },
-              { label: 'Angka (1, 2, 3)', value: 'numbered' },
-              { label: 'Huruf (a, b, c)', value: 'alphabetic' }
-            ]"
-            class="w-full"
-          />
-        </UFormField>
+        <div class="grid gap-2 sm:grid-cols-2">
+          <UFormField label="Gaya penomoran">
+            <USelect
+              v-model="block.style"
+              :disabled="!editable"
+              :items="[
+                { label: 'Bullet (\u2022)', value: 'bullet' },
+                { label: 'Angka (1, 2, 3)', value: 'numbered' },
+                { label: 'Huruf (a, b, c)', value: 'alphabetic' }
+              ]"
+              class="w-full"
+            />
+          </UFormField>
+          <UFormField label="Perataan">
+            <div class="flex h-8 items-center">
+              <KontrakAlignButtonGroup
+                :align="block.align"
+                default-align="left"
+                :disabled="!editable"
+                @update:align="block.align = $event"
+              />
+            </div>
+          </UFormField>
+        </div>
         <UFormField label="Poin daftar">
           <div class="space-y-2">
             <div
@@ -526,13 +567,26 @@ function addColumn() {
               @click="markFocus(`item:${p}`)"
               @focusin="markFocus(`item:${p}`)"
             >
-              <span class="mt-2 w-5 shrink-0 text-right text-xs text-muted">{{ itemPrefix(p) }}</span>
+              <!--
+                Penanda disejajarkan dengan BARIS PERTAMA isi poin. Saat bisa
+                diedit, field menampilkan toolbar B/I/U di atas textarea
+                (±28px), jadi penanda diberi jarak itu; saat read-only toolbar
+                tidak ada dan cukup `mt-2` seperti sebelumnya.
+              -->
+              <span
+                class="w-5 shrink-0 text-right text-xs text-muted"
+                :class="editable ? 'mt-7' : 'mt-2'"
+              >{{ itemPrefix(p) }}</span>
               <div class="min-w-0 flex-1">
-                <UInput
+                <KontrakRichTextField
+                  :ref="el => setItemField(p, el)"
                   v-model="block.items[p]"
                   :disabled="!editable"
+                  :rows="1"
+                  submit-on-enter
                   class="w-full"
                   placeholder="Isi poin&#8230;"
+                  @submit="onItemSubmit(p, $event)"
                 />
                 <p v-if="editable && isBlank(block.items[p])" class="mt-1 text-xs text-warning" aria-live="polite">
                   Poin ini masih kosong.

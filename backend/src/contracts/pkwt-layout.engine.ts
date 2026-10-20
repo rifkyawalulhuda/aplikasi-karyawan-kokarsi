@@ -846,6 +846,18 @@ export function buildPkwtRowsFromStructuredParagraphs(
       // baris item yang pendek.
       const idIsList = (left?.indent ?? 0) > 0
       const enIsList = (right?.indent ?? 0) > 0
+
+      /**
+       * Perataan item daftar. Baris TERAKHIR sebuah poin tidak direntangkan
+       * (sama seperti Word/LaTeX): tanpa ini, poin satu baris akan melar
+       * memenuhi kolom saat admin memilih "Rata kiri-kanan".
+       */
+      const listAlign = (p: typeof left): PkwtAlign | undefined => {
+        if (!p?.align) return p?.align
+        if ((p.indent ?? 0) > 0 && p.align === 'justify' && p.lastOfPara) return 'left'
+        return p.align
+      }
+
       rows.push({
         id: left?.text ?? '',
         en: right?.text ?? '',
@@ -855,8 +867,13 @@ export function buildPkwtRowsFromStructuredParagraphs(
         // Run & perataan hanya ikut bila ada; `undefined` = jalur lama.
         idRuns: left?.runs,
         enRuns: right?.runs,
-        idAlign: idIsList ? 'left' : left?.align,
-        enAlign: enIsList ? 'left' : right?.align,
+        /**
+         * Perataan item daftar ikut `block.align` (bila diisi admin). Tanpa
+         * nilai, `resolveCellAlign` memakai jalur lama → 'left' untuk daftar,
+         * karena `idJustify`/`enJustify` sudah dipaksa `false` saat `isList`.
+         */
+        idAlign: listAlign(left),
+        enAlign: listAlign(right),
         // Label & indentasi gantung item daftar (undefined = baris teks biasa).
         idLabel: left?.label,
         enLabel: right?.label,

@@ -29,6 +29,13 @@ interface Props {
   /** Tampilkan grup perataan (hanya untuk blok `paragraph` / `article`). */
   showAlign?: boolean
   defaultAlign?: 'justify' | 'left'
+  /**
+   * Enter TANPA modifier memicu `submit` (bukan menyisipkan baris baru).
+   *
+   * Dipakai blok Daftar: Enter = poin baru, Shift+Enter = baris baru di poin
+   * yang sama. Default `false` supaya pemakaian lama tidak berubah.
+   */
+  submitOnEnter?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -37,8 +44,13 @@ const props = withDefaults(defineProps<Props>(), {
   autoresize: true,
   placeholder: '',
   showAlign: false,
-  defaultAlign: 'justify'
+  defaultAlign: 'justify',
+  submitOnEnter: false
 })
+
+const emit = defineEmits<{
+  submit: [payload: { text: string, caret: number }]
+}>()
 
 /** `align` sengaja tidak punya default: tidak ada = perilaku default renderer. */
 const align = defineModel<AlignValue | undefined>('align')
@@ -95,6 +107,26 @@ function applyMark(mark: InlineMark) {
 
 /** Pintasan Ctrl/Cmd+B / I / U. */
 function onKeydown(event: KeyboardEvent) {
+  // Enter polos → `submit` (pemanggil yang memutuskan, mis. menambah poin
+  // daftar). Shift+Enter dibiarkan: ia menyisipkan baris baru di dalam field.
+  if (
+    props.submitOnEnter
+    && !props.disabled
+    && event.key === 'Enter'
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.altKey
+    && !event.shiftKey
+  ) {
+    event.preventDefault()
+    const el = field.value?.textareaRef
+    emit('submit', {
+      text: el?.value ?? model.value,
+      caret: el?.selectionStart ?? model.value.length
+    })
+    return
+  }
+
   if (props.disabled || !(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return
   const marks: Record<string, InlineMark> = { b: 'bold', i: 'italic', u: 'underline' }
   const mark = marks[event.key.toLowerCase()]
@@ -102,6 +134,18 @@ function onKeydown(event: KeyboardEvent) {
   event.preventDefault()
   applyMark(mark)
 }
+
+/** Pindahkan fokus ke field ini dan letakkan kursor di akhir teks. */
+function focusEnd() {
+  const el = field.value?.textareaRef
+  if (!el) return
+  el.focus()
+  const end = el.value.length
+  el.setSelectionRange(end, end)
+  syncSelection()
+}
+
+defineExpose({ focusEnd })
 </script>
 
 <template>

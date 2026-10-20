@@ -1376,15 +1376,29 @@ describe('buildPkwtRowsFromStructuredParagraphs - label & hanging indent daftar'
     expect(rows[0].idIndent).toBe(20)
   })
 
-  it('item daftar selalu rata kiri, tidak dijustifikasi', () => {
+  it('item daftar tanpa align tetap rata kiri (tidak dijustifikasi)', () => {
     const rows = buildPkwtRowsFromStructuredParagraphs(
       stubDoc,
       [item(0, 'satu dua tiga empat lima enam tujuh delapan sembilan sepuluh', '1.')],
       [],
       { width: 60, size: 9 }
     )
-    expect(rows.every(r => r.idAlign === 'left')).toBe(true)
+    // `idAlign` kosong = jalur lama; `resolveCellAlign` memetakannya ke 'left'
+    // karena item daftar tidak pernah dijustifikasi.
+    expect(rows.every(r => r.idAlign === undefined)).toBe(true)
     expect(rows.every(r => r.idJustify === false)).toBe(true)
+    expect(rows.every(r => resolveCellAlign(r.idAlign, false, r.idJustify === true) === 'left')).toBe(true)
+  })
+
+  it('item daftar meneruskan align eksplisit dari blok', () => {
+    const rows = buildPkwtRowsFromStructuredParagraphs(
+      stubDoc,
+      [{ ...item(0, 'satu dua tiga', '1.'), align: 'center' }],
+      [],
+      { width: 60, size: 9 }
+    )
+    expect(rows.every(r => r.idAlign === 'center')).toBe(true)
+    expect(rows.every(r => resolveCellAlign(r.idAlign, false, r.idJustify === true) === 'center')).toBe(true)
   })
 
   it('paragraf biasa TIDAK mendapat label/indent (nol regresi)', () => {

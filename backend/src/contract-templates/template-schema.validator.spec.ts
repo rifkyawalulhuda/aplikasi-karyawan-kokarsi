@@ -71,7 +71,6 @@ describe('validateContentDefinition', () => {
   it.each([
     ['article heading', { id: 'article', type: 'article', heading: '**PASAL 1**', paragraphs: ['Teks'] }, /\.heading$/],
     ['title text', { id: 'title', type: 'title', text: '**JUDUL**' }, /\.text$/],
-    ['list item', { id: 'list', type: 'list', style: 'bullet', items: ['**item**'] }, /items\[0\]/],
     ['table cell', {
       id: 'table', type: 'table', columns: [{ key: 'value', label: 'Nilai' }], rows: [{ value: '**sel**' }],
     }, /rows\[0\]\.value/],
@@ -91,6 +90,25 @@ describe('validateContentDefinition', () => {
         expect.objectContaining({ fieldPath: expect.stringMatching(fieldPathPattern) }),
       ]))
     }
+  })
+
+  it('menerima mark B/I/U pada poin daftar dan menghitungnya sebagai blok berformat', () => {
+    const content = baseContent(blocks => [
+      { id: 'list', type: 'list', style: 'numbered', items: ['**Tebal**', '*miring*', '__garis__'] },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.markedBlockCount).toBe(1)
+    expect(result.inlineMarkWarnings).toEqual([])
+  })
+
+  it('mark tak berpasangan di poin daftar hanya jadi peringatan (tidak 400)', () => {
+    const content = baseContent(blocks => [
+      { id: 'list', type: 'list', style: 'bullet', items: ['**tanpa pasangan'] },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
+    expect(result.inlineMarkWarnings.length).toBeGreaterThan(0)
   })
 
   it.each(['middle', '', 1, null])('rejects invalid block alignment %p', align => {
@@ -116,14 +134,23 @@ describe('validateContentDefinition', () => {
     }
   })
 
-  it('menghitung hanya alignment paragraph/article yang valid', () => {
+  it('menghitung alignment paragraph/article/list yang valid', () => {
     const content = baseContent(blocks => [
       { id: 'p', type: 'paragraph', text: 'Body', align: 'right' },
       { id: 'a', type: 'article', heading: 'PASAL 1', paragraphs: ['Body'], align: 'justify' },
+      { id: 'l', type: 'list', style: 'bullet', items: ['satu'], align: 'center' },
       ...blocks.filter(block => block.type === 'signature'),
     ])
     const result = validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')
-    expect(result.alignedBlockCount).toBe(2)
+    expect(result.alignedBlockCount).toBe(3)
+  })
+
+  it('menerima align pada blok list', () => {
+    const content = baseContent(blocks => [
+      { id: 'l', type: 'list', style: 'numbered', items: ['satu', 'dua'], align: 'justify' },
+      ...blocks.filter(block => block.type === 'signature'),
+    ])
+    expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
   })
 
   it('menerima headingAlign pada blok article', () => {

@@ -37,14 +37,18 @@ export const BLOCK_ALIGN_VALUES = INLINE_RUN_ALIGN_VALUES
 export type BlockAlign = InlineRunAlign
 
 /**
- * Hanya blok ini yang boleh membawa properti `align`.
+ * Blok yang boleh membawa properti `align`.
  *
- * `list` dan `table` punya perataan sendiri per-item/per-kolom, dan
- * `title`/`subtitle`/`signature`/`pageBreak` perataannya milik renderer
- * (judul selalu center, tanda tangan milik layout footer). Menerima `align` di
- * sana hanya akan membuat admin mengira perubahannya berpengaruh.
+ * `table` punya perataan sendiri per-kolom, dan `title`/`subtitle`/`signature`/
+ * `pageBreak` perataannya milik renderer (judul selalu center, tanda tangan
+ * milik layout footer). Menerima `align` di sana hanya akan membuat admin
+ * mengira perubahannya berpengaruh.
+ *
+ * `list` DIDUKUNG: perataan berlaku untuk teks poin, sedangkan penanda
+ * ("1.", "•") tetap menempel di kiri pada ruang indentasinya — lihat
+ * `case 'list'` di kedua engine.
  */
-export const ALIGN_CAPABLE_BLOCKS = ['paragraph', 'article'] as const
+export const ALIGN_CAPABLE_BLOCKS = ['paragraph', 'article', 'list'] as const
 
 /** Normalisasi `block.align`; nilai tak dikenal → `undefined` (perilaku lama). */
 export function blockAlign(value: unknown): BlockAlign | undefined {
@@ -237,7 +241,13 @@ export function validateContentDefinition(
       return
     }
     if (!(ALIGN_CAPABLE_BLOCKS as readonly string[]).includes(block.type)) {
-      issues.push({ blockId: id, fieldPath, message: `Properti align tidak didukung pada blok ${block.type}. Hanya paragraph dan article yang dapat diratakan.` })
+      issues.push({
+        blockId: id,
+        fieldPath,
+        message:
+          `Properti align tidak didukung pada blok ${block.type}. ` +
+          `Hanya ${ALIGN_CAPABLE_BLOCKS.join(', ')} yang dapat diratakan.`,
+      })
       return
     }
     alignedBlockCount += 1
@@ -345,7 +355,13 @@ export function validateContentDefinition(
         for (const [itemIndex, item] of block.items.entries()) {
           const text = typeof item === 'string' ? item : item?.text
           const itemPath = `${blockPath}.items[${itemIndex}]${typeof item === 'string' ? '' : '.text'}`
-          if (typeof text === 'string') validateText(id, text, itemPath, false)
+          // Mark B/I/U DIDUKUNG pada poin daftar (editor menampilkan toolbar
+          // yang sama dengan paragraf), jadi teksnya divalidasi sebagai teks
+          // bermark — bukan `allowMarks: false` yang akan menolak setiap poin
+          // berformat dengan 400.
+          if (typeof text === 'string') {
+            blockHasInlineMarks = validateText(id, text, itemPath, true) || blockHasInlineMarks
+          }
         }
       }
       if (block.type === 'table') {
