@@ -112,6 +112,7 @@ Perataan adalah **properti tingkat blok**, bukan mark karakter.
 
 - `align` hanya sah pada blok `paragraph` dan `article` (`ALIGN_CAPABLE_BLOCKS`).
 - `headingAlign` hanya sah pada blok `article` — mengatur judul pasal secara terpisah dari uraian.
+- `align` pada blok `article` **hanya** berlaku untuk uraian; judul memakai `headingAlign`, dan bila tidak ada memakai default keluarga (MITRA `center`, PKWT `left`). Memilih perataan uraian tidak pernah menggeser judul.
 - Nilai yang sah didefinisikan sekali di `INLINE_RUN_ALIGN_VALUES` (`inline-run-layout.ts`) dan dialias oleh `BLOCK_ALIGN_VALUES`.
 
 ### Perataan Bersifat Netral-Tinggi

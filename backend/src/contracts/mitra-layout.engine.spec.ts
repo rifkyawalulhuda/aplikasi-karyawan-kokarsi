@@ -976,6 +976,30 @@ describe('MITRA — mark di PDF NYATA', () => {
   })
 
   /**
+   * Regresi bug editor: memilih "Rata Kiri" pada URAIAN pasal dulu ikut
+   * menggeser JUDUL ke kiri (fallback `headingAlign ?? align ?? 'center'`),
+   * padahal tombol perataan judul di editor menampilkan "Rata Tengah".
+   */
+  it('align uraian TIDAK menggeser judul pasal (judul tetap center)', async () => {
+    const result = await draw([
+      { type: 'title', text: 'PERJANJIAN KEMITRAAN' },
+      {
+        type: 'article',
+        heading: 'PASAL 1',
+        align: 'left',
+        paragraphs: ['Isi pasal yang cukup panjang agar perataannya terlihat.'],
+      },
+      { type: 'signature' },
+    ] as any)
+    const heading = result.texts.find((t: { text: string }) => t.text.includes('PASAL 1'))
+    const body = result.texts.find((t: { text: string }) => t.text.includes('Isi pasal'))
+    expect(heading).toBeDefined()
+    expect(body).toBeDefined()
+    expect(heading!.align).toBe('center')
+    expect(body!.align).toBe('left')
+  })
+
+  /**
    * `spaceAfter` (khusus MITRA): jarak vertikal TAMBAHAN di bawah blok. Nilai
    * manual dibulatkan KE ATAS ke garis grid berikutnya supaya baseline kolom
    * kiri/kanan tetap sejajar. 24pt → 2 baris grid (≈31.6pt).

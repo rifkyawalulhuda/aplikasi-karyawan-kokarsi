@@ -1101,17 +1101,18 @@ function renderMitraPass(
 
       case 'article': {
         const align = mitraBlockAlign(block?.align)
-        // `headingAlign`: perataan KHUSUS judul pasal (PASAL 1 ...), terpisah
-        // dari `align` blok yang tetap hanya berlaku untuk uraian. Urutan
-        // prioritas: headingAlign → align (perilaku Fase 2d) → 'center'
-        // (perilaku asli, tanpa properti apa pun).
+        // `headingAlign`: perataan KHUSUS judul pasal (PASAL 1 ...), LEPAS dari
+        // `align` blok yang hanya berlaku untuk uraian. `align` sengaja TIDAK
+        // ikut menjadi fallback: kalau ikut, memilih "Rata Kiri" pada uraian
+        // diam-diam menggeser judul (bug editor: tombol judul menampilkan
+        // "Rata Tengah" tetapi PDF mencetak rata kiri).
         const headingAlign = mitraBlockAlign(block?.headingAlign)
         if (block.heading) {
           writeText(block.heading, {
             font: F.bold,
             size: G.font.body,
-            // Tanpa keduanya, judul tetap center seperti sebelumnya.
-            align: headingAlign ?? align ?? 'center',
+            // Tanpa `headingAlign`, judul tetap center seperti perilaku asli.
+            align: headingAlign ?? 'center',
             gapBefore: HEADING_GAP,
             gapAfter: 0,
             keepWithNextLines: 3,
@@ -1590,7 +1591,8 @@ function splitBlockAtHeight(
       resolveMitraText(String(p), values),
     )
     const align = mitraBlockAlign(block?.align)
-    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? align ?? 'center'
+    // Sama dengan renderer: judul TIDAK mewarisi `align` uraian.
+    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? 'center'
     const size = G.font.body
 
     let acc = 0
@@ -1762,7 +1764,8 @@ function measureBlockHeight(
       resolveMitraText(String(p), values),
     )
     const align = mitraBlockAlign(block?.align)
-    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? align ?? 'center'
+    // Sama dengan renderer: judul TIDAK mewarisi `align` uraian.
+    const headingAlign = mitraBlockAlign(block?.headingAlign) ?? 'center'
     let total = 0
     if (heading) {
       total +=
