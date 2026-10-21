@@ -52,6 +52,29 @@ Template Key menentukan struktur pasal dan role karyawan pada dokumen PDF.
 Dropdown hanya menampilkan key yang valid sesuai keluarga yang dipilih.
 :::
 
+## Duplikat Template
+
+Gunakan **Duplikat template** pada menu aksi kartu template untuk membuat template baru
+dengan isi yang **sama persis dengan versi yang sedang terbit** (versi terakhir yang
+dipakai membuat kontrak) — bukan kembali ke konten bawaan.
+
+1. Pilih **Duplikat template** pada menu aksi kartu
+2. Isi **Kode** baru (wajib unik) dan **Nama Template**, mis. `PKWT Kasir 2`
+3. **Keluarga** dan **Template Key** terkunci mengikuti template sumber — keduanya
+   menentukan struktur dokumen, sehingga tidak boleh berbeda dari isi yang disalin
+4. Klik **Duplikat**
+
+Hasilnya berupa template baru dengan **satu versi berstatus DRAFT** yang isinya identik
+dengan versi terbit sumber, termasuk field dinamis dan tanda "wajib diisi". Editor konten
+langsung terbuka agar Anda bisa meninjau isinya, lalu klik **Publish** supaya template baru
+dapat dipakai membuat kontrak.
+
+::: warning Perlu versi terbit
+Duplikat hanya bisa dilakukan bila template sumber sudah punya versi terbit. Menu
+**Duplikat template** dinonaktifkan (dengan keterangan *belum ada versi terbit*) selama
+template sumber belum pernah di-publish. Draft yang belum terbit tidak ikut disalin.
+:::
+
 ## Template Key yang Tersedia
 
 | Template Key | Keluarga | Posisi |

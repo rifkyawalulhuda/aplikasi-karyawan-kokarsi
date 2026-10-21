@@ -247,12 +247,14 @@ Status versi: `DRAFT` → `PUBLISHED` → `ARCHIVED`.
 | Operasi | Perilaku |
 |---|---|
 | **Draft baru** | Menyalin versi `PUBLISHED` terakhir (atau definisi bawaan) menjadi `DRAFT` baru dengan `versionNumber` berikutnya |
+| **Duplikat template** | Membuat template BARU: salin metadata + `fieldDefinitions` + binding `ContractTemplateField` dari sumber, lalu tulis snapshot `PUBLISHED` terakhirnya sebagai versi `1` berstatus `DRAFT` |
 | **Publish** | Atomik: arsipkan `PUBLISHED` lama → set draft menjadi `PUBLISHED` → bekukan `fieldDefinitions` sebagai snapshot |
 | **Rollback** | Mengaktifkan kembali versi `ARCHIVED` sebagai `PUBLISHED` |
 
 - Versi `PUBLISHED` bersifat **immutable** — perubahan hanya lewat draft baru.
 - `fieldDefinitions` dibekukan saat publish; placeholder `&#123;&#123;custom.*&#125;&#125;` divalidasi terhadap snapshot itu.
 - **Kontrak memakai snapshot versi** saat dibuat. Publish ulang template tidak mengubah kontrak lama.
+- **Duplikat template** (`POST /contract-templates/:id/duplicate`) menyalin snapshot terbit APA ADANYA — tanpa normalisasi ulang — karena konten efektif hanya dibaca dari versi `PUBLISHED`; baris template tanpa versi akan jatuh ke `CONTRACT_DOCUMENT_DEFINITIONS[templateKey]` dan salinannya tampak "kembali ke default". `family`/`templateKey` diwarisi sumber (bukan dari payload), konten divalidasi sebelum ditulis, dan riwayat versi sumber tidak ikut disalin.
 
 ## Field Dinamis & Placeholder
 

@@ -6,7 +6,11 @@ import { ActivityLogService } from '../activity-log/activity-log.service'
 import { definitionToContentDefinition, definitionToFieldDefinitions } from './default-template-definition'
 import { validateContentDefinition } from './template-schema.validator'
 import { TemplateFieldsService } from './template-fields.service'
-import { addPlaceholderKeysFromDefinitions, applyTemplateBindings } from './template-field-bindings.helpers'
+import {
+  addPlaceholderKeysFromDefinitions,
+  applyTemplateBindings,
+  normalizeVersionFieldDefinitions,
+} from './template-field-bindings.helpers'
 
 export interface ContractTemplatePayload {
   code: string
@@ -20,6 +24,21 @@ export interface ContractTemplatePayload {
   isActive?: boolean
   version?: number
   notes?: string | null
+}
+
+/**
+ * Payload duplikasi. `family` dan `templateKey` sengaja TIDAK ada di sini:
+ * keduanya diwarisi dari template sumber supaya konten hasil salinan selalu
+ * cocok dengan generator dokumennya.
+ */
+export interface DuplicateTemplatePayload {
+  code: string
+  name: string
+  contractTypeId?: number | null
+  jobRoleId?: number | null
+  description?: string | null
+  notes?: string | null
+  isActive?: boolean
 }
 
 @Injectable()
@@ -208,6 +227,129 @@ export class ContractTemplatesService {
         performedBy: actor.name,
         performedByRole: actor.role,
         detail: `Tipe kontrak: ${(template as any).contractType?.name ?? '-'}`,
+      })
+      return template
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        throw new ConflictException('Kode template kontrak sudah digunakan')
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Duplikat template dari versi PUBLISHED terakhir template sumber.
+   *
+   * Kenapa tidak cukup `create()`: baris template tidak menyimpan konten.
+   * Konten efektif dibaca dari versi PUBLISHED, jadi template baru tanpa versi
+   * akan jatuh ke `CONTRACT_DOCUMENT_DEFINITIONS[templateKey]` (definisi
+   * hard-code) dan salinannya tampak "kembali ke default". Karena itu duplikasi
+   * menyalin snapshot terbit APA ADANYA — byte-identik dengan dokumen yang
+   * sedang dipakai kontrak berjalan.
+   *
+   * `fieldDefinitions` versi dan baris binding `ContractTemplateField` ikut
+   * disalin. Tanpa keduanya `applyTemplateBindings()` membuang seluruh field
+   * CONTRACT_INPUT yang tidak ter-bind (lihat opsi `catalogContractInputKeys`),
+   * sehingga form kontrak kehilangan field dinamisnya dan publish bisa gagal
+   * karena placeholder tidak dikenal.
+   *
+   * Salinan berstatus DRAFT: admin meninjau dulu sebelum menerbitkan, sama
+   * seperti alur versi lainnya. Riwayat versi sumber TIDAK ikut disalin.
+   */
+  async duplicate(
+    sourceId: number,
+    payload: DuplicateTemplatePayload,
+    actor: { name: string; role: string },
+  ) {
+    const source = await this.findOne(sourceId)
+    const published = await this.prisma.client.contractTemplateVersion.findFirst({
+      where: { templateId: sourceId, status: 'PUBLISHED' },
+      orderBy: { versionNumber: 'desc' },
+    })
+    // Draft yang belum terbit sengaja diabaikan: "hasil terakhir yang sudah
+    // di-deploy" hanya berarti versi PUBLISHED. Menyalin draft akan membawa
+    // pekerjaan yang belum disetujui ke template baru.
+    if (!published) {
+      throw new BadRequestException(
+        `Template "${source.name}" belum punya versi terbit. Terbitkan versinya dulu di editor konten, baru duplikasi.`,
+      )
+    }
+
+    // Verbatim: snapshot terbit sudah dinormalisasi saat publish
+    // (placeholder, judul pasal, judul PKWT), jadi menormalkan ulang di sini
+    // hanya berisiko mengubah hasil salinan.
+    const contentDefinition = published.contentDefinition
+    const fieldDefinitions = normalizeVersionFieldDefinitions(published.fieldDefinitions)
+
+    // Validasi SEBELUM menulis. Key diambil dari katalog aktif + definisi versi
+    // sumber, sehingga salinan tetap sah walau katalog sempat berubah setelah
+    // sumber diterbitkan.
+    const catalogRows = await this.prisma.client.templateFieldDefinition.findMany({
+      where: { isActive: true },
+      select: { key: true },
+    })
+    const validKeys = new Set(catalogRows.map(row => row.key))
+    addPlaceholderKeysFromDefinitions(contentDefinition, fieldDefinitions, validKeys)
+    validateContentDefinition(contentDefinition, [...validKeys], source.family as any)
+
+    const bindings = await this.prisma.client.contractTemplateField.findMany({
+      where: { templateId: sourceId },
+    })
+
+    try {
+      const template = await this.prisma.client.$transaction(async (tx) => {
+        const created = await tx.contractTemplate.create({
+          data: {
+            code: payload.code,
+            name: payload.name,
+            // Diwarisi dari sumber, bukan dari payload.
+            family: source.family,
+            templateKey: source.templateKey,
+            contractTypeId: payload.contractTypeId ?? null,
+            jobRoleId: payload.jobRoleId ?? null,
+            description: payload.description ?? null,
+            notes: payload.notes ?? null,
+            requiredFields: (source.requiredFields as any) ?? null,
+            isActive: payload.isActive ?? true,
+            version: 1,
+          },
+          include: this.include,
+        })
+
+        if (bindings.length > 0) {
+          await tx.contractTemplateField.createMany({
+            data: bindings.map(binding => ({
+              templateId: created.id,
+              fieldId: binding.fieldId,
+              required: binding.required,
+              sortOrder: binding.sortOrder,
+              config: (binding.config ?? undefined) as any,
+            })),
+          })
+        }
+
+        await tx.contractTemplateVersion.create({
+          data: {
+            templateId: created.id,
+            versionNumber: 1,
+            status: 'DRAFT',
+            contentDefinition: contentDefinition as any,
+            fieldDefinitions: fieldDefinitions as any,
+            changeSummary: `Salinan dari ${source.name} versi ${published.versionNumber}`,
+            createdByName: actor.name,
+          },
+        })
+
+        return created
+      })
+
+      void this.activityLog.log({
+        action: 'CREATE',
+        module: 'Template Kontrak',
+        targetLabel: template.name,
+        performedBy: actor.name,
+        performedByRole: actor.role,
+        detail: `Duplikat dari ${source.code} versi ${published.versionNumber}`,
       })
       return template
     } catch (error: any) {

@@ -38,6 +38,19 @@ const TEMPLATE_KEY_OPTIONS: Record<string, { label: string, value: string }[]> =
 const formOpen = ref(false)
 const saving = ref(false)
 const editingId = ref<number | null>(null)
+/**
+ * Template sumber saat form dipakai untuk duplikasi. `null` = tambah/edit biasa.
+ * Menentukan endpoint yang dipanggil `onSubmit()`.
+ */
+const duplicatingFrom = ref<ContractTemplate | null>(null)
+
+/** Penjelasan di form duplikat: dari mana isinya berasal dan statusnya. */
+const duplicateNotice = computed(() => {
+  const source = duplicatingFrom.value
+  if (!source) return ''
+  return `Isi template baru akan sama dengan versi terbit terakhir "${source.name}". `
+    + 'Salinan dibuat sebagai DRAFT — tinjau lalu terbitkan agar bisa dipakai membuat kontrak.'
+})
 
 const schema = z.object({
   code: z.string().min(3, 'Min. 3 karakter'),
@@ -74,6 +87,7 @@ const templateKeyOptions = computed(() =>
 
 function resetForm() {
   editingId.value = null
+  duplicatingFrom.value = null
   state.code = ''
   state.name = ''
   state.family = 'PKWT'
@@ -113,12 +127,19 @@ function openEdit(template: ContractTemplate) {
 }
 
 /**
- * Buka form tambah dengan nilai awal dari template yang sudah ada.
+ * Buka form duplikat dengan nilai awal dari template yang sudah ada.
+ *
+ * Salinan diambil dari versi PUBLISHED terakhir template sumber, bukan dari
+ * definisi bawaan — lihat `POST /contract-templates/:id/duplicate`. Karena
+ * `family`/`templateKey` menentukan konten salinan, keduanya dikunci di form
+ * dan backend mengabaikan nilai kiriman untuk keduanya.
+ *
  * Kode HARUS diganti admin karena `code` unik di database (P2002) — jadi
  * dikosongkan, bukan diisi otomatis, agar admin sadar perlu kode baru.
  */
 function openDuplicate(template: ContractTemplate) {
   resetForm()
+  duplicatingFrom.value = template
   editingId.value = null
   state.code = ''
   state.name = `${template.name} (Salinan)`
@@ -189,7 +210,36 @@ function toggleActive(template: ContractTemplate) {
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   saving.value = true
+  const source = duplicatingFrom.value
   try {
+    if (source) {
+      // Salinan membawa versi terbit sumber sebagai DRAFT. `family`/`templateKey`
+      // tidak dikirim: backend mewarisinya dari template sumber.
+      const created = await $fetch<ContractTemplate>(`/api/contract-templates/${source.id}/duplicate`, {
+        method: 'POST',
+        body: {
+          code: event.data.code,
+          name: event.data.name,
+          contractTypeId: event.data.contractTypeId,
+          jobRoleId: event.data.jobRoleId,
+          description: event.data.description,
+          notes: event.data.notes,
+          isActive: event.data.isActive
+        }
+      })
+      toast.add({
+        title: 'Template diduplikat',
+        description: `Konten disalin dari versi terbit "${source.name}". Salinan masih DRAFT — tinjau lalu terbitkan agar bisa dipakai membuat kontrak.`,
+        color: 'success'
+      })
+      formOpen.value = false
+      resetForm()
+      await refresh()
+      // Langsung buka editor konten salinan: DRAFT-nya sudah terpilih, jadi
+      // admin bisa meninjau isi (bukan default) dan menerbitkannya.
+      openContentEditor(created)
+      return
+    }
     if (editingId.value) {
       await $fetch(`/api/contract-templates/${editingId.value}`, { method: 'PUT', body: event.data })
       toast.add({ title: 'Template kontrak diperbarui', color: 'success' })
@@ -201,7 +251,11 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     resetForm()
     await refresh()
   } catch (e) {
-    toast.add({ title: 'Gagal menyimpan template', description: apiErrorMessage(e), color: 'error' })
+    toast.add({
+      title: source ? 'Gagal menduplikat template' : 'Gagal menyimpan template',
+      description: apiErrorMessage(e),
+      color: 'error'
+    })
   } finally {
     saving.value = false
   }
@@ -396,10 +450,21 @@ const visibleFamilyKeys = computed(() =>
 // ini hanya lapisan UX, bukan satu-satunya penjaga.
 function moreActions(template: ContractTemplate) {
   const used = usageCount(template)
+  // Duplikat menyalin versi PUBLISHED terakhir. Tanpa versi terbit tidak ada
+  // yang bisa disalin (backend menolak), jadi menu dinonaktifkan dengan label
+  // yang menjelaskan alasannya — pola yang sama dengan tombol Hapus.
+  const hasPublished = !!publishedVersion(template)
   const actions: { label: string, icon: string, onSelect?: () => void, disabled?: boolean }[][] = [
     [
       { label: 'Edit detail template', icon: 'i-lucide-pencil', onSelect: () => openEdit(template) },
-      { label: 'Duplikat template', icon: 'i-lucide-copy', onSelect: () => openDuplicate(template) }
+      {
+        label: hasPublished
+          ? 'Duplikat template'
+          : 'Duplikat template — belum ada versi terbit',
+        icon: 'i-lucide-copy',
+        disabled: !hasPublished || !auth.canManageMasterData,
+        onSelect: () => openDuplicate(template)
+      }
     ],
     [
       {
@@ -748,7 +813,7 @@ function moreActions(template: ContractTemplate) {
     </template>
   </UDashboardPanel>
 
-  <UModal v-model:open="formOpen" :title="editingId ? 'Edit Template Kontrak' : 'Tambah Template Kontrak'" :ui="{ content: 'max-w-2xl' }">
+  <UModal v-model:open="formOpen" :title="editingId ? 'Edit Template Kontrak' : duplicatingFrom ? 'Duplikat Template Kontrak' : 'Tambah Template Kontrak'" :ui="{ content: 'max-w-2xl' }">
     <template #body>
       <UForm
         :schema="schema"
@@ -756,6 +821,15 @@ function moreActions(template: ContractTemplate) {
         class="space-y-4"
         @submit="onSubmit"
       >
+        <UAlert
+          v-if="duplicatingFrom"
+          color="info"
+          variant="subtle"
+          icon="i-lucide-copy"
+          title="Konten disalin dari versi terbit"
+          :description="duplicateNotice"
+        />
+
         <div class="grid grid-cols-2 gap-4">
           <UFormField label="Kode" name="code" required>
             <UInput v-model="state.code" class="w-full" />
@@ -766,19 +840,30 @@ function moreActions(template: ContractTemplate) {
         </div>
 
         <div class="grid grid-cols-2 gap-4">
-          <UFormField label="Keluarga" name="family" required>
-            <USelect v-model="state.family" :items="[{ label: 'PKWT', value: 'PKWT' }, { label: 'MITRA', value: 'MITRA' }]" class="w-full" />
+          <UFormField
+            label="Keluarga"
+            name="family"
+            required
+            :hint="duplicatingFrom ? 'Mengikuti template sumber' : undefined"
+          >
+            <USelect
+              v-model="state.family"
+              :items="[{ label: 'PKWT', value: 'PKWT' }, { label: 'MITRA', value: 'MITRA' }]"
+              :disabled="!!duplicatingFrom"
+              class="w-full"
+            />
           </UFormField>
           <UFormField
             label="Template Key"
             name="templateKey"
             required
-            hint="Menentukan konten dokumen PDF yang digenerate"
+            :hint="duplicatingFrom ? 'Mengikuti template sumber' : 'Menentukan konten dokumen PDF yang digenerate'"
           >
             <USelect
               v-model="state.templateKey"
               :items="templateKeyOptions"
               placeholder="Pilih template key..."
+              :disabled="!!duplicatingFrom"
               class="w-full"
             />
           </UFormField>
@@ -822,7 +907,7 @@ function moreActions(template: ContractTemplate) {
           />
           <UButton
             type="submit"
-            label="Simpan"
+            :label="duplicatingFrom ? 'Duplikat' : 'Simpan'"
             color="primary"
             :loading="saving"
           />

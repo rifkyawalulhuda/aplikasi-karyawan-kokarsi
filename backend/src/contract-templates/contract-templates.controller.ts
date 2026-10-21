@@ -46,6 +46,39 @@ class UpsertContractTemplateDto {
   notes?: string
 }
 
+/**
+ * DTO duplikasi: hanya metadata yang boleh diubah. `family` & `templateKey`
+ * diwarisi dari template sumber supaya konten salinan selalu cocok dengan
+ * generator dokumennya (lihat `ContractTemplatesService.duplicate`).
+ */
+class DuplicateContractTemplateDto {
+  @IsString()
+  code: string
+
+  @IsString()
+  name: string
+
+  @IsOptional()
+  @IsInt()
+  contractTypeId?: number
+
+  @IsOptional()
+  @IsInt()
+  jobRoleId?: number
+
+  @IsOptional()
+  @IsString()
+  description?: string
+
+  @IsOptional()
+  @IsString()
+  notes?: string
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean
+}
+
 @UseGuards(AuthGuard('jwt'))
 @Controller('contract-templates')
 export class ContractTemplatesController {
@@ -71,6 +104,21 @@ export class ContractTemplatesController {
   update(@Request() req: any, @Param('id', ParseIntPipe) id: number, @Body() dto: UpsertContractTemplateDto) {
     this.service.ensureAdmin(req.user?.role)
     return this.service.update(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
+  }
+
+  /**
+   * Salin template BESERTA versi terbit terakhirnya, sebagai DRAFT baru.
+   * Dipisah dari `POST /contract-templates` karena endpoint itu tidak menyentuh
+   * versi — akibatnya salinan tampil dengan konten default.
+   */
+  @Post(':id/duplicate')
+  duplicate(
+    @Request() req: any,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: DuplicateContractTemplateDto,
+  ) {
+    this.service.ensureAdmin(req.user?.role)
+    return this.service.duplicate(id, dto, { name: req.user?.fullName ?? req.user?.name ?? 'System', role: req.user?.role ?? 'UNKNOWN' })
   }
 
   @Get(':id/content-preview')
