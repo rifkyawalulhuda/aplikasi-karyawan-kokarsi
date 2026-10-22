@@ -83,6 +83,13 @@ const blockPickerOpen = ref(false); const confirmDeleteIndex = ref<number | null
 /** Sub-bagian blok yang sedang difokuskan (indeks paragraf/poin/baris/kolom), agar sisipan tepat sasaran. */
 const focusedTarget = ref<{ blockId: string | null, path: string | null }>({ blockId: null, path: null })
 const form = reactive({ key: '', label: '', dataType: 'TEXT', sourceType: 'CONTRACT_INPUT', options: '' })
+/** Pesan validasi form field kustom (ditampilkan di dalam modal). */
+const fieldError = ref('')
+/** Aturan key backend (`template-fields.service.ts` KEY_PATTERN) — dicek di klien
+ *  agar admin tidak menunggu round-trip hanya untuk salah format. */
+const FIELD_KEY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$/
+/** Pratinjau placeholder yang akan disisipkan ke teks template. */
+const fieldPlaceholderPreview = computed(() => `{{custom.${form.key.trim() || 'kunci_field'}}}`)
 const isPkwt = computed(() => props.template?.family === 'PKWT'); const blocks = computed<any[]>({ get: () => draft.value?.contentDefinition?.languages?.[lang.value] ?? selected.value?.contentDefinition?.languages?.[lang.value] ?? [], set: (v) => { if (draft.value)draft.value.contentDefinition.languages[lang.value] = v } })
 
 /**
@@ -115,7 +122,14 @@ const fieldItems = computed(() => {
   const catalog: CatalogField[] = fields.value.length
     ? (fields.value as CatalogField[])
     : (Array.isArray(draft.value?.fieldDefinitions) ? draft.value.fieldDefinitions : draft.value?.fieldDefinitions?.fields ?? [])
-  if (!bindings.value.length) return catalog.map(f => ({ ...f, bound: true }))
+  // Katalog kosong (mis. semua field diarsipkan) → daftar berasal dari
+  // `fieldDefinitions` versi, yang memang hanya memuat field yang sudah dipakai.
+  // Bila katalog ADA tetapi binding gagal dimuat, jangan menebak: field input
+  // manual dianggap belum dipakai agar tidak disisipkan tanpa sumber nilai.
+  if (!bindings.value.length) {
+    if (!fields.value.length) return catalog.map(f => ({ ...f, bound: true }))
+    return catalog.map(f => ({ ...f, bound: f.sourceType !== 'CONTRACT_INPUT' }))
+  }
   const boundByKey = new Map<string, boolean>(bindings.value.map(b => [b.key, b.bound] as [string, boolean]))
   return catalog.map(f => ({
     ...f,
@@ -492,7 +506,113 @@ function blockDropIndicator(i: number): 'none' | 'before' | 'after' {
 
 /** @deprecated gunakan `insertField()` — dipertahankan untuk kompatibilitas. */
 const useField = insertField
-async function createField() { fieldSaving.value = true; try { const f = await $fetch<any>('/api/template-fields', { method: 'POST', body: { key: form.key, label: form.label, dataType: form.dataType, sourceType: form.sourceType, options: form.dataType === 'DROPDOWN' ? form.options.split(',').map(x => x.trim()).filter(Boolean) : undefined } }); fields.value.push(f); fieldOpen.value = false; toast.add({ title: 'Field dibuat', color: 'success' }) } catch (e: any) { toast.add({ title: 'Field gagal dibuat', description: apiErrorMessage(e), color: 'error' }) } finally { fieldSaving.value = false } }
+
+function resetFieldForm() {
+  form.key = ''
+  form.label = ''
+  form.dataType = 'TEXT'
+  form.sourceType = 'CONTRACT_INPUT'
+  form.options = ''
+  fieldError.value = ''
+}
+
+function openFieldModal() {
+  resetFieldForm()
+  fieldOpen.value = true
+}
+
+/** Validasi klien; pesan pertama yang gagal dikembalikan sebagai string kosong bila lolos. */
+function validateFieldForm(): string {
+  const key = form.key.trim()
+  const label = form.label.trim()
+  if (!key) return 'Kunci wajib diisi.'
+  if (!FIELD_KEY_PATTERN.test(key)) {
+    return 'Kunci hanya boleh huruf kecil, angka, dan garis bawah — tanpa spasi. Contoh: nama_panggilan.'
+  }
+  const existing = fields.value.some((f: { key?: unknown }) => String(f?.key ?? '').replace(/^custom\./, '') === key)
+  if (existing) return `Kunci "${key}" sudah dipakai field lain. Gunakan kunci berbeda.`
+  if (!label) return 'Label wajib diisi.'
+  if (form.dataType === 'DROPDOWN' && !form.options.split(',').map(x => x.trim()).filter(Boolean).length) {
+    return 'Field DROPDOWN memerlukan minimal satu pilihan.'
+  }
+  return ''
+}
+
+/**
+ * Muat ulang katalog binding template.
+ *
+ * Wajib dipanggil setelah field baru dibuat: panel "Kelola" dirender dari
+ * `bindings`, bukan dari `fields`, sehingga tanpa ini field baru tidak muncul
+ * di sana dan tidak pernah bisa di-bind (tombol sisip tetap nonaktif).
+ */
+async function reloadBindings() {
+  if (!props.template) return
+  try {
+    const res = await $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', {
+      query: { templateId: props.template.id }
+    })
+    bindings.value = res.fields ?? []
+  } catch (e) {
+    toast.add({ title: 'Gagal memuat daftar field template', description: apiErrorMessage(e), color: 'error' })
+  }
+}
+
+async function createField() {
+  const invalid = validateFieldForm()
+  if (invalid) {
+    fieldError.value = invalid
+    return
+  }
+
+  fieldSaving.value = true
+  fieldError.value = ''
+  try {
+    const created = await $fetch<{ id: number, key: string }>('/api/template-fields', {
+      method: 'POST',
+      body: {
+        key: form.key.trim(),
+        label: form.label.trim(),
+        dataType: form.dataType,
+        // Dokumen kontrak hanya punya jalur resolve untuk input manual;
+        // MASTER_REFERENCE ditolak backend saat binding.
+        sourceType: 'CONTRACT_INPUT',
+        options: form.dataType === 'DROPDOWN'
+          ? form.options.split(',').map(x => x.trim()).filter(Boolean)
+          : undefined
+      }
+    })
+    fields.value.push(created)
+
+    // Katalog berubah → binding dimuat ulang agar field baru muncul di "Kelola".
+    await reloadBindings()
+
+    // Langsung pakai di template ini supaya bisa disisipkan tanpa langkah manual.
+    const row = bindings.value.find(b => b.fieldId === created.id)
+    const bound = row ? await commitBinding(row, { bound: true, required: false }, { silent: true }) : false
+
+    fieldOpen.value = false
+    resetFieldForm()
+    if (bound) {
+      toast.add({
+        title: 'Field dibuat dan dipakai template ini',
+        description: `Sisipkan lewat {{custom.${created.key}}}. Terbitkan versi baru agar muncul di form kontrak.`,
+        color: 'success'
+      })
+    } else {
+      toast.add({
+        title: 'Field dibuat, belum dipakai template',
+        description: 'Aktifkan lewat tombol "Kelola" agar bisa disisipkan ke teks.',
+        color: 'warning'
+      })
+    }
+  } catch (e) {
+    const message = apiErrorMessage(e)
+    fieldError.value = message
+    toast.add({ title: 'Field gagal dibuat', description: message, color: 'error' })
+  } finally {
+    fieldSaving.value = false
+  }
+}
 const color = (s: string) => s === 'PUBLISHED' ? 'success' : s === 'DRAFT' ? 'warning' : 'neutral'
 
 // ── Panel binding: field katalog mana yang dipakai template ini + flag wajib ──
@@ -557,25 +677,39 @@ function setBinding(row: BindingView, patch: { bound?: boolean; required?: boole
   void commitBinding(row, { bound: nextBound, required: nextRequired })
 }
 
-async function commitBinding(row: BindingView, patch: { bound: boolean; required: boolean }) {
+/**
+ * Simpan satu perubahan binding.
+ *
+ * @returns `true` bila server menerima perubahan. `options.silent` menahan toast
+ * sukses agar pemanggil bisa menampilkan pesan gabungan (mis. setelah membuat
+ * field baru).
+ */
+async function commitBinding(
+  row: BindingView,
+  patch: { bound: boolean, required: boolean },
+  options: { silent?: boolean } = {}
+): Promise<boolean> {
   bindingSaving.value = row.fieldId
   try {
     const res = await $fetch<{ fields: BindingView[] }>('/api/template-fields/bindings', {
       method: 'PUT',
-      body: { templateId: props.template!.id, fieldId: row.fieldId, bound: patch.bound, required: patch.required },
+      body: { templateId: props.template!.id, fieldId: row.fieldId, bound: patch.bound, required: patch.required }
     })
     bindings.value = res.fields ?? bindings.value
+    if (options.silent) return true
     if (!patch.bound && row.usedInContent) {
       toast.add({
         title: 'Field dilepas dari template',
         description: `Hapus ${placeholderText(fieldPlaceholderKey(row))} dari teks template sebelum menerbitkan versi baru.`,
-        color: 'warning',
+        color: 'warning'
       })
     } else {
       toast.add({ title: patch.bound ? 'Field dipakai di template' : 'Field dilepas dari template', color: 'success' })
     }
+    return true
   } catch (e: any) {
     toast.add({ title: 'Gagal mengubah field', description: apiErrorMessage(e), color: 'error' })
+    return false
   } finally {
     bindingSaving.value = null
   }
@@ -1555,7 +1689,7 @@ function removeInvalidBlock(index: number) {
                   label="Baru"
                   icon="i-lucide-plus"
                   variant="soft"
-                  @click="fieldOpen = true"
+                  @click="openFieldModal"
                 />
               </div>
             </div>
@@ -1840,24 +1974,44 @@ function removeInvalidBlock(index: number) {
     description="Field dipakai sebagai placeholder di dalam blok teks."
   >
     <template #body>
-      <div class="space-y-3">
-        <UFormField label="Kunci" help="Tanpa spasi; gunakan titik untuk pengelompokan, mis. employee.fullName" required>
-          <UInput v-model="form.key" placeholder="employee.namaPanggilan" class="w-full" />
+      <div class="space-y-4">
+        <UFormField
+          label="Kunci"
+          help="Huruf kecil, angka, dan garis bawah — tanpa spasi. Contoh: nama_panggilan"
+          required
+        >
+          <UInput v-model="form.key" placeholder="nama_panggilan" class="w-full font-mono" />
         </UFormField>
+
         <UFormField label="Label" help="Nama yang tampil saat pengisian kontrak." required>
           <UInput v-model="form.label" placeholder="Nama Panggilan" class="w-full" />
         </UFormField>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <UFormField label="Tipe data">
-            <USelect v-model="form.dataType" :items="['TEXT', 'NUMBER', 'DATE', 'DROPDOWN', 'MASTER_REFERENCE']" class="w-full" />
-          </UFormField>
-          <UFormField label="Sumber nilai">
-            <USelect v-model="form.sourceType" :items="['CONTRACT_INPUT', 'MASTER_REFERENCE']" class="w-full" />
-          </UFormField>
-        </div>
+
+        <UFormField label="Tipe data" help="Menentukan input yang tampil di form kontrak.">
+          <USelect v-model="form.dataType" :items="['TEXT', 'NUMBER', 'DATE', 'DROPDOWN']" class="w-full" />
+        </UFormField>
+
         <UFormField v-if="form.dataType === 'DROPDOWN'" label="Pilihan" help="Pisahkan tiap opsi dengan koma.">
           <UInput v-model="form.options" placeholder="Tetap, Kontrak, Harian" class="w-full" />
         </UFormField>
+
+        <div class="flex items-start gap-2 rounded-lg border border-default bg-elevated/30 p-3 text-xs leading-relaxed text-muted">
+          <UIcon name="i-lucide-info" class="mt-0.5 size-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <span>
+            Nilainya diisi petugas saat membuat kontrak, lalu disisipkan ke dokumen sebagai
+            <code class="font-mono text-highlighted">{{ fieldPlaceholderPreview }}</code>.
+            Field langsung dipakai di template ini — terbitkan versi baru agar muncul di form kontrak.
+          </span>
+        </div>
+
+        <p
+          v-if="fieldError"
+          class="flex items-start gap-1.5 text-xs text-error-600 dark:text-error-400"
+          role="alert"
+        >
+          <UIcon name="i-lucide-circle-alert" class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {{ fieldError }}
+        </p>
       </div>
     </template>
     <template #footer>
@@ -1866,7 +2020,7 @@ function removeInvalidBlock(index: number) {
           label="Batal"
           color="neutral"
           variant="subtle"
-          @click="fieldOpen = false"
+          @click="fieldOpen = false; resetFieldForm()"
         />
         <UButton
           label="Buat field"
