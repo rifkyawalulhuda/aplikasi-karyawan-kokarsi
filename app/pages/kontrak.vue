@@ -51,10 +51,15 @@ const previewPdfSrc = ref('')
 
 // History modal
 const historyModal = ref(false)
+const historyModalRef = useTemplateRef('historyModalRef')
 const selectedHistoryContractId = ref<number | null>(null)
 const reopenHistoryAfterEdit = ref(false)
 const reopenHistoryAfterPreview = ref(false)
 const lastHistoryEmployeeId = ref<number | null>(null)
+
+// Perpanjang dari modal Preview Dokumen: setelah tersimpan, preview ditutup dan
+// Riwayat Kontrak karyawan dibuka agar kontrak baru terlihat di rantainya.
+const renewFromPreview = ref(false)
 
 // Context Menu (klik kanan)
 const contextMenu = ref(false)
@@ -161,13 +166,30 @@ function openRenewFromSummary(row: ContractSummaryRow) {
   openRenew(contract)
 }
 
-function openRenew(contract: Contract) {
+function openRenew(contract: Contract, fromPreview = false) {
+  renewFromPreview.value = fromPreview
   renewParent.value = contract
   renewModal.value = true
 }
 
 function handleRenewSaved() {
   refresh()
+  // Riwayat yang sedang terbuka (perpanjangan dari modal Riwayat) dimuat ulang
+  // agar kontrak baru langsung muncul tanpa menutup modal.
+  if (historyModal.value) historyModalRef.value?.reload()
+
+  if (!renewFromPreview.value) return
+  renewFromPreview.value = false
+  // Jangan biarkan watcher `previewModal` ikut membuka riwayat lagi.
+  reopenHistoryAfterPreview.value = false
+  // `employeeId` diambil dari detail kontrak yang dimuat saat preview dibuka.
+  // Tidak memakai `lastHistoryEmployeeId` agar tidak salah karyawan bila detail
+  // gagal dimuat.
+  const employeeId = previewContract.value?.employeeId
+  previewModal.value = false
+  if (employeeId) {
+    nextTick(() => openHistoryById(employeeId))
+  }
 }
 
 // ── Export Excel: riwayat kontrak per karyawan ────────────────────────────────
@@ -234,6 +256,7 @@ async function handleExportExcel() {
 }
 
 async function openPreview(contractId: number, contractObj?: Contract) {
+  renewFromPreview.value = false
   previewContract.value = contractObj ?? { id: contractId } as Contract
   previewModal.value = true
   previewLoading.value = true
@@ -241,7 +264,17 @@ async function openPreview(contractId: number, contractObj?: Contract) {
   previewPdfSrc.value = ''
 
   try {
-    previewData.value = await $fetch<ContractDocumentPreview>(`/api/contracts/${contractId}/document-preview`)
+    // Detail kontrak dimuat paralel: menyertakan `renewEligibility` yang
+    // menentukan tombol Perpanjang, sekaligus objek lengkap untuk modal renew.
+    const [data, detail] = await Promise.all([
+      $fetch<ContractDocumentPreview>(`/api/contracts/${contractId}/document-preview`),
+      $fetch<Contract>(`/api/contracts/${contractId}`, {
+        query: { withRenewEligibility: 'true' },
+        credentials: 'include'
+      }).catch(() => null)
+    ])
+    previewData.value = data
+    if (detail) previewContract.value = detail
     if ((previewData.value?.missingFields?.length ?? 0) === 0) {
       previewPdfSrc.value = `/api/contracts/${contractId}/download-pdf?preview=${Date.now()}`
     }
@@ -255,6 +288,36 @@ async function openPreview(contractId: number, contractObj?: Contract) {
   } finally {
     previewLoading.value = false
   }
+}
+
+/** Status yang relevan untuk perpanjangan (lihat `renew()` di backend). */
+const previewRenewable = computed(() =>
+  previewContract.value?.status === 'AKAN_HABIS' || previewContract.value?.status === 'EXPIRED'
+)
+
+/**
+ * Kelayakan dari server. Bila backend lama belum mengirim `renewEligibility`,
+ * jatuh ke aturan status saja supaya tombol tetap berfungsi.
+ */
+const previewRenewEligibility = computed<{ eligible: boolean, reason?: string }>(() => {
+  const contract = previewContract.value
+  if (!contract) return { eligible: false, reason: 'Kontrak belum dimuat.' }
+  if (contract.renewEligibility) return contract.renewEligibility
+  return previewRenewable.value
+    ? { eligible: true }
+    : { eligible: false, reason: 'Kontrak belum memasuki masa Akan Habis atau Expired.' }
+})
+
+const previewCanRenew = computed(() => previewRenewEligibility.value.eligible)
+
+const previewRenewBlockedReason = computed(() =>
+  previewRenewEligibility.value.reason ?? 'Kontrak belum dapat diperpanjang.'
+)
+
+function openRenewFromPreview() {
+  const contract = previewContract.value
+  if (!contract || !previewCanRenew.value) return
+  openRenew(contract, true)
 }
 
 function openPreviewFromHistory(contract: Contract) {
@@ -705,6 +768,7 @@ watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
 
   <!-- Modal Riwayat Kontrak -->
   <KontrakContractHistoryModal
+    ref="historyModalRef"
     v-model:open="historyModal"
     :employee-id="lastHistoryEmployeeId"
     :selected-contract-id="selectedHistoryContractId"
@@ -729,6 +793,21 @@ watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
           </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
+          <UTooltip
+            v-if="previewRenewable"
+            :text="previewCanRenew ? 'Buat kontrak perpanjangan' : previewRenewBlockedReason"
+          >
+            <span>
+              <UButton
+                label="Perpanjang"
+                icon="i-lucide-refresh-cw"
+                color="success"
+                variant="solid"
+                :disabled="!previewCanRenew || !previewContract"
+                @click="openRenewFromPreview"
+              />
+            </span>
+          </UTooltip>
           <UButton
             label="Generate Ulang"
             icon="i-lucide-file-cog"

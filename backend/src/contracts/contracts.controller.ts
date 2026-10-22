@@ -53,8 +53,11 @@ export class ContractsController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.findOne(id)
+  findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('withRenewEligibility') withRenewEligibility?: string,
+  ) {
+    return this.service.findOne(id, { withRenewEligibility: withRenewEligibility === 'true' })
   }
 
   @Get(':id/document-preview')

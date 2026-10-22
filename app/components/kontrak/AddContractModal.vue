@@ -3,6 +3,7 @@ import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ContractTemplate, ContractHistoryResponse, ContractStatus, ContractInputField, ContractInputFieldsResponse } from '~/types'
 import { CalendarDate } from '@internationalized/date'
+import { contractPeriodError } from '~/utils/contract-period'
 
 interface EmployeeOption { label: string; value: number }
 interface LookupOption { label: string; value: number }
@@ -218,6 +219,8 @@ const canSubmitForm = computed(() => {
   // dinamis tidak tercetak. Tombol dimatikan, alasannya tampil sebagai banner
   // di dekat pemilih template.
   if (templateNotPublished.value) return false
+  // Periode terbalik diblokir: pesannya tampil di bawah Tanggal Selesai.
+  if (contractPeriodError(state.startDate, state.endDate)) return false
   return true
 })
 
@@ -316,6 +319,23 @@ const signedDateCal = shallowRef<CalendarDate | null>(null)
 watch(startDateCal,  val => { state.startDate  = fromCalDate(val) })
 watch(endDateCal,    val => { state.endDate    = fromCalDate(val) })
 watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
+
+// ── Blocker periode kontrak ──────────────────────────────────────────────────
+/**
+ * Pesan error bila Tanggal Selesai tidak setelah Tanggal Mulai.
+ *
+ * Dihitung sebagai computed (bukan mengandalkan validasi UForm) karena field
+ * tanggal berupa tombol + popover, yang tidak memicu event `input`/`change`
+ * pada form. Dengan `:error` di `UFormField`, pesan muncul begitu kedua tanggal
+ * terisi — termasuk saat Tanggal Mulai digeser melewati Tanggal Selesai yang
+ * sudah ada (tanggal selesai TIDAK dikosongkan otomatis).
+ */
+const endDateError = computed(() => contractPeriodError(state.startDate, state.endDate))
+
+/** Tanggal Selesai minimal H+1: kalender tidak bisa memilih tanggal ≤ mulai. */
+const endMinDateCal = computed(() =>
+  startDateCal.value ? startDateCal.value.add({ days: 1 }) : null
+)
 </script>
 
 <template>
@@ -414,12 +434,20 @@ watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
               <template #content><CalendarPicker v-model="startDateCal" /></template>
             </UPopover>
           </UFormField>
-          <UFormField label="Tanggal Selesai" name="endDate" required>
+          <UFormField
+            label="Tanggal Selesai"
+            name="endDate"
+            required
+            :error="endDateError ?? undefined"
+            :hint="endMinDateCal ? `Min: ${fromCalDate(endMinDateCal)}` : undefined"
+          >
             <UPopover :content="{ side: 'bottom', align: 'start' }">
               <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!endDateCal ? 'text-muted' : ''">
                 {{ endDateCal ? formatDisplay(endDateCal) : 'Pilih tanggal selesai' }}
               </UButton>
-              <template #content><CalendarPicker v-model="endDateCal" /></template>
+              <template #content>
+                <CalendarPicker v-model="endDateCal" :min-date="endMinDateCal" />
+              </template>
             </UPopover>
           </UFormField>
         </div>

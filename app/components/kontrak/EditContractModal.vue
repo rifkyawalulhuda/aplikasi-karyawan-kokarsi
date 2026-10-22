@@ -3,6 +3,7 @@ import * as z from 'zod'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Contract, ContractTemplate, ContractInputField, ContractInputFieldsResponse } from '~/types'
 import { CalendarDate } from '@internationalized/date'
+import { contractPeriodError } from '~/utils/contract-period'
 
 interface LookupOption { label: string; value: number }
 
@@ -26,6 +27,21 @@ const signedDateCal = shallowRef<CalendarDate | null>(null)
 watch(startDateCal,  val => { state.startDate  = fromCalDate(val) })
 watch(endDateCal,    val => { state.endDate    = fromCalDate(val) })
 watch(signedDateCal, val => { state.signedDate = fromCalDate(val) })
+
+// ── Blocker periode kontrak ──────────────────────────────────────────────────
+/**
+ * Pesan error bila Tanggal Selesai tidak setelah Tanggal Mulai. Dihitung
+ * sebagai computed karena pemilih tanggal berupa tombol + popover yang tidak
+ * memicu event `input`/`change` pada UForm; dengan `:error` di `UFormField`
+ * pesan tetap muncul seketika, termasuk saat Tanggal Mulai digeser melewati
+ * Tanggal Selesai yang sudah terisi.
+ */
+const endDateError = computed(() => contractPeriodError(state.startDate, state.endDate))
+
+/** Tanggal Selesai minimal H+1 dari Tanggal Mulai. */
+const endMinDateCal = computed(() =>
+  startDateCal.value ? startDateCal.value.add({ days: 1 }) : null
+)
 
 async function onFileSelected(e: Event) {
   const input = e.target as HTMLInputElement
@@ -312,12 +328,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
               <template #content><CalendarPicker v-model="startDateCal" /></template>
             </UPopover>
           </UFormField>
-          <UFormField label="Tanggal Selesai" name="endDate" required>
+          <UFormField
+            label="Tanggal Selesai"
+            name="endDate"
+            required
+            :error="endDateError ?? undefined"
+            :hint="endMinDateCal ? `Min: ${fromCalDate(endMinDateCal)}` : undefined"
+          >
             <UPopover :content="{ side: 'bottom', align: 'start' }">
               <UButton color="neutral" variant="outline" icon="i-lucide-calendar" class="w-full justify-start font-normal" :class="!endDateCal ? 'text-muted' : ''">
                 {{ endDateCal ? formatDisplay(endDateCal) : 'Pilih tanggal selesai' }}
               </UButton>
-              <template #content><CalendarPicker v-model="endDateCal" /></template>
+              <template #content>
+                <CalendarPicker v-model="endDateCal" :min-date="endMinDateCal" />
+              </template>
             </UPopover>
           </UFormField>
         </div>
@@ -410,7 +434,13 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 
         <div class="flex justify-end gap-2 pt-2">
           <UButton label="Batal" color="neutral" variant="subtle" @click="emit('update:open', false)" />
-          <UButton type="submit" label="Simpan" color="primary" :loading="loading" />
+          <UButton
+            type="submit"
+            label="Simpan"
+            color="primary"
+            :loading="loading"
+            :disabled="!!endDateError"
+          />
         </div>
       </UForm>
     </template>

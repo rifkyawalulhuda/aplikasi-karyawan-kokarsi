@@ -107,6 +107,16 @@ export interface Employee {
 // --- Contract ---
 export type ContractStatus = 'DRAFT' | 'AKTIF' | 'AKAN_HABIS' | 'EXPIRED' | 'SELESAI' | 'DIBATALKAN'
 
+/**
+ * Kelayakan perpanjangan yang dihitung server (`ContractsService`).
+ * `reason` terisi saat `eligible: false` — dipakai sebagai tooltip tombol
+ * Perpanjang yang dinonaktifkan.
+ */
+export interface ContractRenewEligibility {
+  eligible: boolean
+  reason?: string
+}
+
 export interface Contract {
   id: number
   employeeId: number
@@ -134,6 +144,7 @@ export interface Contract {
   generatedAt?: string | null
   parentContractId?: number | null
   parentContract?: { id: number, contractNo: string, status: ContractStatus } | null
+  renewEligibility?: ContractRenewEligibility
   createdAt: string
   updatedAt?: string
 }

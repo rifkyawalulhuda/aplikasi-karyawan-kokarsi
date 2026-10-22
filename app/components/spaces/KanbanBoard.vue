@@ -314,8 +314,17 @@ const hasColumns = computed(() => columns.value.length > 0)
       />
     </div>
 
-    <!-- Empty hasil filter -->
-    <div v-else-if="totalVisible === 0" class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+    <!--
+      Empty hasil filter: HANYA saat filter benar-benar aktif.
+      Sebelumnya cabang ini juga menangkap board yang kolomnya masih kosong
+      (belum ada kartu sama sekali), sehingga seluruh board — termasuk tombol
+      "Tambah Kolom" dan "Tambah kartu" per kolom — tertutup pesan "Tidak ada
+      kartu yang cocok" padahal tidak ada filter yang dipasang.
+    -->
+    <div
+      v-else-if="viewState.hasFilters.value && totalVisible === 0"
+      class="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center"
+    >
       <UIcon name="i-lucide-search-x" class="size-10 text-dimmed" />
       <div>
         <p class="font-medium text-highlighted">

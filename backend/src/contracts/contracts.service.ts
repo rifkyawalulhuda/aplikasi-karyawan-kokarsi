@@ -10,6 +10,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service'
 import { buildDocumentNumber } from '../shared/document-number.util'
 import { deleteUploadedFile } from '../shared/file-cleanup.util'
 import { TemplateSnapshotService } from '../contract-templates/template-snapshot.service'
+import { contractPeriodError } from '../shared/contract-period'
 
 function calculateDaysRemaining(endDate: Date): number {
   const today = startOfDay(new Date()).getTime()
@@ -59,6 +60,51 @@ export interface ContractSummaryRow {
   daysRemaining: number
   historyCount: number
   canRenew: boolean
+}
+
+/**
+ * Hasil penilaian "boleh diperpanjang" untuk satu kontrak.
+ *
+ * Dihitung di server supaya UI tidak menduplikasi aturan: tombol Perpanjang di
+ * modal Riwayat Kontrak maupun Preview Dokumen hanya membaca nilai ini, jadi
+ * tombol tidak pernah tampak aktif untuk permintaan yang pasti ditolak
+ * `renew()`.
+ */
+export interface RenewEligibility {
+  eligible: boolean
+  /** Alasan tombol tidak dapat dipakai; `undefined` saat `eligible: true`. */
+  reason?: string
+}
+
+/**
+ * Aturan kelayakan perpanjangan — cermin dari guard di `renew()`.
+ *
+ * Urutan alasan mengikuti urutan yang paling mungkin ditemui admin:
+ * status → sudah diperpanjang → SP3 → kontrak aktif lain.
+ *
+ * `hasSuccessor` (kontrak sudah punya penerus) tidak diperiksa `renew()`, tapi
+ * dicek di sini agar rantai perpanjangan tidak bercabang: dua kontrak baru yang
+ * sama-sama menunjuk satu induk.
+ */
+export function evaluateRenewEligibility(input: {
+  status: ContractStatus
+  hasSuccessor: boolean
+  hasActiveSp3: boolean
+  hasOtherActiveContract: boolean
+}): RenewEligibility {
+  if (input.status !== 'AKAN_HABIS' && input.status !== 'EXPIRED') {
+    return { eligible: false, reason: 'Kontrak belum memasuki masa Akan Habis atau Expired.' }
+  }
+  if (input.hasSuccessor) {
+    return { eligible: false, reason: 'Kontrak ini sudah diperpanjang.' }
+  }
+  if (input.hasActiveSp3) {
+    return { eligible: false, reason: 'Status eskalasi SP3 karyawan masih aktif.' }
+  }
+  if (input.hasOtherActiveContract) {
+    return { eligible: false, reason: 'Karyawan masih memiliki kontrak aktif lain yang berjalan.' }
+  }
+  return { eligible: true }
 }
 
 @Injectable()
@@ -319,13 +365,79 @@ export class ContractsService {
     return { data: paged, total, page, limit, totalPages: Math.ceil(total / limit) }
   }
 
-  async findOne(id: number) {
+  /**
+   * Detail satu kontrak.
+   *
+   * `withRenewEligibility` opt-in: kelayakan perpanjangan butuh beberapa query
+   * tambahan, jadi hanya diminta oleh modal yang benar-benar menampilkan tombol
+   * Perpanjang (Preview Dokumen). Pemanggil lain (mis. form edit) tidak ikut
+   * menanggung biayanya.
+   */
+  async findOne(id: number, options: { withRenewEligibility?: boolean } = {}) {
     const contract = await this.prisma.contract.findUnique({
       where: { id },
       include: { ...this.include, documents: true },
     })
     if (!contract) throw new NotFoundException('Kontrak tidak ditemukan')
-    return this.withComputedStatus(contract)
+    const computed = this.withComputedStatus(contract)
+    // Anotasi eksplisit: tanpa ini TypeScript menyimpulkan union dua bentuk
+    // (dengan/tanpa `renewEligibility`) dan pemanggil harus mempersempit dulu.
+    const result: typeof computed & { renewEligibility?: RenewEligibility } = computed
+    if (!options.withRenewEligibility) return result
+    return {
+      ...result,
+      renewEligibility: await this.buildRenewEligibility(contract, computed.status),
+    }
+  }
+
+  /**
+   * Blocker periode kontrak: `endDate` wajib LEBIH BESAR dari `startDate`.
+   *
+   * Ditegakkan di server (bukan hanya di form) karena API bisa dipanggil
+   * langsung; tanpa ini tanggal terbalik tersimpan dan kontrak lahir dengan
+   * durasi negatif. Pesannya sengaja sama dengan yang tampil di form.
+   */
+  private assertPeriod(startDate: string, endDate: string) {
+    const error = contractPeriodError(startDate, endDate)
+    if (error) throw new BadRequestException(error)
+  }
+
+  /** SP3 aktif memblokir pembuatan & perpanjangan kontrak (lihat `checkSp3Lockout`). */
+  private hasActiveSp3(employeeId: number) {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return this.prisma.warningLetter.findFirst({
+      where: { employeeId, warningLevel: 3, validUntil: { gte: today } },
+      select: { id: true },
+    })
+  }
+
+  /**
+   * Kelayakan perpanjangan satu kontrak. Query-nya sengaja memakai status
+   * MENTAH (`status` kolom), sama seperti `renew()`, agar tombol di UI konsisten
+   * dengan keputusan server.
+   */
+  private async buildRenewEligibility(
+    contract: { id: number; employeeId: number },
+    computedStatus: ContractStatus,
+  ): Promise<RenewEligibility> {
+    const [successor, otherActive, sp3] = await Promise.all([
+      this.prisma.contract.count({ where: { parentContractId: contract.id } }),
+      this.prisma.contract.count({
+        where: {
+          employeeId: contract.employeeId,
+          id: { not: contract.id },
+          status: { in: ['AKTIF', 'AKAN_HABIS'] },
+        },
+      }),
+      this.hasActiveSp3(contract.employeeId),
+    ])
+    return evaluateRenewEligibility({
+      status: computedStatus,
+      hasSuccessor: successor > 0,
+      hasActiveSp3: !!sp3,
+      hasOtherActiveContract: otherActive > 0,
+    })
   }
 
   async findSummary(): Promise<ContractSummaryRow[]> {
@@ -387,13 +499,34 @@ export class ContractsService {
       orderBy: { startDate: 'desc' },
     })
 
+    // Kelayakan perpanjangan dihitung sekali per karyawan (SP3) lalu dipetakan
+    // per kontrak. Semua kontrak sudah ada di memori, jadi penerus dan kontrak
+    // aktif lain tidak perlu query tambahan.
+    const sp3 = await this.hasActiveSp3(employeeId)
+    const computedContracts = this.withComputedStatuses(contracts).map(contract => ({
+      ...contract,
+      renewEligibility: evaluateRenewEligibility({
+        status: contract.status,
+        hasSuccessor: contracts.some(candidate => candidate.parentContractId === contract.id),
+        hasActiveSp3: !!sp3,
+        hasOtherActiveContract: contracts.some(candidate =>
+          candidate.id !== contract.id
+          && (candidate.status === 'AKTIF' || candidate.status === 'AKAN_HABIS'),
+        ),
+      }),
+    }))
+
     return {
       employee,
-      contracts: this.withComputedStatuses(contracts),
+      contracts: computedContracts,
     }
   }
 
   async create(dto: CreateContractDto, actor: { name: string; role: string }) {
+    // Urutan periode diperiksa paling awal: tanpa ini `endDate < startDate`
+    // lolos ke DB (hanya `@IsDateString` yang divalidasi) dan kontraknya
+    // langsung berstatus Expired dengan durasi negatif di timeline.
+    this.assertPeriod(dto.startDate, dto.endDate)
     await this.assertTemplateUsable(dto.templateId, { context: 'kontrak baru' })
     await this.checkTerminationLockout(dto.employeeId)
     await this.checkSp3Lockout(dto.employeeId)
@@ -465,6 +598,9 @@ export class ContractsService {
   }
 
   async renew(parentId: number, dto: RenewContractDto) {
+    // Periode kontrak baru harus sah lebih dulu, sebelum query kontrak induk —
+    // pesannya tentang kedua tanggal di form ini, bukan tentang tanggal induk.
+    this.assertPeriod(dto.startDate, dto.endDate)
     const parent = await this.prisma.contract.findUnique({
       where: { id: parentId },
       include: this.include,
@@ -573,6 +709,7 @@ export class ContractsService {
   }
 
   async update(id: number, dto: UpdateContractDto, actor: { name: string; role: string }) {
+    this.assertPeriod(dto.startDate, dto.endDate)
     const existing = await this.findOne(id)
 
     // Template yang sudah dipakai kontrak ini tetap boleh dipertahankan walau

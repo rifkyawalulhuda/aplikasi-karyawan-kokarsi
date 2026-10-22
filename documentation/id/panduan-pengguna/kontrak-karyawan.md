@@ -44,6 +44,15 @@ Aksi per kontrak dibuka lewat **klik kanan** pada baris kontrak (klik kiri membu
 
 Nomor kontrak di-generate otomatis dengan format: `{seq}/KK/KUKP/SII/{bulan_romawi}/{tahun}`
 
+::: warning Tanggal selesai harus setelah tanggal mulai
+Tanggal Selesai wajib **lebih besar** dari Tanggal Mulai — tanggal yang sama pun ditolak
+(kontrak minimal berdurasi satu hari). Kalender Tanggal Selesai hanya menampilkan tanggal
+mulai H+1, dan bila Tanggal Mulai diubah melewati Tanggal Selesai yang sudah terisi,
+pesan *"Tanggal selesai harus setelah tanggal mulai"* muncul di bawah field dan tombol
+**Simpan** dinonaktifkan sampai urutannya benar. Aturan ini juga diperiksa server, jadi
+tidak bisa dilewati lewat API.
+:::
+
 ## Field Tambahan (Dinamis)
 
 Beberapa template memiliki **field dinamis** yang harus diisi saat membuat kontrak — mis. "Tanggal Terbit KTP Mitra". Field ini muncul di form kontrak dan nilainya disisipkan ke dokumen PDF lewat placeholder `&#123;&#123;custom.kunci&#125;&#125;`.
@@ -71,6 +80,9 @@ Jika kontrak sudah memiliki dokumen yang ditandatangani, field tanggal, kompensa
 2. **Klik kanan** pada baris kontrak → **Perpanjang Kontrak**
 3. Isi data kontrak baru (tanggal mulai/berakhir baru)
 4. Klik **Perpanjang**
+
+Tanggal mulai tidak boleh mendahului tanggal selesai kontrak sebelumnya, dan tanggal
+selesai wajib setelah tanggal mulai (aturan yang sama dengan Tambah/Edit Kontrak).
 
 Kontrak lama akan berubah status menjadi **Sudah Diperpanjang**.
 

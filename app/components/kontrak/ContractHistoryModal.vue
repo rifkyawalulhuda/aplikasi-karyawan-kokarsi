@@ -93,19 +93,34 @@ function hasSuccessor(id: number) {
   return contracts.value.some(c => c.parentContractId === id)
 }
 
+/** Status yang relevan untuk perpanjangan — di luar ini tombol tidak ditampilkan. */
+function isRenewableStatus(contract: Contract) {
+  return contract.status === 'AKAN_HABIS' || contract.status === 'EXPIRED'
+}
+
+/**
+ * Kelayakan dari server (`renewEligibility`). Bila respons lama belum memuatnya,
+ * jatuh ke aturan lokal: status Akan Habis/Expired dan belum punya penerus.
+ */
+function renewEligibility(contract: Contract): { eligible: boolean, reason?: string } {
+  if (contract.renewEligibility) return contract.renewEligibility
+  const eligible = isRenewableStatus(contract) && !hasSuccessor(contract.id)
+  return { eligible, reason: eligible ? undefined : 'Kontrak ini sudah diperpanjang.' }
+}
+
 function canRenew(contract: Contract) {
-  return (contract.status === 'AKAN_HABIS' || contract.status === 'EXPIRED') && !hasSuccessor(contract.id)
+  return isRenewableStatus(contract) && renewEligibility(contract).eligible
 }
 
-/** Aksi utama kontekstual: EXPIRED belum diperpanjang → Perpanjang, lainnya → Preview. */
-function primaryIsRenew(contract: Contract) {
-  return contract.status === 'EXPIRED' && canRenew(contract)
+function renewBlockedReason(contract: Contract) {
+  return renewEligibility(contract).reason ?? 'Kontrak belum dapat diperpanjang.'
 }
 
-function onPrimary(contract: Contract) {
-  if (primaryIsRenew(contract)) emit('renew', contract)
-  else emit('preview', contract)
-}
+/**
+ * Muat ulang data dari halaman induk tanpa menutup modal — dipakai setelah
+ * perpanjangan agar kontrak baru langsung tampil di rantai riwayat.
+ */
+defineExpose({ reload: load })
 
 // ── Context menu klik-kanan pada kartu kontrak ───────────────────────────────
 // Menggantikan dropdown "Opsi" (⋯). Pola sama dengan context menu tabel di
@@ -157,9 +172,10 @@ function closeContractMenu(restoreFocus = true) {
   }
 }
 
-/** Navigasi keyboard di dalam menu (panah/Home/End). */
+/** Navigasi keyboard di dalam menu (panah/Home/End). Item nonaktif dilewati. */
 function onContractMenuKeydown(event: KeyboardEvent) {
   const items = Array.from(document.querySelectorAll<HTMLElement>('[data-contract-menu] [role="menuitem"]'))
+    .filter(item => !(item as HTMLButtonElement).disabled)
   if (items.length === 0) return
   const idx = items.indexOf(document.activeElement as HTMLElement)
   if (event.key === 'ArrowDown') {
@@ -181,15 +197,23 @@ function onContractContextMenu(payload: { contract: Contract, event: MouseEvent 
   openContractMenu(payload.contract, payload.event)
 }
 
-/** Item menu kontekstual per kontrak; urutan & syarat sama dengan dropdown lama. */
+/**
+ * Item menu kontekstual per kontrak.
+ * "Perpanjang" kini tampil untuk Akan Habis DAN Expired; saat tidak layak item
+ * tetap ada tapi dinonaktifkan dengan alasan, agar admin paham kenapa.
+ */
 function contractMenuItems(contract: Contract) {
-  const items: { label: string, icon: string, onSelect: () => void }[] = []
+  const items: { label: string, icon: string, onSelect: () => void, disabled?: boolean }[] = []
 
-  if (primaryIsRenew(contract)) {
-    items.push({ label: 'Preview', icon: 'i-lucide-file-search', onSelect: () => emit('preview', contract) })
-  }
-  if (canRenew(contract) && !primaryIsRenew(contract)) {
-    items.push({ label: 'Perpanjang', icon: 'i-lucide-refresh-cw', onSelect: () => emit('renew', contract) })
+  items.push({ label: 'Preview', icon: 'i-lucide-file-search', onSelect: () => emit('preview', contract) })
+  if (isRenewableStatus(contract)) {
+    const eligibility = renewEligibility(contract)
+    items.push({
+      label: eligibility.eligible ? 'Perpanjang' : `Perpanjang — ${eligibility.reason ?? 'tidak tersedia'}`,
+      icon: 'i-lucide-refresh-cw',
+      disabled: !eligibility.eligible,
+      onSelect: () => emit('renew', contract)
+    })
   }
   if (contract.documentUrl) {
     items.push({
@@ -205,17 +229,10 @@ function contractMenuItems(contract: Contract) {
   return items
 }
 
-function onContractMenuSelect(item: { onSelect: () => void }) {
+function onContractMenuSelect(item: { onSelect: () => void, disabled?: boolean }) {
+  if (item.disabled) return
   item.onSelect()
   closeContractMenu(false)
-}
-
-function primaryLabel(contract: Contract) {
-  return primaryIsRenew(contract) ? 'Perpanjang' : 'Preview'
-}
-
-function primaryIcon(contract: Contract) {
-  return primaryIsRenew(contract) ? 'i-lucide-refresh-cw' : 'i-lucide-file-search'
 }
 </script>
 
@@ -333,14 +350,32 @@ function primaryIcon(contract: Contract) {
               </p>
               <span v-else />
 
-              <UButton
-                :label="primaryLabel(currentContract)"
-                :icon="primaryIcon(currentContract)"
-                :color="primaryIsRenew(currentContract) ? 'success' : 'primary'"
-                variant="solid"
-                size="sm"
-                @click="onPrimary(currentContract)"
-              />
+              <div class="flex items-center gap-2">
+                <UButton
+                  label="Preview"
+                  icon="i-lucide-file-search"
+                  color="primary"
+                  variant="solid"
+                  size="sm"
+                  @click="emit('preview', currentContract)"
+                />
+                <UTooltip
+                  v-if="isRenewableStatus(currentContract)"
+                  :text="canRenew(currentContract) ? 'Buat kontrak perpanjangan' : renewBlockedReason(currentContract)"
+                >
+                  <span>
+                    <UButton
+                      label="Perpanjang"
+                      icon="i-lucide-refresh-cw"
+                      color="success"
+                      variant="solid"
+                      size="sm"
+                      :disabled="!canRenew(currentContract)"
+                      @click="emit('renew', currentContract)"
+                    />
+                  </span>
+                </UTooltip>
+              </div>
             </div>
           </template>
           <p v-else class="text-sm text-muted">
@@ -358,14 +393,32 @@ function primaryIcon(contract: Contract) {
           @contract-contextmenu="onContractContextMenu"
         >
           <template #actions="{ contract }">
-            <UButton
-              :label="primaryLabel(contract)"
-              :icon="primaryIcon(contract)"
-              :color="primaryIsRenew(contract) ? 'success' : 'primary'"
-              variant="subtle"
-              size="xs"
-              @click="onPrimary(contract)"
-            />
+            <div class="flex items-center gap-1.5">
+              <UButton
+                label="Preview"
+                icon="i-lucide-file-search"
+                color="primary"
+                variant="subtle"
+                size="xs"
+                @click="emit('preview', contract)"
+              />
+              <UTooltip
+                v-if="isRenewableStatus(contract)"
+                :text="canRenew(contract) ? 'Buat kontrak perpanjangan' : renewBlockedReason(contract)"
+              >
+                <span>
+                  <UButton
+                    label="Perpanjang"
+                    icon="i-lucide-refresh-cw"
+                    color="success"
+                    variant="subtle"
+                    size="xs"
+                    :disabled="!canRenew(contract)"
+                    @click="emit('renew', contract)"
+                  />
+                </span>
+              </UTooltip>
+            </div>
           </template>
         </ContractHistoryTimeline>
       </div>
@@ -419,7 +472,9 @@ function primaryIcon(contract: Contract) {
           type="button"
           role="menuitem"
           tabindex="-1"
-          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted transition-colors hover:bg-elevated/60 focus-visible:bg-elevated/60 focus-visible:outline-none"
+          :disabled="item.disabled"
+          :aria-disabled="item.disabled ? 'true' : undefined"
+          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted transition-colors hover:bg-elevated/60 focus-visible:bg-elevated/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent"
           @click="onContractMenuSelect(item)"
         >
           <UIcon :name="item.icon" class="size-4 shrink-0 text-muted" />

@@ -1,4 +1,4 @@
-import { defineEventHandler, getCookie, getMethod, getRouterParam, readBody } from 'h3'
+import { defineEventHandler, getCookie, getMethod, getQuery, getRouterParam, readBody } from 'h3'
 
 
 export default defineEventHandler(async (event) => {
@@ -11,7 +11,15 @@ export default defineEventHandler(async (event) => {
 
   const body = method !== 'GET' && method !== 'DELETE' ? await readBody(event) : undefined
 
-  const res = await $fetch.raw(`${BACKEND}/contracts/${id}`, {
+  // Query diteruskan apa adanya: `?withRenewEligibility=true` dipakai modal
+  // Preview Dokumen untuk meminta status kelayakan Perpanjang sekaligus.
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(getQuery(event))) {
+    if (typeof value === 'string') params.set(key, value)
+  }
+  const qs = params.toString() ? `?${params.toString()}` : ''
+
+  const res = await $fetch.raw(`${BACKEND}/contracts/${id}${qs}`, {
     method: method as any,
     headers: authHeader,
     body,
