@@ -6,6 +6,7 @@ defineProps<{
   placeholder: string
   minDate?: CalendarDate | null
   field?: string
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -16,13 +17,14 @@ const { formatDisplay } = useDatePicker()
 </script>
 
 <template>
-  <UPopover :content="{ side: 'bottom', align: 'start' }">
+  <UPopover :content="{ side: 'bottom', align: 'start' }" :disabled="disabled">
     <UButton
       color="neutral"
       variant="outline"
       icon="i-lucide-calendar"
       class="w-full justify-start font-normal"
       :class="!modelValue ? 'text-muted' : ''"
+      :disabled="disabled"
       :data-field="field"
     >
       {{ modelValue ? formatDisplay(modelValue) : placeholder }}

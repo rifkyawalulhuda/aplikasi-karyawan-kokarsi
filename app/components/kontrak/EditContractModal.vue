@@ -12,12 +12,17 @@ const props = defineProps<{ open: boolean, contract: Contract | null }>()
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'saved': []
+  /** Dokumen dihapus: kontrak di server berubah tanpa form disimpan. */
+  'document-changed': []
 }>()
 
 const toast = useToast()
+const auth = useAuthStore()
+const { confirmDeleteToast } = useConfirmDeleteToast()
 const formId = useId()
 const loading = ref(false)
 const uploadingDoc = ref(false)
+const deletingDoc = ref(false)
 const selectedFile = ref<File | null>(null)
 const { toCalDate, fromCalDate, formatDisplay } = useDatePicker()
 
@@ -187,6 +192,47 @@ const state = reactive<Partial<Schema> & { contractNo?: string, documentUrl?: st
   keterangan: '',
   documentUrl: ''
 })
+
+/**
+ * Kontrak dengan dokumen tanda tangan terkunci di backend: `update()` menolak
+ * perubahan tanggal, kompensasi, dan data karyawan selama `documentUrl` terisi
+ * (`contracts.service.ts`). Karena itu form menonaktifkan field tersebut dan
+ * menyediakan jalan keluar (hapus dokumen) alih-alih membiarkan pengguna
+ * menabrak penolakan 400 saat menyimpan.
+ */
+const documentLocked = computed(() => !!state.documentUrl)
+const canDeleteDocument = computed(() => auth.admin?.role === 'ADMIN')
+
+function confirmDeleteDocument() {
+  if (!props.contract) return
+  confirmDeleteToast({
+    title: 'Hapus dokumen tanda tangan?',
+    description: 'File scan akan dihapus permanen dari server. Tanggal, kompensasi, dan data karyawan '
+      + 'pada kontrak ini akan dapat diubah kembali setelah dokumen dihapus.',
+    confirmLabel: 'Hapus Dokumen',
+    onConfirm: () => deleteDocument()
+  })
+}
+
+async function deleteDocument() {
+  if (!props.contract) return
+  deletingDoc.value = true
+  try {
+    await $fetch(`/api/contracts/${props.contract.id}/document`, { method: 'DELETE' })
+    state.documentUrl = ''
+    toast.add({
+      title: 'Dokumen dihapus',
+      description: 'Tanggal dan kompensasi kontrak kini dapat diubah.',
+      color: 'success'
+    })
+    emit('document-changed')
+  } catch (err) {
+    const message = (err as { data?: { message?: string } })?.data?.message ?? 'Terjadi kesalahan'
+    toast.add({ title: 'Gagal menghapus dokumen', description: message, color: 'error' })
+  } finally {
+    deletingDoc.value = false
+  }
+}
 
 interface EditDraftData {
   startDate: string
@@ -563,9 +609,43 @@ const progressPct = computed(() =>
           title="Periode Kontrak"
           description="Tanggal mulai dan selesai menentukan durasi kontrak."
         >
+          <template #actions>
+            <UBadge
+              v-if="documentLocked"
+              color="warning"
+              variant="subtle"
+              size="sm"
+            >
+              Terkunci
+            </UBadge>
+          </template>
+
+          <div
+            v-if="documentLocked"
+            class="flex items-start gap-2 rounded-lg border border-warning/35 bg-warning/10 p-3 text-xs leading-relaxed"
+          >
+            <UIcon name="i-lucide-lock" class="mt-0.5 size-3.5 shrink-0 text-warning-700 dark:text-warning-400" aria-hidden="true" />
+            <div class="text-muted">
+              <p class="font-medium text-highlighted">
+                Tanggal dan kompensasi terkunci
+              </p>
+              <p class="mt-0.5">
+                Kontrak ini sudah memiliki dokumen tanda tangan, sehingga tanggal, nominal, dan data
+                karyawan tidak dapat diubah. Hapus dokumen di bagian
+                <span class="font-medium text-highlighted">Dokumen Pendukung</span>
+                untuk membuka kembali.
+              </p>
+            </div>
+          </div>
+
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField label="Tanggal Mulai" name="startDate" required>
-              <KontrakContractDateField v-model="startDateCal" field="startDate" placeholder="Pilih tanggal mulai" />
+              <KontrakContractDateField
+                v-model="startDateCal"
+                field="startDate"
+                placeholder="Pilih tanggal mulai"
+                :disabled="documentLocked"
+              />
             </UFormField>
             <UFormField
               label="Tanggal Selesai"
@@ -579,6 +659,7 @@ const progressPct = computed(() =>
                 field="endDate"
                 placeholder="Pilih tanggal selesai"
                 :min-date="endMinDateCal"
+                :disabled="documentLocked"
               />
             </UFormField>
           </div>
@@ -665,13 +746,25 @@ const progressPct = computed(() =>
           style="animation-delay: 160ms"
           icon="i-lucide-paperclip"
           title="Dokumen Pendukung"
-          description="Ganti hasil pindai kontrak yang sudah ditandatangani bila perlu."
+          description="Ganti atau hapus hasil pindai kontrak yang sudah ditandatangani."
         >
           <KontrakContractFileDropzone
             v-model="selectedFile"
             :uploading="uploadingDoc"
             :uploaded-name="uploadedName"
+            :can-delete="canDeleteDocument && documentLocked"
+            :deleting="deletingDoc"
+            @delete="confirmDeleteDocument"
           />
+
+          <p
+            v-if="documentLocked && !canDeleteDocument"
+            class="flex items-start gap-1.5 text-xs leading-relaxed text-muted"
+          >
+            <UIcon name="i-lucide-info" class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+            Hanya Admin yang dapat menghapus dokumen tanda tangan. Hubungi Admin bila tanggal atau
+            kompensasi perlu diubah.
+          </p>
         </KontrakContractFormSection>
 
         <KontrakContractFormSection
@@ -681,18 +774,30 @@ const progressPct = computed(() =>
           title="Kompensasi & Catatan"
           description="Nominal kompensasi dan keterangan tambahan untuk kontrak ini."
         >
+          <template #actions>
+            <UBadge
+              v-if="documentLocked"
+              color="warning"
+              variant="subtle"
+              size="sm"
+            >
+              Terkunci
+            </UBadge>
+          </template>
+
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField
               label="Nominal Kompensasi"
               name="baseCompensation"
               required
-              hint="Otomatis diformat dalam Rupiah."
+              :hint="documentLocked ? 'Terkunci oleh dokumen tanda tangan' : 'Otomatis diformat dalam Rupiah.'"
             >
               <UInput
                 :model-value="currencyDisplay"
                 inputmode="numeric"
                 placeholder="5.941.759"
                 class="w-full"
+                :disabled="documentLocked"
                 @update:model-value="onCurrencyInput"
               >
                 <template #leading>
@@ -753,7 +858,7 @@ const progressPct = computed(() =>
             icon="i-lucide-check"
             color="primary"
             :loading="loading"
-            :disabled="!!endDateError"
+            :disabled="!!endDateError || deletingDoc"
           />
         </div>
       </div>

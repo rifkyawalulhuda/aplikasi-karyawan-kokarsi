@@ -831,4 +831,45 @@ export class ContractsService {
     }
     return this.withComputedStatus(contract)
   }
+
+  /**
+   * Hapus dokumen scan tanda tangan kontrak.
+   *
+   * Diperlukan karena `update()` mengunci `startDate`, `endDate`,
+   * `baseCompensation`, dan `employeeId` selama `documentUrl` terisi. Sebelum
+   * ini pesan penolakannya menyuruh "hapus dokumen terlebih dahulu", tetapi
+   * tidak ada jalur untuk melakukannya — sehingga kontrak yang sudah diunggah
+   * scan-nya terkunci permanen.
+   *
+   * File fisik dihapus SETELAH kolom DB dikosongkan: bila penghapusan file
+   * gagal (file sudah hilang), data tetap konsisten dan kontrak tetap terbuka.
+   */
+  async clearDocument(id: number, actor: { name: string; role: string }) {
+    const existing = await this.findOne(id)
+    if (!existing.documentUrl) {
+      throw new BadRequestException('Kontrak ini tidak memiliki dokumen untuk dihapus.')
+    }
+
+    const previousUrl = existing.documentUrl
+    const contract = await this.prisma.contract.update({
+      where: { id },
+      data: { documentUrl: null },
+      include: this.include,
+    })
+
+    deleteUploadedFile(previousUrl)
+    this.dashboardCache.invalidate()
+
+    const fileName = previousUrl.split('/').pop() ?? '-'
+    void this.activityLog.log({
+      action: 'DELETE',
+      module: 'Kontrak',
+      targetLabel: contract.contractNo,
+      detail: `Dokumen tanda tangan dihapus (${fileName}) | Tanggal, kompensasi, dan data karyawan dapat diubah kembali`,
+      performedBy: actor.name,
+      performedByRole: actor.role,
+    })
+
+    return this.withComputedStatus(contract)
+  }
 }

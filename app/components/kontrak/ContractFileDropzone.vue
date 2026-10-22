@@ -6,16 +6,23 @@ const props = withDefaults(defineProps<{
   accept?: string
   maxSizeMb?: number
   hint?: string
+  /** Tampilkan aksi hapus untuk dokumen yang sudah tersimpan di server. */
+  canDelete?: boolean
+  /** Sedang menghapus dokumen tersimpan. */
+  deleting?: boolean
 }>(), {
   uploading: false,
   uploadedName: '',
   accept: 'application/pdf',
   maxSizeMb: 10,
-  hint: ''
+  hint: '',
+  canDelete: false,
+  deleting: false
 })
 
 const emit = defineEmits<{
   'update:modelValue': [value: File | null]
+  'delete': []
 }>()
 
 const input = ref<HTMLInputElement | null>(null)
@@ -107,16 +114,29 @@ watch(() => props.modelValue, (file) => {
           {{ uploadedName }}
         </p>
         <p class="mt-0.5 text-xs text-muted">
-          Dokumen tersimpan. Pilih file baru untuk menggantinya.
+          Dokumen tanda tangan tersimpan di server.
         </p>
       </div>
-      <UButton
-        label="Ganti"
-        color="neutral"
-        variant="outline"
-        size="sm"
-        @click="pickFile"
-      />
+      <div class="flex shrink-0 items-center gap-1.5">
+        <UButton
+          label="Ganti"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          :disabled="deleting"
+          @click="pickFile"
+        />
+        <UButton
+          v-if="canDelete"
+          label="Hapus"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="ghost"
+          size="sm"
+          :loading="deleting"
+          @click="emit('delete')"
+        />
+      </div>
     </div>
 
     <div
@@ -164,7 +184,7 @@ watch(() => props.modelValue, (file) => {
       @change="onInput"
     >
 
-    <p v-if="error" class="mt-2 flex items-center gap-1.5 text-xs text-error">
+    <p v-if="error" class="mt-2 flex items-center gap-1.5 text-xs text-error-600 dark:text-error-400">
       <UIcon name="i-lucide-circle-alert" class="size-3.5" aria-hidden="true" />
       {{ error }}
     </p>

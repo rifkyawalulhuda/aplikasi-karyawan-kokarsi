@@ -163,4 +163,22 @@ export class ContractsController {
     const documentUrl = `/uploads/contracts/scanned/${file.filename}`
     return this.service.updateDocumentUrl(id, documentUrl)
   }
+
+  /**
+   * Hapus dokumen scan tanda tangan.
+   *
+   * Hanya ADMIN — sama seperti hapus kontrak — karena tindakan ini membuka
+   * kembali tanggal/kompensasi yang sebelumnya dikunci oleh dokumen bertanda
+   * tangan, dan file scan-nya dihapus permanen.
+   */
+  @Delete(':id/document')
+  clearDocument(@Param('id', ParseIntPipe) id: number, @Request() req: any) {
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Hanya ADMIN yang dapat menghapus dokumen kontrak')
+    }
+    return this.service.clearDocument(id, {
+      name: req.user?.fullName ?? req.user?.name ?? 'System',
+      role: req.user?.role ?? 'UNKNOWN',
+    })
+  }
 }

@@ -143,6 +143,14 @@ async function handleEditSaved() {
   openHistoryById(employeeId)
 }
 
+/**
+ * Dokumen kontrak dihapus dari modal Edit: hanya muat ulang daftar (tanpa
+ * membuka Riwayat), karena form belum tentu disimpan.
+ */
+async function handleDocumentChanged() {
+  await refresh()
+}
+
 function openHistory(row: ContractSummaryRow) {
   openHistoryById(row.employeeId, row.contractId)
 }
@@ -757,6 +765,7 @@ watch(() => [route.query.status, route.query.contractType], applyQueryFilters)
     v-model:open="editModal"
     :contract="editTarget"
     @saved="handleEditSaved"
+    @document-changed="handleDocumentChanged"
   />
 
   <!-- Modal Renew -->
