@@ -104,6 +104,7 @@ const calendarPlaceholder = computed(() =>
       <UCalendar
         v-model="internalValue"
         v-model:placeholder="calendarPlaceholder"
+        locale="id-ID"
         :min-value="minDate ?? undefined"
       >
         <template #heading="{ value }">

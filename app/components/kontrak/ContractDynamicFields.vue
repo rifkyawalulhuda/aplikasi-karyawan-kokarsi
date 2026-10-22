@@ -22,9 +22,12 @@ const props = withDefaults(defineProps<{
   errors?: Record<string, string>
   /** Mode baca-saja (dipakai modal Perpanjang: nilai diwarisi dari kontrak induk). */
   readonly?: boolean
+  /** Tanpa kartu & judul sendiri, untuk ditempatkan di dalam section form. */
+  embedded?: boolean
 }>(), {
   errors: () => ({}),
-  readonly: false
+  readonly: false,
+  embedded: false
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, any>] }>()
@@ -69,8 +72,11 @@ function selectItems(field: ContractInputField) {
 </script>
 
 <template>
-  <div v-if="fields.length" class="space-y-4 rounded-xl border border-default bg-elevated/40 p-4">
-    <div class="flex items-start gap-2">
+  <div
+    v-if="fields.length"
+    :class="embedded ? 'space-y-4' : 'space-y-4 rounded-xl border border-default bg-elevated/40 p-4'"
+  >
+    <div v-if="!embedded" class="flex items-start gap-2">
       <UIcon name="i-lucide-list-plus" class="w-4 h-4 text-muted shrink-0 mt-0.5" />
       <div>
         <p class="text-sm font-medium text-highlighted">
