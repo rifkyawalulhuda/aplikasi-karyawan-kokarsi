@@ -709,11 +709,13 @@ const progressPct = computed(() =>
           description="Template menentukan isi dan field tambahan yang ikut tercetak."
         >
           <UFormField label="Template Kontrak" name="templateId" required>
-            <USelect
+            <USelectMenu
               v-model="state.templateId"
               :items="contractTemplateOptions"
+              value-key="value"
               placeholder="Pilih template kontrak..."
               class="w-full"
+              :search-input="{ placeholder: 'Cari nama template...' }"
             />
           </UFormField>
 
