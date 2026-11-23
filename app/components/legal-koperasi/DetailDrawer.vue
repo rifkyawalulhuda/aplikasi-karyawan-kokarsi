@@ -303,9 +303,9 @@ const displayStatus = computed(() => {
             <p class="text-xs font-medium text-muted uppercase tracking-wide">Dokumen</p>
             <div>
               <p class="text-xs font-medium text-muted mb-0.5">No. Dokumen</p>
-              <p class="inline-flex items-center gap-1.5 text-sm font-mono text-highlighted">
-                <UIcon name="i-lucide-hash" class="size-3.5 text-muted" />
-                {{ document.documentNumber || '-' }}
+              <p class="flex items-start gap-1.5 text-sm font-mono text-highlighted">
+                <UIcon name="i-lucide-hash" class="mt-0.5 size-3.5 shrink-0 text-muted" />
+                <span class="min-w-0 [overflow-wrap:anywhere]">{{ document.documentNumber || '-' }}</span>
               </p>
             </div>
             <div>
@@ -357,7 +357,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-default bg-elevated/40 p-3">
                 <p class="text-xs font-medium text-muted mb-0.5">Perpanjangan Dari</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ document.renewedFrom.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ document.renewedFrom.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ document.renewedFrom.documentNumber }}</p>
                 <p class="text-xs text-muted mt-1">{{ formatDate(document.renewedFrom.documentDate) }}</p>
                 <div class="flex items-center gap-2 mt-2">
                   <a
@@ -385,7 +385,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <p class="text-xs font-medium text-primary mb-0.5">Dokumen Ini</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ document.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ document.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ document.documentNumber }}</p>
               </div>
             </div>
 
@@ -395,7 +395,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-default bg-elevated/40 p-3">
                 <p class="text-xs font-medium text-muted mb-0.5">Diperpanjang Ke</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ document.renewedTo.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ document.renewedTo.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ document.renewedTo.documentNumber }}</p>
                 <p class="text-xs text-muted mt-1">{{ formatDate(document.renewedTo.documentDate) }}</p>
                 <button
                   type="button"

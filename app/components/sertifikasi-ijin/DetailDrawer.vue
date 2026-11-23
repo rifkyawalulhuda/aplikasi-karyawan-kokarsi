@@ -254,9 +254,9 @@ function daysText(): string {
             </div>
             <div>
               <p class="text-xs font-medium text-muted mb-0.5">No. Dokumen</p>
-              <p class="inline-flex items-center gap-1.5 text-sm font-mono text-highlighted">
-                <UIcon name="i-lucide-hash" class="size-3.5 text-muted" />
-                {{ document.documentNumber ?? '-' }}
+              <p class="flex items-start gap-1.5 text-sm font-mono text-highlighted">
+                <UIcon name="i-lucide-hash" class="mt-0.5 size-3.5 shrink-0 text-muted" />
+                <span class="min-w-0 [overflow-wrap:anywhere]">{{ document.documentNumber ?? '-' }}</span>
               </p>
             </div>
           </div>
