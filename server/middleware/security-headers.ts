@@ -15,7 +15,11 @@ export default defineEventHandler((event: H3Event) => {
     [
       "default-src 'self'",
       // Nuxt SSR and Nuxt UI currently emit inline bootstrap/style content.
-      "script-src 'self' 'unsafe-inline'",
+      // 'wasm-unsafe-eval' dibutuhkan PDF.js: dekoder gambar scan (JBIG2 /
+      // JPEG2000) dikompilasi sebagai WebAssembly. Tanpa ini browser memblokir
+      // kompilasinya dan PDF hasil scan jatuh ke fallback JS yang jauh lebih
+      // lambat (atau tampil kosong bila file wasm-nya sendiri tidak tersedia).
+      "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",

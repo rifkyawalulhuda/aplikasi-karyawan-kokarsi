@@ -41,7 +41,12 @@ async function renderPdf(url: string | Blob) {
 
     if (token !== renderToken) return
 
-    const pdf = await pdfjsLib.getDocument({ data }).promise
+    // Decoder gambar scan (JBIG2/JPEG2000) di pdfjs-dist v6 berjalan di
+    // WebAssembly dan mengambil file dari `wasmUrl`. Tanpa parameter ini PDF
+    // hasil scan yang hanya berisi gambar JBIG2 tampil kosong (halaman putih),
+    // karena wasm dan fallback JS-nya sama-sama gagal dimuat.
+    // File disajikan dari `public/pdfjs-wasm` (lihat scripts/sync-pdfjs-wasm.mjs).
+    const pdf = await pdfjsLib.getDocument({ data, wasmUrl: '/pdfjs-wasm/' }).promise
 
     if (token !== renderToken) return
 

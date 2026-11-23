@@ -54,3 +54,6 @@ logs/
 !.env.example
 
 .firecrawl/
+
+# File wasm pdfjs-dist hasil scripts/sync-pdfjs-wasm.mjs (regenerate otomatis)
+public/pdfjs-wasm/

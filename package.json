@@ -7,9 +7,11 @@
     "build": "nuxt build",
     "dev": "nuxt dev",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
+    "postinstall": "nuxt prepare && node scripts/sync-pdfjs-wasm.mjs",
     "lint": "eslint .",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "predev": "node scripts/sync-pdfjs-wasm.mjs",
+    "prebuild": "node scripts/sync-pdfjs-wasm.mjs"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.108",
