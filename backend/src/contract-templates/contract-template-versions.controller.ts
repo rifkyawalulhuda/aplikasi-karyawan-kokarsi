@@ -39,6 +39,19 @@ class VersionContentDto {
 export class ContractTemplateVersionsController {
   constructor(private service: ContractTemplateVersionsService) {}
 
+  /**
+   * Nama pelaku untuk jejak audit versi (`createdByName`/`publishedByName`).
+   *
+   * JWT tidak membawa `username` — `validateSession` mengisi `fullName`
+   * (`fullName ?? name` dari database) dan `employeeNo`. Dulu di sini dipakai
+   * `req.user?.username`, yang selalu `undefined`, sehingga setiap versi
+   * tercatat "unknown" dan kartu template menampilkan "Diterbitkan ... oleh
+   * unknown". Urutan fallback mengikuti controller lain di proyek ini.
+   */
+  private actorName(req: any): string {
+    return req?.user?.fullName ?? req?.user?.employeeNo ?? 'System'
+  }
+
   @Get('contract-templates/:templateId/versions')
   listVersions(@Param('templateId', ParseIntPipe) templateId: number) {
     return this.service.listVersions(templateId)
@@ -62,7 +75,7 @@ export class ContractTemplateVersionsController {
     @Body() dto: VersionContentDto,
   ) {
     this.ensureAdmin(req.user?.role)
-    return this.service.createDraft(templateId, dto, { name: req.user?.username ?? 'unknown' })
+    return this.service.createDraft(templateId, dto, { name: this.actorName(req) })
   }
 
   @Get('contract-template-versions/:versionId')
@@ -77,13 +90,13 @@ export class ContractTemplateVersionsController {
     @Body() dto: Partial<VersionContentDto>,
   ) {
     this.ensureAdmin(req.user?.role)
-    return this.service.updateDraft(versionId, dto, { name: req.user?.username ?? 'unknown' })
+    return this.service.updateDraft(versionId, dto, { name: this.actorName(req) })
   }
 
   @Post('contract-template-versions/:versionId/publish')
   publish(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
     this.ensureAdmin(req.user?.role)
-    return this.service.publish(versionId, { name: req.user?.username ?? 'unknown' })
+    return this.service.publish(versionId, { name: this.actorName(req) })
   }
 
   @Post('contract-template-versions/:versionId/preview')
@@ -119,7 +132,7 @@ export class ContractTemplateVersionsController {
   @Post('contract-template-versions/:versionId/rollback')
   rollback(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
     this.ensureAdmin(req.user?.role)
-    return this.service.rollback(versionId, { name: req.user?.username ?? 'unknown' })
+    return this.service.rollback(versionId, { name: this.actorName(req) })
   }
 
   /**
@@ -129,7 +142,7 @@ export class ContractTemplateVersionsController {
   @Delete('contract-template-versions/:versionId')
   removeVersion(@Request() req: any, @Param('versionId', ParseIntPipe) versionId: number) {
     this.ensureAdmin(req.user?.role)
-    return this.service.deleteVersion(versionId, { name: req.user?.username ?? 'unknown' })
+    return this.service.deleteVersion(versionId, { name: this.actorName(req) })
   }
 
   @Get('contract-templates/:templateId/versions/published')

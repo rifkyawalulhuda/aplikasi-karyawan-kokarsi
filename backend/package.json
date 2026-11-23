@@ -16,6 +16,7 @@
     "contract-templates:repair-field-bindings": "ts-node scripts/repair-published-field-bindings.ts",
     "contract-templates:repair-version": "ts-node scripts/repair-published-version.ts",
     "contract-templates:repair-contamination": "ts-node scripts/repair-contamination.ts",
+    "contract-templates:repair-actor": "ts-node scripts/repair-unknown-actor-name.ts",
     "contract-templates:verify-contamination": "ts-node scripts/verify-contamination-fix.ts",
     "contract-templates:backfill-snapshots": "ts-node scripts/backfill-legacy-snapshots.ts",
     "contract-templates:scan-inline-collisions": "ts-node scripts/scan-inline-mark-collisions.ts",

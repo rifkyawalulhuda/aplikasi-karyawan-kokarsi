@@ -30,6 +30,17 @@ const familyMeta = {
 const meta = computed(() => familyMeta[props.template.family] ?? familyMeta.PKWT)
 
 const published = computed(() => props.template.versions?.[0] ?? null)
+
+/**
+ * Nama penerbit untuk ditampilkan. Versi lama sempat tercatat "unknown" karena
+ * controller membaca `req.user.username` yang tidak ada di JWT; jangan
+ * tampilkan placeholder itu seolah-olah nama orang.
+ */
+const publisherName = computed(() => {
+  const name = published.value?.publishedByName?.trim()
+  if (!name) return null
+  return name.toLowerCase() === 'unknown' ? null : name
+})
 const usage = computed(() => props.template._count?.contracts ?? 0)
 const versionCount = computed(() => props.template._count?.versions ?? 0)
 
@@ -127,8 +138,8 @@ function formatDate(value?: string | null) {
             </p>
             <p class="mt-0.5 text-xs text-muted">
               <template v-if="published">
-                Diterbitkan {{ formatDate(published.publishedAt) }}<template v-if="published.publishedByName">
-                  oleh {{ published.publishedByName }}
+                Diterbitkan {{ formatDate(published.publishedAt) }}<template v-if="publisherName">
+                  oleh {{ publisherName }}
                 </template>
               </template>
               <template v-else>
