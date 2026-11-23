@@ -233,8 +233,9 @@ const displayStatus = computed(() => {
             <p class="text-xs font-medium text-muted uppercase tracking-wide">Dokumen</p>
             <div>
               <p class="text-xs font-medium text-muted mb-0.5">No. Dokumen</p>
-              <p class="inline-flex items-center gap-1.5 text-sm font-mono text-highlighted">
-                <UIcon name="i-lucide-hash" class="size-3.5 text-muted" />{{ contract.documentNumber || '-' }}
+              <p class="flex items-start gap-1.5 text-sm font-mono text-highlighted">
+                <UIcon name="i-lucide-hash" class="mt-0.5 size-3.5 shrink-0 text-muted" />
+                <span class="min-w-0 [overflow-wrap:anywhere]">{{ contract.documentNumber || '-' }}</span>
               </p>
             </div>
             <div>
@@ -276,7 +277,7 @@ const displayStatus = computed(() => {
             <div class="min-w-0 flex-1">
               <p class="text-xs font-medium text-primary uppercase tracking-wide mb-1">Perjanjian Payung</p>
               <p class="text-sm font-semibold text-highlighted truncate">{{ contract.motherAgreement.documentName }}</p>
-              <p class="text-xs font-mono text-muted mt-0.5">{{ contract.motherAgreement.documentNumber }}</p>
+              <p class="text-xs font-mono text-muted mt-0.5 [overflow-wrap:anywhere]">{{ contract.motherAgreement.documentNumber }}</p>
               <button type="button" class="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline" @click="emit('open-contract', contract.motherAgreement!.id)">
                 <UIcon name="i-lucide-arrow-up-right" class="size-3" /> Lihat Perjanjian Payung
               </button>
@@ -294,7 +295,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-default bg-elevated/40 p-3">
                 <p class="text-xs font-medium text-muted mb-0.5">Perpanjangan Dari</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ contract.renewedFrom.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ contract.renewedFrom.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ contract.renewedFrom.documentNumber }}</p>
                 <p class="text-xs text-muted mt-1">{{ formatDate(contract.renewedFrom.createdDate) }}</p>
                 <div class="flex items-center gap-2 mt-2">
                   <a v-if="contract.renewedFrom.fileUrl" :href="contract.renewedFrom.fileUrl" target="_blank" class="inline-flex items-center gap-1 text-xs text-primary hover:underline">
@@ -311,7 +312,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-primary/30 bg-primary/5 p-3">
                 <p class="text-xs font-medium text-primary mb-0.5">Kontrak Ini</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ contract.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ contract.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ contract.documentNumber }}</p>
               </div>
             </div>
             <div v-if="contract.renewedTo" class="relative">
@@ -319,7 +320,7 @@ const displayStatus = computed(() => {
               <div class="rounded-lg border border-default bg-elevated/40 p-3">
                 <p class="text-xs font-medium text-muted mb-0.5">Diperpanjang Ke</p>
                 <p class="text-sm font-medium text-highlighted truncate">{{ contract.renewedTo.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ contract.renewedTo.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ contract.renewedTo.documentNumber }}</p>
                 <p class="text-xs text-muted mt-1">{{ formatDate(contract.renewedTo.createdDate) }}</p>
                 <div class="flex items-center gap-2 mt-2">
                   <UBadge :label="renewalStatusLabel[contract.renewedTo.status] ?? contract.renewedTo.status" :color="renewalStatusColor[contract.renewedTo.status] ?? 'neutral'" variant="subtle" size="sm" />
@@ -340,7 +341,7 @@ const displayStatus = computed(() => {
               <UIcon name="i-lucide-refresh-cw" class="size-4 shrink-0 text-muted" />
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-medium text-highlighted truncate">{{ renewal.documentName }}</p>
-                <p class="text-xs font-mono text-muted">{{ renewal.documentNumber }}</p>
+                <p class="text-xs font-mono text-muted [overflow-wrap:anywhere]">{{ renewal.documentNumber }}</p>
                 <p v-if="renewal.endDate" class="text-xs text-muted mt-0.5">Berakhir {{ formatDate(renewal.endDate) }}</p>
               </div>
               <div class="flex items-center gap-2 shrink-0">
