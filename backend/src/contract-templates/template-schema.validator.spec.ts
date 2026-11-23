@@ -420,6 +420,33 @@ describe('validateContentDefinition', () => {
     expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
   })
 
+  /**
+   * `signatureSpaceMm` = tinggi ruang kosong tanda tangan (tempat meterai).
+   * Angka 0–100 mm; di luar itu atau bukan angka harus 400, bukan diam-diam
+   * dipotong, supaya admin tahu inputnya salah.
+   */
+  it('menerima signatureSpaceMm pada batas 0 dan 100', () => {
+    for (const value of [0, 28.95, 31, 100]) {
+      const content = baseContent(b => [
+        ...b.filter(block => block.type !== 'signature'),
+        { id: 'sig-space', type: 'signature', signatureSpaceMm: value },
+      ])
+      expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA')).not.toThrow()
+    }
+  })
+
+  it.each([-1, 100.5, 101, '30', null, Number.NaN, Infinity])(
+    'menolak signatureSpaceMm tidak valid %p',
+    value => {
+      const content = baseContent(b => [
+        ...b.filter(block => block.type !== 'signature'),
+        { id: 'sig-space', type: 'signature', signatureSpaceMm: value as any },
+      ])
+      expect(() => validateContentDefinition(content, VALID_FIELD_KEYS, 'MITRA'))
+        .toThrow(/signatureSpaceMm/)
+    },
+  )
+
   it('menerima blok closing dengan teks & placeholder tanggal', () => {
     const content = baseContent(b => [
       ...b,

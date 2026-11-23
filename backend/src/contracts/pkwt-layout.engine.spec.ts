@@ -33,6 +33,23 @@ import {
   getContractDocumentDefinition
 } from './contract-document-definitions'
 import { definitionToContentDefinition, type SeedContentDefinition } from '../contract-templates/default-template-definition'
+import { PT_PER_MM } from './signature-space'
+
+/**
+ * Stub PDFKit untuk menguji tinggi tabel tanda tangan tanpa font Lucida.
+ * `heightOfString` meniru word-wrap: ±5 pt per karakter, 11,5 pt per baris.
+ */
+function stubSignatureDoc() {
+  return {
+    font() { return this },
+    fontSize() { return this },
+    heightOfString(text: string, opts: { width: number }) {
+      const chars = String(text ?? '').length
+      const lines = Math.max(1, Math.ceil((chars * 5) / Math.max(opts.width, 1)))
+      return lines * 11.5
+    }
+  }
+}
 
 describe('PKWT layout engine — geometri master', () => {
   it('geometri cocok dengan hasil pengukuran master', () => {
@@ -83,10 +100,46 @@ describe('PKWT layout engine — geometri master', () => {
     expect(Math.abs(leftoverCenter - G.headerCenterX)).toBeGreaterThan(40)
   })
 
-  it('tinggi blok tanda tangan = label + area tanda tangan master', () => {
+  it('tinggi blok tanda tangan = baris label + baris body', () => {
     // Master: baris label 34.52 + area tanda tangan 97.57.
-    expect(pkwtSignatureHeight()).toBeCloseTo(34.52 + 97.57, 2)
+    // Tinggi body kini diturunkan dari ruang meterai (default PKWT 28,95 mm),
+    // bukan lagi konstanta 97.57 — lihat tes ruang meterai di bawah.
+    const doc = stubSignatureDoc()
+    const height = pkwtSignatureHeight(doc, { leftTitle: 'A', rightTitle: 'B' })
+    expect(height).toBeGreaterThan(34.52)
     expect(PKWT_GEOMETRY.signatureTable.height).toBeCloseTo(97.57, 2)
+  })
+
+  it('ruang meterai menambah tinggi tabel persis sebesar selisihnya', () => {
+    const doc = stubSignatureDoc()
+    const o = { leftTitle: 'A', rightTitle: 'B' }
+    const hDefault = pkwtSignatureHeight(doc, o)
+    const h40 = pkwtSignatureHeight(doc, { ...o, spacePt: 40 * PT_PER_MM })
+    const h0 = pkwtSignatureHeight(doc, { ...o, spacePt: 0 })
+
+    // Default PKWT = 28,95 mm.
+    expect(h40 - hDefault).toBeCloseTo((40 - 28.95) * PT_PER_MM, 2)
+    expect(hDefault - h0).toBeCloseTo(28.95 * PT_PER_MM, 2)
+  })
+
+  it('nama/jabatan panjang memanjangkan tabel, bukan memakan ruang meterai', () => {
+    const doc = stubSignatureDoc()
+    const spacePt = 28.95 * PT_PER_MM
+    const short = pkwtSignatureHeight(doc, {
+      leftTitle: 'A',
+      rightTitle: 'B',
+      leftName: 'Budi',
+      rightName: 'Siti',
+      spacePt,
+    })
+    const long = pkwtSignatureHeight(doc, {
+      leftTitle: 'A',
+      rightTitle: 'B',
+      leftName: 'Budi Santoso Wijayakusuma Pratama',
+      rightName: 'Siti Rahmawati Kusumaningrum',
+      spacePt,
+    })
+    expect(long).toBeGreaterThanOrEqual(short)
   })
 
   it('lebar dalam kolom positif dan lebih kecil dari lebar kotak', () => {
@@ -1193,6 +1246,17 @@ with pdfplumber.open(sys.argv[1]) as pdf:
     return Number(execFileSync('python', ['-c', PAGES_PY, file]).toString().trim())
   }
 
+  /** Salin blok dengan `signatureSpaceMm` tertentu — mengunci geometri tanda tangan. */
+  function withSignatureSpace(blocks: any[], spaceMm: number): any[] {
+    return blocks.map((b: any) => (b?.type === 'signature' ? { ...b, signatureSpaceMm: spaceMm } : b))
+  }
+
+  /**
+   * `blockGap` adalah plafon halaman: bila ini gagal, turunkan `blockGap`,
+   * JANGAN naikkan angka harapan. Ruang meterai dipatok 20 mm (setara geometri
+   * lama untuk fixture ini) supaya tes tetap mengukur `blockGap`, bukan fitur
+   * tinggi ruang tanda tangan.
+   */
   it('keempat varian PKWT bawaan tetap 4 halaman pada blockGap sekarang', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkwt-pages-'))
     try {
@@ -1202,7 +1266,7 @@ with pdfplumber.open(sys.argv[1]) as pdf:
       for (const key of keys) {
         const content: SeedContentDefinition = definitionToContentDefinition(getContractDocumentDefinition(key))
         const buffer = await createPkwtPdfBuffer({
-          blocks: content?.languages?.id ?? [],
+          blocks: withSignatureSpace(content?.languages?.id ?? [], 20),
           blocksEn: content?.languages?.en ?? [],
           values: { ...PKWT_PREVIEW_VALUES },
           orgLines: [...PKWT_HEADER_CHROME.org],
@@ -1224,6 +1288,52 @@ with pdfplumber.open(sys.argv[1]) as pdf:
         // Bila ini gagal: `blockGap` sudah melewati plafon dan dokumen legal
         // bertambah satu lembar. Turunkan `blockGap`, jangan naikkan angka ini.
         expect({ key, pages: countPages(buffer, tmpDir, key) }).toEqual({ key, pages: 4 })
+      }
+    } finally {
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true })
+      } catch {
+        // Direktori sementara OS; gagal bersih-bersih tidak boleh menggagalkan tes.
+      }
+    }
+  })
+
+  /**
+   * KEPUTUSAN PRODUK (23 Nov 2026): default ruang meterai PKWT 28,95 mm
+   * (tinggi meterai) menambah ±9 mm tinggi tabel tanda tangan. Karena halaman
+   * terakhir varian bawaan sudah penuh, tabel tanda tangan pindah ke halaman
+   * baru — dokumen menjadi 5 halaman. Ini DISENGAJA agar meterai muat.
+   *
+   * Bila tes ini gagal karena halaman turun ke 4, berarti isi dokumen mengecil:
+   * boleh diperbarui, tapi periksa dulu bahwa ruang meterai tidak ikut menyusut.
+   */
+  it('default ruang meterai 28,95 mm membuat varian bawaan 5 halaman (disengaja)', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pkwt-pages-space-'))
+    try {
+      const keys = Object.keys(CONTRACT_DOCUMENT_DEFINITIONS).filter(k => k.startsWith('PKWT_'))
+      for (const key of keys) {
+        const content: SeedContentDefinition = definitionToContentDefinition(getContractDocumentDefinition(key))
+        const buffer = await createPkwtPdfBuffer({
+          blocks: content?.languages?.id ?? [],
+          blocksEn: content?.languages?.en ?? [],
+          values: { ...PKWT_PREVIEW_VALUES },
+          orgLines: [...PKWT_HEADER_CHROME.org],
+          addressLines: [...PKWT_HEADER_CHROME.address],
+          contactLine: PKWT_HEADER_CHROME.contactLine,
+          titleId: 'KESEPAKATAN KERJA WAKTU TERTENTU',
+          titleEn: 'STATED PERIODS LABOUR AGREEMENT',
+          numberLabel: `${PKWT_HEADER_CHROME.numberPrefix} 174/KUKP-SII/VII/2026`,
+          fonts: resolvePkwtFonts(),
+          signature: {
+            leftTitle: PKWT_HEADER_CHROME.signature.leftTitle,
+            rightTitle: PKWT_HEADER_CHROME.signature.rightTitle,
+            leftName: PKWT_PREVIEW_VALUES['employee.fullName'],
+            leftRole: PKWT_PREVIEW_VALUES['employee.jobRole'],
+            rightName: PKWT_PREVIEW_VALUES['settings.cooperativeChairmanName'],
+            rightRole: PKWT_HEADER_CHROME.signature.rightRoleLabel,
+          },
+        })
+        expect({ key, pages: countPages(buffer, tmpDir, `${key}-space`) }).toEqual({ key, pages: 5 })
       }
     } finally {
       try {

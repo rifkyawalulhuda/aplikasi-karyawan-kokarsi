@@ -37,13 +37,24 @@ interface Props {
    * antar isi: MITRA memakai baseline grid, PKWT tidak.
    */
   family?: 'MITRA' | 'PKWT'
+  /**
+   * Bahasa tab yang sedang diedit. Tabel tanda tangan hanya SATU untuk kedua
+   * bahasa (PKWT bilingual) dan renderer membaca nilai dari blok ID lebih dulu,
+   * jadi kontrol ruang meterai disembunyikan di tab English agar tidak lahir
+   * nilai kedua yang diabaikan.
+   */
+  language?: 'id' | 'en'
+  /** Default tinggi ruang tanda tangan (mm) per keluarga; hanya untuk tampilan. */
+  signatureSpaceDefault?: number
 }
 const props = withDefaults(defineProps<Props>(), {
   headingAlignDefault: 'center',
   dragging: false,
   dropIndicator: 'none',
   spaceTypes: () => [],
-  family: 'MITRA'
+  family: 'MITRA',
+  language: 'id',
+  signatureSpaceDefault: undefined
 })
 const emit = defineEmits<{
   'move': [direction: number]
@@ -53,6 +64,8 @@ const emit = defineEmits<{
   'activate': [blockId: string, path?: string | null]
   'dragstart': [event: DragEvent]
   'dragend': []
+  /** Tinggi ruang tanda tangan (mm); `undefined` = kembali ke default keluarga. */
+  'signature-space': [value: number | undefined]
 }>()
 
 /**
@@ -107,6 +120,80 @@ const spaceBadge = computed<string | null>(() => {
   if (typeof v !== 'number' || v <= 0) return null
   return `+${v} pt`
 })
+
+/* --- Tinggi ruang tanda tangan (tempat meterai) ------------------------- */
+
+/** Batas yang sama dengan validator backend (`signature-space.ts`). */
+const SIGNATURE_SPACE_MAX_MM = 100
+
+/**
+ * Tinggi meterai Rp10.000. Di bawah angka ini meterai tidak muat utuh, jadi
+ * editor memberi peringatan (tidak memblokir: admin boleh sengaja merapatkan).
+ */
+const METERAI_HEIGHT_MM = 28.95
+
+/**
+ * Default HANYA untuk tampilan. Nilai yang benar-benar dipakai renderer
+ * (`signatureSpacePt`) tetap di backend; angka ini harus sejalan dengan
+ * `signatureSpaceDefaultMm()` di sana (PKWT 28,95 mm = tinggi meterai,
+ * MITRA 31,04 mm = baris ruang master 88 pt).
+ */
+const signatureSpaceDefaultMm = computed(() =>
+  props.signatureSpaceDefault ?? (props.family === 'MITRA' ? 31.04 : METERAI_HEIGHT_MM)
+)
+
+const signatureSpaceDefaultLabel = computed(() => formatMm(signatureSpaceDefaultMm.value))
+
+/** Nilai efektif: field kosong → default keluarga. */
+const signatureSpaceValue = computed(() => {
+  const v = props.block?.signatureSpaceMm
+  return typeof v === 'number' && Number.isFinite(v) ? v : signatureSpaceDefaultMm.value
+})
+
+/** "28,95" — koma sesuai kebiasaan angka Indonesia. */
+function formatMm(value: number): string {
+  return String(Math.round(value * 100) / 100).replace('.', ',')
+}
+
+/**
+ * Kotak input memakai nilai EFEKTIF (default keluarga saat field kosong), jadi
+ * admin selalu melihat angka yang benar-benar tercetak. Disalin ke ref lokal
+ * supaya bisa diketik bebas tanpa "berkelahi" dengan nilai tersimpan; commit
+ * terjadi saat blur/Enter (`@change`), bukan tiap ketukan.
+ */
+const signatureSpaceInput = ref<number>(signatureSpaceValue.value)
+watch(
+  () => [props.block?.signatureSpaceMm, props.family, props.signatureSpaceDefault],
+  () => { signatureSpaceInput.value = signatureSpaceValue.value },
+  { immediate: true }
+)
+
+/**
+ * Tulis nilai ke blok (lewat parent — kartu tidak boleh memutasi prop).
+ * Kosong / bukan angka → dikembalikan ke nilai efektif (bukan jadi 0/NaN),
+ * lalu dijepit ke 0–100 mm seperti validator backend.
+ */
+function setSignatureSpace() {
+  if (!props.editable) return
+  const raw = signatureSpaceInput.value as unknown
+  // `v-model.number` mengirim '' saat kotak dikosongkan; itu bukan 0.
+  const text = typeof raw === 'string' ? raw.trim().replace(',', '.') : ''
+  const n = typeof raw === 'string' ? (text ? Number(text) : Number.NaN) : Number(raw)
+  if (!Number.isFinite(n)) {
+    signatureSpaceInput.value = signatureSpaceValue.value
+    return
+  }
+  const clamped = Math.min(SIGNATURE_SPACE_MAX_MM, Math.max(0, n))
+  const rounded = Math.round(clamped * 100) / 100
+  signatureSpaceInput.value = rounded
+  emit('signature-space', rounded)
+}
+
+/** Hapus properti → template memakai default (dan kembali "ikut bawaan"). */
+function resetSignatureSpace() {
+  if (!props.editable) return
+  emit('signature-space', undefined)
+}
 
 const toast = useToast()
 
@@ -739,6 +826,45 @@ function addColumn() {
             <UInput v-model="block.rightParty" :disabled="!editable" placeholder="(Mitra)" />
           </UFormField>
         </div>
+
+        <div v-if="language !== 'en'" class="mt-3 rounded-md border border-default p-3">
+          <UFormField label="Tinggi ruang tanda tangan (mm)">
+            <div class="flex items-center gap-2">
+              <UInput
+                v-model.number="signatureSpaceInput"
+                type="number"
+                :min="0"
+                :max="SIGNATURE_SPACE_MAX_MM"
+                step="0.05"
+                :disabled="!editable"
+                class="w-32"
+                aria-label="Tinggi ruang tanda tangan (mm)"
+                @change="setSignatureSpace"
+              />
+              <span class="text-xs text-muted">mm</span>
+              <UButton
+                label="Kembalikan default"
+                size="xs"
+                variant="ghost"
+                :disabled="!editable || block.signatureSpaceMm === undefined"
+                @click="resetSignatureSpace"
+              />
+            </div>
+            <p class="mt-1 text-xs text-muted">
+              Tinggi ruang kosong untuk menempel meterai (0–{{ SIGNATURE_SPACE_MAX_MM }} mm).
+              Satu nilai untuk kedua kolom; default {{ signatureSpaceDefaultLabel }} mm.
+              Nama/jabatan yang panjang menambah tinggi tabel — ruang ini tidak ikut menyusut.
+            </p>
+            <p v-if="signatureSpaceValue < METERAI_HEIGHT_MM" class="mt-1 text-xs text-warning">
+              Lebih kecil dari tinggi meterai Rp10.000 ({{ formatMm(METERAI_HEIGHT_MM) }} mm) —
+              meterai tidak akan muat utuh.
+            </p>
+          </UFormField>
+        </div>
+        <p v-else class="mt-3 text-xs text-muted">
+          Tinggi ruang tanda tangan diatur di tab Indonesia — tabel tanda tangan dipakai
+          kedua bahasa, jadi nilainya sama.
+        </p>
       </template>
 
       <template v-else-if="block.type === 'closing'">

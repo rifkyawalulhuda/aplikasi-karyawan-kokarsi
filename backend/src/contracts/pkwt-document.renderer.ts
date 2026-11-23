@@ -16,6 +16,7 @@ import { interpolate, listPrefix } from './contract-block-renderer'
 import { formatCell } from './table-layout.helpers'
 import { hasInlineMarks, parseInlineRuns, type InlineRun } from './inline-marks'
 import { blockSpaceAfterPts, fieldSpacingPts } from './block-spacing'
+import { signatureSpacePtFromBlocks } from './signature-space'
 import {
   PKWT_FONT_NAMES,
   PKWT_GEOMETRY,
@@ -444,7 +445,10 @@ export function renderPkwtDocumentInto(doc: any, opts: PkwtDocumentRenderOptions
       leftName: sig.leftName,
       rightName: sig.rightName,
       leftRole: sig.leftRole,
-      rightRole: sig.rightRole
+      rightRole: sig.rightRole,
+      // Tinggi ruang meterai: SATU nilai untuk kedua kolom, dibaca dari blok
+      // `signature` template (ID dulu, fallback EN). Default 28,95 mm.
+      spacePt: signatureSpacePtFromBlocks(opts.blocks, opts.blocksEn, 'PKWT')
     }
   })
 }

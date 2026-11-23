@@ -14,6 +14,7 @@ import {
   renderMitraSignature,
   mitraClosingHeight,
   mitraClosingLineCount,
+  mitraSignatureRows,
 } from './mitra-layout.engine'
 import { createMitraPdfBuffer, resolveMitraFonts } from './mitra-document.renderer'
 import { parseInlineRuns, runsToText } from './inline-marks'
@@ -24,6 +25,17 @@ import {
   getContractDocumentDefinition,
 } from './contract-document-definitions'
 import { definitionToContentDefinition, type SeedContentDefinition } from '../contract-templates/default-template-definition'
+import { PT_PER_MM } from './signature-space'
+
+/** Isi minimal tabel tanda tangan untuk mengukur tinggi baris. */
+const SIG_SAMPLE = {
+  leftHeader: 'KOPERASI',
+  rightHeader: 'MITRA',
+  leftName: 'Ketua',
+  rightName: 'Anggota',
+  leftRole: '(Ketua Koperasi)',
+  rightRole: '(Mitra)',
+}
 
 const FONT_DIR = process.platform === 'win32' ? 'C:/Windows/Fonts' : '/usr/share/fonts/truetype/msttcorefonts'
 
@@ -156,6 +168,26 @@ describe('MITRA layout — helper', () => {
 
   it('format mata uang untuk imbalan', () => {
     expect(formatMitraCell('6000000', 'currency')).toContain('6.000.000')
+  })
+
+  /**
+   * Ruang meterai = baris ke-3 (index 2) tabel tanda tangan.
+   * Default HARUS 88 pt persis supaya template lama tidak berubah seperseratus
+   * pt, sedangkan nilai dari template (mm) dikonversi ke pt.
+   */
+  it('tinggi ruang meterai mengikuti spacePt, default tetap 88 pt', () => {
+    const doc = {
+      font() { return this },
+      fontSize() { return this },
+      heightOfString() { return 12 },
+    }
+
+    const spaceRow = (spacePt?: number) =>
+      mitraSignatureRows(doc as any, { ...SIG_SAMPLE, spacePt }).heights[2]
+
+    expect(spaceRow()).toBe(88)
+    expect(spaceRow(88)).toBe(88)
+    expect(spaceRow(40 * PT_PER_MM)).toBeCloseTo(40 * PT_PER_MM, 6)
   })
 })
 

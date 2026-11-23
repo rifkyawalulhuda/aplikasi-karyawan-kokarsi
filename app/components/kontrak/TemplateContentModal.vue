@@ -1205,6 +1205,22 @@ function removeInvalidBlock(index: number) {
   blocks.value.splice(index, 1)
   toast.add({ title: 'Blok rusak dihapus', color: 'success' })
 }
+
+/**
+ * Tinggi ruang tanda tangan (`signatureSpaceMm`) di blok `signature`.
+ *
+ * Nilai `undefined` menghapus properti supaya template memakai default
+ * keluarga — bukan menyimpan 0 yang berarti "tanpa ruang meterai".
+ * Kartu blok tidak memutasi prop-nya sendiri; mutasi terjadi di sini.
+ */
+function setBlockSignatureSpace(block: BlockLike | null | undefined, value: number | undefined) {
+  if (!block) return
+  if (value === undefined) {
+    delete (block as Record<string, unknown>).signatureSpaceMm
+    return
+  }
+  ;(block as Record<string, unknown>).signatureSpaceMm = value
+}
 </script>
 
 <template>
@@ -1605,6 +1621,7 @@ function removeInvalidBlock(index: number) {
                 :editable="!!draft"
                 :heading-align-default="isPkwt ? 'left' : 'center'"
                 :family="isPkwt ? 'PKWT' : 'MITRA'"
+                :language="lang"
                 :space-types="isPkwt ? PKWT_SPACE_TYPES : MITRA_SPACE_TYPES"
                 :collapsed="collapsedBlocks[entry.block.id] ?? true"
                 :selected="focusedBlockId === entry.block.id"
@@ -1617,6 +1634,7 @@ function removeInvalidBlock(index: number) {
                 @remove="confirmDeleteIndex = entry.index"
                 @dragstart="e => onBlockDragStart(entry.index, e)"
                 @dragend="onBlockDragEnd"
+                @signature-space="value => setBlockSignatureSpace(entry.block, value)"
               />
             </div>
           </div>

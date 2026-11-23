@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common'
 import { hasInlineMarks, validateInlineMarks } from '../contracts/inline-marks'
 import { INLINE_RUN_ALIGN_VALUES, type InlineRunAlign } from '../contracts/inline-run-layout'
+import { MAX_SIGNATURE_SPACE_MM, normalizeSignatureSpaceMm } from '../contracts/signature-space'
 import {
   MAX_BLOCK_SPACE_AFTER,
   MAX_FIELD_SPACING,
@@ -393,6 +394,20 @@ export function validateContentDefinition(
         for (const [key, value] of Object.entries(block)) {
           if (typeof value === 'string') validateText(id, value, `${blockPath}.${key}`, false)
         }
+      }
+
+      /**
+       * `signatureSpaceMm`: tinggi ruang kosong tanda tangan (tempat meterai).
+       * Satu nilai untuk kedua kolom; angka 0–100 mm. Nilai tak sah DITOLAK di
+       * sini (bukan dipotong diam-diam) supaya admin tahu inputnya salah.
+       */
+      if (block.type === 'signature' && block.signatureSpaceMm !== undefined
+        && normalizeSignatureSpaceMm(block.signatureSpaceMm) === undefined) {
+        issues.push({
+          blockId: id,
+          fieldPath: `${blockPath}.signatureSpaceMm`,
+          message: `Nilai signatureSpaceMm "${String(block.signatureSpaceMm)}" tidak valid. Gunakan angka 0–${MAX_SIGNATURE_SPACE_MM} (mm).`,
+        })
       }
 
       if ((block.type === 'title' || block.type === 'subtitle') && typeof block.text === 'string') {

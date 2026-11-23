@@ -16,6 +16,7 @@
 import PDFDocument from 'pdfkit'
 import { interpolate } from './contract-block-renderer'
 import { fieldSpacingPts } from './block-spacing'
+import { signatureSpacePtFromBlocks } from './signature-space'
 import {
   MITRA_HEADER_CHROME,
   renderMitraLayout,
@@ -164,6 +165,8 @@ export function renderMitraDocumentInto(doc: any, opts: MitraDocumentRenderOptio
     closingLines,
     // Jarak antar baris logis penutup (`fieldSpacing` blok `closing`).
     closingFieldSpacing: closingFieldSpacingPts,
+    // Tinggi ruang meterai: SATU nilai untuk kedua kolom, dari blok `signature`.
+    spacePt: signatureSpacePtFromBlocks(blocks, undefined, 'MITRA'),
   }
 
   renderMitraLayout(doc, blocks, {

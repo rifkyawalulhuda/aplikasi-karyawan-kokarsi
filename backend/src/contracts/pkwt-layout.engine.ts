@@ -29,6 +29,7 @@ import {
 } from './table-layout.helpers'
 import type { InlineRun } from './inline-marks'
 import { blockSpaceAfterPts, fieldSpacingPts } from './block-spacing'
+import { signatureSpacePt } from './signature-space'
 import {
   drawRunsLine,
   wrapRunsToLines,
@@ -163,9 +164,13 @@ export const PKWT_GEOMETRY = {
     left: 125.4,
     divider: 297.38,
     right: 459.58,
-    /** Tinggi total terukur. */
+    /**
+     * Tinggi total master (referensi pengukuran), BUKAN lagi tinggi yang
+     * dipakai: tinggi sebenarnya dihitung per dokumen oleh
+     * `pkwtSignatureRowHeights` karena ruang meterai bisa diubah admin.
+     */
     height: 97.57,
-    /** Jumlah baris logis (label jabatan / ruang tanda tangan / nama). */
+    /** Jarak tabel dari dasar kotak kolom. */
     gapFromBox: 12
   },
 
@@ -1219,16 +1224,46 @@ export interface PkwtSignatureOptions {
   /** Keterangan jabatan di bawah nama. */
   leftRole?: string
   rightRole?: string
+  /**
+   * Tinggi ruang kosong untuk meterai (pt), SATU nilai untuk kedua kolom.
+   * Diisi renderer dari `signatureSpaceMm` blok template; kosong = default.
+   */
+  spacePt?: number
 }
 
 const SIG_PAD = 6
-/** Tinggi baris label + tinggi area tanda tangan (terukur dari master). */
+/** Tinggi baris label (terukur dari master). */
 const SIG_LABEL_ROW = 34.52
-const SIG_BODY_ROW = 97.57
+/** Jarak garis bawah dari dasar tabel (terukur dari master). */
+const SIG_UNDERLINE_GAP = 12
 
-/** Tinggi total sub-tabel tanda tangan. */
-export function pkwtSignatureHeight(): number {
-  return SIG_LABEL_ROW + SIG_BODY_ROW
+/**
+ * Tinggi tiap baris sub-tabel tanda tangan.
+ *
+ * Baris body = padding atas + tinggi teks nama/jabatan + ruang meterai +
+ * jarak garis bawah. Ruang meterai TETAP: nama/jabatan panjang membuat tabel
+ * memanjang, bukan memakan ruang meterai (dulu tinggi baris dipatok 97,57 pt
+ * sehingga ruang meterai menyusut dan meterai tidak muat).
+ */
+function pkwtSignatureRowHeights(doc: any, o: PkwtSignatureOptions): number[] {
+  const G = PKWT_GEOMETRY
+  const T = G.signatureTable
+  const rows = pkwtSignatureRows(o)
+  const leftW = Math.max(T.divider - T.left - SIG_PAD * 2, 8)
+  const rightW = Math.max(T.right - T.divider - SIG_PAD * 2, 8)
+  doc.font(PKWT_FONT_NAMES.regular).fontSize(G.font.signature)
+  const textHeights = rows.map((row) => {
+    const hl = row.left ? doc.heightOfString(row.left, { width: leftW, align: 'center' }) : 0
+    const hr = row.right ? doc.heightOfString(row.right, { width: rightW, align: 'center' }) : 0
+    return Math.max(hl, hr)
+  })
+  const space = o.spacePt ?? signatureSpacePt(undefined, 'PKWT')
+  return [SIG_LABEL_ROW, SIG_PAD + (textHeights[1] ?? 0) + space + SIG_UNDERLINE_GAP]
+}
+
+/** Tinggi total sub-tabel tanda tangan (dipakai pengukur & penggambar). */
+export function pkwtSignatureHeight(doc: any, o: PkwtSignatureOptions): number {
+  return pkwtSignatureRowHeights(doc, o).reduce((a, b) => a + b, 0)
 }
 
 /**
@@ -1356,7 +1391,7 @@ export function renderPkwtSignature(
   const F = PKWT_FONT_NAMES
   const T = G.signatureTable
   const rows = pkwtSignatureRows(o)
-  const heights = [SIG_LABEL_ROW, SIG_BODY_ROW]
+  const heights = pkwtSignatureRowHeights(doc, o)
   const total = heights.reduce((a, b) => a + b, 0)
 
   doc.switchToPage(pageIndex)
@@ -1397,7 +1432,7 @@ export function renderPkwtSignature(
     const ux = x0 + (w - uw) / 2
     doc.save()
     doc.fillColor('#000000')
-    doc.rect(ux, tableTop + total - 12, uw, G.borderWidth).fill()
+    doc.rect(ux, tableTop + total - SIG_UNDERLINE_GAP, uw, G.borderWidth).fill()
     doc.restore()
   }
   underline(T.left, leftW)
@@ -1473,6 +1508,8 @@ export interface PkwtLayoutMeta {
   closingTop?: number
   closingBottom?: number
   closingLineCount?: number
+  /** Tinggi sub-tabel tanda tangan yang benar-benar digambar (pt). */
+  signatureHeight?: number
 }
 
 /**
@@ -1827,7 +1864,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
   }
 
   // --- Tanda tangan di halaman terakhir (atau halaman baru bila tak muat) ---
-  const sigH = pkwtSignatureHeight()
+  const sigH = pkwtSignatureHeight(doc, opts.signature)
   const sigGap = G.signatureTable.gapFromBox
   const closingWrapped = wrapPkwtClosingLines(doc, opts.closingLines ?? [])
   const closingGap = fieldSpacingPts(opts.closingFieldSpacing)
@@ -1871,6 +1908,7 @@ export function renderPkwtLayout(doc: any, opts: PkwtRenderOptions): void {
     closingPage: sigPage,
     closingTop,
     closingBottom: closingWrapped.length > 0 ? closingTop + closingH : closingTop,
-    closingLineCount: pkwtClosingLineCount(closingWrapped)
+    closingLineCount: pkwtClosingLineCount(closingWrapped),
+    signatureHeight: sigH
   } satisfies PkwtLayoutMeta
 }

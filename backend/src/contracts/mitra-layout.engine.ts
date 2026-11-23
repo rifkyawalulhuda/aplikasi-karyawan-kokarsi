@@ -232,6 +232,12 @@ export interface MitraSignatureOptions {
    * Hanya antar baris yang dipisahkan Enter; baris lipatan tetap rapat.
    */
   closingFieldSpacing?: number
+  /**
+   * Tinggi baris ruang kosong tanda tangan (pt) — tempat menempel meterai.
+   * SATU nilai untuk kedua kolom; diisi renderer dari `signatureSpaceMm`.
+   * Kosong = `signSpaceRowH` master (88 pt), jadi template lama tidak berubah.
+   */
+  spacePt?: number
 }
 
 /** Padding teks di dalam sel tabel tanda tangan (agar tidak menempel garis). */
@@ -262,7 +268,7 @@ export function mitraSignatureRows(doc: any, o?: MitraSignatureOptions) {
   const rows: Array<{ base: number; left: string; right: string; bold: boolean }> = [
     { base: T.labelRowH, left: o?.leftLabel?.trim() || 'PIHAK PERTAMA', right: o?.rightLabel?.trim() || 'PIHAK KEDUA', bold: false },
     { base: T.companyRowH, left: o?.leftHeader ?? C.leftHeader, right: o?.rightHeader ?? C.rightHeader, bold: false },
-    { base: T.signSpaceRowH, left: '', right: '', bold: false },
+    { base: o?.spacePt ?? T.signSpaceRowH, left: '', right: '', bold: false },
     { base: T.nameRowH, left: o?.leftName ?? '', right: o?.rightName ?? '', bold: true },
     { base: T.roleRowH, left: o?.leftRole ?? C.leftRoleLabel, right: o?.rightRole ?? C.rightRoleFallback, bold: false },
   ]

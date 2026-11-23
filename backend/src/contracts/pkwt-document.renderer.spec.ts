@@ -11,15 +11,18 @@
  * sesungguhnya di `pkwt-layout.engine.spec.ts`.
  */
 import { existsSync } from 'fs'
+import PDFDocument from 'pdfkit'
 import {
   resolvePkwtFonts,
   resolvePkwtLogoPath,
   createPkwtPdfBuffer,
+  renderPkwtDocumentInto,
   blocksToPkwtParagraphs,
   resolvePkwtHeaderTitles,
   resolveClosingLines,
 } from './pkwt-document.renderer'
 import { PKWT_HEADER_CHROME } from './pkwt-layout.engine'
+import { PT_PER_MM } from './signature-space'
 import { PKWT_PREVIEW_VALUES, PKWT_PREVIEW_VALUES_EN } from './pkwt-preview-sample'
 import {
   CONTRACT_INPUT_FIELD_SEEDS,
@@ -109,6 +112,32 @@ describe('PKWT document renderer â€” pintu tunggal', () => {
   maybe('tidak menuntut kolom EN ada (template ID-saja tetap render)', async () => {
     const buffer = await createPkwtPdfBuffer({ ...baseOpts(), blocksEn: [] })
     expect(buffer.subarray(0, 5).toString('latin1')).toBe('%PDF-')
+  })
+
+  maybe('signatureSpaceMm dari blok menambah tinggi tabel tanda tangan', () => {
+    const measure = (signatureSpaceMm?: number): number => {
+      const doc: any = new PDFDocument({
+        size: [595.5, 842.25],
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        bufferPages: true,
+      })
+      const opts: any = { ...baseOpts() }
+      if (signatureSpaceMm !== undefined) {
+        opts.blocks = [
+          ...BLOCKS.id.filter((b: any) => b.type !== 'signature'),
+          { type: 'signature', leftRole: 'Karyawan/employee', rightRole: 'Pengusaha/Perusahaan', signatureSpaceMm },
+        ]
+      }
+      renderPkwtDocumentInto(doc, opts)
+      return doc.__pkwtLayout.signatureHeight as number
+    }
+
+    const withoutField = measure()
+    const wide = measure(40)
+    // Default 28,95 mm → 40 mm menambah tepat selisihnya.
+    expect(wide - withoutField).toBeCloseTo((40 - 28.95) * PT_PER_MM, 1)
+    // Nilai kosong = default PKWT, bukan 97,57 pt lama.
+    expect(withoutField).toBeGreaterThan(34.52 + 97.57)
   })
 
   maybe('placeholder tanpa nilai tidak mencetak token mentah ke dokumen', async () => {
