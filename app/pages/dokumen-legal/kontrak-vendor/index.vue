@@ -60,6 +60,8 @@ const renewModal = ref(false)
 const renewTarget = ref<VendorContract | null>(null)
 const detailDrawer = ref(false)
 const detailTarget = ref<VendorContract | null>(null)
+const previewOpen = ref(false)
+const previewTarget = ref<VendorContract | null>(null)
 
 // --- Fetch Data ---
 const res = ref<{ data: VendorContract[]; total: number } | null>(null)
@@ -307,7 +309,7 @@ async function openContextMenu(e: MouseEvent, doc: VendorContract) {
   await nextTick()
   const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
   const menuWidth = menuEl?.offsetWidth ?? 192
-  const menuHeight = menuEl?.offsetHeight ?? 260
+  const menuHeight = menuEl?.offsetHeight ?? 300
   contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
   contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
 }
@@ -430,6 +432,16 @@ function openRenew(doc: VendorContract) {
 function openDetail(doc: VendorContract) {
   detailTarget.value = doc
   detailDrawer.value = true
+}
+
+// --- Preview Dokumen (klik kanan, tampilan sama dengan Arsip Umum) ---
+function isPdf(url?: string | null) {
+  return !!url && url.toLowerCase().includes('.pdf')
+}
+function openPreview(doc: VendorContract) {
+  if (!doc.fileUrl) return
+  previewTarget.value = doc
+  previewOpen.value = true
 }
 
 // --- Open contract by ID (for renewedTo link in drawer) ---
@@ -687,6 +699,23 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
     @open-contract="openContractById"
   />
 
+  <!-- Modal Preview Dokumen -->
+  <UModal v-model:open="previewOpen" :title="previewTarget?.documentName ?? 'Preview Dokumen'" :ui="{ content: 'sm:max-w-4xl w-full' }">
+    <template #body>
+      <div v-if="previewTarget?.fileUrl" class="overflow-hidden rounded-lg border border-default bg-elevated/20">
+        <div v-if="isPdf(previewTarget.fileUrl)" class="h-[70vh] min-h-[420px]">
+          <PdfViewer :src="previewTarget.fileUrl" />
+        </div>
+        <img
+          v-else
+          :src="previewTarget.fileUrl"
+          :alt="`Preview ${previewTarget.documentName}`"
+          class="max-h-[70vh] w-full object-contain"
+        >
+      </div>
+    </template>
+  </UModal>
+
   <!-- Context Menu (klik kanan) -->
   <Teleport to="body">
     <div
@@ -729,9 +758,16 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
           Perpanjang
         </button>
 
-        <!-- Divider sebelum Unduh File (jika ada) -->
+        <!-- Divider sebelum Preview/Unduh File (jika ada) -->
         <template v-if="contextMenuTarget?.fileUrl">
           <hr class="border-default my-1" />
+          <button
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+            @click="openPreview(contextMenuTarget!); closeContextMenu()"
+          >
+            <UIcon name="i-lucide-file-text" class="size-4 text-muted shrink-0" />
+            Lihat Preview
+          </button>
           <a
             class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors cursor-pointer"
             :href="contextMenuTarget!.fileUrl!"

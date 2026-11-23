@@ -549,13 +549,14 @@ const showMotherAgreement = computed(() => !!state.companyId && !!state.category
           label="Mother Agreement"
           name="motherAgreementId"
         >
-          <USelect
+          <USelectMenu
             v-model="state.motherAgreementId"
             :items="motherAgreementOptions"
+            value-key="value"
             placeholder="Pilih kontrak induk (opsional)..."
+            :search-input="{ placeholder: 'Cari kontrak induk...' }"
+            clear
             class="w-full"
-            searchable
-            searchable-placeholder="Cari kontrak induk..."
           />
           <template #hint>
             <span class="text-xs text-muted">Kontrak induk yang menjadi dasar kontrak ini</span>

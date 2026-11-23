@@ -71,10 +71,22 @@ const editModal = ref(false)
 const editTarget = ref<EmployeeDocument | null>(null)
 const detailDrawer = ref(false)
 const detailTarget = ref<EmployeeDocument | null>(null)
+const previewOpen = ref(false)
+const previewTarget = ref<EmployeeDocument | null>(null)
 
 function openDetail(doc: EmployeeDocument) {
   detailTarget.value = doc
   detailDrawer.value = true
+}
+
+// --- Preview Dokumen (klik kanan, tampilan sama dengan Arsip Umum) ---
+function isPdf(url?: string | null) {
+  return !!url && url.toLowerCase().includes('.pdf')
+}
+function openPreview(doc: EmployeeDocument) {
+  if (!doc.fileUrl) return
+  previewTarget.value = doc
+  previewOpen.value = true
 }
 
 // --- Fetch Data ---
@@ -242,7 +254,7 @@ async function openContextMenu(e: MouseEvent, doc: EmployeeDocument) {
   await nextTick()
   const menuEl = document.querySelector('[data-context-menu]') as HTMLElement
   const menuWidth = menuEl?.offsetWidth ?? 192
-  const menuHeight = menuEl?.offsetHeight ?? 220
+  const menuHeight = menuEl?.offsetHeight ?? 260
   contextMenuX.value = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
   contextMenuY.value = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
 }
@@ -557,6 +569,23 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
     @update:open="(v: boolean) => { renewModal = v; if (!v) renewTarget = null }"
   />
 
+  <!-- Modal Preview Dokumen -->
+  <UModal v-model:open="previewOpen" :title="previewTarget?.documentType?.name ?? 'Preview Dokumen'" :ui="{ content: 'sm:max-w-4xl w-full' }">
+    <template #body>
+      <div v-if="previewTarget?.fileUrl" class="overflow-hidden rounded-lg border border-default bg-elevated/20">
+        <div v-if="isPdf(previewTarget.fileUrl)" class="h-[70vh] min-h-[420px]">
+          <PdfViewer :src="previewTarget.fileUrl" />
+        </div>
+        <img
+          v-else
+          :src="previewTarget.fileUrl"
+          :alt="`Preview ${previewTarget.documentType?.name ?? 'Dokumen'}`"
+          class="max-h-[70vh] w-full object-contain"
+        >
+      </div>
+    </template>
+  </UModal>
+
   <!-- Floating Context Menu (klik kanan) -->
   <Teleport to="body">
     <div
@@ -599,17 +628,27 @@ watch(() => route.query.openId, (newId) => handleOpenId(newId))
           Perpanjang
         </button>
 
-        <!-- Unduh File (kondisional: hanya jika fileUrl ada) -->
-        <a
-          v-if="contextMenuTarget?.fileUrl"
-          :href="contextMenuTarget.fileUrl"
-          target="_blank"
-          class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
-          @click="closeContextMenu()"
-        >
-          <UIcon name="i-lucide-download" class="size-4 text-muted shrink-0" />
-          Unduh File
-        </a>
+        <!-- Preview & Unduh File (kondisional: hanya jika fileUrl ada) -->
+        <template v-if="contextMenuTarget?.fileUrl">
+          <hr class="border-default my-1" />
+          <button
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+            @click="openPreview(contextMenuTarget!); closeContextMenu()"
+          >
+            <UIcon name="i-lucide-file-text" class="size-4 text-muted shrink-0" />
+            Lihat Preview
+          </button>
+          <a
+            :href="contextMenuTarget.fileUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-highlighted hover:bg-elevated/60 transition-colors"
+            @click="closeContextMenu()"
+          >
+            <UIcon name="i-lucide-download" class="size-4 text-muted shrink-0" />
+            Unduh File
+          </a>
+        </template>
 
         <!-- Divider -->
         <hr class="border-default my-1" />
