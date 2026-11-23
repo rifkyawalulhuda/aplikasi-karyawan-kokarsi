@@ -309,11 +309,13 @@ const endMinDateCal = computed(() =>
         </UFormField>
 
         <UFormField label="Template Dokumen" name="templateId" required>
-          <USelect
+          <USelectMenu
             v-model="state.templateId"
             :items="contractTemplateOptions"
+            value-key="value"
             placeholder="Pilih template kontrak..."
             class="w-full"
+            :search-input="{ placeholder: 'Cari nama template...' }"
           />
         </UFormField>
 
